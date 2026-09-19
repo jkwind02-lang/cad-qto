@@ -17,6 +17,9 @@ from pathlib import Path
 from typing import Any
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence/scripts"))
+from qto_spatial import nearby_pairs
+
 CURVE_TYPES = {"ARC", "CIRCLE", "ELLIPSE", "SPLINE"}
 
 
@@ -110,7 +113,7 @@ def main() -> int:
             start = point(raw.get("start"), f"{object_id}.start")
             end = point(raw.get("end"), f"{object_id}.end")
             length = finite(raw.get("length"), f"{object_id}.length")
-            if length <= 0 or distance(start, end) <= 0:
+            if length <= 0 or (distance(start, end) <= 0 and not (isinstance(raw.get("geometry"), dict) and raw["geometry"].get("parts"))):
                 fail(f"{object_id} 的长度和端点距离必须大于0")
             source_ids = raw.get("source_ids")
             if not isinstance(source_ids, list) or not source_ids or any(
@@ -130,18 +133,18 @@ def main() -> int:
                 "length": length,
                 "source_ids": source_ids,
                 "geometry_signature": raw.get("geometry_signature"),
+                "space_id": raw.get("space_id", "single-view"),
             }
             candidates[object_id] = record
             endpoints.extend([(object_id, start), (object_id, end)])
 
         connected_endpoint_count: dict[str, int] = defaultdict(int)
-        for left_index, (left_id, left_point) in enumerate(endpoints):
-            for right_id, right_point in endpoints[left_index + 1 :]:
-                if left_id == right_id:
-                    continue
-                if distance(left_point, right_point) <= connection_tolerance:
-                    connected_endpoint_count[left_id] += 1
-                    connected_endpoint_count[right_id] += 1
+        groups = [(candidates[oid]["system"], candidates[oid]["space_id"]) for oid, _ in endpoints]
+        for left_index, right_index in nearby_pairs([p for _,p in endpoints], connection_tolerance, groups):
+            left_id, right_id = endpoints[left_index][0], endpoints[right_index][0]
+            if left_id != right_id:
+                connected_endpoint_count[left_id] += 1
+                connected_endpoint_count[right_id] += 1
 
         families: dict[tuple[Any, ...], list[str]] = defaultdict(list)
         for object_id, item in candidates.items():

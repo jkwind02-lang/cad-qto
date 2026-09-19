@@ -25,7 +25,9 @@ from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_
 
 import qto_cad_geometry as cad_geometry
 
-VERSION = "qto-pipe-neutral-adapter/1.4.0"
+from qto_pipe_topology import RouteIndex, route_distance, project_route, geometry_parts, scale_route_geometry
+
+VERSION = "qto-pipe-neutral-adapter/1.5.0"
 PROFILE_SCHEMA = "qto-pipe-recognition-profile/1.1"
 LEDGER_SCHEMA = "qto-project-adjudication-ledger/1.0"
 LINE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "SPLINE"}
@@ -567,6 +569,9 @@ def main() -> int:
                 "length": float(raw_length) * factor,
                 "source_ids": [f"EV-CAD-{row.get('record_id')}", rule["rule_id"], unit_source_id],
                 "geometry_signature": row.get("geometry_signature"),
+                "geometry": scale_route_geometry(row.get("geometry"), factor),
+                "space_id": str(rule.get("space_id") or scope.get("space_id") or layout),
+                "physical_id": row.get("physical_id"),
             }
             candidates[object_id] = candidate
             candidate_meta[object_id] = {"row": row, "rule": rule}
@@ -623,11 +628,15 @@ def main() -> int:
                 "length": item["length"],
                 "source_ids": item["source_ids"],
                 "dn_seeds": [],
+                "geometry": item.get("geometry"),
+                "space_id": item.get("space_id"),
+                "physical_id": item.get("physical_id"),
             })
         if not segments:
             save_pending_recognition(output, object_dispositions, scope, working_basis, "当前对象审计后尚无可计算管段，需继续识图或补充相关证据")
             fail("对象审计后没有可继续计算的管段")
 
+        dn_route_index = RouteIndex(segments)
         dn_candidates: list[dict[str, Any]] = []
         threshold_sensitive = False
         for row in text_rows:
@@ -648,10 +657,7 @@ def main() -> int:
                 if not digits:
                     continue
                 system = text(rule.get("system"), f"{rule['rule_id']}.system")
-                ranked = sorted(
-                    (point_segment_distance(anchor, item["start"], item["end"]), item["segment_id"])
-                    for item in segments if item["system"] == system
-                )
+                ranked = dn_route_index.nearest(anchor, system, rule.get("space_id") or scope.get("space_id") or layout, 2)
                 if not ranked:
                     continue
                 max_distance = finite(rule.get("max_distance"), f"{rule['rule_id']}.max_distance")
@@ -664,7 +670,7 @@ def main() -> int:
                         recognition_unresolved.append({"object_id": source_record_id, "kind": "bound_segment_unavailable", "segment_id": explicit_target})
                         continue
                     segment_id = explicit_target
-                    first_distance = point_segment_distance(anchor, target["start"], target["end"])
+                    first_distance = route_distance(anchor, target)
                 second_distance = ranked[1][0] if len(ranked) > 1 else math.inf
                 margin = second_distance - first_distance
                 sensitive = first_distance > max_distance * 0.8 or margin < min_margin
@@ -704,7 +710,18 @@ def main() -> int:
                     })
                 else:
                     candidate["reason"] = reason
+                target = next(item for item in segments if item["segment_id"] == segment_id)
+                _, part_index, parameter = project_route(anchor, geometry_parts(target))
+                candidate.update(part_index=part_index, parameter=parameter)
                 dn_candidates.append(candidate)
+                group_id = candidate["candidate_id"]
+                for alt_distance, alt_id in dn_route_index.within(anchor, system, max_distance + max(0.0, min_margin), rule.get("space_id") or scope.get("space_id") or layout):
+                    if alt_id == segment_id:
+                        continue
+                    dn_candidates.append({"candidate_id": f"DNC-{len(dn_candidates) + 1:05d}", "segment_id": alt_id,
+                        "dn": candidate["dn"], "source_id": candidate["source_id"], "disposition": "excluded",
+                        "reason": "同一标注的其他绑定候选，本轮未采用；并非排除该管段数量", "alternative_group": group_id,
+                        "threshold_sensitive": sensitive, "diagnostics": {"distance": alt_distance, "text": raw_text, "rule_id": rule["rule_id"]}})
                 object_dispositions[source_record_id].update({
                     "disposition": "adopted" if disposition == "seed" else "candidate",
                     "basis": "冻结文字规则形成规格种子" if disposition == "seed" else "冻结文字规则形成规格方案候选",
@@ -903,6 +920,9 @@ def main() -> int:
             "terminal_type_rules": terminal_type_rules,
             "role_dn_rules": profile.get("role_dn_rules", []),
             "gap_classifications": profile.get("gap_classifications", []),
+            "gap_exclusions": profile.get("gap_exclusions", []),
+            "junctions": profile.get("junctions", []),
+            "cross_view_links": profile.get("cross_view_links", []),
             "change_nodes": profile.get("change_nodes", []),
             "valves": valves,
         }

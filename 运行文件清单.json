@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 215,
+  "runtime_file_count": 220,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
@@ -41,8 +41,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/人工思路识图与算量流程.md",
-      "sha256": "dce6f8e94245fe8a763f59cf5af21e2b53e908c551fe71aea15a2478e5abd026",
-      "bytes": 5936
+      "sha256": "9e25ee560df2df663308113bcf41db686d323b1b94f5c3dedb1f52f6b2e0d061",
+      "bytes": 6303
     },
     {
       "path": "_qto-shared-evidence/references/公共资源调用与停止条件.md",
@@ -58,6 +58,11 @@
       "path": "_qto-shared-evidence/references/工程量成果最小字段.schema.json",
       "sha256": "31df37f3976271ca50eea8245eaa1cf85c2d85fb1cac5e4a4b64f34c52a58213",
       "bytes": 22547
+    },
+    {
+      "path": "_qto-shared-evidence/references/按人工算量顺序执行与重算.md",
+      "sha256": "e4edbaef3cd813b7a5c3a687628d8817541f07a8c4b06cd54dc005696a3bc103",
+      "bytes": 7665
     },
     {
       "path": "_qto-shared-evidence/references/按任务阶段读取.md",
@@ -130,6 +135,11 @@
       "bytes": 17225
     },
     {
+      "path": "_qto-shared-evidence/scripts/qto_pipe_topology.py",
+      "sha256": "b76a6a05aef63d3402e0535a0e300118be9258d587dacb01f6e54a18a3c7b4b4",
+      "bytes": 35626
+    },
+    {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
       "sha256": "9ac79b0c17adc96012fc3088cd673f1b14f7752769127ac0af04f8237a3e100a",
       "bytes": 12264
@@ -140,14 +150,24 @@
       "bytes": 4378
     },
     {
+      "path": "_qto-shared-evidence/scripts/qto_spatial.py",
+      "sha256": "d228ad667878b54244414844df23562feb9ca6471b183d1f4302124e83a84a25",
+      "bytes": 6283
+    },
+    {
       "path": "_qto-shared-evidence/scripts/read_qto_review_feedback.py",
       "sha256": "ac019a3a8f747bdd72ef93f059dfd66b96b1a0f5a987117db9bd7a8a9e60f6f7",
       "bytes": 2129
     },
     {
+      "path": "_qto-shared-evidence/scripts/recompute_qto_dependencies.py",
+      "sha256": "d830767889ab43c369705843310773101bc88a1c5305f7b074c9095721fb3c2c",
+      "bytes": 14339
+    },
+    {
       "path": "_qto-shared-evidence/scripts/validate_minimum_result.py",
-      "sha256": "0787b75e04acfe9c9860577b4466edef5a4a021f326808bf55caf5b99d668ff3",
-      "bytes": 29333
+      "sha256": "3e8f313a6dfa65c7546642fcc0bc4f28e917107f0f9bda540f9cddb53c96f779",
+      "bytes": 29449
     },
     {
       "path": "_qto-shared-evidence/scripts/validate_shared_evidence.py",
@@ -156,8 +176,8 @@
     },
     {
       "path": "qto-components-points/SKILL.md",
-      "sha256": "01ca56e05fc677d607e42de1e6b0d69237abaff0197609e1769cfb0e56307d55",
-      "bytes": 5762
+      "sha256": "36a10cfaea8c351b7f9c61609e2f7e5957b5f51e3b500d5f004186823c2f002d",
+      "bytes": 6200
     },
     {
       "path": "qto-components-points/agents/openai.yaml",
@@ -216,13 +236,13 @@
     },
     {
       "path": "qto-components-points/scripts/build_component_instances_from_neutral.py",
-      "sha256": "3aabffee9663936b5f648328aa90dfa28bf9790b946203747b4fa38f59de3921",
-      "bytes": 34618
+      "sha256": "c6cfefcec43f9dbc50ff7ce20c093f0717a4ced3875233f6927654a699ab2dbb",
+      "bytes": 35749
     },
     {
       "path": "qto-components-points/scripts/build_network_endpoint_handoff.py",
-      "sha256": "0aff474f985a44cdaf4bfbe3189e8ae2c49465a7dfcb63c75ff0eac80884837d",
-      "bytes": 9716
+      "sha256": "bec9ca9d9e1cf1a9d82ff33146e23f5f9eeda6db901990d5b5b669934ccf75cc",
+      "bytes": 9853
     },
     {
       "path": "qto-components-points/scripts/count_reconciled_instances.py",
@@ -311,8 +331,8 @@
     },
     {
       "path": "qto-coordinator/SKILL.md",
-      "sha256": "0116361308933ad68b5ae3ef0d0ee68fb72355cdbf4bd4eadb4e558e16164a2c",
-      "bytes": 7288
+      "sha256": "6a6f06e487895d0586f32f5e966742b93aeceace9351efccbbb114bbb369c50e",
+      "bytes": 7703
     },
     {
       "path": "qto-coordinator/agents/openai.yaml",
@@ -476,8 +496,8 @@
     },
     {
       "path": "qto-electrical-routes/SKILL.md",
-      "sha256": "0acb28cf155ed34953800104d67ee890257301becdfdf20830d0a0b848d5d7f2",
-      "bytes": 4937
+      "sha256": "f351437eeb43700e557ee74f589df6f34df803e98af15500c8ab42c208c7866a",
+      "bytes": 5378
     },
     {
       "path": "qto-electrical-routes/agents/openai.yaml",
@@ -486,8 +506,8 @@
     },
     {
       "path": "qto-electrical-routes/capability.json",
-      "sha256": "c90d0507f4bac2985a3e231c067feb3ba688462359cd0f01065c5e7b35255f2c",
-      "bytes": 1201
+      "sha256": "709d5451ec9ec9b83e7642029d85b61611441673c4cc77e5304a2d284a31ff81",
+      "bytes": 1445
     },
     {
       "path": "qto-electrical-routes/references/专业规则与成熟状态.md",
@@ -496,8 +516,8 @@
     },
     {
       "path": "qto-electrical-routes/references/常规计算逻辑.md",
-      "sha256": "af5726a1caab53fccd1ff83ce511af7f5e603f221e32cb894439dbd08325ed62",
-      "bytes": 2135
+      "sha256": "4c08f0b27a67fc737b3a365327f0a1d0b83d99cfa46b5475520d2081bffb3c6e",
+      "bytes": 2589
     },
     {
       "path": "qto-electrical-routes/references/案例与接入清单.md",
@@ -520,9 +540,14 @@
       "bytes": 896
     },
     {
+      "path": "qto-electrical-routes/scripts/calculate_electrical_paths.py",
+      "sha256": "9d661f320654c5d164b21c39d2f077a1ac50d7866a9ee7912656ec1cf60c8056",
+      "bytes": 7215
+    },
+    {
       "path": "qto-electrical-routes/scripts/calculate_electrical_routes_reference.py",
-      "sha256": "cc732df14bf7a346146cb51c6ce0bee4504ae0b065312c21b154417c07a2689d",
-      "bytes": 1800
+      "sha256": "cd013d13fe08cbd19f8b61573dedfd7bb43a230838c3b5899dee8854824ec53b",
+      "bytes": 2034
     },
     {
       "path": "qto-framing-supports/SKILL.md",
@@ -676,8 +701,8 @@
     },
     {
       "path": "qto-pipe-networks/SKILL.md",
-      "sha256": "179dc7aa48bcb8953ec04c41347a66ce131de3bedf09e1b52156f34174827e8c",
-      "bytes": 11228
+      "sha256": "506a45f984d3e8b5f1856bbce9b949350de8f029fd1828aad71b339b8df2c40a",
+      "bytes": 11606
     },
     {
       "path": "qto-pipe-networks/agents/openai.yaml",
@@ -776,18 +801,18 @@
     },
     {
       "path": "qto-pipe-networks/scripts/audit_pipe_object_selection.py",
-      "sha256": "4c84ba8f0c066255419d576986627d3abbf3a7c39b01568973f4a4f16e9b7015",
-      "bytes": 12356
+      "sha256": "9c80ede5b87bb1818b97d7aac735aadb0c742e8e54e85c6259a53c73fcc03bd4",
+      "bytes": 12668
     },
     {
       "path": "qto-pipe-networks/scripts/build_pipe_inference_input.py",
-      "sha256": "020e6c829982614db15a51962ffc7483b4af5c0b547e6ce4142fe6cf25205c9f",
-      "bytes": 58474
+      "sha256": "ae4a560b6defd70d1bd62c5cebe6b8bf1a8245554f52d495c379dcd114fcc564",
+      "bytes": 60164
     },
     {
       "path": "qto-pipe-networks/scripts/infer_pipe_network.py",
-      "sha256": "99cdc3421b579c9b45689b0d2037f791ac4015473d9c4e9920ab03a718507b49",
-      "bytes": 77970
+      "sha256": "b31813dd61811ab1334fe96748b84c1be149d95f265e8168757e77fe179c4449",
+      "bytes": 80510
     },
     {
       "path": "qto-pipe-networks/scripts/measure_pipe_centerlines.py",
@@ -796,8 +821,8 @@
     },
     {
       "path": "qto-pipe-networks/scripts/validate_pipe_result.py",
-      "sha256": "ad07b473471038523b8656ad9d483856b90c8a1e552c14b2906aac27cfcba1b4",
-      "bytes": 21878
+      "sha256": "309891187fd3a4dfbab3e39177e98e6f4e1b4a1f876c1ce8e702b0655752e0d5",
+      "bytes": 23204
     },
     {
       "path": "qto-pipe-networks/scripts/validate_pipe_user_summary.py",

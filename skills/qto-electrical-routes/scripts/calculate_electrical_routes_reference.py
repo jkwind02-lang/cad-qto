@@ -7,7 +7,11 @@ def num(v):return isinstance(v,(int,float)) and not isinstance(v,bool) and math.
 def main():
  p=argparse.ArgumentParser();p.add_argument("input",type=Path);a=p.parse_args()
  try:
-  rows=json.loads(a.input.read_text(encoding="utf-8")).get("route_items")
+  document=json.loads(a.input.read_text(encoding="utf-8-sig"))
+  if document.get("schema")=="qto-electrical-path-ledger/1.0":
+   from calculate_electrical_paths import calculate
+   print(json.dumps(calculate(document),ensure_ascii=False,indent=2,allow_nan=False));return 0
+  rows=document.get("route_items")
   if not isinstance(rows,list) or not rows:raise ValueError("route_items必须为非空数组")
   out=[]
   for i,r in enumerate(rows):

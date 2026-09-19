@@ -133,9 +133,10 @@ def main() -> int:
                     }
                     if terminal["evidence_level"] not in ("confirmed", "inferred", "scenario"):
                         fail(f"{physical_id}.{port_id}.evidence_level 必须是 confirmed、inferred 或 scenario")
-                    for optional in ("port_dn", "assumption_id", "port_source_id"):
-                        if port.get(optional) is not None:
-                            terminal[optional] = port[optional]
+                    for optional in ("port_dn", "assumption_id", "port_source_id", "port_evidence_level", "space_id", "segment_id", "source_segment_id", "coordinate_unit"):
+                        value = port.get(optional, raw.get(optional))
+                        if value is not None:
+                            terminal[optional] = value
                     terminals.append(terminal)
                     reason = "已生成网络端点事实"
                 else:
