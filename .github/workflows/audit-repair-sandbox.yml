@@ -1,0 +1,43 @@
+name: Audit repair sandbox
+on:
+  push:
+    branches: [fix/audit-20260920]
+permissions:
+  contents: write
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/fix/audit-20260920'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install 'ezdxf==1.4.3' 'jsonschema>=4,<5' pytest
+      - name: Apply reviewed source edits
+        run: |
+          if test -f maintenance/apply_audit_fixes_20260920.py; then
+            python maintenance/apply_audit_fixes_20260920.py
+          fi
+      - name: Verify actual modules
+        run: |
+          python -m compileall -q skills tests
+          python tests/run_html_review_tests.py --root skills --output-root .codex_work/html-review
+          node tests/run_html_review_ui_tests.mjs --root skills --report .codex_work/html-ui.json
+          if test -f tests/test_audit_regressions.py; then
+            python -m pytest tests/test_audit_regressions.py -q
+          fi
+      - name: Record verified source tree on sandbox branch only
+        if: hashFiles('maintenance/apply_audit_fixes_20260920.py') != ''
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add skills tests README.md .codex-plugin docs maintenance '运行文件清单.json' '仓库发布核对.json'
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix: materialize and verify audited quantity and review fixes'
+            git push origin HEAD:refs/heads/fix/audit-20260920
+          fi
