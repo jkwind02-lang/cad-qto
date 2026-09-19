@@ -896,5 +896,13 @@
     "status": "PRESERVED_SOURCE_FORMATTING",
     "existing_warnings": 50,
     "note": "已核对提示均来自原文件的空白格式。为保留发布哈希不改写；新增说明另行通过格式检查。"
+  },
+  "audit_fix_20260920": {
+    "version": "0.1.1+codex.20260920",
+    "baseline_commit": "cac19cc2729abff6bb84757b5b80e1701f8751e3",
+    "runtime_file_count": 215,
+    "runtime_manifest_sha256": "b301af7ebc8fa440a3cbcfc3f27ad7005948b2e057771c9f21284e0882a72008",
+    "validation": "See GitHub Actions and tests/test_audit_regressions.py; no real DWG or business adoption claim",
+    "local_installation_updated": false
   }
 }

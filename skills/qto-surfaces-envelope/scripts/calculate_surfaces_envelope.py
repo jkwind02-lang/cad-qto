@@ -104,7 +104,7 @@ CAD_METADATA_ASSERTIONS = {
     "source_unit",
     "integrity.conservation_ok",
 }
-PARTIAL_FORBIDDEN_WORDS = {"总量", "合计", "完整", "全部", "全量"}
+PARTIAL_FORBIDDEN_WORDS = {'全部', '全量', '完整', '总量'}
 LEGACY_FRAGMENTS = (
     "\\skills-disabled\\",
     "\\旧skill只读归档\\",

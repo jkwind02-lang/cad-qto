@@ -22,7 +22,9 @@ from typing import Any, Iterable
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_entries, applies_to, recognition_basis
 
-VERSION = "qto-component-neutral-adapter/1.1.0"
+import qto_cad_geometry as cad_geometry
+
+VERSION = "qto-component-neutral-adapter/1.2.0"
 PROFILE_SCHEMA = "qto-component-recognition-profile/1.0"
 LEDGER_SCHEMA = "qto-project-adjudication-ledger/1.0"
 CONFIRMATION_SOURCES = {
@@ -101,6 +103,8 @@ def source_from_manifest(path: Path) -> tuple[Path, Path, dict[str, Any]]:
     manifest = load_json(path)
     if manifest.get("schema_version") != "qto-cad-neutral-evidence/1.0":
         fail("cad-manifest schema_version 必须为 qto-cad-neutral-evidence/1.0")
+    if manifest.get("geometry_schema_version") != cad_geometry.GEOMETRY_SCHEMA:
+        fail("CAD旧缓存缺少完整WCS几何，请用新版中性提取器重新生成；不得继承旧曲线测长")
     artifacts = manifest.get("artifacts")
     if not isinstance(artifacts, dict):
         fail("CAD清单缺少 artifacts")
@@ -228,52 +232,15 @@ def choose_rule(block: str, layer: str, parent_block: str, rules: list[dict[str,
 
 
 def matrix_for_insert(row: dict[str, Any], origin: list[float]) -> tuple[float, ...]:
-    scales = row.get("scale_factors")
-    if not isinstance(scales, list) or len(scales) < 2:
-        scales = [1.0, 1.0, 1.0]
-    sx = finite(scales[0], "insert.xscale")
-    sy = finite(scales[1], "insert.yscale")
-    sz = finite(scales[2], "insert.zscale") if len(scales) > 2 else 1.0
-    rotation = finite(row.get("rotation", 0.0), "insert.rotation")
-    cosine, sine = math.cos(rotation), math.sin(rotation)
-    a, b, c, d = cosine * sx, sine * sx, -sine * sy, cosine * sy
-    insertion = [
-        finite(row.get("x", 0.0), "insert.x"),
-        finite(row.get("y", 0.0), "insert.y"),
-        finite(row.get("z", 0.0), "insert.z"),
-    ]
-    return (
-        a,
-        b,
-        c,
-        d,
-        insertion[0] - a * origin[0] - c * origin[1],
-        insertion[1] - b * origin[0] - d * origin[1],
-        sz,
-        insertion[2] - sz * origin[2],
-    )
+    return cad_geometry.matrix_for_insert(row, origin)
 
 
 def compose(parent: tuple[float, ...], child: tuple[float, ...]) -> tuple[float, ...]:
-    pa, pb, pc, pd, ptx, pty, psz, ptz = parent
-    ca, cb, cc, cd, ctx, cty, csz, ctz = child
-    return (
-        pa * ca + pc * cb,
-        pb * ca + pd * cb,
-        pa * cc + pc * cd,
-        pb * cc + pd * cd,
-        pa * ctx + pc * cty + ptx,
-        pb * ctx + pd * cty + pty,
-        psz * csz,
-        psz * ctz + ptz,
-    )
+    return cad_geometry.compose_matrix(parent, child)
 
 
-def transform_point(value: list[float], matrix: tuple[float, ...]) -> list[float]:
-    a, b, c, d, tx, ty, sz, tz = matrix
-    x, y = float(value[0]), float(value[1])
-    z = float(value[2]) if len(value) > 2 else 0.0
-    return [a * x + c * y + tx, b * x + d * y + ty, sz * z + tz]
+def transform_point(value: Any, matrix: tuple[float, ...]) -> list[float] | None:
+    return cad_geometry.transform_point(value, matrix)
 
 
 def point_in_bounds(value: list[float], bounds: dict[str, float] | None) -> bool:
@@ -373,33 +340,10 @@ def main() -> int:
         block_boxes: dict[str, list[float] | None] = {}
 
         def transformed_box(box, matrix):
-            corners = [transform_point([x, y, 0], matrix) for x in (box[0], box[2]) for y in (box[1], box[3])]
-            return [min(p[0] for p in corners), min(p[1] for p in corners), max(p[0] for p in corners), max(p[1] for p in corners)]
+            return cad_geometry.transform_bounds(box, matrix)
 
         def definition_box(name, stack=()):
-            if name in block_boxes:
-                return block_boxes[name]
-            if name in stack or len(stack) >= max_depth:
-                return None
-            boxes = []
-            for entity in definitions.get(name, []):
-                box = entity.get("bbox")
-                if entity.get("entity_type") == "INSERT":
-                    child_name = str(entity.get("block_name") or "")
-                    child_box = definition_box(child_name, (*stack, name))
-                    if child_box:
-                        box = transformed_box(child_box, matrix_for_insert(entity, origins.get(child_name, [0, 0, 0])))
-                elif not isinstance(box, list) and isinstance(entity.get("start"), list) and isinstance(entity.get("end"), list):
-                    start, end = entity["start"], entity["end"]
-                    box = [min(start[0], end[0]), min(start[1], end[1]), max(start[0], end[0]), max(start[1], end[1])]
-                if isinstance(box, list) and len(box) >= 4 and all(isinstance(v, (int, float)) and math.isfinite(v) for v in box[:4]):
-                    boxes.append(box)
-            result = [min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)] if boxes else None
-            # Only cache complete acyclic top-level computations; depth-limited
-            # lookups must not poison a later independent instance's extent.
-            if not stack:
-                block_boxes[name] = result
-            return result
+            return cad_geometry.definition_bounds(name, definitions, origins, max_depth, block_boxes, stack)
 
         def visit(
             insert: dict[str, Any],
@@ -423,8 +367,16 @@ def main() -> int:
             world_point = transform_point(local_anchor, parent_matrix)
             matrix = compose(parent_matrix, matrix_for_insert(insert, origins.get(block_name, [0.0, 0.0, 0.0])))
             local_box = definition_box(block_name)
-            world_box = transformed_box(local_box, matrix) if local_box else None
-            in_scope = bbox_intersects({"bbox": world_box}, bounds) if world_box else (bbox_intersects(insert, bounds) if top_level else point_in_bounds(world_point, bounds))
+            world_box3d = transformed_box(local_box, matrix) if local_box else None
+            world_box = [world_box3d[0], world_box3d[1], world_box3d[3], world_box3d[4]] if world_box3d else None
+            in_scope = bbox_intersects({"bbox": world_box}, bounds) if world_box else True
+            if not in_scope:
+                return  # only complete, conservative bounds allow pruning
+            if insert.get("geometry_issues"):
+                dispositions.append({"object_id": f"PT-{path}", "physical_id": f"PT-{path}", "source_record_id": source_record_id,
+                                     "disposition": "unresolved", "basis": "; ".join(insert["geometry_issues"]), "rule_ids": [], "instance_path": path})
+                failures.append({"kind": "unsupported_insert_geometry", "instance_path": path, "issues": insert["geometry_issues"]})
+                return
             physical_id = f"PT-{path}"
             next_suppressed = suppressed_by
 

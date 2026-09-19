@@ -23,7 +23,9 @@ except ImportError as exc:  # pragma: no cover - exercised by deployment checks
     raise SystemExit("缺少 ezdxf；请使用工作区 Python 运行时或安装 ezdxf>=1.4") from exc
 
 
-VERSION = "qto-cad-neutral-extractor/1.0.0"
+from qto_cad_geometry import GEOMETRY_SCHEMA, entity_geometry as extract_geometry_facts
+
+VERSION = "qto-cad-neutral-extractor/1.1.0"
 CURVE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "CIRCLE", "ELLIPSE", "SPLINE"}
 UNIT_NAMES = {
     0: "Unitless",
@@ -116,86 +118,8 @@ def entity_text(entity: Any) -> str | None:
 
 
 def entity_geometry(entity: Any) -> dict[str, Any]:
-    kind = entity.dxftype()
-    anchor = start = end = bbox = length = signature = None
-    if kind == "LINE":
-        start, end = point(entity.dxf.start), point(entity.dxf.end)
-        anchor, bbox = start, bounds([start, end])
-        length = distance(start, end) if start and end else None
-    elif kind == "LWPOLYLINE":
-        elevation = float(get_dxf(entity, "elevation", 0.0) or 0.0)
-        values = [
-            (point((x, y, elevation)), float(bulge or 0.0))
-            for x, y, bulge in entity.get_points("xyb")
-        ]
-        clean = [(item, bulge) for item, bulge in values if item]
-        points = [item for item, _ in clean]
-        start, end = (points[0], points[-1]) if points else (None, None)
-        anchor, bbox = start, bounds(points)
-        length = polyline_length(clean, bool(entity.closed))
-    elif kind == "POLYLINE":
-        values = [
-            (point(vertex.dxf.location), float(get_dxf(vertex, "bulge", 0.0) or 0.0))
-            for vertex in entity.vertices
-        ]
-        clean = [(item, bulge) for item, bulge in values if item]
-        points = [item for item, _ in clean]
-        start, end = (points[0], points[-1]) if points else (None, None)
-        anchor, bbox = start, bounds(points)
-        length = polyline_length(clean, bool(entity.is_closed))
-    elif kind == "ARC":
-        anchor = point(entity.dxf.center)
-        radius = float(entity.dxf.radius)
-        start_deg = float(entity.dxf.start_angle)
-        end_deg = float(entity.dxf.end_angle)
-        sweep_deg = (end_deg - start_deg) % 360.0
-        if anchor:
-            start = [anchor[0] + radius * math.cos(math.radians(start_deg)), anchor[1] + radius * math.sin(math.radians(start_deg)), anchor[2]]
-            end = [anchor[0] + radius * math.cos(math.radians(end_deg)), anchor[1] + radius * math.sin(math.radians(end_deg)), anchor[2]]
-            bbox = [anchor[0] - radius, anchor[1] - radius, anchor[0] + radius, anchor[1] + radius]
-        length = radius * math.radians(sweep_deg)
-        signature = {"radius": radius, "sweep_deg": sweep_deg}
-    elif kind == "CIRCLE":
-        anchor = point(entity.dxf.center)
-        radius = float(entity.dxf.radius)
-        if anchor:
-            bbox = [anchor[0] - radius, anchor[1] - radius, anchor[0] + radius, anchor[1] + radius]
-        length = 2.0 * math.pi * radius
-        signature = {"radius": radius, "sweep_deg": 360.0}
-    elif kind == "ELLIPSE":
-        anchor = point(entity.dxf.center)
-        major = point(entity.dxf.major_axis)
-        major_radius = math.dist([0.0, 0.0, 0.0], major) if major else 0.0
-        minor_radius = major_radius * float(entity.dxf.ratio)
-        radius = max(major_radius, minor_radius)
-        if anchor:
-            bbox = [anchor[0] - radius, anchor[1] - radius, anchor[0] + radius, anchor[1] + radius]
-        length = math.pi * (
-            3.0 * (major_radius + minor_radius)
-            - math.sqrt(max(0.0, (3.0 * major_radius + minor_radius) * (major_radius + 3.0 * minor_radius)))
-        )
-        signature = {"major_radius": major_radius, "minor_radius": minor_radius}
-    elif kind == "SPLINE":
-        points = [point(item) for item in list(entity.control_points) + list(entity.fit_points)]
-        clean = [item for item in points if item]
-        anchor, bbox = (clean[0] if clean else None), bounds(clean)
-        start, end = (clean[0], clean[-1]) if len(clean) >= 2 else (None, None)
-    elif kind == "INSERT":
-        anchor = point(entity.dxf.insert)
-        bbox = bounds([anchor])
-    elif kind in {"TEXT", "MTEXT", "ATTRIB", "ATTDEF"}:
-        anchor = point(get_dxf(entity, "insert"))
-        bbox = bounds([anchor])
-    elif kind == "DIMENSION":
-        anchor = point(get_dxf(entity, "defpoint"))
-        bbox = bounds([anchor])
-    else:
-        for field in ("insert", "location", "center", "start"):
-            anchor = point(get_dxf(entity, field))
-            if anchor:
-                bbox = bounds([anchor])
-                break
-    return {"anchor": anchor, "bbox": bbox, "start": start, "end": end, "length": length, "signature": signature}
+    """Preserve WCS parametric geometry; never substitute an end-point chord."""
+    return extract_geometry_facts(entity)
 
 
 def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: str, raw_unit: str, sequence: int) -> dict[str, Any]:
@@ -240,6 +164,14 @@ def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: 
         "scale_factors": [float(get_dxf(entity, name, 1.0) or 1.0) for name in ("xscale", "yscale", "zscale")] if kind == "INSERT" else None,
         "attributes": attributes,
         "geometry_signature": geometry["signature"],
+        "geometry": geometry["geometry"],
+        "raw_geometry": geometry["raw_geometry"],
+        "geometry_status": geometry["geometry_status"],
+        "geometry_issues": geometry["geometry_issues"],
+        "bbox3d": geometry["bbox3d"],
+        "extrusion": geometry["extrusion"],
+        "insert_matrix_wcs": geometry["insert_matrix_wcs"],
+        "length_error_estimate": geometry["length_error_estimate"],
     }
 
 
@@ -253,9 +185,13 @@ def write_stream(path: Path, groups: Iterable[tuple[str, str | None, Iterable[An
             for sequence, entity in enumerate(ordered, 1):
                 try:
                     record = convert(entity, layout=layout, parent_block=parent_block, source_hash=source_hash, raw_unit=raw_unit, sequence=sequence)
-                    target.write(json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
+                    target.write(json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n")
                     count += 1
                     types[record["entity_type"]] += 1
+                    if record.get("geometry_issues"):
+                        failures.append({"layout": layout, "parent_block": parent_block,
+                                         "entity_handle": record["entity_handle"], "entity_type": record["entity_type"],
+                                         "error": "; ".join(record["geometry_issues"]), "record_retained": True})
                 except Exception as exc:  # retain evidence instead of silently skipping
                     failures.append({
                         "layout": layout,
@@ -316,6 +252,7 @@ def main() -> int:
         manifest = {
             "schema_version": "qto-cad-neutral-evidence/1.0",
             "extractor_version": VERSION,
+            "geometry_schema_version": GEOMETRY_SCHEMA,
             "status": "PASS" if not failures else "PARTIAL",
             "professional_classification_performed": False,
             "authoritative_source": {"path": str(primary_path), "sha256": primary_hash, "bytes": primary_path.stat().st_size},

@@ -49,7 +49,7 @@ def main():
  bad=copy.deepcopy(d);bad['groups'][0]['member_keys'].append('missing');rejected('不存在的组成员拒绝',lambda:c.normalize_view(bad,out))
  bad=copy.deepcopy(d);bad['scenes'][0]['raster_data_uri']='https://example.invalid/image.png';rejected('外部底图依赖拒绝',lambda:c.normalize_view(bad,out))
  rejected('不覆盖已有用户HTML',lambda:build(datafile,out/'全专业图面复核演示.html'))
- fb=c.empty_feedback(view);g=view['groups'][0];sel=g['member_keys'][:2];ex=g['member_keys'][2:];record={'annotation_id':'问题组|'+g['id'],'object_id':g['id'],'object_ids':[s['object_id'] for s in g['member_snapshot'][:2]],'group_id':g['id'],'selected_object_keys':sel,'excluded_object_keys':ex,'member_snapshot':g['member_snapshot'],'confirmed_result':'保留各处规格，仅修正判断方法','reason':'跨单位成员不得统一覆盖数值','instruction':'请助手复核','scope':'本组勾选对象','updated_at':'2026-09-14T00:00:00Z','history':[]}
+ fb=c.empty_feedback(view);g=view['groups'][0];sel=g['member_keys'][:2];ex=g['member_keys'][2:];record={'annotation_id':'问题组|'+g['id'],'object_id':g['id'],'object_ids':[s['object_id'] for s in g['member_snapshot'][:2]],'group_id':g['id'],'selected_object_keys':sel,'excluded_object_keys':ex,'member_snapshot':g['member_snapshot'],'result_fingerprint':g['result_fingerprint'],'confirmed_result':'保留各处规格，仅修正判断方法','reason':'跨单位成员不得统一覆盖数值','instruction':'请助手复核','scope':'本组勾选对象','updated_at':'2026-09-14T00:00:00Z','history':[]}
  fb['annotations'][record['annotation_id']]=record;assert not c.validate_feedback(fb,view)[1];checks.append('整组两成员和一例外保全')
  bad=copy.deepcopy(fb);bad['project_id']='其他项目';rejected('同图异项目批注拒绝',lambda:c.validate_feedback(bad,view))
  badview=copy.deepcopy(d);badview['sources'][1]['sha256']='b'*64;badview=c.normalize_view(badview,out);rejected('任一来源版本变化拒绝',lambda:c.validate_feedback(fb,badview))

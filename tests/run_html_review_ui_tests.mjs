@@ -1,4 +1,4 @@
-import fs from 'node:fs';import path from 'node:path';import vm from 'node:vm';import assert from 'node:assert/strict';import {gzipSync} from 'node:zlib';
+import {spawnSync} from 'node:child_process';import fs from 'node:fs';import path from 'node:path';import vm from 'node:vm';import assert from 'node:assert/strict';import {gzipSync} from 'node:zlib';
 const args=process.argv.slice(2),arg=k=>args[args.indexOf(k)+1],root=arg('--root'),report=JSON.parse(fs.readFileSync(arg('--report'),'utf8')),art=report.artifacts,A=path.join(root,'_qto-shared-evidence','assets','review');
 const data=JSON.parse(fs.readFileSync(art.normalized_view,'utf8')),sourceHTML=fs.readFileSync(art.html,'utf8');
 function harness(html){
@@ -36,7 +36,7 @@ e['widen-editor'].click();assert.equal(e.layout.style.values['--revieww'],'720px
 const core=h.ctx.QtoReviewCore;assert.throws(()=>core.parse({...pkg,project_id:'其他项目'},data),/项目/);assert.throws(()=>core.cleanRecord({...note,selected_object_keys:['不属于本组']},k,true),/成员/);checks.push('跨项目和越组批注拒绝');
 let history=undefined;for(let n=0;n<75;n++)history=core.saveRecord(history,{...note,confirmed_result:'修正'+n},k,new Date(1700000000000+n).toISOString());assert.equal(history.history.length,74);checks.push('超过30次修改历史不静默截断');
 const conflicting={...pkg,annotations:{...pkg.annotations,[k]:{...note,confirmed_result:'不同意见',updated_at:'2099-01-01T00:00:00Z'}}};const merged=core.mergePackages(pkg,conflicting);assert.equal(merged.annotations[k].confirmed_result,'不同意见');assert(merged.annotations[k].history.some(r=>r.confirmed_result===note.confirmed_result));checks.push('冲突合并保留旧意见历史');
-const changed=structuredClone(data);changed.receipts[k]={status:'已复算',assistant_response:'按所属专业重算完成，原单位保留',source_annotation_updated_at:note.updated_at,object_ids:note.object_ids};let withReceipt=savedHTML.replace(/(<script id="payload" type="application\/octet-stream">)[\s\S]*?(<\/script>)/,(_,a,b)=>a+gzipSync(Buffer.from(JSON.stringify(changed))).toString('base64').match(/.{1,180}/g).join('\n')+b);
+const changed=structuredClone(data);changed.receipts[k]={status:'已复算',assistant_response:'按所属专业重算完成，原单位保留',source_annotation_updated_at:note.updated_at,source_result_fingerprint:note.result_fingerprint,object_ids:note.object_ids};let withReceipt=savedHTML.replace(/(<script id="payload" type="application\/octet-stream">)[\s\S]*?(<\/script>)/,(_,a,b)=>a+gzipSync(Buffer.from(JSON.stringify(changed))).toString('base64').match(/.{1,180}/g).join('\n')+b);
 const rh=harness(withReceipt);await rh.start();assert.match(rh.ids['current-adoption'].textContent,/已复算/);assert.equal(core.receiptState(changed.receipts[k],note),'current');assert.equal(core.receiptState(changed.receipts[k],{...note,updated_at:'2099-02-01T00:00:00Z'}),'stale');checks.push('回执绑定实际处理的批注版本');
 const malicious={...note,confirmed_result:'</script><script>globalThis.bad=true</script>',reason:'文字原样保留'};const safe=core.embed(sourceHTML,{...pkg,annotations:{[k]:malicious}});assert(safe.includes('\\u003c/script>'));assert(!safe.includes('<script>globalThis.bad=true'));checks.push('批注文字不能关闭数据块执行脚本');
 function withData(html,d){return html.replace(/(<script id="payload" type="application\/octet-stream">)[\s\S]*?(<\/script>)/,(_,a,b)=>a+gzipSync(Buffer.from(JSON.stringify(d))).toString('base64').match(/.{1,180}/g).join('\n')+b);}
@@ -46,6 +46,20 @@ if(args.includes('--legacy-html')){
  const legacyHTML=fs.readFileSync(arg('--legacy-html'),'utf8'),lv=JSON.parse(fs.readFileSync(arg('--legacy-view'),'utf8')),legacy=harness(legacyHTML);await legacy.start();assert.equal(legacy.ids.category.value,'待补资料');assert.equal(legacy.ids.list.children.length,4);
  const originalLegacy=JSON.parse(legacy.ids['feedback-seed'].textContent);assert.equal(Object.keys(originalLegacy.annotations).length,47);assert.equal(Object.keys(originalLegacy.drafts).length,1);legacy.ids['save-html'].click();const saved=await legacy.downloads.at(-1).blob.text();const again=legacy.ctx.QtoReviewCore.parse(legacy.ctx.QtoReviewCore.readFileText(saved),lv);assert.deepEqual(JSON.parse(JSON.stringify(again.annotations)),originalLegacy.annotations);assert.deepEqual(JSON.parse(JSON.stringify(again.drafts)),originalLegacy.drafts);assert(Buffer.byteLength(saved)<2000000);checks.push('真实旧版47条意见及1空白草稿在新界面往返保全');
 }
+// Rebuild the changed engineering snapshot through the actual Python contract.
+const changedResult=structuredClone(data);changedResult.objects[0].quantities[0].value+=10;
+const normalizeResult=spawnSync('python',['-c',"import sys,json;sys.path.insert(0,sys.argv[1]);from qto_review_contract import normalize_view;print(json.dumps(normalize_view(json.load(sys.stdin)),ensure_ascii=False))",path.resolve(root,'_qto-shared-evidence/scripts')],{input:JSON.stringify(changedResult),encoding:'utf8'});
+assert.equal(normalizeResult.status,0,normalizeResult.stderr);
+const renewed=JSON.parse(normalizeResult.stdout),staleHarness=harness(withData(savedHTML,renewed));await staleHarness.start();
+assert.match(staleHarness.ids['entry-status'].textContent,/历史意见待重新核对/);
+const stalePkg=staleHarness.ctx.QtoReviewCore.parse(staleHarness.ctx.QtoReviewCore.readFileText(savedHTML),renewed);
+assert.equal(stalePkg.annotations[k].applicability_state,'stale');assert.equal(stalePkg.annotations[k].confirmed_result,note.confirmed_result);
+assert.equal(core.receiptState(changed.receipts[k],stalePkg.annotations[k]),'stale');
+staleHarness.ids['save-review'].click();const renewedPkg=JSON.parse([...staleHarness.cache.values()][0]);
+assert.equal(renewedPkg.annotations[k].result_fingerprint,renewed.groups[0].result_fingerprint);
+assert(renewedPkg.annotations[k].history.some(r=>r.result_fingerprint===note.result_fingerprint));
+checks.push('成果变化显式显示历史意见；用户重存后绑定新成果并保留旧历史');
+
 const packageFile=path.join(path.dirname(art.html),'UI实际保存批注.json');fs.writeFileSync(packageFile,JSON.stringify(pkg,null,2));
 const fh=harness(sourceHTML);await fh.start();fh.ctx.localStorage.setItem=()=>{throw new Error('模拟暂存不可用');};fh.ids['save-html'].click();assert.equal(fh.ids['action-message'].hidden,false);assert.match(fh.ids['action-message'].textContent,/本机暂存不可用/);assert(fh.downloads.length>0);fh.ids['import-file'].files=[{text:async()=>'{invalid'}];await fh.ids['import-file'].onchange();assert.match(fh.ids['action-message'].textContent,/导入未应用/);assert.equal(fh.ids['action-message'].hidden,false);checks.push('顶部精简后暂存失败与导入失败仍显式提示，HTML仍可下载');
 const result={status:'PASS',count:checks.length,checks,scope:'无浏览器DOM模拟，非原生浏览器视觉验收',saved_feedback:packageFile};fs.writeFileSync(path.join(path.dirname(arg('--report')),'交互核验.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));

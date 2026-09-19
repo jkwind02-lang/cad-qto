@@ -23,7 +23,9 @@ from typing import Any, Iterable
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_entries, applies_to, recognition_basis, validate_working_basis
 
-VERSION = "qto-pipe-neutral-adapter/1.3.0"
+import qto_cad_geometry as cad_geometry
+
+VERSION = "qto-pipe-neutral-adapter/1.4.0"
 PROFILE_SCHEMA = "qto-pipe-recognition-profile/1.1"
 LEDGER_SCHEMA = "qto-project-adjudication-ledger/1.0"
 LINE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "SPLINE"}
@@ -104,19 +106,9 @@ def bbox_intersects(row: dict[str, Any], bounds: dict[str, float] | None) -> boo
     if bounds is None:
         return True
     bbox = row.get("bbox")
-    if isinstance(bbox, list) and len(bbox) >= 4 and all(isinstance(item, (int, float)) for item in bbox[:4]):
-        return not (
-            float(bbox[2]) < bounds["xmin"]
-            or float(bbox[0]) >= bounds["xmax_exclusive"]
-            or float(bbox[3]) < bounds["ymin"]
-            or float(bbox[1]) >= bounds["ymax_exclusive"]
-        )
-    if isinstance(row.get("x"), (int, float)) and isinstance(row.get("y"), (int, float)):
-        return (
-            bounds["xmin"] <= float(row["x"]) < bounds["xmax_exclusive"]
-            and bounds["ymin"] <= float(row["y"]) < bounds["ymax_exclusive"]
-        )
-    return False
+    if isinstance(bbox, list) and len(bbox) >= 4 and all(isinstance(n, (int, float)) and math.isfinite(n) for n in bbox[:4]):
+        return not (bbox[2] < bounds["xmin"] or bbox[0] >= bounds["xmax_exclusive"] or bbox[3] < bounds["ymin"] or bbox[1] >= bounds["ymax_exclusive"])
+    return True  # incomplete geometry is unresolved, not silently excluded
 
 
 def scaled_point(value: Any, factor: float, label: str) -> list[float]:
@@ -251,6 +243,8 @@ def source_from_manifest(manifest_path: Path) -> tuple[Path, Path, dict[str, Any
     manifest = load_json(manifest_path)
     if manifest.get("schema_version") != "qto-cad-neutral-evidence/1.0":
         fail("cad-manifest schema_version 必须为 qto-cad-neutral-evidence/1.0")
+    if manifest.get("geometry_schema_version") != cad_geometry.GEOMETRY_SCHEMA:
+        fail("CAD旧缓存缺少完整WCS几何，请用新版中性提取器重新生成；不得继承旧曲线测长")
     artifact = (manifest.get("artifacts") or {}).get("layout_entities")
     if not isinstance(artifact, dict):
         fail("CAD清单缺少 artifacts.layout_entities")
@@ -266,123 +260,64 @@ def source_from_manifest(manifest_path: Path) -> tuple[Path, Path, dict[str, Any
     return stream_path, block_path, manifest
 
 
-def matrix_for_insert(row: dict[str, Any], origin: list[float]) -> tuple[float, float, float, float, float, float, float, float]:
-    scales = row.get("scale_factors")
-    if not isinstance(scales, list) or len(scales) < 2:
-        scales = [1.0, 1.0, 1.0]
-    sx = finite(scales[0], "insert.xscale")
-    sy = finite(scales[1], "insert.yscale")
-    sz = finite(scales[2], "insert.zscale") if len(scales) > 2 else 1.0
-    rotation = finite(row.get("rotation", 0.0), "insert.rotation")
-    cosine, sine = math.cos(rotation), math.sin(rotation)
-    a, b = cosine * sx, sine * sx
-    c, d = -sine * sy, cosine * sy
-    insert = [finite(row.get("x", 0.0), "insert.x"), finite(row.get("y", 0.0), "insert.y"), finite(row.get("z", 0.0), "insert.z")]
-    tx = insert[0] - a * origin[0] - c * origin[1]
-    ty = insert[1] - b * origin[0] - d * origin[1]
-    tz = insert[2] - sz * origin[2]
-    return a, b, c, d, tx, ty, sz, tz
+def matrix_for_insert(row: dict[str, Any], origin: list[float]) -> tuple[float, ...]:
+    return cad_geometry.matrix_for_insert(row, origin)
 
 
 def compose_matrix(parent: tuple[float, ...], child: tuple[float, ...]) -> tuple[float, ...]:
-    pa, pb, pc, pd, ptx, pty, psz, ptz = parent
-    ca, cb, cc, cd, ctx, cty, csz, ctz = child
-    return (
-        pa * ca + pc * cb,
-        pb * ca + pd * cb,
-        pa * cc + pc * cd,
-        pb * cc + pd * cd,
-        pa * ctx + pc * cty + ptx,
-        pb * ctx + pd * cty + pty,
-        psz * csz,
-        psz * ctz + ptz,
-    )
+    return cad_geometry.compose_matrix(parent, child)
 
 
 def transform_point(value: Any, matrix: tuple[float, ...]) -> list[float] | None:
-    if not isinstance(value, list) or len(value) < 2:
-        return None
-    a, b, c, d, tx, ty, sz, tz = matrix
-    x, y = float(value[0]), float(value[1])
-    z = float(value[2]) if len(value) > 2 else 0.0
-    return [a * x + c * y + tx, b * x + d * y + ty, sz * z + tz]
+    return cad_geometry.transform_point(value, matrix)
 
 
 def transform_row(row: dict[str, Any], matrix: tuple[float, ...], instance_path: str, target_layout: str) -> dict[str, Any]:
-    result = copy.deepcopy(row)
-    original_id = str(row.get("record_id") or "NO-ID")
-    result["source_definition_record_id"] = original_id
-    result["record_id"] = f"CADINST-{instance_path}/{original_id}"
-    result["candidate_physical_id"] = result["record_id"]
-    result["instance_path"] = instance_path
-    result["layout"] = target_layout
-    anchor = transform_point([row.get("x"), row.get("y"), row.get("z", 0.0)], matrix) if isinstance(row.get("x"), (int, float)) and isinstance(row.get("y"), (int, float)) else None
-    if anchor:
-        result["x"], result["y"], result["z"] = anchor
-    start = transform_point(row.get("start"), matrix)
-    end = transform_point(row.get("end"), matrix)
-    if start:
-        result["start"] = start
-    if end:
-        result["end"] = end
-    if start and end:
-        result["raw_length"] = math.dist(start, end)
-    bbox = row.get("bbox")
-    if isinstance(bbox, list) and len(bbox) >= 4:
-        corners = [
-            transform_point([bbox[0], bbox[1], row.get("z", 0.0)], matrix),
-            transform_point([bbox[0], bbox[3], row.get("z", 0.0)], matrix),
-            transform_point([bbox[2], bbox[1], row.get("z", 0.0)], matrix),
-            transform_point([bbox[2], bbox[3], row.get("z", 0.0)], matrix),
-        ]
-        valid = [item for item in corners if item]
-        result["bbox"] = [min(item[0] for item in valid), min(item[1] for item in valid), max(item[0] for item in valid), max(item[1] for item in valid)]
-    return result
+    return cad_geometry.transform_row(row, matrix, instance_path, target_layout)
 
 
-def expanded_manifest_rows(
-    layout_path: Path,
-    block_path: Path,
-    manifest: dict[str, Any],
-    max_depth: int,
-    failures: list[dict[str, Any]],
-) -> Iterable[dict[str, Any]]:
+def expanded_manifest_rows(layout_path: Path, block_path: Path, manifest: dict[str, Any],
+                           max_depth: int, failures: list[dict[str, Any]],
+                           target_layout: str | None = None, scope_bounds: dict[str, float] | None = None) -> Iterable[dict[str, Any]]:
     definitions: dict[str, list[dict[str, Any]]] = {}
     for row in load_stream(block_path):
         definitions.setdefault(str(row.get("parent_block") or ""), []).append(row)
-    origins = {
-        str(item.get("block_name")): [float(value) for value in item.get("origin", [0.0, 0.0, 0.0])[:3]]
-        for item in manifest.get("blocks", [])
-        if isinstance(item, dict) and item.get("block_name")
-    }
-    identity = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0)
-
-    def expand(insert: dict[str, Any], parent_matrix: tuple[float, ...], path: str, stack: tuple[str, ...], target_layout: str) -> Iterable[dict[str, Any]]:
-        block_name = str(insert.get("block_name") or "")
-        if not block_name or block_name not in definitions:
-            failures.append({"object_id": insert.get("record_id"), "kind": "missing_block_definition", "block_name": block_name, "instance_path": path})
+    origins = {str(item["block_name"]): item.get("origin", [0., 0., 0.]) for item in manifest.get("blocks", []) if isinstance(item, dict) and item.get("block_name")}
+    extent_cache = {}
+    def expand(insert, parent_matrix, path, stack, layout, inherited_layer):
+        name = str(insert.get("block_name") or "")
+        if not name or name not in definitions:
+            failures.append({"object_id": insert.get("record_id"), "kind": "missing_block_definition", "block_name": name, "instance_path": path})
             return
-        if block_name in stack:
-            failures.append({"object_id": insert.get("record_id"), "kind": "cyclic_block_reference", "block_name": block_name, "instance_path": path})
+        if name in stack or len(stack) >= max_depth:
+            failures.append({"object_id": insert.get("record_id"), "kind": "cyclic_block_reference" if name in stack else "block_depth_limit", "instance_path": path})
             return
-        if len(stack) >= max_depth:
-            failures.append({"object_id": insert.get("record_id"), "kind": "block_depth_limit", "block_name": block_name, "instance_path": path, "max_depth": max_depth})
+        if insert.get("geometry_issues"):
+            failures.append({"object_id": insert.get("record_id"), "kind": "unsupported_insert_geometry", "instance_path": path, "issues": insert["geometry_issues"]})
             return
-        origin = origins.get(block_name, [0.0, 0.0, 0.0])
-        local = matrix_for_insert(insert, origin)
-        matrix = compose_matrix(parent_matrix, local)
-        next_stack = (*stack, block_name)
-        for definition_row in definitions[block_name]:
-            child_path = f"{path}/{block_name}"
-            expanded = transform_row(definition_row, matrix, child_path, target_layout)
+        matrix = compose_matrix(parent_matrix, matrix_for_insert(insert, origins.get(name, [0., 0., 0.])))
+        local_box = cad_geometry.definition_bounds(name, definitions, origins, max_depth, extent_cache)
+        box = cad_geometry.transform_bounds(local_box, matrix)
+        if not cad_geometry.bounds_intersect(box, scope_bounds):
+            return
+        layer = str(insert.get("layer") or "")
+        effective_layer = inherited_layer if layer in {"", "0"} else layer
+        for row in definitions[name]:
+            child_path = f"{path}/{name}"
+            expanded = transform_row(row, matrix, child_path, layout)
+            if expanded.get("layer") in {"", "0"}:
+                expanded["source_layer"] = expanded.get("layer")
+                expanded["layer"] = effective_layer
             yield expanded
             if expanded.get("entity_type") == "INSERT":
-                yield from expand(definition_row, matrix, f"{child_path}/{definition_row.get('record_id')}", next_stack, target_layout)
-
+                yield from expand(row, matrix, f"{child_path}/{row.get('record_id')}", (*stack, name), layout, effective_layer)
     for row in load_stream(layout_path):
+        layout = str(row.get("layout") or "Model")
+        if target_layout is not None and layout != target_layout:
+            continue
         yield row
         if row.get("entity_type") == "INSERT":
-            yield from expand(row, identity, str(row.get("record_id") or "LAYOUT-INSERT"), (), str(row.get("layout") or "Model"))
+            yield from expand(row, cad_geometry.IDENTITY, str(row.get("record_id") or "LAYOUT-INSERT"), (), layout, str(row.get("layer") or ""))
 
 
 def main() -> int:
@@ -422,6 +357,8 @@ def main() -> int:
                 cad_manifest,
                 raw_max_depth,
                 block_expansion_failures,
+                target_layout=str((profile.get("scope") or {}).get("layout", "Model")),
+                scope_bounds=(profile.get("scope") or {}).get("bounds"),
             )
         else:
             stream_path = args.neutral_stream.resolve()
