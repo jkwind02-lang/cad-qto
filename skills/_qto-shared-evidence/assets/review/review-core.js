@@ -27,6 +27,21 @@ function cleanRecord(r,key,complete=true){
  else if(q.object_snapshot)ensure(q.object_id===q.object_snapshot.object_id&&q.object_ids.length===1&&q.object_ids[0]===q.object_snapshot.object_id,'单对象批注和对象快照不一致');
  return q;
 }
+function assessRecord(record,view){
+ const objects=new Map(view.objects.map(o=>[o.catalog_key,o])),groups=new Map(view.groups.map(g=>[g.id,g]));
+ const target=record.group_id?groups.get(record.group_id):objects.get(record.object_snapshot?.catalog_key);
+ if(!target)return {state:'unmatched',reason:'历史对象或新增标记须由所属专业重新对应，不自动沿用确认'};
+ const snaps=record.group_id?(record.member_snapshot||[]):[record.object_snapshot||{}];
+ for(const snap of snaps){
+  const current=objects.get(snap.catalog_key);
+  if(!current)return {state:'unmatched',reason:'批注成员不在当前成果中，须先核对迁移'};
+  ensure(current.id===snap.object_id,'批注成员快照与当前对象身份不一致');
+  if(!snap.result_fingerprint||snap.result_fingerprint!==current.result_fingerprint)return {state:'stale',reason:'对象数量、规格、几何或采用依据已变化；旧意见仅保留为历史参考'};
+ }
+ if(!record.result_fingerprint||record.result_fingerprint!==target.result_fingerprint)return {state:'stale',reason:'意见未绑定当前成果版本，须重新确认；不得自动继承旧数字确认'};
+ return {state:'current',reason:'已绑定当前成果快照；仍须所属专业复核，不自动改量'};
+}
+
 function parse(input,view){
  const raw=typeof input==='string'?JSON.parse(input):input,p=clone(raw);
  const legacy=['cad-qto-review-feedback/1.0','cad-qto-review-feedback/1.1'].includes(p.schema);
@@ -54,10 +69,13 @@ function parse(input,view){
     const expected=groups.get(q.group_id).member_keys;
     ensure(q.member_snapshot.length===expected.length&&q.member_snapshot.every(m=>expected.includes(m.catalog_key)),'当前组成员已变化，请先核对历史批注适用范围');
    }
+   const validity=assessRecord(q,view);
+   q.applicability_state=validity.state;q.applicability_reason=validity.reason;
    result[k]=q;
   }
   p[field]=result;
  }
+ p.current_result_fingerprint=view.result_fingerprint;
  return p;
 }
 function saveRecord(previous,next,key,now){
@@ -86,6 +104,6 @@ function mergePackages(local,incoming){
 }
 function embed(html,pkg){const json=JSON.stringify(pkg,null,1).replace(/^[ \t]+/gm,'').replace(/</g,'\\u003c');ensure(/id="feedback-seed"/.test(html),'页面缺少批注嵌入块');return html.replace(/(<script id="feedback-seed" type="application\/json">)[\s\S]*?(<\/script>)/,(_,a,b)=>a+json+b);}
 function readFileText(text){if(text.trimStart().startsWith('<')){const m=text.match(/<script id="feedback-seed" type="application\/json">([\s\S]*?)<\/script>/);ensure(m,'HTML没有批注数据块');return JSON.parse(m[1]);}return JSON.parse(text);}
-function receiptState(receipt,annotation){return receipt&&annotation&&receipt.source_annotation_updated_at===annotation.updated_at?'current':receipt?'stale':'none';}
-root.QtoReviewCore={schema,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState};
+function receiptState(receipt,annotation){return receipt&&annotation&&annotation.result_fingerprint&&annotation.applicability_state!=='stale'&&annotation.applicability_state!=='unmatched'&&receipt.source_annotation_updated_at===annotation.updated_at&&receipt.source_result_fingerprint===annotation.result_fingerprint?'current':receipt?'stale':'none';}
+root.QtoReviewCore={schema,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord};
 })(globalThis);

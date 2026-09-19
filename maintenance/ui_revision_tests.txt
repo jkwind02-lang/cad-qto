@@ -1,0 +1,13 @@
+// Rebuild the changed engineering snapshot through the actual Python contract.
+const changedResult=structuredClone(data);changedResult.objects[0].quantities[0].value+=10;
+const normalizeResult=spawnSync('python',['-c',"import sys,json;sys.path.insert(0,sys.argv[1]);from qto_review_contract import normalize_view;print(json.dumps(normalize_view(json.load(sys.stdin)),ensure_ascii=False))",path.resolve(root,'_qto-shared-evidence/scripts')],{input:JSON.stringify(changedResult),encoding:'utf8'});
+assert.equal(normalizeResult.status,0,normalizeResult.stderr);
+const renewed=JSON.parse(normalizeResult.stdout),staleHarness=harness(withData(savedHTML,renewed));await staleHarness.start();
+assert.match(staleHarness.ids['entry-status'].textContent,/历史意见待重新核对/);
+const stalePkg=staleHarness.ctx.QtoReviewCore.parse(staleHarness.ctx.QtoReviewCore.readFileText(savedHTML),renewed);
+assert.equal(stalePkg.annotations[k].applicability_state,'stale');assert.equal(stalePkg.annotations[k].confirmed_result,note.confirmed_result);
+assert.equal(core.receiptState(changed.receipts[k],stalePkg.annotations[k]),'stale');
+staleHarness.ids['save-review'].click();const renewedPkg=JSON.parse([...staleHarness.cache.values()][0]);
+assert.equal(renewedPkg.annotations[k].result_fingerprint,renewed.groups[0].result_fingerprint);
+assert(renewedPkg.annotations[k].history.some(r=>r.result_fingerprint===note.result_fingerprint));
+checks.push('成果变化显式显示历史意见；用户重存后绑定新成果并保留旧历史');

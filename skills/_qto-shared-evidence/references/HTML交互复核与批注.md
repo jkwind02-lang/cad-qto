@@ -110,3 +110,7 @@ python ../_qto-shared-evidence/scripts/migrate_cad_review_view.py --input 旧复
 再用生成器及`--feedback`导入原1.0/1.1批注。旧格式必须绑定同一单来源SHA，不能跨项目默认接受；旧双视图及新增标记有显式场景映射。迁移只转换展示接口，不重分类、不计算新的专业数量。新项目直接使用通用格式，不用旧专用适配器起算。
 
 运行实现：[生成器](../scripts/build_qto_review_html.py)、[数据契约](../scripts/qto_review_contract.py)、[批注读取](../scripts/read_qto_review_feedback.py)、[旧版视图适配器](../scripts/migrate_cad_review_view.py)。
+
+## 2026-09-20 成果快照绑定（优先于旧版回执说明）
+
+来源身份继续使用项目、复核范围和图纸哈希；另由规范化器重算对象/问题组 result_fingerprint。批注及成员快照须绑定该值。数量、规格、几何、采用依据变化时旧意见标为 stale，保留在历史中而不进入当前可执行 actions；缺失对象标为 unmatched。组成员逐一核对 object_id，不能仅比较 catalog_key。旧版无绑定批注不自动升级。页面标题或单纯revision标签变化不使工程判断失效。方法意见的理由可参考，旧数字确认不能继承。回执同时绑定 source_annotation_updated_at 与 source_result_fingerprint；两者任一不符都显示过期。

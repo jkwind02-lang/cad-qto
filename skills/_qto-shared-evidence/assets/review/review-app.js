@@ -84,7 +84,7 @@ try{
   $('review-instruction').value=r.instruction||'请助手复核';$('review-scope').disabled=!!i.member_keys;$('review-scope').value=i.member_keys?'本组勾选对象':r.scope||'仅所选对象';
   $('original').hidden=!r.original_message;$('original').textContent='原话：\n'+(r.original_message||'');
   $('history-content').textContent=(r.history||[]).map((h,n)=>(n+1)+'. '+(h.updated_at||'')+'\n'+(h.confirmed_result||'')+'\n原因：'+(h.reason||'')).join('\n\n')||'暂无修改历史';
-  $('entry-status').textContent=feedback.drafts[key(i)]?'当前有草稿，未保存为结论。':feedback.annotations[key(i)]?'已有保存意见；实际应用状态见回执。':'尚未保存意见；建议不自动当作你的确认。';
+  $('entry-status').textContent=(r.applicability_state==='stale'||r.applicability_state==='unmatched')?'历史意见待重新核对：'+r.applicability_reason:feedback.drafts[key(i)]?'当前有草稿，未保存为结论。':feedback.annotations[key(i)]?'已有保存意见；实际应用状态见回执。':'尚未保存意见；建议不自动当作你的确认。';
   if(i.member_keys)groupState();else{$('group-guidance').hidden=true;$('save-review').textContent='保存本对象批注';$('save-review').disabled=false;}
  }
  function showFacts(i){
@@ -96,7 +96,7 @@ try{
   $('detail').textContent='对象：'+i.id+'\n专业：'+data.professional_labels[i.professional]+'\n图页：'+(scenes.get(i.scene_id)?.title||'未定位')+'\n状态：'+i.status+'\n'+i.detail+'\n来源：'+i.source+'\n属性：'+JSON.stringify(i.attributes||{},null,2);
   if(data.legacy_records?.[i.catalog_key])$('detail').textContent+='\n兼容迁移的完整原记录：'+JSON.stringify(data.legacy_records[i.catalog_key],null,2);
   const rc=data.receipts[key(selected)],saved=feedback.annotations[key(selected)],state=core.receiptState(rc,saved),box=$('current-adoption');box.hidden=!rc&&!i.adoption_result;
-  box.textContent=(i.adoption_result?'当前采用：'+i.adoption_result+'\n'+(i.adoption_reason||'')+'\n'+(i.adoption_note||''):'')+(rc?'\n处理回执：'+rc.status+'\n'+rc.assistant_response+(state==='stale'?'\n这条意见已有更新，旧回执不能证明新意见已应用。':''):'');
+  box.textContent=(i.adoption_result?'当前采用：'+i.adoption_result+'\n'+(i.adoption_reason||'')+'\n'+(i.adoption_note||''):'')+(rc?'\n处理回执：'+rc.status+'\n'+rc.assistant_response+(state==='stale'?'\n意见或成果版本已变化，旧回执不能证明当前结果已复核。':''):'');
   if(rc?.member_results){const row=rc.member_results.find(r=>r.object_id===i.id||r['对象编号']===i.id);if(row)box.textContent+='\n本成员处理：'+JSON.stringify(row,null,2);}
  }
  function changeScene(id,fitPage=true){if(!scenes.has(id))return;scene=scenes.get(id);$('scene').value=id;if(fitPage)fit();draw();}
@@ -137,10 +137,10 @@ try{
  }
  function form(){
   const old=feedback.annotations[key(selected)]||{},isGroup=!!selected.member_keys;
-  const out={...old,object_id:selected.id,object_ids:isGroup?Array.from(new Set(selected.member_keys.filter(k=>checked.has(k)).map(k=>objects.get(k).id))):[selected.id],category:selected.category,title:selected.title,
+  const out={...old,result_fingerprint:selected.result_fingerprint,applicability_state:'current',applicability_reason:'用户本轮重新保存意见',object_id:selected.id,object_ids:isGroup?Array.from(new Set(selected.member_keys.filter(k=>checked.has(k)).map(k=>objects.get(k).id))):[selected.id],category:selected.category,title:selected.title,
    confirmed_result:$('review-result').value,reason:$('review-reason').value,instruction:$('review-instruction').value,scope:isGroup?'本组勾选对象':$('review-scope').value,evidence_note:$('review-evidence').value,original_message:old.original_message||'',entry_origin:'页面草稿，未保存',updated_at:new Date().toISOString()};
   if(isGroup)Object.assign(out,{group_id:selected.id,selected_object_keys:selected.member_keys.filter(k=>checked.has(k)),excluded_object_keys:selected.member_keys.filter(k=>!checked.has(k)),member_snapshot:selected.member_snapshot,group_revision:data.revision});
-  else out.object_snapshot={catalog_key:selected.catalog_key,object_id:selected.id,professional:selected.professional,scene_id:selected.scene_id,quantities:selected.quantities,attributes:selected.attributes};
+  else out.object_snapshot={catalog_key:selected.catalog_key,object_id:selected.id,professional:selected.professional,scene_id:selected.scene_id,quantities:selected.quantities,attributes:selected.attributes,result_fingerprint:selected.result_fingerprint};
   return out;
  }
  function status(extra=''){
@@ -148,7 +148,7 @@ try{
   const message=[extra,storageOK?'':'本机暂存不可用，请及时保存带批注HTML或导出JSON。',cacheProblem?'暂存提示：'+cacheProblem:''].filter(Boolean).join(' ');
   $('action-message').textContent=message;$('action-message').hidden=!message;
  }
- function backup(){feedback.drawing_revision=data.revision;feedback.exported_at=new Date().toISOString();try{localStorage.setItem(storageKey,JSON.stringify(feedback));storageOK=true;}catch(e){storageOK=false;}status();}
+ function backup(){feedback.drawing_revision=data.revision;feedback.current_result_fingerprint=data.result_fingerprint;feedback.exported_at=new Date().toISOString();try{localStorage.setItem(storageKey,JSON.stringify(feedback));storageOK=true;}catch(e){storageOK=false;}status();}
  function stash(){if(!selected)return;feedback.drafts[key(selected)]=core.cleanRecord(form(),key(selected),false);backup();$('entry-status').textContent='已暂存草稿；尚未保存为意见。';}
  for(const id of ['review-result','review-reason','review-evidence','review-scope','review-instruction'])$(id).oninput=stash;
  $('save-review').onclick=()=>{if(!selected)return;try{const k=key(selected);feedback.annotations[k]=core.saveRecord(feedback.annotations[k],form(),k,new Date().toISOString());delete feedback.drafts[k];backup();reviewShow(selected);if(focused)showFacts(focused);$('entry-status').textContent='意见已保存；专业复算后才更新实际数量。';}catch(e){$('entry-status').textContent=e.message;}};

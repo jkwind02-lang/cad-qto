@@ -1,6 +1,7 @@
 """Shared offline review data contract. Does not recognize objects or alter quantities."""
 import base64, copy, gzip, hashlib, json, math, re
 from pathlib import Path
+from qto_review_revision import bind_result_versions, classify_feedback
 
 VIEW_SCHEMA = 'qto-review-view/1.0'
 FEEDBACK_SCHEMA = 'qto-review-feedback/2.0'
@@ -95,6 +96,7 @@ def normalize_view(raw, base_dir=None):
   require(string(q.get('label')) and string(q.get('unit')) and string(q.get('scope')),'汇总须含范围、名称和单位')
   require(q.get('value') is None or number(q['value']),'汇总数值无效')
  d['professional_labels']=PROFESSIONALS;d.setdefault('scope_notes',[])
+ bind_result_versions(d)
  json.dumps(d,ensure_ascii=False,allow_nan=False)
  return d
 
@@ -147,7 +149,7 @@ def validate_feedback(raw, view):
     else:
      obj=next((o for o in view['objects'] if o['catalog_key']==snap['catalog_key']),None)
      if obj:require(obj['id']==snap['object_id'],'单对象快照与当前对象身份不一致')
- return p,unmatched
+ return classify_feedback(p,view,unmatched)
 
 def empty_feedback(view):
- return {'schema':FEEDBACK_SCHEMA,'project_id':view['project_id'],'review_id':view['review_id'],'source_sha256':view['source_sha256'],'drawing_revision':view['revision'],'annotations':{},'drafts':{},'custom_markers':[]}
+ return {'schema':FEEDBACK_SCHEMA,'project_id':view['project_id'],'review_id':view['review_id'],'source_sha256':view['source_sha256'],'drawing_revision':view['revision'],'result_fingerprint':view['result_fingerprint'],'annotations':{},'drafts':{},'custom_markers':[]}
