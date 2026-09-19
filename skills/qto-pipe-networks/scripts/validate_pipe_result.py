@@ -317,7 +317,7 @@ def main() -> int:
                 errors.append("缺少 endpoint_handoff 跨工作包对账")
             else:
                 handoff_counts = [
-                    endpoint_handoff.get("source_instance_count"),
+                    endpoint_handoff.get("source_endpoint_port_count", endpoint_handoff.get("source_instance_count")),
                     endpoint_handoff.get("delivered_count"),
                     endpoint_handoff.get("not_applicable_count"),
                     endpoint_handoff.get("unresolved_count"),
@@ -396,6 +396,23 @@ def main() -> int:
                 errors.append("workflow_readiness 必须明确不以协议验证替代业务正确性")
             elif readiness.get("status") != "READY":
                 warnings.append("推算链仍有未闭合审计或交接，只能形成部分工作量")
+
+    if args.inference and isinstance(inference.get("route_preparation"), dict):
+        prep = inference["route_preparation"]
+        if not math.isclose(as_number(prep.get("length_delta")) or 0, 0, abs_tol=1e-7):
+            errors.append("原工程路线分段前后长度不守恒")
+        parent_map = prep.get("parent_map", {})
+        children = [sid for values in parent_map.values() for sid in values]
+        actual = [r.get("segment_id") for r in inference.get("segments", [])]
+        if len(children) != len(set(children)) or set(children) != set(actual):
+            errors.append("原对象与派生管段映射不完整或重复")
+        source_lengths = prep.get("source_lengths", {})
+        edge_lengths = {r["segment_id"]: r["length"] for r in inference.get("segments", [])}
+        for parent, keys in parent_map.items():
+            if parent not in source_lengths or any(k not in edge_lengths for k in keys) or not math.isclose(sum(edge_lengths.get(k, 0) for k in keys), source_lengths.get(parent, -1), abs_tol=1e-7, rel_tol=1e-10):
+                errors.append("派生管段与原路线长度不符: " + parent)
+        if prep.get("issues"):
+            warnings.append("路径识别或跨图关系尚有未决，详见自动生成复核摘要")
 
     status = "FAIL" if errors else ("PASS_WITH_LIMITATIONS" if warnings else "PASS")
     output = {

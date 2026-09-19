@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from model_recognition_basis import validate_working_basis
+from recompute_qto_dependencies import check_result_dependencies
 
 
 TOP_REQUIRED = (
@@ -582,6 +583,7 @@ def validate_document(data: Any) -> list[str]:
             if not nonempty(item.get(field)):
                 errors.append(f"{identifier}缺少非空字段: {field}")
 
+    errors.extend(check_result_dependencies(data))
     return errors
 
 

@@ -24,6 +24,8 @@ INPUT_VERSIONS = {
 }
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from model_recognition_basis import validate_working_basis
+from qto_pipe_topology import (prepare_network, make_endpoint_nodes, gap_pairs, add_interfaces,
+    NodeLocator, RouteIndex, ambiguous_role_nodes, finalize_network, review_markdown)
 OUTPUT_VERSION = "qto-pipe-network-inference-evidence/1.2"
 LEVEL_RANK = {"scenario": 1, "inferred": 2, "confirmed": 3}
 LEVEL_ZH = {"scenario": "方案暂估量", "inferred": "规则推算量", "confirmed": "确认量"}
@@ -148,6 +150,8 @@ def main() -> int:
 
     try:
         data = load(args.input.resolve())
+        data, route_preparation = prepare_network(data)
+        uncertain_change_systems = set()
         validate_working_basis(data.get("recognition_basis"))
         input_version = data.get("schema_version")
         if input_version not in INPUT_VERSIONS:
@@ -294,6 +298,7 @@ def main() -> int:
                 "length": length,
                 "source_ids": source_ids,
                 "seeds": seeds,
+                **{k: raw.get(k) for k in ("geometry", "parent_segment_id", "space_id", "start_token", "end_token", "tangent_start", "tangent_end")},
             }
             endpoints.extend(
                 [
@@ -395,31 +400,7 @@ def main() -> int:
         else:
             dn_match_policy = None
 
-        endpoint_uf = UnionFind(len(endpoints))
-        for left in range(len(endpoints)):
-            for right in range(left + 1, len(endpoints)):
-                if endpoints[left]["system"] != endpoints[right]["system"]:
-                    continue
-                if distance(endpoints[left]["point"], endpoints[right]["point"]) <= snap:
-                    endpoint_uf.union(left, right)
-        node_ids: dict[int, str] = {}
-        node_points: dict[str, tuple[float, ...]] = {}
-        endpoint_node: dict[int, str] = {}
-        for endpoint_index, endpoint in enumerate(endpoints):
-            root = endpoint_uf.find(endpoint_index)
-            if root not in node_ids:
-                node_id = f"N-{len(node_ids) + 1:05d}"
-                node_ids[root] = node_id
-                members = [
-                    candidate["point"]
-                    for index, candidate in enumerate(endpoints)
-                    if endpoint_uf.find(index) == root
-                ]
-                node_points[node_id] = tuple(
-                    sum(value[axis] for value in members) / len(members)
-                    for axis in range(coordinate_dimension or 2)
-                )
-            endpoint_node[endpoint_index] = node_ids[root]
+        node_points, endpoint_node, node_partitions, snap_stats = make_endpoint_nodes(endpoints, segments, snap)
 
         segment_nodes: dict[str, tuple[str, str]] = {}
         node_segments: dict[str, set[str]] = defaultdict(set)
@@ -473,13 +454,14 @@ def main() -> int:
             for index, endpoint in enumerate(endpoints)
             if len(node_segments[endpoint_node[index]]) == 1
         ]
+        spatial_gap_options = gap_pairs(endpoints, open_endpoints, segments, gap_max)
         candidates: dict[int, list[tuple[float, int]]] = defaultdict(list)
         for left_pos, left in enumerate(open_endpoints):
             a = endpoints[left]
             a_segment = segments[a["segment_id"]]
             a_other = a_segment["end"] if a["end_name"] == "start" else a_segment["start"]
-            outward_a = vector(a_other, a["point"])
-            for right in open_endpoints[left_pos + 1 :]:
+            outward_a = tuple(-x for x in a_segment["tangent_start"]) if a["end_name"] == "start" else tuple(a_segment["tangent_end"])
+            for right in spatial_gap_options.get(left, []):
                 b = endpoints[right]
                 if a["segment_id"] == b["segment_id"] or a["system"] != b["system"]:
                     continue
@@ -493,7 +475,7 @@ def main() -> int:
                     continue
                 b_segment = segments[b["segment_id"]]
                 b_other = b_segment["end"] if b["end_name"] == "start" else b_segment["start"]
-                outward_b = vector(b_other, b["point"])
+                outward_b = tuple(-x for x in b_segment["tangent_start"]) if b["end_name"] == "start" else tuple(b_segment["tangent_end"])
                 if angle_deg(outward_a, vector(a["point"], b["point"])) > direction_tolerance:
                     continue
                 if angle_deg(outward_b, vector(b["point"], a["point"])) > direction_tolerance:
@@ -527,6 +509,7 @@ def main() -> int:
                 {
                     "bridge_id": bridge_id,
                     "system": a["system"],
+                    "space_id": segments[a["segment_id"]]["space_id"],
                     "a": {"segment_id": a["segment_id"], "end": a["end_name"]},
                     "b": {"segment_id": b["segment_id"], "end": b["end_name"]},
                     "node_a": endpoint_node[left],
@@ -558,14 +541,10 @@ def main() -> int:
             graph[bridge["node_a"]].append((bridge["node_b"], "bridge", bridge["bridge_id"]))
             graph[bridge["node_b"]].append((bridge["node_a"], "bridge", bridge["bridge_id"]))
 
-        def nearest_node(raw_point: tuple[float, ...], system: str, maximum: float) -> str | None:
-            allowed = {
-                node
-                for node, incident in node_segments.items()
-                if any(segments[segment_id]["system"] == system for segment_id in incident)
-            }
-            ranked = sorted((distance(raw_point, node_points[node]), node) for node in allowed)
-            return ranked[0][1] if ranked and ranked[0][0] <= maximum else None
+        interface_edges = add_interfaces(route_preparation, endpoint_lookup, endpoint_node, graph)
+        node_locator = NodeLocator(node_points, node_partitions, segment_nodes, segments, max(terminal_max, snap, 1e-9))
+        def nearest_node(raw_point, system, maximum, context=None):
+            return node_locator.bind({**(context or {}), "point": list(raw_point), "system": system}, maximum)
 
         change_nodes: set[str] = set()
         change_records = []
@@ -574,9 +553,11 @@ def main() -> int:
                 fail(f"change_nodes[{index}] 必须是对象")
             system = text(raw.get("system"), f"change_nodes[{index}].system")
             raw_point = point(raw.get("point"), f"change_nodes[{index}].point")
-            node = nearest_node(raw_point, system, terminal_max)
+            node = nearest_node(raw_point, system, terminal_max, raw)
             if node is None:
-                fail(f"change_nodes[{index}] 未绑定到网络节点")
+                uncertain_change_systems.add(system)
+                route_preparation["issues"].append({"type": "变径边界未绑定，受影响系统停止规格传播", "object": raw})
+                continue
             change_nodes.add(node)
             change_records.append(
                 {
@@ -594,9 +575,10 @@ def main() -> int:
             if not isinstance(raw, dict):
                 fail(f"roots[{index}] 必须是对象")
             system = text(raw.get("system"), f"roots[{index}].system")
-            node = nearest_node(point(raw.get("point"), f"roots[{index}].point"), system, terminal_max)
+            node = nearest_node(point(raw.get("point"), f"roots[{index}].point"), system, terminal_max, raw)
             if node is None:
-                fail(f"roots[{index}] 未绑定到网络节点")
+                route_preparation["issues"].append({"type": "水源或立管根节点未绑定", "object": raw})
+                continue
             roots_by_system[system].append(node)
             root_records.append(
                 {
@@ -647,9 +629,10 @@ def main() -> int:
             terminal_id = text(raw.get("terminal_id"), f"terminals[{index}].terminal_id")
             system = text(raw.get("system"), f"{terminal_id}.system")
             terminal_point = point(raw.get("point"), f"{terminal_id}.point")
-            node = nearest_node(terminal_point, system, terminal_max)
+            node = nearest_node(terminal_point, system, terminal_max, raw)
             if node is None:
-                fail(f"{terminal_id} 未绑定到网络端点")
+                route_preparation["issues"].append({"type": "末端端口未绑定", "object": raw})
+                continue
             level = seed_level(raw.get("evidence_level"), f"{terminal_id}.evidence_level")
             terminal_type = text(raw.get("terminal_type"), f"{terminal_id}.terminal_type")
             port_dn = raw.get("port_dn")
@@ -690,6 +673,12 @@ def main() -> int:
             terminal_records.append(record)
 
         raw_endpoint_handoff = data.get("endpoint_handoff")
+        if isinstance(raw_endpoint_handoff, dict):
+            unbound = len(data.get("terminals", [])) - len(terminal_records)
+            route_preparation["endpoint_receipt"] = {"provided": len(data.get("terminals", [])), "bound": len(terminal_records), "unbound": unbound}
+            raw_endpoint_handoff = dict(raw_endpoint_handoff)
+            raw_endpoint_handoff["delivered_count"] -= unbound
+            raw_endpoint_handoff["unresolved_count"] += unbound
         if input_version == "qto-pipe-network-inference-input/1.2" and not isinstance(
             raw_endpoint_handoff, dict
         ):
@@ -775,14 +764,14 @@ def main() -> int:
 
         adjacency: dict[str, set[str]] = defaultdict(set)
         for node, incident in node_segments.items():
-            if node in change_nodes:
+            if node in change_nodes or any(segments[sid]["system"] in uncertain_change_systems for sid in incident):
                 continue
             if len(incident) == 2:
                 left, right = sorted(incident)
                 adjacency[left].add(right)
                 adjacency[right].add(left)
         for bridge in bridges:
-            if bridge["node_a"] in change_nodes or bridge["node_b"] in change_nodes:
+            if bridge["node_a"] in change_nodes or bridge["node_b"] in change_nodes or bridge["system"] in uncertain_change_systems:
                 continue
             left_segments = node_segments[bridge["node_a"]]
             right_segments = node_segments[bridge["node_b"]]
@@ -790,6 +779,16 @@ def main() -> int:
                 left, right = next(iter(left_segments)), next(iter(right_segments))
                 adjacency[left].add(right)
                 adjacency[right].add(left)
+
+        for link in interface_edges:
+            if link.get("dn_continuity") is not True or link["system"] in uncertain_change_systems:
+                continue
+            if link["node_a"] in change_nodes or link["node_b"] in change_nodes:
+                continue
+            left_set, right_set = node_segments[link["node_a"]], node_segments[link["node_b"]]
+            if len(left_set) == len(right_set) == 1:
+                left, right = next(iter(left_set)), next(iter(right_set))
+                adjacency[left].add(right); adjacency[right].add(left)
 
         terminal_seeds: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for node, records in terminal_nodes.items():
@@ -992,6 +991,13 @@ def main() -> int:
                     role = "未定"
             roles[segment_id] = {"role": role, "downstream_terminal_count": downstream}
 
+        ambiguous_nodes = ambiguous_role_nodes(graph, roots_by_system)
+        for sid, (left, right) in segment_nodes.items():
+            if left in ambiguous_nodes or right in ambiguous_nodes:
+                roles[sid] = {"role": "环网", "downstream_terminal_count": 0, "role_basis": "环路或多源不套用树状下游数量"}
+        if ambiguous_nodes:
+            route_preparation["issues"].append({"type": "环网或多水源需按系统图复核主支管", "node_count": len(ambiguous_nodes)})
+
         role_dn_rules = []
         for index, raw in enumerate(data.get("role_dn_rules", [])):
             if not isinstance(raw, dict):
@@ -1126,7 +1132,7 @@ def main() -> int:
             for segment_id in incident:
                 left, right = segment_nodes[segment_id]
                 target = segments[segment_id]["end"] if left == node_id else segments[segment_id]["start"]
-                directions.append(vector(node_points[node_id], target))
+                directions.append(tuple(segments[segment_id]["tangent_start"]) if left == node_id else tuple(-x for x in segments[segment_id]["tangent_end"]))
             dns = sorted({assignments[segment_id]["dn"] for segment_id in incident if assignments[segment_id]["dn"]})
             fitting_type = None
             candidate_types = []
@@ -1172,6 +1178,7 @@ def main() -> int:
                 }
             )
 
+        valve_route_index = RouteIndex(list(segments.values()))
         valve_records = []
         valve_ids: set[str] = set()
         for index, raw in enumerate(data.get("valves", [])):
@@ -1183,17 +1190,12 @@ def main() -> int:
             valve_ids.add(valve_id)
             system = text(raw.get("system"), f"{valve_id}.system")
             valve_point = point(raw.get("point"), f"{valve_id}.point")
-            ranked = sorted(
-                (
-                    point_segment_distance(valve_point, segment["start"], segment["end"]),
-                    segment_id,
-                )
-                for segment_id, segment in segments.items()
-                if segment["system"] == system
-            )
+            spaces = {r["space_id"] for r in segments.values() if r["system"] == system}
+            valve_space = raw.get("space_id") or (next(iter(spaces)) if len(spaces) == 1 else None)
+            ranked = valve_route_index.within(valve_point, system, valve_max, valve_space)
             nearby_segments = [segment_id for gap, segment_id in ranked if gap <= valve_max]
             connection_method = "proximity_candidates"
-            attached_segments = nearby_segments
+            attached_segments = []  # proximity alone is not an actual online connection
             explicit_segments = raw.get("connected_segment_ids")
             if explicit_segments is not None:
                 if (not isinstance(explicit_segments, list) or not explicit_segments
@@ -1206,14 +1208,14 @@ def main() -> int:
                 connection_method = "evidence_bound_connection"
             else:
                 # 搜索半径只找候选；实际在线接触优先于邻近侧管。
-                contact_segments = [sid for gap, sid in ranked if gap <= snap]
+                contact_segments = [sid for gap, sid in ranked if gap <= snap and valve_space is not None]
                 if contact_segments:
                     attached_segments = contact_segments
                     connection_method = "exact_segment_contact"
                 else:
                     bridge_pairs = []
                     for bridge in bridges:
-                        if bridge["system"] != system:
+                        if bridge["system"] != system or bridge.get("space_id") != valve_space:
                             continue
                         pa, pb = node_points[bridge["node_a"]], node_points[bridge["node_b"]]
                         if (point_segment_distance(valve_point, pa, pb) <= snap
@@ -1273,6 +1275,8 @@ def main() -> int:
                     "attached_segment_id": attached,
                     "attached_segment_ids": attached_segments,
                     "nearby_segment_ids": nearby_segments,
+                    "nearby_dn_candidates": sorted({assignments[sid]["dn"] for sid in nearby_segments if assignments[sid]["dn"]}),
+                    "space_id": valve_space,
                     "connection_method": connection_method,
                     "connection_source_id": raw.get("connection_source_id"),
                     "instance_level": seed_level(raw.get("instance_level", "confirmed"), "valve instance level"),
@@ -1300,7 +1304,8 @@ def main() -> int:
                 item
                 for item in valve_records
                 if item["system"] == bridge["system"]
-                and point_segment_distance(tuple(item["point"]), bridge_start, bridge_end) <= valve_max
+                and item.get("space_id") == bridge.get("space_id")
+                and point_segment_distance(tuple(item["point"]), bridge_start, bridge_end) <= snap
             ]
             if occupying_valves:
                 bridge["classification"] = "在线附件占位候选"
@@ -1561,15 +1566,23 @@ def main() -> int:
             },
             "decision_queue": decision_queue,
         }
+        output = finalize_network(output, route_preparation, segments, snap_stats)
         output_path = args.output.resolve()
         if output_path == args.input.resolve():
             fail("输出路径不得覆盖输入")
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(output, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        import hashlib
+        summary = review_markdown(output)
+        summary_path = output_path.with_name(output_path.stem + "_" + hashlib.sha256(summary.encode()).hexdigest()[:10] + "_复核摘要.md")
+        if summary_path.exists() and summary_path.read_text(encoding="utf-8") != summary:
+            fail("复核摘要文件冲突，请使用新版本输出目录")
+        summary_path.write_text(summary, encoding="utf-8")
         print(
             json.dumps(
                 {
                     "status": "PASS",
+                    "review_summary": str(summary_path),
                     "network_id": network_id,
                     "segment_count": len(segments),
                     "topology_bridge_count": len(bridges),

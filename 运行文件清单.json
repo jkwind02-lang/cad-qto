@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 215,
+  "runtime_file_count": 218,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
@@ -130,6 +130,11 @@
       "bytes": 17225
     },
     {
+      "path": "_qto-shared-evidence/scripts/qto_pipe_topology.py",
+      "sha256": "a0fffd77043543805c6fbd4a87ef4259a07887d790835776e6908d9a8d8909f0",
+      "bytes": 32490
+    },
+    {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
       "sha256": "9ac79b0c17adc96012fc3088cd673f1b14f7752769127ac0af04f8237a3e100a",
       "bytes": 12264
@@ -140,14 +145,24 @@
       "bytes": 4378
     },
     {
+      "path": "_qto-shared-evidence/scripts/qto_spatial.py",
+      "sha256": "d228ad667878b54244414844df23562feb9ca6471b183d1f4302124e83a84a25",
+      "bytes": 6283
+    },
+    {
       "path": "_qto-shared-evidence/scripts/read_qto_review_feedback.py",
       "sha256": "ac019a3a8f747bdd72ef93f059dfd66b96b1a0f5a987117db9bd7a8a9e60f6f7",
       "bytes": 2129
     },
     {
+      "path": "_qto-shared-evidence/scripts/recompute_qto_dependencies.py",
+      "sha256": "42cfd77229c3aaf89f9a8e7e0057dd3de3cdb25c0db30c616eea2f359ba1ab3b",
+      "bytes": 13446
+    },
+    {
       "path": "_qto-shared-evidence/scripts/validate_minimum_result.py",
-      "sha256": "0787b75e04acfe9c9860577b4466edef5a4a021f326808bf55caf5b99d668ff3",
-      "bytes": 29333
+      "sha256": "3e8f313a6dfa65c7546642fcc0bc4f28e917107f0f9bda540f9cddb53c96f779",
+      "bytes": 29449
     },
     {
       "path": "_qto-shared-evidence/scripts/validate_shared_evidence.py",
@@ -776,18 +791,18 @@
     },
     {
       "path": "qto-pipe-networks/scripts/audit_pipe_object_selection.py",
-      "sha256": "4c84ba8f0c066255419d576986627d3abbf3a7c39b01568973f4a4f16e9b7015",
-      "bytes": 12356
+      "sha256": "9c80ede5b87bb1818b97d7aac735aadb0c742e8e54e85c6259a53c73fcc03bd4",
+      "bytes": 12668
     },
     {
       "path": "qto-pipe-networks/scripts/build_pipe_inference_input.py",
-      "sha256": "020e6c829982614db15a51962ffc7483b4af5c0b547e6ce4142fe6cf25205c9f",
-      "bytes": 58474
+      "sha256": "ae4a560b6defd70d1bd62c5cebe6b8bf1a8245554f52d495c379dcd114fcc564",
+      "bytes": 60164
     },
     {
       "path": "qto-pipe-networks/scripts/infer_pipe_network.py",
-      "sha256": "99cdc3421b579c9b45689b0d2037f791ac4015473d9c4e9920ab03a718507b49",
-      "bytes": 77970
+      "sha256": "b31813dd61811ab1334fe96748b84c1be149d95f265e8168757e77fe179c4449",
+      "bytes": 80510
     },
     {
       "path": "qto-pipe-networks/scripts/measure_pipe_centerlines.py",
@@ -796,8 +811,8 @@
     },
     {
       "path": "qto-pipe-networks/scripts/validate_pipe_result.py",
-      "sha256": "ad07b473471038523b8656ad9d483856b90c8a1e552c14b2906aac27cfcba1b4",
-      "bytes": 21878
+      "sha256": "309891187fd3a4dfbab3e39177e98e6f4e1b4a1f876c1ce8e702b0655752e0d5",
+      "bytes": 23204
     },
     {
       "path": "qto-pipe-networks/scripts/validate_pipe_user_summary.py",
