@@ -293,7 +293,7 @@ def test_recompute_cli_preserves_previous_and_writes_readable_output(tmp_path):
 
 def test_multiport_handoff_uses_port_count_not_equipment_count(tmp_path):
     d=base([line('P',(0,0),(10,0))]);d['terminals']=[{'terminal_id':k,'system':'W','point':p,'terminal_type':'device-port','evidence_level':'confirmed','source_id':'equipment:'+k} for k,p in [('in',[0,0,0]),('out',[10,0,0])]]
-    d['endpoint_handoff'].update(required=True,source_instance_count=1,source_physical_instance_count=1,source_endpoint_port_count=2,delivered_count=2)
+    d['endpoint_handoff'].update(required=True,source_instance_count=2,source_physical_instance_count=1,source_endpoint_port_count=2,delivered_count=2)
     o=run_engine(tmp_path,d);assert len(o['terminals'])==2
     result=tmp_path/'result.json';result.write_text(json.dumps({'契约版本':'qto-result-minimum/1.0','本次规则清单':[],'工程量结果':[],'整体未决事项':[]}),encoding='utf-8')
     p=subprocess.run([sys.executable,str(ROOT/'skills/qto-pipe-networks/scripts/validate_pipe_result.py'),'--result',str(result),'--inference',str(tmp_path/'output.json')],capture_output=True,text=True,encoding='utf-8')

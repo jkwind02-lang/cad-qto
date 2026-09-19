@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+from collections import defaultdict, deque
 
 SCHEMA='qto-calculation-graph/1.0'
 UNIT={'1':(1.,()),'m':(1.,(('L',1),)),'mm':(.001,(('L',1),)),'cm':(.01,(('L',1),)),
@@ -101,18 +102,21 @@ def recalculate(document,previous=None):
             h=r.get('sha256')
             if not isinstance(h,str) or len(h)!=64 or any(c not in '0123456789abcdef' for c in h.lower()):raise ValueError(label+k+'缺少有效内容哈希')
     previous_rows=ids(previous.get('nodes',[]),'旧节点') if previous else {}
-    order=[];visiting=set();done=set()
-    def visit(k):
-        if k in visiting:raise ValueError('计算依赖成环:'+k)
-        if k in done:return
-        r=nodes[k];refs=r.get('variables',{})
+    order=[];degree={};children=defaultdict(list)
+    for k,r in nodes.items():
+        refs=r.get('variables',{})
         if not isinstance(refs,dict):raise ValueError(k+'变量映射无效')
-        visiting.add(k)
         for alias,dep in refs.items():
-            if not isinstance(alias,str) or not alias.isidentifier() or dep not in nodes:raise ValueError(k+'存在无效或缺失依赖')
-            visit(dep)
-        visiting.remove(k);done.add(k);order.append(k)
-    for k in nodes:visit(k)
+            if not isinstance(alias,str) or not alias.isidentifier() or not isinstance(dep,str) or dep not in nodes:raise ValueError(k+'存在无效或缺失依赖')
+        degree[k]=len(set(refs.values()))
+        for dep in set(refs.values()):children[dep].append(k)
+    queue=deque(k for k in nodes if degree[k]==0)
+    while queue:
+        k=queue.popleft();order.append(k)
+        for child in children[k]:
+            degree[child]-=1
+            if degree[child]==0:queue.append(child)
+    if len(order)!=len(nodes):raise ValueError('计算依赖成环:'+','.join(k for k in nodes if degree[k]))
     evaluated={};output=[];changed=[];affected=[];stale=[];errors=[]
     for key in order:
         r=nodes[key];unit=r.get('unit')
@@ -186,19 +190,28 @@ def check_result_dependencies(data):
     """Detect missing references, cycles and transitive release violations."""
     items=data.get('工程量结果',[])
     byid={r.get('成果项编号'):r for r in items if isinstance(r,dict)}
-    errors=[];visiting=set();done=set()
-    def visit(key):
-        if key in visiting:errors.append('成果依赖成环:'+str(key));return
-        if key in done:return
-        visiting.add(key);r=byid[key];layer=r.get('成果分层') or {}
-        for dep in layer.get('依赖成果项',[]):
-            if dep not in byid:errors.append(str(key)+'依赖不存在成果:'+str(dep));continue
-            visit(dep)
-            other=byid[dep];ol=other.get('成果分层') or {}
-            if layer.get('进入正式量') is True and (ol.get('进入正式量') is not True or other.get('结果',{}).get('数值') is None):
+    errors=[];degree={};children=defaultdict(list)
+    for key,r in byid.items():
+        layer=r.get('成果分层') or {}
+        if not isinstance(layer,dict):errors.append(str(key)+'成果分层类型无效');layer={}
+        refs=layer.get('依赖成果项',[])
+        if not isinstance(refs,list):errors.append(str(key)+'依赖成果项类型无效');refs=[]
+        valid=set()
+        for dep in refs:
+            if not isinstance(dep,str) or dep not in byid:errors.append(str(key)+'依赖不存在成果:'+str(dep));continue
+            valid.add(dep);other=byid[dep];ol=other.get('成果分层') or {};ol=ol if isinstance(ol,dict) else {}
+            result=other.get('结果') or {};result=result if isinstance(result,dict) else {}
+            if layer.get('进入正式量') is True and (ol.get('进入正式量') is not True or result.get('数值') is None):
                 errors.append(str(key)+'进入正式量但依赖成果未闭合:'+str(dep))
-        visiting.remove(key);done.add(key)
-    for key in byid:visit(key)
+        degree[key]=len(valid)
+        for dep in valid:children[dep].append(key)
+    queue=deque(k for k in byid if degree[k]==0);visited=0
+    while queue:
+        key=queue.popleft();visited+=1
+        for child in children[key]:
+            degree[child]-=1
+            if degree[child]==0:queue.append(child)
+    if visited!=len(byid):errors.append('成果依赖成环:'+','.join(str(k) for k in byid if degree[k]))
     return errors
 
 def main():

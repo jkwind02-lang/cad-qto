@@ -156,6 +156,10 @@ class RouteIndex:
 def prepare_network(raw):
     """Normalize a 1.x input, preserving source selection and parent quantities."""
     data=copy.deepcopy(raw);source=data.get('segments')
+    for field in ('roots','terminals','valves','change_nodes'):
+        for item in data.get(field,[]):
+            if item.get('coordinate_unit') is not None and item['coordinate_unit']!=data.get('unit'):
+                raise ValueError('端口/节点坐标与网络单位不同，须先显式换算')
     if not isinstance(source,list) or not source: raise ValueError('segments须为非空数组')
     report={'schema':SCHEMA,'source_segment_ids':[],'parent_map':{},'source_object_selection':copy.deepcopy(data.get('object_selection')),
             'issues':[],'junctions':[],'interfaces':[],'vertical_quantities':[],'source_lengths':{},'source_length':0.,'derived_length':0.,'length_delta':0.}
@@ -210,6 +214,11 @@ def prepare_network(raw):
 
     # Preserve original geometric continuity, but never merge an artificial cut
     # with another route just because both happen to have the same coordinates.
+    def vertex_key(s,i,t):
+        t=round(t,12)
+        if closed[s] and i==len(parts_by_id[s])-1 and t==1.: return (s,0,0.)
+        if t==1. and i+1<len(parts_by_id[s]): return (s,i+1,0.)
+        return (s,i,t)
     tokens={};reserved=set();explicit_ids=set()
     for j in data.get('junctions',[]):
         jid=text(j.get('junction_id'),'junction_id')
@@ -226,7 +235,7 @@ def prepare_network(raw):
         pts=[part_point(parts_by_id[s][i],t) for s,i,t in locs]
         if any(math.dist(a,b)>tol for n,a in enumerate(pts) for b in pts[n+1:]):raise ValueError('接管点成员超出连接容差')
         for s,i,t in locs:
-            key=(s,i,round(t,12))
+            key=vertex_key(s,i,t)
             if key in reserved:raise ValueError('同一接点有相互覆盖的决定，请先合并裁决')
             reserved.add(key);cuts[s][i].add(t)
             tokens[key]=('join:'+jid) if decision=='connect' else ('separate:'+jid+':'+s)
@@ -253,7 +262,7 @@ def prepare_network(raw):
 
     derived=[];ranges={};endpoint_refs=defaultdict(list)
     def token(s,i,t):
-        key=(s,i,round(t,12))
+        key=vertex_key(s,i,t)
         if key in tokens:return tokens[key]
         # Adjacent geometric parts use the same vertex token.
         if t==1. and i+1<len(parts_by_id[s]):
@@ -549,7 +558,17 @@ def unresolved_contacts(originals,parts_by_id,junctions,tolerance):
     rows=[{**r,'_parts':parts_by_id[s]} for s,r in originals.items()]
     index=RouteIndex(rows);issues=[];seen=set();decisions=[]
     for j in junctions:
-        decisions.append({m['segment_id'] for m in j['members']})
+        positions={}
+        for m in j['members']:
+            sid=m['segment_id'];parts=parts_by_id[sid]
+            if m.get('end')=='start':p=part_point(parts[0],0)
+            elif m.get('end')=='end':p=part_point(parts[-1],1)
+            elif 'point' in m:p=xyz(m['point'])
+            else:p=part_point(parts[m.get('part_index',0)],m['parameter'])
+            positions[sid]=p
+        decisions.append(positions)
+    def decided_here(pair,p):
+        return any(pair<=set(d) and all(math.dist(p,d[k])<=tolerance for k in pair) for d in decisions)
     # Endpoint-to-interior discovery is O(n log n + local candidates), not
     # drawing-wide pair comparison. Interior-interior intersections stay
     # disconnected unless the model supplies a drawing-backed junction.
@@ -561,9 +580,41 @@ def unresolved_contacts(originals,parts_by_id,junctions,tolerance):
                 _,i,t=project_route(p,parts_by_id[other]);last=len(parts_by_id[other])-1
                 if (i==0 and t<=1e-9) or (i==last and t>=1-1e-9):continue
                 pair={sid,other}
-                if any(pair<=d for d in decisions):continue
+                if decided_here(pair,p):continue
                 key=(tuple(sorted(pair)),tuple(round(x,8) for x in p))
                 if key in seen:continue
                 seen.add(key);issues.append({'type':'端点落在他管中部，连接待识图确认','segment_ids':sorted(pair),
                     'point':p,'candidate_member':{'segment_id':other,'part_index':i,'parameter':t},'default_connection':False})
+    flat={};groups=defaultdict(list)
+    for sid,r in originals.items():
+        for n,part in enumerate(parts_by_id[sid]):
+            if part['kind']!='line':continue
+            key=(sid,n);flat[key]=part;a,b=part['start'],part['end']
+            box=[min(x,y)-tolerance for x,y in zip(a,b)]+[max(x,y)+tolerance for x,y in zip(a,b)]
+            groups[(r['system'],r['space_id'])].append((key,box))
+    for entries in groups.values():
+        idx=BoundsIndex(entries)
+        for key,box in entries:
+            sid,_=key;p=flat[key];a=p['start'];u=[y-x for x,y in zip(a,p['end'])];A=sum(x*x for x in u)
+            for other in idx.query_box(box):
+                if other<=key or other[0]==sid:continue
+                pair={sid,other[0]};q=flat[other];b=q['start'];v=[y-x for x,y in zip(b,q['end'])];w=[x-y for x,y in zip(a,b)]
+                B=sum(x*y for x,y in zip(u,v));C=sum(x*x for x in v);D=sum(x*y for x,y in zip(u,w));E=sum(x*y for x,y in zip(v,w));den=A*C-B*B
+                if abs(den)<=1e-12*A*C:
+                    cross=[w[1]*u[2]-w[2]*u[1],w[2]*u[0]-w[0]*u[2],w[0]*u[1]-w[1]*u[0]]
+                    if math.sqrt(sum(x*x for x in cross)/A)>tolerance:continue
+                    ts=[sum((x-y)*z for x,y,z in zip(pt,a,u))/A for pt in (b,q['end'])]
+                    lo=max(0.,min(ts));hi=min(1.,max(ts))
+                    if (hi-lo)*math.sqrt(A)<=tolerance:continue
+                    pnt=part_point(p,(lo+hi)/2);issue='共线重叠路线，须核对重复表达或并行实物'
+                else:
+                    x=(B*E-C*D)/den;y=(A*E-B*D)/den
+                    if not 1e-9<x<1-1e-9 or not 1e-9<y<1-1e-9:continue
+                    pnt=part_point(p,x)
+                    if math.dist(pnt,part_point(q,y))>tolerance:continue
+                    issue='图内交叉但无连接依据，待识图确认'
+                if decided_here(pair,pnt):continue
+                marker=(tuple(sorted(pair)),tuple(round(x,8) for x in pnt))
+                if marker in seen:continue
+                seen.add(marker);issues.append({'type':issue,'segment_ids':sorted(pair),'point':pnt,'default_connection':False})
     return issues

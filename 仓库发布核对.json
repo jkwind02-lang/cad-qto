@@ -904,5 +904,13 @@
     "runtime_manifest_sha256": "b301af7ebc8fa440a3cbcfc3f27ad7005948b2e057771c9f21284e0882a72008",
     "validation": "See GitHub Actions and tests/test_audit_regressions.py; no real DWG or business adoption claim",
     "local_installation_updated": false
+  },
+  "current_revision": {
+    "version": "0.2.0+codex.20260920",
+    "baseline_commit": "48bf5cef731b321e6c28abb52a73a21b8a2d6356",
+    "scope": "人工算量路径的结构修复；详见docs/计算路径改进记录_20260920.md",
+    "validation": "以对应提交的Windows/Linux Actions实际日志为准；本字段不自证测试通过",
+    "local_installation_updated": false,
+    "real_dwg_or_browser_visual_validation": false
   }
 }

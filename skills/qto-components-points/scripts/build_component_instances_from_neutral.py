@@ -460,7 +460,20 @@ def main() -> int:
                                         port.update(network_disposition="unresolved", reason="模型尚未确认连接端口坐标，块插入点不能自动当端口")
                                     suffix = text(port.pop("port_id_suffix", f"PORT-{port_index}"), f"{rule['rule_id']}.port_id_suffix")
                                     port["port_id"] = f"{physical_id}-{suffix}"
+                                    point_space = port.pop("point_coordinate_space", "output")
+                                    if point_space not in {"output", "drawing", "block"}:
+                                        fail("端口坐标系必须为output/drawing/block")
+                                    if "point" in port and point_space != "output":
+                                        p = port["point"]
+                                        if not isinstance(p, list) or len(p) not in (2, 3):
+                                            fail("端口坐标必须为二维或三维坐标")
+                                        p = [finite(v, "port.point") for v in p]
+                                        if point_space == "block":
+                                            p = transform_point(p, matrix)
+                                        port["point"] = [v * factor for v in p]
                                     port.setdefault("point", base["point"])
+                                    port.setdefault("space_id", str(rule.get("space_id") or scope.get("space_id") or target_layout))
+                                    port.setdefault("coordinate_unit", coordinate_unit)
                                     port.setdefault("endpoint_id", f"EP-{physical_id}-{suffix}")
                                     port.setdefault("terminal_type", rule["category"])
                                     network_ports.append(port)
