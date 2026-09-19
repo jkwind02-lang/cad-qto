@@ -1,0 +1,37 @@
+name: Manual QTO repair sandbox
+on:
+  push:
+    branches: [fix/manual-qto-20260920]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r tests/requirements.txt
+      - name: Materialize actual source on isolated branch
+        run: python maintenance/apply_manual_updates.py
+      - name: Record source under test on sandbox branch only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add skills tests .codex-plugin README.md docs maintenance '运行文件清单.json' '仓库发布核对.json'
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix: materialize human takeoff path and dependency improvements'
+            git push origin HEAD:refs/heads/fix/manual-qto-20260920
+          fi
+          git rev-parse HEAD
+      - run: python -m compileall -q skills tests
+      - run: python -m pytest tests -q
+      - run: python tests/run_html_review_tests.py --root skills --output-root .codex_work/html-review
+      - run: node tests/run_html_review_ui_tests.mjs --root skills --report .codex_work/html-review/最新核验.json

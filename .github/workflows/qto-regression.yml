@@ -24,6 +24,6 @@ jobs:
           node-version: '22'
       - run: python -m pip install -r tests/requirements.txt
       - run: python -m compileall -q skills tests
-      - run: python -m pytest tests/test_audit_regressions.py -q
+      - run: python -m pytest tests -q
       - run: python tests/run_html_review_tests.py --root skills --output-root .codex_work/html-review
       - run: node tests/run_html_review_ui_tests.mjs --root skills --report .codex_work/html-review/最新核验.json
