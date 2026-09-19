@@ -1,0 +1,6 @@
+interface:
+  display_name: "龙骨与支承骨架算量"
+  short_description: "核算隔墙吊顶幕墙骨架的构件长度数量和重量并保留未决条件"
+  default_prompt: "使用 $qto-framing-supports 复核龙骨与支承骨架工程量及连接边界。"
+policy:
+  allow_implicit_invocation: true

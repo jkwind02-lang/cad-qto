@@ -1,0 +1,6 @@
+interface:
+  display_name: "土方与场地标高算量"
+  short_description: "计算基坑基槽、场地挖填、回填余方及标高未决工程数量"
+  default_prompt: "使用 $qto-earthwork-terrain 从当前图纸和项目规则计算可追溯的土方与场地标高工程量。"
+policy:
+  allow_implicit_invocation: true

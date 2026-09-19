@@ -1,0 +1,27 @@
+{
+  "schema_version": "qto-capability-disclosure/1.0",
+  "skill": "qto-piles-groundwork",
+  "capability_tier": "REFERENCE_RECALC",
+  "automatic_scope": [
+    "对有证据的桩组和地基处理清单进行根数、长度和体积参考复算",
+    "共享HTML图面复核生成、分组批注读取及回执版本对应；只展示与交接，不自动改量"
+  ],
+  "required_user_inputs": [
+    "权威图纸/已有明细与算量范围",
+    "资料无法查明的决定性设计、施工或计量条件"
+  ],
+  "calculation_inputs": [
+    "桩位或根数",
+    "桩型截面和标高",
+    "施工与计量口径"
+  ],
+  "agent_role": "原图任务由模型依据图纸识别并准备可追溯计算输入；未形成已验证自动识别器不等于必须用户先完成识别。保留候选成熟度及未复核状态。",
+  "output_adoption_level": "候选参考",
+  "business_adoption_allowed": false,
+  "known_limitations": [
+    "尚无真实案例和原始资料识别链"
+  ],
+  "agent_prepared_inputs": [
+    "专业对象、图页定位、独立单位和复核问题组；按共享HTML复核契约准备"
+  ]
+}

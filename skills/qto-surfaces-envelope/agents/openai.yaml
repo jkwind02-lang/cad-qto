@@ -1,0 +1,6 @@
+interface:
+  display_name: "面层与建筑围护算量"
+  short_description: "计算楼地面、墙面、天棚、屋面、防水保温与围护板面积"
+  default_prompt: "使用 $qto-surfaces-envelope 按设计表面、层次和洞口边界计算面层与建筑围护工程量，并保留未闭合项。"
+policy:
+  allow_implicit_invocation: true

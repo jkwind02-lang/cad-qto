@@ -1,0 +1,19 @@
+{
+  "schema_version": "qto-conventional-terminal-dn-candidates/1.0",
+  "meaning": "只生成方案暂估候选；项目图例、系统图、设备资料或用户裁决优先。",
+  "rules": [
+    {"rule_id": "CAND-DRAIN-FLOOR-DRAIN", "system_pattern": "污|废|排水", "terminal_type_pattern": "地漏", "port_dn": "DN50", "assumption_id": "A-CAND-DRAIN-FLOOR-DRAIN"},
+    {"rule_id": "CAND-DRAIN-TOILET", "system_pattern": "污|废|排水", "terminal_type_pattern": "坐便|马桶|大便器|蹲便", "port_dn": "DN100", "assumption_id": "A-CAND-DRAIN-TOILET"},
+    {"rule_id": "CAND-DRAIN-BASIN", "system_pattern": "污|废|排水", "terminal_type_pattern": "洗手盆|洗脸盆|面盆", "port_dn": "DN32", "assumption_id": "A-CAND-DRAIN-BASIN"},
+    {"rule_id": "CAND-DRAIN-MOP", "system_pattern": "污|废|排水", "terminal_type_pattern": "拖布池|污洗池|冲洗槽", "port_dn": "DN50", "assumption_id": "A-CAND-DRAIN-MOP"},
+    {"rule_id": "CAND-DRAIN-SHOWER", "system_pattern": "污|废|排水", "terminal_type_pattern": "淋浴", "port_dn": "DN50", "assumption_id": "A-CAND-DRAIN-SHOWER"},
+    {"rule_id": "CAND-DRAIN-URINAL", "system_pattern": "污|废|排水", "terminal_type_pattern": "小便器|小便斗", "port_dn": "DN50", "assumption_id": "A-CAND-DRAIN-URINAL"},
+    {"rule_id": "CAND-DRAIN-WASHER", "system_pattern": "污|废|排水", "terminal_type_pattern": "洗衣机", "port_dn": "DN50", "assumption_id": "A-CAND-DRAIN-WASHER"},
+    {"rule_id": "CAND-WATER-TOILET", "system_pattern": "给水|冷水|生活水", "terminal_type_pattern": "坐便|马桶|大便器|蹲便", "port_dn": "DN15", "assumption_id": "A-CAND-WATER-TOILET"},
+    {"rule_id": "CAND-WATER-BASIN", "system_pattern": "给水|冷水|热水|生活水", "terminal_type_pattern": "洗手盆|洗脸盆|面盆", "port_dn": "DN15", "assumption_id": "A-CAND-WATER-BASIN"},
+    {"rule_id": "CAND-WATER-MOP", "system_pattern": "给水|冷水|生活水", "terminal_type_pattern": "拖布池|污洗池|冲洗槽", "port_dn": "DN20", "assumption_id": "A-CAND-WATER-MOP"},
+    {"rule_id": "CAND-WATER-SHOWER", "system_pattern": "给水|冷水|热水|生活水", "terminal_type_pattern": "淋浴", "port_dn": "DN15", "assumption_id": "A-CAND-WATER-SHOWER"},
+    {"rule_id": "CAND-WATER-URINAL", "system_pattern": "给水|冷水|生活水", "terminal_type_pattern": "小便器|小便斗", "port_dn": "DN15", "assumption_id": "A-CAND-WATER-URINAL"},
+    {"rule_id": "CAND-WATER-WASHER", "system_pattern": "给水|冷水|生活水", "terminal_type_pattern": "洗衣机", "port_dn": "DN15", "assumption_id": "A-CAND-WATER-WASHER"}
+  ]
+}

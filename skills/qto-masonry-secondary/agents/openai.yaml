@@ -1,0 +1,7 @@
+interface:
+  display_name: "砌体与二次结构算量"
+  short_description: "核算砌体墙净量及构造柱圈梁过梁，缺少资料时保留未决"
+  default_prompt: "使用 $qto-masonry-secondary 复核砌体墙和二次结构工程量并列出未决条件。"
+policy:
+  allow_implicit_invocation: true
+

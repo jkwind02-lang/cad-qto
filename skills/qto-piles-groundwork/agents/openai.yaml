@@ -1,0 +1,6 @@
+interface:
+  display_name: "桩基与地基处理算量"
+  short_description: "核算桩位桩长成孔灌注护筒褥垫层和各类地基处理工程量"
+  default_prompt: "使用 $qto-piles-groundwork 复核桩基与地基处理分项工程量。"
+policy:
+  allow_implicit_invocation: true

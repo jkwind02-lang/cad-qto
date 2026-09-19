@@ -1,0 +1,6 @@
+interface:
+  display_name: "管道与管网算量"
+  short_description: "按系统和规格计算管道、管件、阀门、管道支吊架及保温工程量"
+  default_prompt: "使用 $qto-pipe-networks 计算指定系统和区域的管道工程量，并保留证据与未决事项。"
+policy:
+  allow_implicit_invocation: true

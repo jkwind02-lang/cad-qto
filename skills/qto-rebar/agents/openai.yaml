@@ -1,0 +1,6 @@
+interface:
+  display_name: "钢筋算量"
+  short_description: "按平法和构件配筋计算钢筋根数、展开长度、理论重量及未闭合节点"
+  default_prompt: "使用 $qto-rebar 计算可追溯的钢筋根数、中心线展开长度和理论重量，并保留未闭合节点。"
+policy:
+  allow_implicit_invocation: true

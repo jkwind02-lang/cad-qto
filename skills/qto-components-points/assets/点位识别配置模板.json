@@ -1,0 +1,37 @@
+{
+  "schema_version": "qto-component-recognition-profile/1.0",
+  "profile_id": "填写项目内唯一配置ID",
+  "profile_version": "1",
+  "expected_source_sha256": "填写原始DWG或权威DXF的SHA256",
+  "adjudication_ledger": {
+    "ledger_id": "填写项目裁决台账ID",
+    "ledger_version": "1",
+    "sha256": "填写项目裁决台账文件SHA256"
+  },
+  "scope": {
+    "layout": "Model",
+    "bounds": {
+      "xmin": 0,
+      "xmax_exclusive": 1,
+      "ymin": 0,
+      "ymax_exclusive": 1
+    }
+  },
+  "unit": {
+    "factor_to_output": 0.001,
+    "output_coordinate_unit": "m",
+    "source_id": "填写单位证据ID"
+  },
+  "block_expansion": {"max_depth": 16},
+  "consumer_skill": "qto-pipe-networks",
+  "rules": [
+    {
+      "rule_id": "填写点位规则ID",
+      "block_pattern": "填写块名正则",
+      "layer_pattern": ".*",
+      "parent_block_pattern": ".*",
+      "decision": "unresolved",
+      "priority": 10
+    }
+  ]
+}

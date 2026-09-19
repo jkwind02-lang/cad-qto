@@ -1,0 +1,6 @@
+interface:
+  display_name: "构件门窗设备与点位算量"
+  short_description: "核对构件门窗设备和点位实例，去重后按规格与区域统计数量"
+  default_prompt: "使用 $qto-components-points 核对门窗、设备或点位实例并防止重复计数。"
+policy:
+  allow_implicit_invocation: true

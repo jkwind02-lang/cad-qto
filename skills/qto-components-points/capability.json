@@ -1,0 +1,28 @@
+{
+  "schema_version": "qto-capability-disclosure/1.0",
+  "skill": "qto-components-points",
+  "capability_tier": "PROFESSIONAL_INFERENCE",
+  "automatic_scope": [
+    "按冻结规则展开CAD嵌套块",
+    "逐实例采用、排除、未决和不适用处置",
+    "唯一ID计数与多端口交接",
+    "共享HTML图面复核生成、分组批注读取及回执版本对应；只展示与交接，不自动改量"
+  ],
+  "required_user_inputs": [
+    "权威图纸与算量范围",
+    "资料无法查明的决定性项目条件或计量口径"
+  ],
+  "agent_prepared_inputs": [
+    "本轮来源哈希和单位核对",
+    "模型读图形成的工作识别记录与配置，或真实已有的独立裁决",
+    "实例分组、唯一身份和端口定位证据",
+    "专业对象、图页定位、独立单位和复核问题组；按共享HTML复核契约准备"
+  ],
+  "working_recognition_supported": true,
+  "output_adoption_level": "候选参考、规则推算或方案暂估；真实T1评分通过前不标识别确认量",
+  "business_adoption_allowed": false,
+  "known_limitations": [
+    "识别适配器尚未通过真实T1和SESSION隐藏样本",
+    "无冻结规则的块族保持未决，不能按块名或图层猜成正式实例"
+  ]
+}

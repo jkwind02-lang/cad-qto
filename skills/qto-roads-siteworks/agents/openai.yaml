@@ -1,0 +1,7 @@
+interface:
+  display_name: "道路与场地构造算量"
+  short_description: "核算道路场坪结构层、铺装及路缘沟渠绿化等分项工程量"
+  default_prompt: "使用 $qto-roads-siteworks 复核道路和场地构造分层工程量。"
+policy:
+  allow_implicit_invocation: true
+

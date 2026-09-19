@@ -1,0 +1,39 @@
+{
+  "schema_version": "qto-model-recognition-ledger/1.0",
+  "ledger_id": "填写本轮识别记录编号",
+  "ledger_version": "1",
+  "source_sha256": "填写本轮来源SHA256",
+  "adoption_scope": "working",
+  "review_status": "unreviewed",
+  "evidence": [
+    {
+      "evidence_id": "EV-本轮图面",
+      "path": "填写实际证据文件路径",
+      "sha256": "填写该证据文件SHA256",
+      "source_sha256": "填写本轮来源SHA256",
+      "kind": "drawing_view",
+      "locator": "填写图号、布局、区域和对象定位",
+      "observation": "填写实际观察到的图例、对象与连接关系"
+    }
+  ],
+  "entries": [
+    {
+      "adjudication_id": "MR-001",
+      "subject_id": "填写识别规则rule_id",
+      "decision": "include",
+      "professional_owner": "qto-pipe-networks",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "填写实际模型标识",
+      "recognized_at": "填写实际识别时间",
+      "source_id": "填写本轮资料编号",
+      "evidence_ids": ["EV-本轮图面"],
+      "object_ids": ["填写中性record_id或点位PT完整实例路径"],
+      "basis": "填写为何这样识别",
+      "scope_basis": "填写本层/本系统适用范围",
+      "identity_basis": "填写唯一物理对象及重复表达核对",
+      "cross_check": "填写已做的图例、系统或局部连接关系核对",
+      "uncertainties": []
+    }
+  ]
+}

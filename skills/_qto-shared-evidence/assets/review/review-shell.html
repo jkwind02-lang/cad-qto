@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__PAGE_TITLE__</title>
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0}body{display:flex;flex-direction:column;font:13px "Microsoft YaHei",sans-serif;color:#20364b;background:#f4f7fa;overflow:hidden}
+header{flex:none;position:relative;z-index:10;padding:6px 12px;border-bottom:1px solid #d5e0e8;background:white}.header-row{display:flex;align-items:center;gap:12px;min-width:0}h1{flex:1;min-width:0;font-size:15px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.intro{font-size:12px;color:#617587;line-height:1.6}.exportbar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:10px}
+button,select,input,textarea{font:inherit}button,select{border:1px solid #b7c8d4;border-radius:5px;background:white;padding:7px 9px;color:#23455b;cursor:pointer}button:hover{background:#edf5fa}.on{background:#235c7a!important;color:white!important}button:disabled{opacity:.45;cursor:default}input{border:1px solid #b7c8d4;border-radius:5px;padding:8px}
+main{--navw:260px;--revieww:clamp(390px,34vw,620px);display:grid;grid-template-columns:var(--navw) 6px minmax(300px,1fr) 6px var(--revieww);flex:1;min-height:0;min-width:0;overflow:hidden}
+.nav,.review-pane{display:flex;flex-direction:column;min-height:0;background:white;overflow:hidden}.nav{padding:10px}.modebar{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px}.nav label{font-weight:bold;font-size:12px}.nav select,.nav input{width:100%;margin:5px 0}#counter{font-size:11px;color:#6c7e8d;margin:5px 0;line-height:1.5}#list{flex:1;min-height:0;overflow:auto;border-top:1px solid #dee7ed}
+.item{display:block;text-align:left;width:100%;border:0;border-radius:0;border-bottom:1px solid #e2e9ee;padding:10px 7px;background:white;line-height:1.55}.item strong{font-size:12px}.item small{display:block;color:#6c8192;font-size:11px}.item.active{background:#e9f3f9;box-shadow:inset 3px 0 #236383}
+.splitter{cursor:col-resize;background:#e1e9ef;touch-action:none}.splitter:hover,.splitter.dragging{background:#73a6c5}.map{display:flex;flex-direction:column;min-width:0;min-height:0}.bar{flex:none;display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:7px}.bar button{padding:6px 8px;font-size:12px}.maparea{position:relative;flex:1;min-height:0;background:white;margin:0 6px;border:1px solid #d8e1e8}canvas{position:absolute;width:100%;height:100%;touch-action:none;cursor:grab}#mapstatus{position:absolute;bottom:8px;left:8px;pointer-events:none;font-size:11px;background:#fffffff0;padding:6px 8px;max-width:90%;line-height:1.5}.hint{font-size:11px;color:#698093;padding:6px 9px;line-height:1.5}.membernav{padding:4px 8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}#member-position{font-size:11px;color:#47677e}
+.review-titlebar{flex:none;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #dbe4eb;font-size:15px;font-weight:bold;background:#f4f9fc}#editor{flex:1;min-height:0;overflow:auto;padding:12px 15px}#editor-title{display:block;font-size:14px;margin-bottom:7px;color:#154f72}#group-guidance{background:#edf6fb;border-left:3px solid #3f86b0;padding:8px 10px;font-size:12px;line-height:1.7;white-space:pre-wrap;margin-bottom:10px}#group-guidance[hidden]{display:none}
+#editor label{display:block;font-weight:bold;font-size:12px;margin:10px 0 5px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:9px}.fields select{width:100%;padding:7px}textarea{width:100%;border:1px solid #a8bdca;border-radius:5px;padding:8px;font-size:13px;line-height:1.65;resize:vertical;background:white}#review-result{min-height:86px}#review-reason{min-height:126px}#review-evidence{min-height:70px}details{margin:9px 0;border:1px solid #dce6ec;border-radius:5px;padding:7px}summary{cursor:pointer;font-size:12px;color:#386781}#detail,#original{font-size:12px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}#original{background:#fff7df;padding:8px}.savebar{position:sticky;bottom:-12px;background:#fff;padding:10px 0 5px;margin-top:8px;border-top:1px solid #dbe5ec}#save-review{width:100%;padding:10px;background:#225e7c;color:white;font-weight:bold;font-size:14px}#entry-status{display:block;font-size:11px;line-height:1.6;margin-top:6px}#review-status{font-size:11px;line-height:1.5;color:#246746;max-width:700px}.footer-note{flex:none;border-top:1px solid #e1e8ed;padding:7px 11px;font-size:11px;line-height:1.6;color:#6e8291}#loading{position:fixed;inset:0;background:#f5f8fbf5;display:flex;align-items:center;justify-content:center;z-index:40;font-size:17px;padding:30px}#import-file{display:none}
+#members-panel{height:42%;min-height:150px;max-height:420px;display:flex;flex-direction:column;border-top:2px solid #bdd2df;margin-top:5px}#members-panel[hidden]{display:none}.members-head{font-size:12px;padding:8px 0 4px;font-weight:bold}.members-actions{display:flex;gap:5px;align-items:center;font-size:11px}.members-actions button{padding:4px 7px;font-size:11px}#member-list{flex:1;min-height:0;overflow:auto;margin-top:4px}.member-row{display:flex;align-items:flex-start;gap:5px;padding:6px 2px;border-bottom:1px solid #edf0f4;line-height:1.45}.member-row input{width:15px;flex:none;margin-top:4px}.member-row button{border:0;border-radius:0;padding:0;background:transparent;text-align:left;flex:1;font-size:11px;overflow-wrap:anywhere}.member-row.focus{background:#fff2d7}.member-row small{display:block;color:#758b9c}#selected-count{font-size:11px;color:#416b85}
+@media(max-width:1050px){main{--navw:210px;--revieww:360px;grid-template-columns:var(--navw) 5px minmax(240px,1fr) 5px var(--revieww)}header{padding:6px 8px}.header-row{gap:8px}.exportbar button{font-size:11px}}
+@media(max-width:850px){body{overflow:auto;height:auto}main{display:flex;flex-direction:column;overflow:visible}.nav{height:360px}.splitter{display:none}.map{height:65vh;min-height:430px}.review-pane{height:auto;min-height:700px}#editor{overflow:visible}.savebar{bottom:0}.review-titlebar{position:sticky;top:0}.footer-note{font-size:12px}}
+#current-adoption{white-space:pre-wrap;line-height:1.7;font-size:13px;padding:11px;background:#eef8f1;border:1px solid #9fcdb0;border-radius:6px;margin:8px 0;max-height:260px;overflow:auto}#current-adoption[hidden]{display:none}
+
+.filters{display:grid;grid-template-columns:1fr 1fr;gap:5px}.pagination{display:flex;gap:5px;align-items:center;font-size:11px;padding:5px 0}.qty{border-collapse:collapse;width:100%;margin:8px 0;font-size:12px}.qty th,.qty td{padding:6px;border:1px solid #d8e2e9;text-align:left}.qty th{background:#edf4f8}.summary-strip{display:flex;gap:6px;flex-wrap:wrap;margin:5px 0}.summary-chip{font-size:12px;background:#eef5f8;padding:4px 7px;border-radius:4px}#scope-notes{color:#805323;white-space:pre-wrap;font-size:12px;line-height:1.5}#unlocated{position:absolute;top:15px;left:15px;max-width:85%;padding:10px;background:#fff4d9;color:#775015;line-height:1.7}#unlocated[hidden]{display:none}.minor{font-size:11px;color:#647e8d}#history-content{white-space:pre-wrap;font-size:12px;line-height:1.6}#summary-strip:empty{display:none}
+.filters>*{min-width:0}.filters select{min-width:0}#scene{max-width:280px}#summary-strip{max-height:100px;overflow:auto}#history-content{max-height:300px;overflow:auto}
+#review-status{flex:none;white-space:nowrap}.header-row>#save-html{flex:none;padding:6px 10px;background:#225e7c;color:white;font-size:12px}
+#header-details{flex:none;margin:0;padding:0;border:0}#header-details>summary{padding:6px 9px;border:1px solid #b7c8d4;border-radius:5px;white-space:nowrap;background:white}#header-details[open]>summary{background:#edf5fa}
+.header-panel{position:absolute;right:12px;top:calc(100% + 5px);width:min(680px,calc(100vw - 24px));max-height:55vh;overflow:auto;padding:14px;background:white;border:1px solid #b7c8d4;border-radius:7px;box-shadow:0 6px 20px #20364b25}.header-panel .intro{display:block}.header-panel p{margin:8px 0 0;font-size:12px;line-height:1.6;color:#617587}
+#action-message{margin:5px 0 0;font-size:12px;line-height:1.5;color:#805323;overflow-wrap:anywhere}#action-message[hidden]{display:none}
+@media(max-width:600px){.header-row{flex-wrap:wrap;gap:6px 8px}.header-row h1{flex-basis:100%}#review-status{flex:1}}
+</style>
+<header><div class="header-row"><h1 id="page-title">__PAGE_TITLE__</h1><span id="review-status" aria-live="polite"></span><button id="save-html">保存带批注HTML</button>
+<details id="header-details"><summary>说明与更多</summary><div class="header-panel">
+<div class="intro" id="current-summary">正在载入复核资料。</div>
+<div id="summary-strip" class="summary-strip"></div><div id="scope-notes"></div>
+<p>批注自动暂存在本机；交接时保存带批注HTML或导出JSON，交回其中一份即可。</p>
+<div class="exportbar"><button id="export-feedback">导出批注JSON</button><button id="import-feedback">导入批注HTML或JSON</button><input type="file" id="import-file" accept=".json,.html,.htm"></div>
+</div></details></div><div id="action-message" role="status" hidden></div>
+</header>
+<main id="layout">
+<aside class="nav"><div class="modebar"><button id="mode-groups" class="on">按问题组</button><button id="mode-objects">全部对象</button></div>
+<div class="filters"><div><label for="professional">专业</label><select id="professional"></select></div><div><label for="category">问题/状态</label><select id="category"></select></div></div>
+<input id="search" placeholder="搜索对象、图页、规格、状态或依据" aria-label="搜索复核内容">
+<div id="counter"></div><div id="list"></div><div class="pagination"><button id="list-prev">上一页</button><span id="list-page"></span><button id="list-next">下一页</button></div>
+<div id="members-panel" hidden><div class="members-head">本组成员 · 可取消特殊位置</div><div class="members-actions"><button id="member-all">全选</button><button id="member-none">全不选</button><span id="selected-count"></span></div><div id="member-list"></div><div class="pagination"><button id="members-prev">上一页</button><span id="members-page"></span><button id="members-next">下一页</button></div></div>
+</aside><div class="splitter" id="nav-splitter" title="拖动调整对象列表"></div>
+<section class="map"><div class="bar"><label for="scene">图页/视图</label><select id="scene"></select><button id="fit">整图</button><button id="group-fit">本组本页</button><button id="plus">＋</button><button id="minus">−</button><button id="add-marker">新增标记</button><button id="export-image">保存当前图</button></div>
+<div class="membernav"><button id="member-prev">上一处</button><button id="member-next">下一处</button><button id="member-single">只批注当前处</button><span id="member-position"></span></div>
+<div class="maparea"><canvas id="cad" aria-label="全专业对象回图"></canvas><div id="unlocated" hidden></div><div id="mapstatus"></div></div>
+<div class="hint">左侧选组，中间逐位置查看，右侧记录结论和原因；跨图页成员自动切换。拖动两条分隔线可调整宽度。</div>
+</section><div class="splitter" id="review-splitter" title="拖动调整填写区"></div>
+<aside class="review-pane"><div class="review-titlebar"><span>复核意见与处理</span><button id="widen-editor">加宽填写区</button></div>
+<div id="editor"><b id="editor-title">先选问题组或对象</b><div id="group-guidance" hidden></div><div id="current-adoption" hidden></div>
+<div id="object-facts"></div><details id="source-details"><summary>查看完整依据、属性与原话</summary><div id="detail"></div><div id="original" hidden></div></details>
+<div class="fields"><div><label for="review-instruction">处理意见</label><select id="review-instruction"><option value="请助手复核">请助手继续判断</option><option value="确认现结果">认可当前结果</option><option value="修改结果">给出修正结果</option><option value="排除对象">排除所选对象</option><option value="暂缓计算">暂缓所选部分</option><option value="仍需核实">仍需补充资料</option></select></div><div><label for="review-scope">应用范围</label><select id="review-scope"><option>仅所选对象</option><option>本组勾选对象</option><option>本图同类对象（需核对范围）</option><option>供通用规则评估</option></select></div></div>
+<label for="review-result">你的结论或需要判断的问题</label><textarea id="review-result" placeholder="可以确认某种判断方法；不同规格和单位保留各成员原值，不会自动统一改数。"></textarea>
+<label for="review-reason">判断原因／图纸依据</label><textarea id="review-reason" placeholder="说明依据或需要助手继续核对的位置；整组例外可取消勾选。"></textarea>
+<details><summary>补充定位说明（可选）</summary><textarea id="review-evidence" placeholder="图页、轴线、编号、图例或构造做法"></textarea></details>
+<details><summary>本条修改历史</summary><div id="history-content"></div></details>
+<div class="savebar"><button id="save-review" disabled>保存本条批注</button><span id="entry-status"></span></div></div>
+<div class="footer-note">草稿与已保存意见分开。保存只记录意见，专业复算后才更新数量及回执；方法意见不当作具体数值确认。完成后交回带批注HTML或JSON中的一份即可。</div>
+</aside></main>
+<div id="loading">正在展开内嵌图纸、对象和批注…</div>
+<script id="feedback-seed" type="application/json">__FEEDBACK__</script>
+<script>__REVIEW_CORE__</script>
+<script id="payload" type="application/octet-stream">
+__PAYLOAD__
+</script>
+<script>__REVIEW_APP__</script>
+</html>

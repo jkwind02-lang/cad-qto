@@ -1,0 +1,49 @@
+{
+  "schema_version": "qto-pipe-recognition-profile/1.1",
+  "profile_id": "填写项目内唯一配置ID",
+  "profile_version": "1",
+  "expected_source_sha256": "填写原始DWG或权威DXF的SHA256",
+  "adjudication_ledger": {
+    "ledger_id": "填写项目裁决台账ID",
+    "ledger_version": "1",
+    "sha256": "填写项目裁决台账文件SHA256"
+  },
+  "network_id": "填写管网ID",
+  "scope": {
+    "layout": "Model",
+    "bounds": {
+      "xmin": 0,
+      "xmax_exclusive": 1,
+      "ymin": 0,
+      "ymax_exclusive": 1
+    }
+  },
+  "unit": {
+    "factor_to_output": 0.001,
+    "output_unit": "m",
+    "source_id": "填写单位证据ID"
+  },
+  "layer_rules": [
+    {
+      "rule_id": "填写图层规则ID",
+      "layer_pattern": "填写图层正则",
+      "system": "填写系统",
+      "decision": "unresolved",
+      "allowed_entity_types": ["LINE", "LWPOLYLINE", "POLYLINE", "ARC", "SPLINE"],
+      "priority": 10
+    }
+  ],
+  "root_rules": [],
+  "block_rules": [],
+  "text_rules": [],
+  "use_conventional_terminal_type_candidates": true,
+  "use_conventional_valve_type_candidates": true,
+  "object_audit_parameters": {
+    "connection_tolerance": 0.01,
+    "repeat_min_count": 3,
+    "signature_precision": 6
+  },
+  "inference_parameters": {},
+  "roots": [],
+  "terminals": []
+}

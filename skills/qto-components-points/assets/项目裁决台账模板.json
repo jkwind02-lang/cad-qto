@@ -1,0 +1,20 @@
+{
+  "schema_version": "qto-project-adjudication-ledger/1.0",
+  "ledger_id": "填写项目内唯一台账ID",
+  "ledger_version": "1",
+  "source_sha256": "填写与识别配置一致的来源SHA256",
+  "entries": [
+    {
+      "adjudication_id": "填写唯一裁决ID",
+      "subject_id": "填写被裁决的规则ID",
+      "decision": "include",
+      "professional_owner": "qto-components-points",
+      "confirmation_source": "legend",
+      "source_id": "填写图例、渲染、第二来源、用户裁决或权威文件ID",
+      "evidence_ids": ["填写至少一个证据ID"],
+      "confirmed_by": "填写实际核定人或权威文件责任主体",
+      "confirmed_at": "填写核定时间",
+      "status": "active"
+    }
+  ]
+}

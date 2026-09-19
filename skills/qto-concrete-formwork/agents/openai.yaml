@@ -1,0 +1,6 @@
+interface:
+  display_name: "混凝土与模板算量"
+  short_description: "按同一构件几何计算混凝土体积、模板接触面积及扣减关系"
+  default_prompt: "使用 $qto-concrete-formwork 计算指定范围的混凝土与模板工程量，并保留构件证据、扣减关系和未决事项。"
+policy:
+  allow_implicit_invocation: true

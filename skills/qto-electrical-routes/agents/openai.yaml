@@ -1,0 +1,6 @@
+interface:
+  display_name: "电气线路与通道算量"
+  short_description: "核算回路导管桥架电缆电线母线及配套构件的分规格长度"
+  default_prompt: "使用 $qto-electrical-routes 复核电气线路和通道分系统分规格工程量。"
+policy:
+  allow_implicit_invocation: true

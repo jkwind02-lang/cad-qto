@@ -1,0 +1,958 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "qto-result-minimum/1.0",
+  "title": "工程量成果最小字段规范化测试结构",
+  "description": "仅用于验证最小字段和跨字段不变量，不要求实际成果统一转换为 JSON，也不承担专业判断。",
+  "type": "object",
+  "required": [
+    "契约版本",
+    "任务范围",
+    "资料选择",
+    "证据目录",
+    "本次规则清单",
+    "工程量结果",
+    "整体未决事项"
+  ],
+  "properties": {
+    "recognition_basis": {
+      "type": "object",
+      "required": ["schema_version", "decision_origin", "ledger_path", "ledger_sha256", "adoption_scope", "review_status", "formal_adoption_allowed"],
+      "properties": {
+        "schema_version": {"const": "qto-model-recognition-ledger/1.0"},
+        "decision_origin": {"const": "model"},
+        "ledger_path": {"type": "string", "minLength": 1},
+        "ledger_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "adoption_scope": {"const": "working"},
+        "review_status": {"const": "unreviewed"},
+        "formal_adoption_allowed": {"const": false}
+      }
+    },
+    "契约版本": {
+      "const": "qto-result-minimum/1.0"
+    },
+    "任务范围": {
+      "$ref": "#/$defs/任务范围"
+    },
+    "资料选择": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/资料选择项"
+      }
+    },
+    "证据目录": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/证据项"
+      }
+    },
+    "本次规则清单": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/规则项"
+      }
+    },
+    "工程量结果": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/成果项"
+      }
+    },
+    "整体未决事项": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/未决项"
+      }
+    },
+    "推算协议版本": {
+      "const": "qto-inference/1.0"
+    },
+    "假定与裁决清单": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/假定与裁决项"
+      }
+    },
+    "说明": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {"required": ["recognition_basis"]},
+      "then": {
+        "properties": {
+          "工程量结果": {
+            "items": {
+              "required": ["成果分层"],
+              "properties": {
+                "成果分层": {
+                  "required": ["进入正式量", "发布状态"],
+                  "properties": {
+                    "进入正式量": {"const": false},
+                    "发布状态": {"enum": ["内部工作", "复核"]}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "非空文本": {
+      "type": "string",
+      "minLength": 1
+    },
+    "可定位文本": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/非空文本"
+        },
+        {
+          "not": {
+            "enum": [
+              "待确认",
+              "未知",
+              "未确定",
+              "证据不足",
+              "无",
+              "N/A",
+              "n/a",
+              "-"
+            ]
+          }
+        }
+      ]
+    },
+    "可核对单位": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/非空文本"
+        },
+        {
+          "not": {
+            "enum": [
+              "待确认",
+              "未知",
+              "未确定",
+              "证据不足",
+              "混合",
+              "混合单位",
+              "综合",
+              "综合单位",
+              "多单位",
+              "-"
+            ]
+          }
+        },
+        {
+          "pattern": "^[^+＋、,，|;；]+$"
+        }
+      ]
+    },
+    "零值复核记录": {
+      "type": "object",
+      "required": [
+        "范围覆盖",
+        "来源",
+        "规则",
+        "复核结论",
+        "说明"
+      ],
+      "properties": {
+        "范围覆盖": {
+          "$ref": "#/$defs/可定位文本"
+        },
+        "来源": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^EV-[A-Za-z0-9._-]+$"
+          }
+        },
+        "规则": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^R-[A-Za-z0-9._-]+$"
+          }
+        },
+        "复核结论": {
+          "const": "已确认零值"
+        },
+        "说明": {
+          "$ref": "#/$defs/可定位文本"
+        }
+      },
+      "additionalProperties": true
+    },
+    "任务范围": {
+      "type": "object",
+      "required": [
+        "业务专业",
+        "主要物理对象",
+        "系统",
+        "楼栋",
+        "楼层或区域",
+        "图纸类型",
+        "图纸版本",
+        "输出维度"
+      ],
+      "properties": {
+        "业务专业": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "主要物理对象": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "系统": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "楼栋": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "楼层或区域": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "图纸类型": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "图纸版本": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "输出维度": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "纳入项": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/非空文本"
+          }
+        },
+        "排除项": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/非空文本"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "资料选择项": {
+      "type": "object",
+      "required": [
+        "资料编号",
+        "路径",
+        "资料类型",
+        "版本身份",
+        "选择结论",
+        "原因",
+        "拟提取中性事实",
+        "未使用影响"
+      ],
+      "properties": {
+        "资料编号": {
+          "type": "string",
+          "pattern": "^SRC-[A-Za-z0-9._-]+$"
+        },
+        "路径": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "资料类型": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "版本身份": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "选择结论": {
+          "enum": [
+            "已选择",
+            "已排除",
+            "暂不确定"
+          ]
+        },
+        "原因": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "拟提取中性事实": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "未使用影响": {
+          "$ref": "#/$defs/非空文本"
+        }
+      },
+      "additionalProperties": true
+    },
+    "证据项": {
+      "type": "object",
+      "required": [
+        "证据编号",
+        "来源类型",
+        "资料编号",
+        "中性事实",
+        "定位",
+        "来源身份",
+        "提取方式",
+        "质量状态",
+        "限制"
+      ],
+      "properties": {
+        "证据编号": {
+          "type": "string",
+          "pattern": "^EV-[A-Za-z0-9._-]+$"
+        },
+        "来源类型": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "资料编号": {
+          "type": "string",
+          "pattern": "^SRC-[A-Za-z0-9._-]+$"
+        },
+        "中性事实": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "定位": {
+          "$ref": "#/$defs/可定位文本"
+        },
+        "来源身份": {
+          "$ref": "#/$defs/可定位文本"
+        },
+        "提取方式": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "质量状态": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "限制": {
+          "type": "string"
+        },
+        "缓存编号": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "规则项": {
+      "type": "object",
+      "required": [
+        "规则编号",
+        "规则名称",
+        "规则来源",
+        "本次判定",
+        "成熟状态",
+        "执行结果",
+        "证据位置"
+      ],
+      "properties": {
+        "规则编号": {
+          "type": "string",
+          "pattern": "^R-[A-Za-z0-9._-]+$"
+        },
+        "规则名称": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "规则来源": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "本次判定": {
+          "enum": [
+            "采用",
+            "试用",
+            "不适用",
+            "证据不足"
+          ]
+        },
+        "成熟状态": {
+          "enum": [
+            "候选",
+            "试运行",
+            "正式",
+            "停用"
+          ]
+        },
+        "执行结果": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "证据位置": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "项目采用依据": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "未决项": {
+      "type": "object",
+      "required": [
+        "事项编号",
+        "类型",
+        "关联成果项",
+        "说明",
+        "影响",
+        "所需输入",
+        "当前处理"
+      ],
+      "properties": {
+        "事项编号": {
+          "type": "string",
+          "pattern": "^U-[A-Za-z0-9._-]+$"
+        },
+        "类型": {
+          "enum": [
+            "缺资料",
+            "范围未定",
+            "来源冲突",
+            "规则冲突",
+            "质量问题",
+            "需用户确认"
+          ]
+        },
+        "关联成果项": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^QTY-[A-Za-z0-9._-]+$"
+          }
+        },
+        "说明": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "影响": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "所需输入": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "当前处理": {
+          "enum": [
+            "停止受影响计算",
+            "保留已证实部分",
+            "等待裁决",
+            "形成规则推算",
+            "形成方案暂估",
+            "保留多方案"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "假定与裁决项": {
+      "type": "object",
+      "required": [
+        "假定编号",
+        "假定内容",
+        "类型",
+        "依据",
+        "使用规则",
+        "置信等级",
+        "替代方案",
+        "推荐方案",
+        "状态",
+        "影响成果项",
+        "影响说明",
+        "所需确认方",
+        "重算范围"
+      ],
+      "properties": {
+        "假定编号": {
+          "type": "string",
+          "pattern": "^A-[A-Za-z0-9._-]+$"
+        },
+        "假定内容": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "类型": {
+          "enum": [
+            "事实推定",
+            "规则选择",
+            "方案参数",
+            "跨专业接口",
+            "用户裁决"
+          ]
+        },
+        "依据": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/非空文本"
+          }
+        },
+        "使用规则": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^R-[A-Za-z0-9._-]+$"
+          }
+        },
+        "置信等级": {
+          "enum": [
+            "高",
+            "中",
+            "低",
+            "不适用"
+          ]
+        },
+        "替代方案": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "方案编号",
+              "内容",
+              "数量影响"
+            ],
+            "properties": {
+              "方案编号": {
+                "$ref": "#/$defs/非空文本"
+              },
+              "内容": {
+                "$ref": "#/$defs/非空文本"
+              },
+              "数量影响": {
+                "$ref": "#/$defs/非空文本"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "推荐方案": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "状态": {
+          "enum": [
+            "自动接受",
+            "待确认",
+            "已确认",
+            "已否决",
+            "不适用"
+          ]
+        },
+        "影响成果项": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^QTY-[A-Za-z0-9._-]+$"
+          }
+        },
+        "影响说明": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "所需确认方": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "重算范围": {
+          "$ref": "#/$defs/非空文本"
+        }
+      },
+      "additionalProperties": true
+    },
+    "成果分层": {
+      "type": "object",
+      "required": [
+        "数量层级",
+        "计算完整性",
+        "置信等级",
+        "确认状态",
+        "发布状态",
+        "假定编号",
+        "替代方案",
+        "依赖成果项",
+        "进入工作量",
+        "进入正式量",
+        "重算范围"
+      ],
+      "properties": {
+        "数量层级": {
+          "enum": [
+            "确认量",
+            "规则推算量",
+            "方案暂估量",
+            "未决量",
+            "不适用"
+          ]
+        },
+        "计算完整性": {
+          "enum": [
+            "完整",
+            "部分",
+            "无法形成"
+          ]
+        },
+        "置信等级": {
+          "enum": [
+            "高",
+            "中",
+            "低",
+            "不适用"
+          ]
+        },
+        "确认状态": {
+          "enum": [
+            "无需确认",
+            "待确认",
+            "已确认",
+            "已否决",
+            "不适用"
+          ]
+        },
+        "发布状态": {
+          "enum": [
+            "内部工作",
+            "复核",
+            "正式"
+          ]
+        },
+        "假定编号": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^A-[A-Za-z0-9._-]+$"
+          }
+        },
+        "替代方案": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/非空文本"
+          }
+        },
+        "依赖成果项": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^QTY-[A-Za-z0-9._-]+$"
+          }
+        },
+        "进入工作量": {
+          "type": "boolean"
+        },
+        "进入正式量": {
+          "type": "boolean"
+        },
+        "重算范围": {
+          "$ref": "#/$defs/非空文本"
+        }
+      },
+      "additionalProperties": true
+    },
+    "成果项": {
+      "type": "object",
+      "required": [
+        "成果项编号",
+        "范围",
+        "结果",
+        "单位",
+        "来源",
+        "规则",
+        "状态",
+        "未决事项",
+        "试运行结果",
+        "零值复核"
+      ],
+      "properties": {
+        "成果项编号": {
+          "type": "string",
+          "pattern": "^QTY-[A-Za-z0-9._-]+$"
+        },
+        "范围": {
+          "type": "object",
+          "required": [
+            "业务专业",
+            "主要对象",
+            "系统",
+            "楼栋",
+            "楼层或区域",
+            "规格",
+            "输出维度"
+          ],
+          "properties": {
+            "业务专业": {
+              "$ref": "#/$defs/非空文本"
+            },
+            "主要对象": {
+              "$ref": "#/$defs/非空文本"
+            },
+            "系统": {
+              "$ref": "#/$defs/非空文本"
+            },
+            "楼栋": {
+              "$ref": "#/$defs/非空文本"
+            },
+            "楼层或区域": {
+              "$ref": "#/$defs/非空文本"
+            },
+            "规格": {
+              "$ref": "#/$defs/非空文本"
+            },
+            "输出维度": {
+              "$ref": "#/$defs/非空文本"
+            }
+          },
+          "additionalProperties": true
+        },
+        "结果": {
+          "type": "object",
+          "required": [
+            "名称",
+            "数值",
+            "数值状态",
+            "计算式或说明",
+            "精度"
+          ],
+          "properties": {
+            "名称": {
+              "$ref": "#/$defs/非空文本"
+            },
+            "数值": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "数值状态": {
+              "enum": [
+                "已计算",
+                "未确定",
+                "不适用"
+              ]
+            },
+            "计算式或说明": {
+              "$ref": "#/$defs/非空文本"
+            },
+            "精度": {
+              "$ref": "#/$defs/非空文本"
+            }
+          },
+          "additionalProperties": true
+        },
+        "单位": {
+          "$ref": "#/$defs/非空文本"
+        },
+        "来源": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^EV-[A-Za-z0-9._-]+$"
+          }
+        },
+        "规则": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^R-[A-Za-z0-9._-]+$"
+          }
+        },
+        "状态": {
+          "enum": [
+            "已计算",
+            "部分计算",
+            "待确认",
+            "证据不足",
+            "不适用"
+          ]
+        },
+        "未决事项": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^U-[A-Za-z0-9._-]+$"
+          }
+        },
+        "试运行结果": {
+          "type": "boolean"
+        },
+        "零值复核": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/零值复核记录"
+            }
+          ]
+        },
+        "成果分层": {
+          "$ref": "#/$defs/成果分层"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "状态": {
+                "const": "已计算"
+              }
+            },
+            "required": [
+              "状态"
+            ]
+          },
+          "then": {
+            "properties": {
+              "结果": {
+                "properties": {
+                  "数值": {
+                    "type": "number"
+                  },
+                  "数值状态": {
+                    "const": "已计算"
+                  }
+                }
+              },
+              "来源": {
+                "minItems": 1
+              },
+              "规则": {
+                "minItems": 1
+              },
+              "单位": {
+                "$ref": "#/$defs/可核对单位"
+              },
+              "未决事项": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "状态": {
+                "const": "部分计算"
+              }
+            },
+            "required": [
+              "状态"
+            ]
+          },
+          "then": {
+            "properties": {
+              "结果": {
+                "properties": {
+                  "数值": {
+                    "type": "number"
+                  },
+                  "数值状态": {
+                    "const": "已计算"
+                  }
+                }
+              },
+              "来源": {
+                "minItems": 1
+              },
+              "规则": {
+                "minItems": 1
+              },
+              "单位": {
+                "$ref": "#/$defs/可核对单位"
+              },
+              "未决事项": {
+                "minItems": 1
+              },
+              "成果分层": {
+                "properties": {
+                  "计算完整性": {
+                    "const": "部分"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "状态": {
+                "enum": [
+                  "待确认",
+                  "证据不足"
+                ]
+              }
+            },
+            "required": [
+              "状态"
+            ]
+          },
+          "then": {
+            "properties": {
+              "结果": {
+                "properties": {
+                  "数值": {
+                    "type": "null"
+                  },
+                  "数值状态": {
+                    "const": "未确定"
+                  }
+                }
+              },
+              "未决事项": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "状态": {
+                "const": "不适用"
+              }
+            },
+            "required": [
+              "状态"
+            ]
+          },
+          "then": {
+            "properties": {
+              "结果": {
+                "properties": {
+                  "数值": {
+                    "type": "null"
+                  },
+                  "数值状态": {
+                    "const": "不适用"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "结果": {
+                "properties": {
+                  "数值": {
+                    "const": 0
+                  }
+                },
+                "required": [
+                  "数值"
+                ]
+              }
+            },
+            "required": [
+              "结果"
+            ]
+          },
+          "then": {
+            "properties": {
+              "零值复核": {
+                "$ref": "#/$defs/零值复核记录"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": true
+    }
+  }
+}

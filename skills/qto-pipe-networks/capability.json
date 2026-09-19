@@ -1,0 +1,28 @@
+{
+  "schema_version": "qto-capability-disclosure/1.0",
+  "skill": "qto-pipe-networks",
+  "capability_tier": "PROFESSIONAL_INFERENCE",
+  "automatic_scope": [
+    "CAD中性事实提取",
+    "候选识别与全对象处置",
+    "已识别管段的拓扑、DN、断口、管件和阀门推算",
+    "共享HTML图面复核生成、分组批注读取及回执版本对应；只展示与交接，不自动改量"
+  ],
+  "required_user_inputs": [
+    "权威图纸与算量范围",
+    "资料无法查明的决定性项目条件或计量口径"
+  ],
+  "agent_prepared_inputs": [
+    "本轮来源哈希和单位核对",
+    "模型读图形成的工作识别记录与配置，或真实已有的独立裁决",
+    "系统、对象及规格的定位证据",
+    "专业对象、图页定位、独立单位和复核问题组；按共享HTML复核契约准备"
+  ],
+  "working_recognition_supported": true,
+  "output_adoption_level": "候选参考、规则推算或方案暂估；真实T1评分通过前不标识别确认量",
+  "business_adoption_allowed": false,
+  "known_limitations": [
+    "识别适配器尚未通过真实T1和SESSION隐藏样本",
+    "竖向、支吊架、保温和套管仍取决于项目证据"
+  ]
+}

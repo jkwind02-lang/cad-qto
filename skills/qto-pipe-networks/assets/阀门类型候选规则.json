@@ -1,0 +1,10 @@
+{
+  "schema_version": "qto-conventional-valve-type-candidates/1.0",
+  "meaning": "只补充匿名阀件的方案候选类型，不替代图例或项目裁决。",
+  "rules": [
+    {"rule_id": "CAND-VALVE-DOMESTIC-WATER", "system_pattern": "生活|给水|热水|中水", "candidate_types": ["截止阀", "闸阀", "球阀"], "assumption_id": "A-CAND-VALVE-DOMESTIC-WATER"},
+    {"rule_id": "CAND-VALVE-FIRE", "system_pattern": "消防|消火栓|喷淋", "candidate_types": ["闸阀", "蝶阀"], "assumption_id": "A-CAND-VALVE-FIRE"},
+    {"rule_id": "CAND-VALVE-HVAC", "system_pattern": "冷冻|冷却|采暖|空调水", "candidate_types": ["蝶阀", "球阀", "闸阀"], "assumption_id": "A-CAND-VALVE-HVAC"},
+    {"rule_id": "CAND-VALVE-DRAIN", "system_pattern": "污水|废水|排水", "candidate_types": ["闸阀", "止回阀"], "assumption_id": "A-CAND-VALVE-DRAIN"}
+  ]
+}

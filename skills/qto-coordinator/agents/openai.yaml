@@ -1,0 +1,6 @@
+interface:
+  display_name: "全专业算量协调"
+  short_description: "拆分全专业和跨多个计算能力任务，检查唯一归属与单位隔离"
+  default_prompt: "使用 $qto-coordinator 拆分这项全专业算量请求并建立各能力交接边界。"
+policy:
+  allow_implicit_invocation: true
