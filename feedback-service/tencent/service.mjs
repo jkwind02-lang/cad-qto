@@ -4,6 +4,29 @@ export const sha=value=>createHash('sha256').update(value).digest('hex');
 export class InputError extends Error {constructor(message,status=400){super(message);this.status=status;}}
 const fail=(message,status)=>{throw new InputError(message,status);};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export function htmlFilename(value){
+ let name=String(value||'').toWellFormed().normalize('NFC').replace(/[\u0000-\u001f\u007f\\/<>:"|?*]/g,'_').replace(/[.\s]+$/g,'').replace(/\.(?:html?|bin)$/i,'').replace(/^[.\s]+|[.\s]+$/g,'');
+ if(!name)name='复核成果';
+ if(/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name))name='复核_'+name;
+ const chars=Array.from(name);while(Buffer.byteLength(chars.join(''),'utf8')>180)chars.pop();
+ return chars.join('').replace(/[.\s]+$/g,'')+'.html';
+}
+export const attachmentHeader=filename=>"attachment; filename=\"review.html\"; filename*=UTF-8''"+encodeURIComponent(htmlFilename(filename)).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase());
+export function artifactPath(meta){
+ if(!uuid.test(meta.report_id))fail('提交编号不正确');
+ return 'cad-qto-feedback/reviews/'+meta.report_id+'/'+htmlFilename(meta.filename);
+}
+export async function ensureHtmlArtifact(row,store,files){
+ if(!row||row.status!=='saved'||!row.file_id)fail('未找到完整HTML',404);
+ if(/\.html$/i.test(row.file_id))return row;
+ // Repair old .bin artifacts without deleting the original or changing review data.
+ const bytes=await files.read(row.file_id,MAX_HTML);
+ if(bytes.length!==row.meta.bytes||sha(bytes)!==row.meta.sha256)fail('原文件校验不一致，未转换',409);
+ const file_id=await files.put(artifactPath(row.meta),bytes,htmlFilename(row.meta.filename));
+ const restored=await files.read(file_id,MAX_HTML);
+ if(restored.length!==row.meta.bytes||sha(restored)!==row.meta.sha256)fail('HTML副本校验不一致，原收件记录仍保留',503);
+ return store.relocate(row.meta.report_id,row.file_id,file_id);
+}
 export function validateMetadata(m){
  const keys=['schema','report_id','receipt_token','consent','sha256','filename','project_id','review_id','revision','source_sha256','plugin_version','annotations_count','draft_count','bytes'];
  if(!m||Array.isArray(m)||Object.keys(m).some(k=>!keys.includes(k))||m.schema!=='cad-qto-review-upload/1.0'||m.consent!==true||!uuid.test(m.report_id)||!/^([0-9a-f]{64})$/i.test(m.receipt_token))fail('复核上传元数据不正确');
@@ -45,8 +68,8 @@ export function createService({env,store,files}){
     if(!authorized(request.headers.get('Authorization'),env.FEEDBACK_ADMIN_TOKEN))fail('需要维护者取件码',401);
     if(path==='/api/admin/reports')return reply({reports:(await store.list()).map(r=>({...receipt(r),project_id:r.meta.project_id,review_id:r.meta.review_id,filename:r.meta.filename,created_at:r.created_at}))});
     if(/^\/api\/admin\/artifacts\/TC-[0-9a-f-]{36}$/i.test(path)){
-     const row=await store.get(path.split('/').at(-1).slice(3));if(!row||row.status!=='saved')fail('未找到完整HTML',404);
-     return reply({...receipt(row),filename:row.meta.filename,url:await files.downloadURL(row.file_id)});
+     const row=await ensureHtmlArtifact(await store.get(path.split('/').at(-1).slice(3)),store,files);
+     return reply({...receipt(row),filename:htmlFilename(row.meta.filename),url:await files.downloadURL(row.file_id)});
     }
     fail('没有这个入口',404);
    }
@@ -73,7 +96,7 @@ export function createService({env,store,files}){
    if(!html.includes('id="feedback-seed"')||!html.includes('id="payload"'))fail('不是本插件生成的完整复核HTML');
    // Only the server can write the final path. A replay of a staging credential cannot
    // replace a reviewed artifact after the hash was verified.
-   const file_id=await files.put('cad-qto-feedback/reviews/'+row.meta.report_id+'/'+row.meta.sha256+'.bin',bytes);
+   const file_id=await files.put(artifactPath(row.meta),bytes,htmlFilename(row.meta.filename));
    const saved=await store.complete(row.meta.report_id,file_id);
    return reply(receipt(saved),202);
   }catch(e){return reply({error:e instanceof InputError?e.message:'腾讯云服务暂时不可用，请保留本地HTML后重试'},e instanceof InputError?e.status:503);}
