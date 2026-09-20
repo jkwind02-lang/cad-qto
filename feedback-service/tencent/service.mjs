@@ -34,8 +34,8 @@ export function createService({env,store,files}){
   if(request.method==='OPTIONS'&&origin==='null')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'GET, POST','Access-Control-Allow-Headers':'Content-Type, Authorization'}});
   try{
    const base=env.PUBLIC_BASE_PATH||'',path=base&&url.pathname.startsWith(base+'/')?url.pathname.slice(base.length):url.pathname;
-   const ready=env.FEEDBACK_ACCESS_CODE?.length>=16&&env.UPLOAD_TICKET_SECRET?.length>=32&&env.FEEDBACK_ADMIN_TOKEN?.length>=32;
-   if(request.method==='GET'&&path==='/api/info')return reply({provider:'tencent',role:'primary',ready:!!ready,max_html_bytes:MAX_HTML});
+   const ready=env.UPLOAD_TICKET_SECRET?.length>=32&&env.FEEDBACK_ADMIN_TOKEN?.length>=32;
+   if(request.method==='GET'&&path==='/api/info')return reply({provider:'tencent',role:'primary',upload_access:'open',ready:!!ready,max_html_bytes:MAX_HTML});
    if(!ready)fail('腾讯云收件服务尚未配置完成',503);
    if(request.method==='GET'&&/^\/api\/status\/[0-9a-f-]{36}$/i.test(path)){
     const row=await store.get(path.split('/').at(-1)),token=(request.headers.get('Authorization')||'').replace(/^Bearer /,'');
@@ -52,7 +52,6 @@ export function createService({env,store,files}){
    }
    if(request.method!=='POST'||!['/api/reviews/init','/api/reviews/complete'].includes(path))fail('没有这个入口',404);
    if(!['null',url.origin].includes(origin))fail('请从复核页面提交',403);
-   if(!authorized(request.headers.get('Authorization'),env.FEEDBACK_ACCESS_CODE))fail('团队反馈码不正确',401);
    if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')||''))fail('上传请求格式不正确',415);
    const raw=await bounded(request.body,16384);let body;try{body=JSON.parse(raw.toString('utf8'));}catch{fail('上传请求格式不正确');}
    if(path.endsWith('/init')){

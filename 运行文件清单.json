@@ -11,8 +11,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/problem-feedback.js",
-      "sha256": "cc33ff43025341c1b0dc2bc76d57c9dba96d96c301957bc195339c4b28f4e1c5",
-      "bytes": 9558
+      "sha256": "ab79fbd1bd3f0c7afbf185a0c503fa15bec911d82b1f8e88a335b00e548607e2",
+      "bytes": 9296
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
@@ -26,8 +26,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-shell.html",
-      "sha256": "66a80571dbe22b2c4d94510b78f170c78a4becb5318d360e7fda734cf748c078",
-      "bytes": 15632
+      "sha256": "6212376160568b6a95efa12a5218953688d9c0798421165177f7ac09fedc2a20",
+      "bytes": 15417
     },
     {
       "path": "_qto-shared-evidence/assets/模型工作识别记录模板.json",
@@ -41,8 +41,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
-      "sha256": "60ac0aeba381ba3d2abddb2f312f93d6684d291272a35e96a35d9115d8c8febe",
-      "bytes": 13273
+      "sha256": "178c533df3360610554377458d1f9a5e63b2ab93dd681a9d68c9519afbe4c3f6",
+      "bytes": 13267
     },
     {
       "path": "_qto-shared-evidence/references/PDF图片与表格提取.md",

@@ -7,7 +7,7 @@ function endpoint(value){
 async function hash(bytes){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');}
 function attach({data,getFeedback,saveLocal}){
  const config=JSON.parse($('problem-config').textContent),dlg=$('problem-dialog');
- let busy=false,server='',backup='',pending=null,teamCode='';
+ let busy=false,server='',backup='',pending=null;
  const primaryName=config.provider==='tencent'?'腾讯云':'主站';
  const message=text=>$('problem-message').textContent=text;
  const signature=()=>{const value={...getFeedback()};delete value.exported_at;return JSON.stringify(value);};
@@ -15,7 +15,7 @@ function attach({data,getFeedback,saveLocal}){
  $('problem-close').onclick=close;dlg.oncancel=e=>{if(busy)e.preventDefault();};
  $('problem-local').onclick=()=>{saveLocal();message('已请求浏览器保存完整带批注HTML，请在下载位置核对文件。');};
  function open(){
-  const f=getFeedback();$('problem-consent').checked=false;$('problem-code').value=teamCode;$('problem-check').hidden=!pending;
+  const f=getFeedback();$('problem-consent').checked=false;$('problem-check').hidden=!pending;
   server='';backup='';try{if(config.url)server=endpoint(config.url);if(config.backup_url)backup=endpoint(config.backup_url);}catch(e){message(e.message);}
   $('problem-destination').textContent=server?primaryName+'主站：'+server+(backup?'\nCloudflare备用：'+backup+'（仅主站网络或服务故障时使用）':''):'在线反馈尚未开通，当前可保存到本机。';
   $('problem-preview').textContent='项目：'+data.project_id+'\n复核范围：'+data.review_id+'\n成果版本：'+data.revision+
@@ -39,8 +39,8 @@ function attach({data,getFeedback,saveLocal}){
   if(result.sha256!==pending.metadata.sha256||result.bytes!==pending.blob.size)throw error('服务器回执与本地文件不一致，请保留文件并联系维护人员');
   return result;
  }
- async function uploadTo(url,provider,code){
-  const headers={Authorization:'Bearer '+code};
+ async function uploadTo(url,provider){
+  const headers={};
   if(provider==='tencent'){
    const init=await json(url+'/api/reviews/init',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({...pending.metadata,bytes:pending.blob.size})});
    if(init.accepted)return verify(init);
@@ -62,9 +62,9 @@ function attach({data,getFeedback,saveLocal}){
   const form=new FormData();form.append('metadata',JSON.stringify(pending.metadata));form.append('html',pending.blob,pending.file.filename);
   return verify(await json(url+'/api/reviews',{method:'POST',headers,body:form}));
  }
- async function deliver(code){
+ async function deliver(){
   if(pending.result)return pending.result;
-  try{const result=await uploadTo(server,config.provider||'cloudflare',code);pending.destination=server;pending.destinationName=primaryName;return result;}
+  try{const result=await uploadTo(server,config.provider||'cloudflare');pending.destination=server;pending.destinationName=primaryName;return result;}
   catch(e){
    if(!backup||!e.retryable)throw e;
    // A lost acknowledgement can follow a successful write. Query first, then retain the
@@ -75,13 +75,12 @@ function attach({data,getFeedback,saveLocal}){
    message(primaryName+'暂时未能确认收件，正在将同一份HTML转交Cloudflare备用站…');
    const info=await json(backup+'/api/info',{signal:AbortSignal.timeout(15000)});
    if(info.provider!=='cloudflare'||info.role!=='backup'||!info.ready)throw error('Cloudflare备用站尚未配置为备用接收模式');
-   const result=await uploadTo(backup,'cloudflare',code);pending.destination=backup;pending.destinationName='Cloudflare备用';pending.mainUncertain=true;return result;
+   const result=await uploadTo(backup,'cloudflare');pending.destination=backup;pending.destinationName='Cloudflare备用';pending.mainUncertain=true;return result;
   }
  }
  $('problem-send').onclick=async()=>{
   if(busy)return;
   if(!$('problem-consent').checked){message('请先确认发送完整HTML。');return;}
-  const code=$('problem-code').value;if(code.length<16){message('请填写维护人员提供的团队反馈码。');return;}
   busy=true;$('problem-send').disabled=true;$('problem-local').disabled=true;
   try {
    const current=signature();
@@ -96,13 +95,13 @@ function attach({data,getFeedback,saveLocal}){
     pending={file,blob,metadata,signature:signature()};
    }else saveLocal(pending.file);
    message('本地保存已发起，正在同步同一份完整HTML…');
-   const result=await deliver(code);
-   teamCode=code;pending.receipt=result.receipt;pending.result=result;
+   const result=await deliver();
+   pending.receipt=result.receipt;pending.result=result;
    message('完整HTML已收件：'+result.receipt+'（'+pending.destinationName+'）。本地与服务器文件校验一致。'+
     (pending.mainUncertain?'\n主站收件状态仍待核对；主备使用同一提交编号，备用站不另建GitHub问题。':'')+
     '\n请在浏览器下载位置核对本地文件。收件不代表当前项目已复算或问题已修正。');
   }catch(e){message('同步尚未完成：'+e.message+'。\n本地保存已发起；未修改意见时重试会使用同一份文件和提交编号。');}
-  finally{busy=false;$('problem-local').disabled=false;$('problem-send').disabled=!server;$('problem-code').value='';$('problem-check').hidden=!pending;}
+  finally{busy=false;$('problem-local').disabled=false;$('problem-send').disabled=!server;$('problem-check').hidden=!pending;}
  };
  $('problem-check').onclick=async()=>{
   if(!pending)return;

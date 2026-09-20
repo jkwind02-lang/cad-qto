@@ -21,7 +21,6 @@ button.primary{background:#235c7a;color:white}button:disabled{opacity:.5;cursor:
 <label for="reason">判断原因／依据（可选）</label><textarea id="reason" maxlength="2500"></textarea>
 <label for="steps">如何出现这个问题（可选）</label><textarea id="steps" maxlength="1500"></textarea>
 <div class="row"><div><label for="plugin_version">插件版本（可选）</label><input id="plugin_version" maxlength="80"></div><div><label for="contact">方便联系你的方式（可选）</label><input id="contact" maxlength="120"></div></div>
-<label for="code">团队反馈码</label><input id="code" type="password" autocomplete="off" placeholder="由插件维护人员提供；不是 GitHub 密码">
 <div class="actions"><button type="submit" class="primary">查看发送内容</button><button type="button" id="export">保存反馈到本机</button></div></form>
 <section id="preview" hidden><h2>将发送的内容</h2><pre id="preview-text"></pre>
 <label><input type="checkbox" id="consent">我已核对以上内容，并同意发送给插件维护人员。</label>

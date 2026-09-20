@@ -13,12 +13,12 @@ function database() {
   async first(){return st.get(...args)||null;},async all(){return {results:st.all(...args)};},
   async run(){const r=st.run(...args);return {meta:{changes:Number(r.changes)}};}};return q;}};
 }
-const code='test-team-code-123456789',repo='test-owner/private-feedback';
-function environment(){return {DB:database(),FEEDBACK_ACCESS_CODE:code,IP_HASH_SALT:'test-only-salt',GITHUB_REPOSITORY:repo,GITHUB_TOKEN:'test-token-only'};}
+const repo='test-owner/private-feedback';
+function environment(){return {DB:database(),IP_HASH_SALT:'test-only-salt',GITHUB_REPOSITORY:repo,GITHUB_TOKEN:'test-token-only'};}
 function body(overrides={}){return {report_id:crypto.randomUUID(),receipt_token:'a'.repeat(64),consent:true,
  summary:'DN分界判断错误',professional:'给排水',category:'识图判断',actual:'转接头上方判断为DN65',expected:'应为DN50',reason:'转接头才是变径边界',steps:'查看立管转接位置',contact:'',plugin_version:'test',...overrides};}
 function request(data,options={}){return new Request('https://feedback.test/api/reports',{method:'POST',headers:{
- Origin:'https://feedback.test','Content-Type':'application/json',Authorization:'Bearer '+code,...options.headers},body:JSON.stringify(data)});}
+ Origin:'https://feedback.test','Content-Type':'application/json',...options.headers},body:JSON.stringify(data)});}
 function context(){const jobs=[];return {jobs,waitUntil(p){jobs.push(p);},async finish(){await Promise.all(jobs);}};}
 function githubMock(options={}) {
  let creates=0;const issues=[];
@@ -50,15 +50,14 @@ test('保存后返回收件编号，后台写入私有GitHub；重复提交只�
  const status=await handle(new Request('https://feedback.test/api/status/'+b.report_id,{headers:{Authorization:'Bearer '+b.receipt_token}}),env,context());
  const receipt=await status.json();assert.equal(receipt.status,'synced');assert.equal(receipt.payload,undefined);assert.equal(receipt.issue_number,undefined);
 });
-test('缺少授权、未确认、未知字段和超长内容均不入库',async()=>{
+test('未确认、未知字段和超长内容均不入库',async()=>{
  const env=environment();githubMock();
  for(const b of [body({consent:false}),body({drawing_path:'D:/private.dwg'}),body({actual:'x'.repeat(2501)})]){
   assert.equal((await handle(request(b),env,context())).status,400);
  }
- assert.equal((await handle(request(body(),{headers:{Authorization:'Bearer wrong'}}),env,context())).status,401);
  assert.equal(env.DB.raw.prepare('SELECT count(*) n FROM reports').get().n,0);
 });
-test('本地HTML跨域只开放null来源且必须有团队码；其他站点被拒绝',async()=>{
+test('本地HTML无反馈码也可提交；跨域只开放null来源，其他站点被拒绝',async()=>{
  const env=environment(),ctx=context();githubMock();
  const pre=await worker.fetch(new Request('https://feedback.test/api/reports',{method:'OPTIONS',headers:{Origin:'null'}}),env,ctx);
  assert.equal(pre.status,204);assert.equal(pre.headers.get('Access-Control-Allow-Origin'),'null');
@@ -66,7 +65,7 @@ test('本地HTML跨域只开放null来源且必须有团队码；其他站点被
  const denied=await worker.fetch(request(body(),{headers:{Origin:'https://unrelated.test'}}),env,context());assert.equal(denied.status,403);assert.equal(denied.headers.get('Access-Control-Allow-Origin'),null);
 });
 test('凭据未配置关闭接收；状态查询不能枚举其他反馈',async()=>{
- const env=environment();env.FEEDBACK_ACCESS_CODE='';assert.equal((await handle(request(body()),env,context())).status,503);
+ const env=environment();env.IP_HASH_SALT='';assert.equal((await handle(request(body()),env,context())).status,503);
  const row=await acceptOnly(env);const r=await handle(new Request('https://feedback.test/api/status/'+row.report_id,{headers:{Authorization:'Bearer wrong'}}),env,context());assert.equal(r.status,404);
 });
 test('丢失GitHub应答保留uncertain，自动核对已有编号，不盲目重复创建',async()=>{
@@ -107,22 +106,22 @@ test('流式请求超限被拒绝，不依赖可伪造的Content-Length',async()
 test('HTML和Markdown中的恶意文本按文字保留，响应不携带配置秘密',async()=>{
  const env=environment(),row=await acceptOnly(env,body({actual:'<script>alert(1)</script> @all'}));
  assert(issueBody(row).includes('&lt;script&gt;'));assert(!issueBody(row).includes('@all'));
- const r=await handle(new Request('https://feedback.test/'),env,context());assert(r.headers.get('Content-Security-Policy').includes("script-src 'self'"));assert(!(await r.text()).includes(env.GITHUB_TOKEN));
+ const r=await handle(new Request('https://feedback.test/'),env,context());assert(r.headers.get('Content-Security-Policy').includes("script-src 'self'"));const page=await r.text();assert(!page.includes(env.GITHUB_TOKEN));assert(!page.includes('团队反馈码'));assert(!page.includes('id="code"'));
 });
 function bucket(){const files=new Map();return {files,async put(key,bytes){files.set(key,new Uint8Array(bytes));},async get(key){const bytes=files.get(key);return bytes?{body:bytes}:null;}};}
 async function reviewRequest(html,overrides={}){
  const bytes=new TextEncoder().encode(html),metadata={schema:'cad-qto-review-upload/1.0',report_id:crypto.randomUUID(),receipt_token:'c'.repeat(64),consent:true,
   sha256:await hashBytes(bytes),filename:'项目复核.html',project_id:'合成项目',review_id:'八层给排水',revision:'复核一版',source_sha256:'a'.repeat(64),plugin_version:'test',annotations_count:1,draft_count:1,...overrides};
  const form=new FormData();form.append('metadata',JSON.stringify(metadata));form.append('html',new Blob([html],{type:'text/html'}),metadata.filename);
- return {metadata,request:new Request('https://feedback.test/api/reviews',{method:'POST',headers:{Origin:'null',Authorization:'Bearer '+code},body:form})};
+ return {metadata,request:new Request('https://feedback.test/api/reviews',{method:'POST',headers:{Origin:'null'},body:form})};
 }
 const sampleHTML='<!doctype html><html lang="zh-CN"><script id="feedback-seed" type="application/json">{"意见":"DN50","原因":"转接头边界"}</script><script id="payload" type="application/octet-stream">合成图面</script></html>';
-test('完整HTML先私有入库再收件，维护者下载逐字节一致',async()=>{
+test('完整HTML无需反馈码，先私有入库再收件，维护者下载逐字节一致',async()=>{
  const env=environment();env.REVIEWS=bucket();env.FEEDBACK_ADMIN_TOKEN='admin-only-token-12345678901234567890';const ctx=context(),gh=githubMock(),submission=await reviewRequest(sampleHTML);
  const r=await worker.fetch(submission.request,env,ctx);assert.equal(r.status,202);const received=await r.json();assert.equal(received.sha256,submission.metadata.sha256);await ctx.finish();assert.equal(gh.creates,1);assert(gh.issues[0].body.includes('合成项目'));
  const url='https://feedback.test/api/artifacts/'+received.receipt;
  assert.equal((await worker.fetch(new Request(url),env,context())).status,401);
- assert.equal((await worker.fetch(new Request(url,{headers:{Authorization:'Bearer '+code}}),env,context())).status,401);
+ assert.equal((await worker.fetch(new Request(url,{headers:{Authorization:'Bearer invalid-admin-token'}}),env,context())).status,401);
  const download=await worker.fetch(new Request(url,{headers:{Authorization:'Bearer '+env.FEEDBACK_ADMIN_TOKEN}}),env,context());
  assert.equal(download.status,200);assert.match(download.headers.get('Content-Disposition'),/^attachment;/);assert.equal(await download.text(),sampleHTML);assert.equal(download.headers.get('X-Content-SHA256'),submission.metadata.sha256);
 });

@@ -15,8 +15,7 @@ export async function hashBytes(bytes){return [...new Uint8Array(await crypto.su
 export async function uploadReview(request,env,ctx) {
  const origin=new URL(request.url).origin;
  if(![origin,'null'].includes(request.headers.get('Origin')))throw new InputError('请从复核页面提交',403);
- if(!env.DB||!env.REVIEWS||!env.FEEDBACK_ACCESS_CODE||env.FEEDBACK_ACCESS_CODE.length<16||!env.IP_HASH_SALT)throw new InputError('完整HTML接收服务尚未配置完成',503);
- if(await digest(request.headers.get('Authorization')||'')!==await digest('Bearer '+env.FEEDBACK_ACCESS_CODE))throw new InputError('团队反馈码不正确',401);
+ if(!env.DB||!env.REVIEWS||!env.IP_HASH_SALT)throw new InputError('完整HTML接收服务尚未配置完成',503);
  const type=request.headers.get('Content-Type')||'';
  if(!type.startsWith('multipart/form-data;'))throw new InputError('需要上传HTML文件',415);
  let form,meta;

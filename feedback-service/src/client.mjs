@@ -23,7 +23,7 @@ export function feedbackClient() {
   $('send').onclick=async()=>{
     if(!$('consent').checked){text('请先核对发送内容并勾选确认。');return;}
     $('send').disabled=true;
-    try {const result=await json('/api/reports',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+$('code').value},body:JSON.stringify(pending)});
+    try {const result=await json('/api/reports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pending)});
       submitted=true;draft={...pending,receipt:result.receipt};delete draft.consent;store();text(result.receipt+'\n'+result.message);$('check').hidden=false;$('new').hidden=false;
     }catch(e){text(e.message+'\n可用相同内容重试，提交编号保持不变。');}finally{$('send').disabled=false;}
   };

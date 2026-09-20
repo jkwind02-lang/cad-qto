@@ -123,7 +123,7 @@ export async function scheduled(env) {
 }
 export async function handle(request,env,ctx) {
   const url=new URL(request.url);
-  // file:// review pages have Origin:null. A separate team code is still required.
+  // file:// review pages have Origin:null. Uploads are open; retrieval stays authenticated.
   if(request.method==='OPTIONS'&&request.headers.get('Origin')==='null') {
     return new Response(null,{status:204,headers:{'Access-Control-Allow-Origin':'null',
       'Access-Control-Allow-Methods':'POST, GET','Access-Control-Allow-Headers':'Authorization, Content-Type','Vary':'Origin'}});
@@ -132,15 +132,13 @@ export async function handle(request,env,ctx) {
   if(request.method==='GET'&&url.pathname==='/client.js')return response('('+feedbackClient.toString()+')();',200,'text/javascript; charset=utf-8');
   if(request.method==='GET'&&url.pathname==='/admin')return response(ADMIN_PAGE,200,'text/html; charset=utf-8');
   if(request.method==='GET'&&url.pathname==='/admin.js')return response('('+adminClient.toString()+')();',200,'text/javascript; charset=utf-8');
-  if(request.method==='GET'&&url.pathname==='/api/info')return response({provider:'cloudflare',role:env.FEEDBACK_ROLE||'primary',notice:env.PRIVACY_NOTICE||'',ready:!!env.DB&&!!env.REVIEWS&&!!env.FEEDBACK_ACCESS_CODE&&!!env.IP_HASH_SALT});
+  if(request.method==='GET'&&url.pathname==='/api/info')return response({provider:'cloudflare',role:env.FEEDBACK_ROLE||'primary',notice:env.PRIVACY_NOTICE||'',upload_access:'open',ready:!!env.DB&&!!env.REVIEWS&&!!env.IP_HASH_SALT});
   try {
     if(request.method==='POST'&&url.pathname==='/api/reviews')return await uploadReview(request,env,ctx);
     if(request.method==='GET'&&/^\/api\/artifacts\/FB-\d{6,}$/.test(url.pathname))return await downloadReview(request,env);
     if(request.method==='POST'&&url.pathname==='/api/reports') {
       if(![url.origin,'null'].includes(request.headers.get('Origin')))throw new InputError('请从反馈页面提交',403);
-      if(!env.DB||!env.FEEDBACK_ACCESS_CODE||env.FEEDBACK_ACCESS_CODE.length<16||!env.IP_HASH_SALT)throw new InputError('服务尚未配置完成，请联系维护人员',503);
-      const auth=request.headers.get('Authorization')||'';
-      if(await digest(auth)!==await digest('Bearer '+env.FEEDBACK_ACCESS_CODE))throw new InputError('团队反馈码不正确',401);
+      if(!env.DB||!env.IP_HASH_SALT)throw new InputError('服务尚未配置完成，请联系维护人员',503);
       const body=await readBody(request),payload=validate(body),store=new Store(env.DB);
       const value={report_id:body.report_id,receipt_hash:await digest(body.receipt_token),payload_hash:await digest(JSON.stringify(payload)),
         payload:JSON.stringify(payload),client_hash:await digest(env.IP_HASH_SALT+'|'+(request.headers.get('CF-Connecting-IP')||'unknown')),created_at:Date.now()};

@@ -27,7 +27,7 @@ main{--navw:260px;--revieww:clamp(390px,34vw,620px);display:grid;grid-template-c
  #problem-dialog{width:min(850px,94vw);max-height:90vh;overflow:auto;border:1px solid #9cb5c7;border-radius:8px;padding:20px;color:#20364b}
  #problem-dialog::backdrop{background:#20364b66}#problem-dialog h2{font-size:18px;margin:0 0 12px}
  #problem-preview{white-space:pre-wrap;overflow-wrap:anywhere;max-height:42vh;overflow:auto;background:#f2f6fa;padding:12px;font:13px/1.65 "Microsoft YaHei",sans-serif}
- #problem-dialog p{line-height:1.7}#problem-code{width:100%;margin-top:5px}#problem-message{white-space:pre-wrap;color:#805323;line-height:1.7}#problem-send{background:#225e7c;color:white}
+ #problem-dialog p{line-height:1.7}#problem-message{white-space:pre-wrap;color:#805323;line-height:1.7}#problem-send{background:#225e7c;color:white}
 </style>
 <header><div class="header-row"><h1 id="page-title">__PAGE_TITLE__</h1><span id="review-status" aria-live="polite"></span><button id="save-html">保存带批注HTML</button>
 <details id="header-details"><summary>说明与更多</summary><div class="header-panel">
@@ -65,7 +65,6 @@ main{--navw:260px;--revieww:clamp(390px,34vw,620px);display:grid;grid-template-c
 <p id="problem-destination"></p><p>同一次操作保存到本机，并将同一份完整HTML同步到维护者的私有存储，保留项目和图面上下文。</p>
 <pre id="problem-preview"></pre>
 <label><input type="checkbox" id="problem-consent">我确认这份HTML及其中的项目资料可以发送给插件维护人员，用于问题排查。</label>
-<p><label for="problem-code">团队反馈码</label><input id="problem-code" type="password" autocomplete="off" placeholder="维护人员提供；不会保存在HTML中"></p>
 <div class="exportbar"><button id="problem-send">保存并反馈</button><button id="problem-local">仅保存到本机</button><button id="problem-check" hidden>查询收件状态</button><button id="problem-close">关闭</button></div>
 <p id="problem-message" role="status" aria-live="polite"></p></dialog>
 <script id="problem-config" type="application/json">__PROBLEM_CONFIG__</script>
