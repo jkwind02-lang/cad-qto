@@ -27,3 +27,12 @@ jobs:
       - run: python -m pytest tests -q
       - run: python tests/run_html_review_tests.py --root skills --output-root .codex_work/html-review
       - run: node tests/run_html_review_ui_tests.mjs --root skills --report .codex_work/html-review/最新核验.json
+      - run: node --test feedback-service/tests/*.test.mjs
+      - run: npm ci --no-audit --no-fund
+        working-directory: feedback-service
+      - run: npm run check
+        working-directory: feedback-service
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+      - run: npm run test:runtime
+        working-directory: feedback-service

@@ -1,0 +1,7 @@
+{
+  "name": "cad-qto-tencent-feedback",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=20"},
+  "dependencies": {"@cloudbase/node-sdk": "3.18.3"}
+}

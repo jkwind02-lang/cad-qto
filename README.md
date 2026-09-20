@@ -37,6 +37,8 @@
 
 共享 HTML 支持点线面、多图页、对象定位、同类问题分组及成员例外；用户填写结论和原因后，由所属专业复核重算，不直接将文字批注覆盖工程量。批注可以随HTML保存或导出JSON。详见[共享复核说明](skills/_qto-shared-evidence/references/HTML交互复核与批注.md)。
 
+全专业共用“保存并反馈”：同一次操作保存完整本地HTML并同步上传完全相同的文件，保留项目、图面、对象、确认结果和原因。腾讯云作为主站，Cloudflare作为备用；正常收件不向备用发送，网络故障时先查询主站，再按同一编号备用收件。维护者端点通过共用配置提供，用户确认整份HTML的发送范围后才联网，同事无需GitHub账号。主备服务已用合成HTML完成真实上传与私有取件验证；GitHub转交尚未配置。见[腾讯云主站与主备使用说明](feedback-service/腾讯云主站与主备使用说明.md)和[Cloudflare备用部署](feedback-service/Cloudflare部署说明.md)。
+
 ## 获取与安装
 
 ```powershell
@@ -58,7 +60,8 @@ skills/_qto-shared-evidence/    共享取证、计算辅助、契约、HTML与�
 tests/                         实际模块的合成工程算例与HTML回归
 docs/                          审查、修复和人工算量路径复核
 maintenance/                   运行文件清单维护工具
-运行文件清单.json              220个运行文件的大小与SHA-256
+feedback-service/              可选的问题接收服务（需维护者独立部署）
+运行文件清单.json              当前运行文件的大小与SHA-256
 仓库发布核对.json              当前版本的验证范围和历史基线
 ```
 

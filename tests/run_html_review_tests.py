@@ -8,7 +8,9 @@ def main():
  while (a.output_root/f'运行{n:02d}').exists():n+=1
  out=a.output_root/f'运行{n:02d}';out.mkdir();sys.path.insert(0,str(root/'_qto-shared-evidence/scripts'))
  import qto_review_contract as c
- from build_qto_review_html import build
+ from build_qto_review_html import build as configured_build
+ # Offline fixtures deliberately disable the maintained endpoint profile.
+ def build(*args,**kwargs):return configured_build(*args,feedback_url='',**kwargs)
  # Tiny generated test raster; not a rendering of a real drawing.
  def chunk(kind,data):return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)
  png=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>2I5B',64,64,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(b''.join(b'\0'+b''.join(bytes([180,200,213]) if x%16==0 or y%16==0 else bytes([248,251,253]) for x in range(64)) for y in range(64))))+chunk(b'IEND',b'')

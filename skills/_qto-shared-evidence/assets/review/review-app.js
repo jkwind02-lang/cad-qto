@@ -154,7 +154,9 @@ try{
  $('save-review').onclick=()=>{if(!selected)return;try{const k=key(selected);feedback.annotations[k]=core.saveRecord(feedback.annotations[k],form(),k,new Date().toISOString());delete feedback.drafts[k];backup();reviewShow(selected);if(focused)showFacts(focused);$('entry-status').textContent='意见已保存；专业复算后才更新实际数量。';}catch(e){$('entry-status').textContent=e.message;}};
  function download(name,type,content){const url=URL.createObjectURL(new Blob([content],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
  const stamp=()=>new Date().toISOString().slice(0,19).replace(/[:T]/g,'-'),filename=()=>data.title.replace(/[<>:"/\\|?*]/g,'_');
- $('save-html').onclick=()=>{backup();download(filename()+'_带批注_'+stamp()+'.html','text/html;charset=utf-8',core.embed(originalHTML,feedback));};
+ const saveLocalHTML=prepared=>{let file=prepared;if(!file){backup();file={filename:filename()+'_带批注_'+stamp()+'.html',html:core.embed(originalHTML,feedback)};}download(file.filename,'text/html;charset=utf-8',file.html);return file;};
+ $('save-html').onclick=()=>saveLocalHTML();
+ globalThis.QtoProblemFeedback?.attach({data,getFeedback:()=>feedback,saveLocal:saveLocalHTML});
  $('export-feedback').onclick=()=>{backup();download(filename()+'_批注_'+stamp()+'.json','application/json;charset=utf-8',JSON.stringify(feedback,null,2));};
  $('import-feedback').onclick=()=>$('import-file').click();$('import-file').onchange=async()=>{const f=$('import-file').files[0];if(!f)return;try{const incoming=core.parse(core.readFileText(await f.text()),data);feedback=core.mergePackages(feedback,incoming);installMarkers();backup();populateCategories();list();status('导入完成；重复意见保留修改历史。');}catch(e){status('导入未应用：'+e.message);}finally{$('import-file').value='';}};
  function setMode(m){mode=m;$('mode-groups').classList.toggle('on',m==='groups');$('mode-objects').classList.toggle('on',m==='objects');populateCategories(m==='groups'?data.default_category:null);list();if(items.length)select(items[0]);}

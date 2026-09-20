@@ -9,16 +9,18 @@ function harness(html){
   append(...c){this.children.push(...c);}replaceChildren(...c){this.children=c;this._text='';}setAttribute(k,v){this[k]=v;}
   getBoundingClientRect(){return this.id==='layout'?{width:1450,height:760,left:0,top:0}:this.className==='nav'?{width:260}:this.className==='review-pane'?{width:490}:{width:680,height:650,left:0,top:0};}
   getContext(){return new Proxy({measureText:t=>({width:t.length*7})},{get:(t,k)=>k in t?t[k]:()=>{}});}setPointerCapture(){}remove(){this.removed=true;}
-  click(){if(this.tagName==='a')downloads.push({name:this.download,blob:blobs.get(this.href)});else this.onclick?.();}toBlob(fn){fn(new Blob(['test-canvas']));}
+  click(){if(this.tagName==='a')downloads.push({name:this.download,blob:blobs.get(this.href)});else return this.onclick?.();}toBlob(fn){fn(new Blob(['test-canvas']));}showModal(){this.open=true;}close(){this.open=false;}
  }
  for(const match of html.split('<script id="feedback-seed"')[0].matchAll(/\bid="([^"]+)"/g))ids[match[1]]=new El('div',match[1]);
  ids.payload=new El('script','payload');ids['feedback-seed']=new El('script','feedback-seed');
  ids.payload._text=html.match(/<script id="payload" type="application\/octet-stream">([\s\S]*?)<\/script>/)[1];ids['feedback-seed']._text=html.match(/<script id="feedback-seed" type="application\/json">([\s\S]*?)<\/script>/)[1];
+ if(ids['problem-config'])ids['problem-config']._text=html.match(/<script id="problem-config" type="application\/json">([\s\S]*?)<\/script>/)[1];
  const nav=new El();nav.className='nav';const rp=new El();rp.className='review-pane';ids.cad.parentElement=new El();
  const document={getElementById:id=>ids[id]||null,createElement:tag=>new El(tag),documentElement:{outerHTML:html.replace(/^<!doctype html>/i,'')},querySelector:s=>s==='.nav'?nav:rp,querySelectorAll:s=>all.filter(e=>e.className.split(' ').includes(s.slice(1)))};
  class Image{constructor(){this.complete=false;this.naturalWidth=0;}set src(v){this._src=v;this.complete=true;this.naturalWidth=64;this.onload?.();}}
- const ctx=vm.createContext({document,console,Blob,Response,DecompressionStream,Uint8Array,atob,Image,devicePixelRatio:1,ResizeObserver:class{observe(){}},setTimeout:()=>0,URL:{createObjectURL:b=>{const k='blob-test-'+blobs.size;blobs.set(k,b);return k;},revokeObjectURL:()=>{}},localStorage:{getItem:k=>cache.get(k)||null,setItem:(k,v)=>cache.set(k,v)}});
- return {ctx,ids,cache,downloads,async start(){vm.runInContext(fs.readFileSync(path.join(A,'review-core.js'),'utf8'),ctx);await vm.runInContext(fs.readFileSync(path.join(A,'review-app.js'),'utf8'),ctx);assert.equal(ids.loading.removed,true,ids.loading.textContent);}};
+ class TestURL extends URL{static createObjectURL(b){const k='blob-test-'+blobs.size;blobs.set(k,b);return k;}static revokeObjectURL(){}}
+ const ctx=vm.createContext({document,console,Blob,FormData,Response,DecompressionStream,Uint8Array,TextEncoder,crypto,AbortSignal,atob,Image,devicePixelRatio:1,ResizeObserver:class{observe(){}},setTimeout:()=>0,URL:TestURL,fetch:()=>{throw Error('Unexpected network call');},localStorage:{getItem:k=>cache.get(k)||null,setItem:(k,v)=>cache.set(k,v)}});
+ return {ctx,ids,cache,downloads,async start(){vm.runInContext(fs.readFileSync(path.join(A,'review-core.js'),'utf8'),ctx);if(ids['problem-config'])vm.runInContext(fs.readFileSync(path.join(A,'problem-feedback.js'),'utf8'),ctx);await vm.runInContext(fs.readFileSync(path.join(A,'review-app.js'),'utf8'),ctx);assert.equal(ids.loading.removed,true,ids.loading.textContent);}};
 }
 const checks=[],h=harness(sourceHTML);await h.start();const e=h.ids;assert.equal(e.professional.options.length,14);assert.equal(e.list.children.length,13);assert.equal(e['member-list'].children.length,3);assert.equal(e['review-result'].value,'');checks.push('13专业筛选与分组初始化；建议不预填为确认');
 assert.equal(e['action-message'].hidden,true);assert.match(e['review-status'].textContent,/^\d+条已保存 · \d+条草稿$/);
@@ -62,4 +64,50 @@ checks.push('成果变化显式显示历史意见；用户重存后绑定新成�
 
 const packageFile=path.join(path.dirname(art.html),'UI实际保存批注.json');fs.writeFileSync(packageFile,JSON.stringify(pkg,null,2));
 const fh=harness(sourceHTML);await fh.start();fh.ctx.localStorage.setItem=()=>{throw new Error('模拟暂存不可用');};fh.ids['save-html'].click();assert.equal(fh.ids['action-message'].hidden,false);assert.match(fh.ids['action-message'].textContent,/本机暂存不可用/);assert(fh.downloads.length>0);fh.ids['import-file'].files=[{text:async()=>'{invalid'}];await fh.ids['import-file'].onchange();assert.match(fh.ids['action-message'].textContent,/导入未应用/);assert.equal(fh.ids['action-message'].hidden,false);checks.push('顶部精简后暂存失败与导入失败仍显式提示，HTML仍可下载');
+if(h.ids['problem-config']){
+ e['report-problem'].click();assert.equal(e['problem-dialog'].open,true);assert.match(e['problem-destination'].textContent,/尚未开通/);assert.equal(e['problem-send'].disabled,true);e['problem-close'].click();
+ checks.push('反馈未配置仍可离线保存；不会自动联网');
+ const configuredHTML=savedHTML.replace(/(<script id="problem-config" type="application\/json">)([\s\S]*?)(<\/script>)/,(_,a,b,c)=>a+JSON.stringify({...JSON.parse(b),url:'https://feedback.example'})+c);
+ const ph=harness(configuredHTML);await ph.start();const pe=ph.ids,requests=[];let fail=true;
+ ph.ctx.fetch=async(url,options)=>{const meta=JSON.parse(options.body.get('metadata')),file=options.body.get('html');requests.push({url,meta,file});assert(ph.downloads.length>0,'上传前必须先保存本地HTML');assert.equal(await file.text(),await ph.downloads.at(-1).blob.text(),'本地和上传必须完全同字节内容');if(fail)throw Error('模拟网络断开');return Response.json({accepted:true,receipt:'FB-000001',status:'saved',sha256:meta.sha256,bytes:file.size});};
+ pe['save-html'].click();assert.equal(pe['problem-dialog'].open,true);assert.match(pe['problem-preview'].textContent,/完整HTML/);assert.equal(requests.length,0);
+ await pe['problem-send'].click();assert.equal(requests.length,0);assert.match(pe['problem-message'].textContent,/确认发送完整HTML/);
+ pe['problem-consent'].checked=true;pe['problem-code'].value='test-team-secret-123456789';await pe['problem-send'].click();assert.equal(requests.length,1);assert.equal(ph.downloads.length,1);assert.match(pe['problem-message'].textContent,/未完成/);
+ const localCopy=await ph.downloads[0].blob.text();assert(!localCopy.includes('test-team-secret'));assert(localCopy.includes('feedback-seed'));const delivered=ph.ctx.QtoReviewCore.readFileText(localCopy);assert.equal(delivered.annotations[k].confirmed_result,note.confirmed_result);assert.equal(delivered.annotations[k].reason,note.reason);assert.equal(requests[0].meta.project_id,data.project_id);
+ fail=false;pe['problem-consent'].checked=true;pe['problem-code'].value='test-team-secret-123456789';await pe['problem-send'].click();assert.equal(requests.length,2);assert.equal(requests[0].meta.report_id,requests[1].meta.report_id);assert.equal(requests[0].meta.sha256,requests[1].meta.sha256);assert.match(pe['problem-message'].textContent,/本地与服务器文件校验一致/);
+ pe['review-reason'].value='增加未保存草稿';pe['review-reason'].oninput();pe['problem-code'].value='test-team-secret-123456789';await pe['problem-send'].click();assert.equal(requests.length,3);assert.notEqual(requests[0].meta.report_id,requests[2].meta.report_id);assert.equal(requests[2].meta.draft_count,1);
+ checks.push('合并保存先落本地；整份HTML和上传逐字节一致，断网原文件重试，意见变化后生成新文件与编号');
+ const rph=harness(localCopy);await rph.start();rph.ids['save-html'].click();assert.equal(rph.ids['problem-dialog'].open,true);
+ const one=await rph.ctx.QtoProblemFeedback.hash(await requests[0].file.arrayBuffer());assert.equal(one,requests[0].meta.sha256);
+ assert.throws(()=>rph.ctx.QtoProblemFeedback.endpoint('https://user:secret@feedback.example'),/HTTPS/);assert.throws(()=>rph.ctx.QtoProblemFeedback.endpoint('http://feedback.example'),/HTTPS/);
+ checks.push('完整HTML保留项目、图面、结论、原因和草稿；保存后独立恢复，拒绝含凭据的接收地址');
+ const dualHTML=configuredHTML.replace(/(<script id="problem-config" type="application\/json">)([\s\S]*?)(<\/script>)/,(_,a,b,c)=>a+JSON.stringify({...JSON.parse(b),provider:'tencent',url:'https://tencent.example',backup_url:'https://backup.example'})+c);
+ const begin=async(x)=>{await x.start();x.ids['save-html'].click();x.ids['problem-consent'].checked=true;x.ids['problem-code'].value='test-team-secret-123456789';};
+ const th=harness(dualHTML);await begin(th);const tcalls=[];let tm;
+ th.ctx.fetch=async(url,o)=>{tcalls.push(url);
+  if(url.endsWith('/init')){tm=JSON.parse(o.body);return Response.json({ticket:'synthetic-ticket',upload:{url:'https://test-123456.cos.ap-shanghai.myqcloud.com/',fields:{key:'staging/test.html'}}});}
+  if(url.includes('myqcloud.com')){assert.equal(await o.body.get('file').text(),await th.downloads.at(-1).blob.text());return new Response(null,{status:204});}
+  assert(url.endsWith('/complete'));return Response.json({accepted:true,receipt:'TC-test',sha256:tm.sha256,bytes:tm.bytes});};
+ await th.ids['problem-send'].click();assert.equal(tcalls.length,3);assert(!tcalls.some(u=>u.includes('backup.example')));assert.match(th.ids['problem-message'].textContent,/腾讯云/);
+ th.ids['problem-code'].value='test-team-secret-123456789';await th.ids['problem-send'].click();assert.equal(tcalls.length,3,'已收件的同一快照不会重复上传');
+ checks.push('腾讯云主站直传COS后确认回执；正常收件不调用备用站，已收快照不重复发送');
+ const bh=harness(dualHTML);await begin(bh);const bcalls=[];let bm;
+ bh.ctx.fetch=async(url,o)=>{bcalls.push(url);
+  if(url.endsWith('/init')){bm=JSON.parse(o.body);throw Error('lost response');}
+  if(url.includes('/api/status/'))return Response.json({error:'未找到'},{status:404});
+  if(url.endsWith('/api/info'))return Response.json({provider:'cloudflare',role:'backup',ready:true});
+  assert.equal(url,'https://backup.example/api/reviews');const meta=JSON.parse(o.body.get('metadata'));assert.equal(meta.report_id,bm.report_id);assert.equal(meta.sha256,bm.sha256);assert.equal(await o.body.get('html').text(),await bh.downloads.at(-1).blob.text());
+  return Response.json({accepted:true,receipt:'FB-000002',sha256:meta.sha256,bytes:o.body.get('html').size});};
+ await bh.ids['problem-send'].click();assert.equal(bcalls.length,4);assert.match(bh.ids['problem-message'].textContent,/Cloudflare备用/);assert.match(bh.ids['problem-message'].textContent,/主站收件状态仍待核对/);
+ checks.push('主站超时先查回执，再按同一编号和完整字节备用收件；实际位置与主站不确定状态可见');
+ const eh=harness(dualHTML);await begin(eh);let ecalls=0;eh.ctx.fetch=async()=>{ecalls++;return Response.json({error:'团队反馈码不正确'},{status:401});};await eh.ids['problem-send'].click();assert.equal(ecalls,1);assert.match(eh.ids['problem-message'].textContent,/反馈码不正确/);
+ const ah=harness(dualHTML);await begin(ah);let am,acalls=0;ah.ctx.fetch=async(url,o)=>{acalls++;if(url.endsWith('/init')){am=JSON.parse(o.body);throw Error('timeout');}assert(url.includes('/api/status/'));return Response.json({accepted:true,receipt:'TC-accepted',sha256:am.sha256,bytes:am.bytes});};await ah.ids['problem-send'].click();assert.equal(acalls,2);assert.match(ah.ids['problem-message'].textContent,/TC-accepted/);
+ checks.push('反馈码错误不转备用；主站已接收但首次回执丢失时查询恢复，不再发备用');
+ const putHarness=harness(dualHTML);await begin(putHarness);let putMeta;putHarness.ctx.fetch=async(url,o)=>{
+  if(url.endsWith('/init')){putMeta=JSON.parse(o.body);return Response.json({ticket:'put-ticket',upload:{url:'https://test-123456.cos.ap-shanghai.myqcloud.com/cad-qto-feedback/staging/sample.bin',method:'PUT',headers:{authorization:'scoped-temporary-signature',key:'scoped-path'}}});}
+  if(url.includes('myqcloud.com')){assert.equal(o.method,'PUT');assert.equal(await o.body.text(),await putHarness.downloads.at(-1).blob.text());return new Response(null,{status:200});}
+  return Response.json({accepted:true,receipt:'TC-put',sha256:putMeta.sha256,bytes:putMeta.bytes});};
+ await putHarness.ids['problem-send'].click();assert.match(putHarness.ids['problem-message'].textContent,/TC-put/);assert.equal(putHarness.ctx.QtoProblemFeedback.endpoint('https://tencent.example/cad-qto-feedback/'),'https://tencent.example/cad-qto-feedback');
+ checks.push('腾讯云开发实际PUT直传协议逐字节保全，支持专用子路径入口');
+}
 const result={status:'PASS',count:checks.length,checks,scope:'无浏览器DOM模拟，非原生浏览器视觉验收',saved_feedback:packageFile};fs.writeFileSync(path.join(path.dirname(arg('--report')),'交互核验.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));

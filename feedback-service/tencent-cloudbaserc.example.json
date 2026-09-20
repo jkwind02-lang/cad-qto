@@ -1,0 +1,15 @@
+{
+  "envId": "your-env-id",
+  "region": "ap-shanghai",
+  "functionRoot": ".",
+  "functions": [{
+    "name": "cad-qto-feedback",
+    "type": "HTTP",
+    "runtime": "Nodejs20.19",
+    "handler": "index.main",
+    "timeout": 120,
+    "memorySize": 512,
+    "installDependency": false,
+    "envVariables": {"TCB_ENV": "your-env-id", "PUBLIC_BASE_PATH": "/cad-qto-feedback"}
+  }]
+}

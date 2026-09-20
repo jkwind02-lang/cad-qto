@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cad-qto-feedback",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-09-20",
+  "workers_dev": true,
+  "observability": {"enabled": false},
+  "vars": {
+    "FEEDBACK_ROLE": "backup",
+    "GITHUB_REPOSITORY": "",
+    "PRIVACY_NOTICE": "反馈仅供授权维护人员排查；完整HTML包含其中的项目、图面和批注，请确认有权提供。"
+  },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "cad-qto-feedback",
+    "database_id": "00000000-0000-0000-0000-000000000000",
+    "migrations_dir": "migrations"
+  }],
+  "r2_buckets": [{"binding":"REVIEWS","bucket_name":"cad-qto-private-reviews"}],
+  "triggers": {"crons": ["*/10 * * * *"]}
+}

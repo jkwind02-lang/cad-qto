@@ -1,0 +1,7 @@
+{
+  "schema": "cad-qto-feedback-config/1.0",
+  "enabled": true,
+  "provider": "tencent",
+  "url": "https://dc-knowledge-d7g1d4mfn67992452-1300583265.ap-shanghai.app.tcloudbase.com/cad-qto-feedback",
+  "backup_url": "https://cad-qto-feedback.jkwind02.workers.dev"
+}

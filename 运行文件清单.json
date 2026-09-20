@@ -2,12 +2,22 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 220,
+  "runtime_file_count": 222,
   "files": [
     {
+      "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
+      "sha256": "aef642745c631255492a13b3c14c0ffe3be4b2e2fba39a2be2c8a7c2ec88580e",
+      "bytes": 265
+    },
+    {
+      "path": "_qto-shared-evidence/assets/review/problem-feedback.js",
+      "sha256": "cc33ff43025341c1b0dc2bc76d57c9dba96d96c301957bc195339c4b28f4e1c5",
+      "bytes": 9558
+    },
+    {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
-      "sha256": "254de06ecc5e87771f3be9f8a7f1be5678cad4b2fcdf13a5aea206fe2eb7a824",
-      "bytes": 26519
+      "sha256": "d47ddf4564e2a75d9ad4dc6563676a861fd557fddd77233a8624136d6f4426cc",
+      "bytes": 26750
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-core.js",
@@ -16,8 +26,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-shell.html",
-      "sha256": "414aa764aca38d06bb17da66407ea227d2a84ea85fd1ce84ea426024c809e6ef",
-      "bytes": 13915
+      "sha256": "66a80571dbe22b2c4d94510b78f170c78a4becb5318d360e7fda734cf748c078",
+      "bytes": 15632
     },
     {
       "path": "_qto-shared-evidence/assets/模型工作识别记录模板.json",
@@ -31,8 +41,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
-      "sha256": "7ea27fcd1a8f9d2d8359d465e7c56d0fcf309604f76ca73289b3d3554fe87996",
-      "bytes": 11158
+      "sha256": "60ac0aeba381ba3d2abddb2f312f93d6684d291272a35e96a35d9115d8c8febe",
+      "bytes": 13273
     },
     {
       "path": "_qto-shared-evidence/references/PDF图片与表格提取.md",
@@ -106,8 +116,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/build_qto_review_html.py",
-      "sha256": "8317dde524f6b81c301bfedbdf80aedee5c9f22f97927ded81bba94eda55afc7",
-      "bytes": 3910
+      "sha256": "43cf2c33d6f707282ea8147df652acb64149d094bdd0a32e10aa703de39df554",
+      "bytes": 6026
     },
     {
       "path": "_qto-shared-evidence/scripts/export_dwg_exchange_dxf.ps1",
@@ -173,11 +183,6 @@
       "path": "_qto-shared-evidence/scripts/validate_shared_evidence.py",
       "sha256": "a5a8622eee71ff7f13ce868f1bbda83fda2fce9e0fed7d4f48538ff44e749576",
       "bytes": 8144
-    },
-    {
-      "path": "qto-components-points/SKILL.md",
-      "sha256": "36a10cfaea8c351b7f9c61609e2f7e5957b5f51e3b500d5f004186823c2f002d",
-      "bytes": 6200
     },
     {
       "path": "qto-components-points/agents/openai.yaml",
@@ -250,9 +255,9 @@
       "bytes": 2200
     },
     {
-      "path": "qto-concrete-formwork/SKILL.md",
-      "sha256": "8beb10b3bb538a48a341b87b6def6827b23af8471736a795c607ba88cfeade3d",
-      "bytes": 9099
+      "path": "qto-components-points/SKILL.md",
+      "sha256": "36a10cfaea8c351b7f9c61609e2f7e5957b5f51e3b500d5f004186823c2f002d",
+      "bytes": 6200
     },
     {
       "path": "qto-concrete-formwork/agents/openai.yaml",
@@ -330,9 +335,9 @@
       "bytes": 45726
     },
     {
-      "path": "qto-coordinator/SKILL.md",
-      "sha256": "6a6f06e487895d0586f32f5e966742b93aeceace9351efccbbb114bbb369c50e",
-      "bytes": 7703
+      "path": "qto-concrete-formwork/SKILL.md",
+      "sha256": "8beb10b3bb538a48a341b87b6def6827b23af8471736a795c607ba88cfeade3d",
+      "bytes": 9099
     },
     {
       "path": "qto-coordinator/agents/openai.yaml",
@@ -365,9 +370,9 @@
       "bytes": 1959
     },
     {
-      "path": "qto-duct-air-systems/SKILL.md",
-      "sha256": "a872ef28fcefe1dbc54c1255755cbe8a8e79ec65281aa7e0a0408ab7ef170010",
-      "bytes": 4828
+      "path": "qto-coordinator/SKILL.md",
+      "sha256": "6a6f06e487895d0586f32f5e966742b93aeceace9351efccbbb114bbb369c50e",
+      "bytes": 7703
     },
     {
       "path": "qto-duct-air-systems/agents/openai.yaml",
@@ -415,9 +420,9 @@
       "bytes": 1877
     },
     {
-      "path": "qto-earthwork-terrain/SKILL.md",
-      "sha256": "d8a289e68863bf933843c8882d9695e0e67674dfbc48966409debc4c78c68e35",
-      "bytes": 10084
+      "path": "qto-duct-air-systems/SKILL.md",
+      "sha256": "a872ef28fcefe1dbc54c1255755cbe8a8e79ec65281aa7e0a0408ab7ef170010",
+      "bytes": 4828
     },
     {
       "path": "qto-earthwork-terrain/agents/openai.yaml",
@@ -495,9 +500,9 @@
       "bytes": 11681
     },
     {
-      "path": "qto-electrical-routes/SKILL.md",
-      "sha256": "f351437eeb43700e557ee74f589df6f34df803e98af15500c8ab42c208c7866a",
-      "bytes": 5378
+      "path": "qto-earthwork-terrain/SKILL.md",
+      "sha256": "d8a289e68863bf933843c8882d9695e0e67674dfbc48966409debc4c78c68e35",
+      "bytes": 10084
     },
     {
       "path": "qto-electrical-routes/agents/openai.yaml",
@@ -550,9 +555,9 @@
       "bytes": 2034
     },
     {
-      "path": "qto-framing-supports/SKILL.md",
-      "sha256": "2c6a7dd17c07fb66fcf8e7f6b218930c54eecb30018d87fde47d40efd16086e1",
-      "bytes": 4878
+      "path": "qto-electrical-routes/SKILL.md",
+      "sha256": "f351437eeb43700e557ee74f589df6f34df803e98af15500c8ab42c208c7866a",
+      "bytes": 5378
     },
     {
       "path": "qto-framing-supports/agents/openai.yaml",
@@ -600,9 +605,9 @@
       "bytes": 1813
     },
     {
-      "path": "qto-masonry-secondary/SKILL.md",
-      "sha256": "7954ec7299018093082f79ac85f955ed379672280d165b305e2daf2aec290eb8",
-      "bytes": 5292
+      "path": "qto-framing-supports/SKILL.md",
+      "sha256": "2c6a7dd17c07fb66fcf8e7f6b218930c54eecb30018d87fde47d40efd16086e1",
+      "bytes": 4878
     },
     {
       "path": "qto-masonry-secondary/agents/openai.yaml",
@@ -650,9 +655,9 @@
       "bytes": 2403
     },
     {
-      "path": "qto-piles-groundwork/SKILL.md",
-      "sha256": "f3e3b07412260512c69a9f4c2b11e94cf0186de75f98924e3dc19e1ff45e8d4e",
-      "bytes": 4646
+      "path": "qto-masonry-secondary/SKILL.md",
+      "sha256": "7954ec7299018093082f79ac85f955ed379672280d165b305e2daf2aec290eb8",
+      "bytes": 5292
     },
     {
       "path": "qto-piles-groundwork/agents/openai.yaml",
@@ -700,9 +705,9 @@
       "bytes": 1884
     },
     {
-      "path": "qto-pipe-networks/SKILL.md",
-      "sha256": "506a45f984d3e8b5f1856bbce9b949350de8f029fd1828aad71b339b8df2c40a",
-      "bytes": 11606
+      "path": "qto-piles-groundwork/SKILL.md",
+      "sha256": "f3e3b07412260512c69a9f4c2b11e94cf0186de75f98924e3dc19e1ff45e8d4e",
+      "bytes": 4646
     },
     {
       "path": "qto-pipe-networks/agents/openai.yaml",
@@ -830,9 +835,9 @@
       "bytes": 7744
     },
     {
-      "path": "qto-rebar/SKILL.md",
-      "sha256": "bd10f2ff9bf39a98111ea7cddbc60d5fe2ac1e851134813cd5773363833eabdf",
-      "bytes": 11209
+      "path": "qto-pipe-networks/SKILL.md",
+      "sha256": "506a45f984d3e8b5f1856bbce9b949350de8f029fd1828aad71b339b8df2c40a",
+      "bytes": 11606
     },
     {
       "path": "qto-rebar/agents/openai.yaml",
@@ -900,9 +905,9 @@
       "bytes": 9371
     },
     {
-      "path": "qto-roads-siteworks/SKILL.md",
-      "sha256": "412e42cd2c36cf88976eedf047e5ffa3857645f0746a6fc49dbdc398d045e1b3",
-      "bytes": 4762
+      "path": "qto-rebar/SKILL.md",
+      "sha256": "bd10f2ff9bf39a98111ea7cddbc60d5fe2ac1e851134813cd5773363833eabdf",
+      "bytes": 11209
     },
     {
       "path": "qto-roads-siteworks/agents/openai.yaml",
@@ -950,9 +955,9 @@
       "bytes": 1752
     },
     {
-      "path": "qto-structural-steel/SKILL.md",
-      "sha256": "7e0520dfc17f1c971125a3a6d642cdbc49c43ef5ad56f044da5009c983022969",
-      "bytes": 11076
+      "path": "qto-roads-siteworks/SKILL.md",
+      "sha256": "412e42cd2c36cf88976eedf047e5ffa3857645f0746a6fc49dbdc398d045e1b3",
+      "bytes": 4762
     },
     {
       "path": "qto-structural-steel/agents/openai.yaml",
@@ -1020,9 +1025,9 @@
       "bytes": 26231
     },
     {
-      "path": "qto-surfaces-envelope/SKILL.md",
-      "sha256": "0395c66240eed2edf82fd19e8e33dad9bfcddf5007195577b6a8d45ebda23513",
-      "bytes": 9906
+      "path": "qto-structural-steel/SKILL.md",
+      "sha256": "7e0520dfc17f1c971125a3a6d642cdbc49c43ef5ad56f044da5009c983022969",
+      "bytes": 11076
     },
     {
       "path": "qto-surfaces-envelope/agents/openai.yaml",
@@ -1103,6 +1108,11 @@
       "path": "qto-surfaces-envelope/scripts/validate_surfaces_envelope_result.py",
       "sha256": "22b5c1bb04e35594da8c74406357ebae98513be3f34d04c86e474368f8d29a60",
       "bytes": 10410
+    },
+    {
+      "path": "qto-surfaces-envelope/SKILL.md",
+      "sha256": "0395c66240eed2edf82fd19e8e33dad9bfcddf5007195577b6a8d45ebda23513",
+      "bytes": 9906
     }
   ]
 }

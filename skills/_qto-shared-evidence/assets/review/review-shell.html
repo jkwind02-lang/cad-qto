@@ -24,13 +24,17 @@ main{--navw:260px;--revieww:clamp(390px,34vw,620px);display:grid;grid-template-c
 .header-panel{position:absolute;right:12px;top:calc(100% + 5px);width:min(680px,calc(100vw - 24px));max-height:55vh;overflow:auto;padding:14px;background:white;border:1px solid #b7c8d4;border-radius:7px;box-shadow:0 6px 20px #20364b25}.header-panel .intro{display:block}.header-panel p{margin:8px 0 0;font-size:12px;line-height:1.6;color:#617587}
 #action-message{margin:5px 0 0;font-size:12px;line-height:1.5;color:#805323;overflow-wrap:anywhere}#action-message[hidden]{display:none}
 @media(max-width:600px){.header-row{flex-wrap:wrap;gap:6px 8px}.header-row h1{flex-basis:100%}#review-status{flex:1}}
+ #problem-dialog{width:min(850px,94vw);max-height:90vh;overflow:auto;border:1px solid #9cb5c7;border-radius:8px;padding:20px;color:#20364b}
+ #problem-dialog::backdrop{background:#20364b66}#problem-dialog h2{font-size:18px;margin:0 0 12px}
+ #problem-preview{white-space:pre-wrap;overflow-wrap:anywhere;max-height:42vh;overflow:auto;background:#f2f6fa;padding:12px;font:13px/1.65 "Microsoft YaHei",sans-serif}
+ #problem-dialog p{line-height:1.7}#problem-code{width:100%;margin-top:5px}#problem-message{white-space:pre-wrap;color:#805323;line-height:1.7}#problem-send{background:#225e7c;color:white}
 </style>
 <header><div class="header-row"><h1 id="page-title">__PAGE_TITLE__</h1><span id="review-status" aria-live="polite"></span><button id="save-html">保存带批注HTML</button>
 <details id="header-details"><summary>说明与更多</summary><div class="header-panel">
 <div class="intro" id="current-summary">正在载入复核资料。</div>
 <div id="summary-strip" class="summary-strip"></div><div id="scope-notes"></div>
 <p>批注自动暂存在本机；交接时保存带批注HTML或导出JSON，交回其中一份即可。</p>
-<div class="exportbar"><button id="export-feedback">导出批注JSON</button><button id="import-feedback">导入批注HTML或JSON</button><input type="file" id="import-file" accept=".json,.html,.htm"></div>
+<div class="exportbar"><button id="export-feedback">导出批注JSON</button><button id="import-feedback">导入批注HTML或JSON</button><button id="report-problem">保存与插件反馈</button><input type="file" id="import-file" accept=".json,.html,.htm"></div>
 </div></details></div><div id="action-message" role="status" hidden></div>
 </header>
 <main id="layout">
@@ -57,8 +61,17 @@ main{--navw:260px;--revieww:clamp(390px,34vw,620px);display:grid;grid-template-c
 <div class="footer-note">草稿与已保存意见分开。保存只记录意见，专业复算后才更新数量及回执；方法意见不当作具体数值确认。完成后交回带批注HTML或JSON中的一份即可。</div>
 </aside></main>
 <div id="loading">正在展开内嵌图纸、对象和批注…</div>
+<dialog id="problem-dialog" aria-labelledby="problem-title"><h2 id="problem-title">保存并反馈</h2>
+<p id="problem-destination"></p><p>同一次操作保存到本机，并将同一份完整HTML同步到维护者的私有存储，保留项目和图面上下文。</p>
+<pre id="problem-preview"></pre>
+<label><input type="checkbox" id="problem-consent">我确认这份HTML及其中的项目资料可以发送给插件维护人员，用于问题排查。</label>
+<p><label for="problem-code">团队反馈码</label><input id="problem-code" type="password" autocomplete="off" placeholder="维护人员提供；不会保存在HTML中"></p>
+<div class="exportbar"><button id="problem-send">保存并反馈</button><button id="problem-local">仅保存到本机</button><button id="problem-check" hidden>查询收件状态</button><button id="problem-close">关闭</button></div>
+<p id="problem-message" role="status" aria-live="polite"></p></dialog>
+<script id="problem-config" type="application/json">__PROBLEM_CONFIG__</script>
 <script id="feedback-seed" type="application/json">__FEEDBACK__</script>
 <script>__REVIEW_CORE__</script>
+<script>__PROBLEM_FEEDBACK__</script>
 <script id="payload" type="application/octet-stream">
 __PAYLOAD__
 </script>
