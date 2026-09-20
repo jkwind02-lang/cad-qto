@@ -1,33 +1,162 @@
 {
-  "schema_version": "cad-qto-release-verification/2.0",
+  "schema_version": "cad-qto-release-verification/3.0",
   "plugin": "cad-qto",
   "version": "0.2.0+codex.20260920",
-  "baseline_commit": "48bf5cef731b321e6c28abb52a73a21b8a2d6356",
-  "runtime_files": 220,
+  "baseline_commit": "4019d029275b58509d678c443de4f9d4e8abebd2",
+  "runtime_files": 222,
   "runtime_manifest": "运行文件清单.json",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "validated_runtime_commit": "9771886f5e45e4cbfb095e549405f12120abcd61",
-  "isolated_verification": {
-    "workflow_run_id": 35462945269,
-    "job_id": 105949961669,
-    "completed_at_utc": "2026-09-19T19:00:21Z",
-    "environment": "ubuntu-latest / Python 3.11 / Node 22",
-    "python_compile": "PASS",
-    "pytest": {"status": "PASS", "count": 136},
-    "html_contract": {"status": "PASS", "count": 20},
-    "html_interaction": {"status": "PASS", "count": 19, "scope": "DOM模拟，非原生浏览器视觉验收"}
+  "validated_runtime_commit": "a2b7be33f2075467cae5bc996c8f3bc3d28804fc",
+  "branch_integration": [
+    {
+      "branch": "fix/audit-20260920",
+      "branch_commit": "47b5ef216635ddb332e7576581124ac7dfc8e8a1",
+      "already_published_at": "48bf5cef731b321e6c28abb52a73a21b8a2d6356",
+      "business_tree_identical": true,
+      "scope": [
+        "skills",
+        "tests",
+        "docs",
+        ".codex-plugin",
+        "运行文件清单.json",
+        ".github/workflows/qto-regression.yml"
+      ],
+      "remaining_differences": [
+        "A\t.github/workflows/audit-repair-sandbox.yml",
+        "A\tmaintenance/apply_audit_fixes_20260920.py",
+        "A\tmaintenance/apply_core.py",
+        "A\tmaintenance/audit-payload-01.b64",
+        "A\tmaintenance/audit-payload-02.b64",
+        "A\tmaintenance/audit-payload-03.b64",
+        "A\tmaintenance/audit-payload-04.b64",
+        "A\tmaintenance/audit-payload-05.b64",
+        "A\tmaintenance/review_revision_js.txt",
+        "A\tmaintenance/ui_revision_tests.txt"
+      ],
+      "handling": "保留当前发布内容，将分支提交历史归入主分支；历史临时修补载荷和临时CI不恢复到运行版本"
+    },
+    {
+      "branch": "fix/manual-qto-20260920",
+      "branch_commit": "9771886f5e45e4cbfb095e549405f12120abcd61",
+      "already_published_at": "4019d029275b58509d678c443de4f9d4e8abebd2",
+      "business_tree_identical": true,
+      "scope": [
+        "skills",
+        "tests",
+        "docs",
+        ".codex-plugin",
+        "运行文件清单.json",
+        ".github/workflows/qto-regression.yml"
+      ],
+      "remaining_differences": [
+        "A\t.github/workflows/manual-repair-sandbox.yml",
+        "M\tREADME.md",
+        "A\tmaintenance/apply_manual_patch.py",
+        "A\tmaintenance/apply_manual_updates.py",
+        "A\tmaintenance/finish_route_edges.py",
+        "A\tmaintenance/finish_workflow.py",
+        "A\tmaintenance/manual-payload-01.b64",
+        "A\tmaintenance/manual-payload-02.b64",
+        "A\tmaintenance/manual-payload-03.b64",
+        "A\tmaintenance/manual-payload-04.b64",
+        "M\t仓库发布核对.json"
+      ],
+      "handling": "保留当前发布内容，将分支提交历史归入主分支；历史临时修补载荷和临时CI不恢复到运行版本"
+    },
+    {
+      "branch": "fix/manual-workflow-20260920",
+      "branch_commit": "38634eee0b5e7d718007cd54dd1163df4fe945b2",
+      "already_published_at": "48bf5cef731b321e6c28abb52a73a21b8a2d6356",
+      "business_tree_identical": true,
+      "scope": [
+        "skills",
+        "tests",
+        "docs",
+        ".codex-plugin",
+        "运行文件清单.json",
+        ".github/workflows/qto-regression.yml"
+      ],
+      "remaining_differences": [
+        "A\t.github/workflows/manual-review-workspace.yml"
+      ],
+      "handling": "保留当前发布内容，将分支提交历史归入主分支；历史临时修补载荷和临时CI不恢复到运行版本"
+    },
+    {
+      "branch": "feature/usage-feedback",
+      "branch_commit": "a2b7be33f2075467cae5bc996c8f3bc3d28804fc",
+      "handling": "完整合入最新反馈功能，包括主备云端、取消反馈码和HTML文件名修复"
+    }
+  ],
+  "local_verification": {
+    "pytest": {
+      "status": "PASS",
+      "count": 136
+    },
+    "html_contract": {
+      "status": "PASS",
+      "count": 20
+    },
+    "html_interaction": {
+      "status": "PASS",
+      "count": 26,
+      "scope": "DOM模拟，非原生浏览器视觉验收"
+    },
+    "feedback_service": {
+      "status": "PASS",
+      "count": 23
+    },
+    "installed_runtime_files_identical": 222
   },
-  "release_tree_changes_after_verification": "只移除临时传输、修补及沙盒工作流，并更新README和本发布记录；正式运行脚本和测试沿用已验证内容",
-  "main_verification": "最终提交的Windows/Linux运行结果以.github/workflows/qto-regression.yml对应的Actions日志为准",
+  "release_tree_changes_after_verification": "运行代码与最新反馈分支一致；连接已发布修复的分支历史并更新README、整合说明和发布核对",
+  "main_verification": "最终main提交的Windows/Linux结果以.github/workflows/qto-regression.yml对应Actions为准，包含Workers构建和运行时核验",
   "business_adoption_promoted": false,
   "local_installation_updated": false,
+  "existing_local_installed_version": "0.2.0+codex.20260920080009",
   "real_dwg_autocad_tested": false,
   "real_project_recognition_accuracy_verified": false,
   "native_browser_visual_verified": false,
-  "historical_initial_release": {
-    "git_commit": "cac19cc2729abff6bb84757b5b80e1701f8751e3",
-    "file": "仓库发布核对.json",
-    "note": "最初217个文件原样上传和213个运行文件的历史核对保留在该提交，不代表当前修改后内容仍与初始包相同"
+  "previous_release_verification": {
+    "schema_version": "cad-qto-release-verification/2.0",
+    "plugin": "cad-qto",
+    "version": "0.2.0+codex.20260920",
+    "baseline_commit": "48bf5cef731b321e6c28abb52a73a21b8a2d6356",
+    "runtime_files": 220,
+    "runtime_manifest": "运行文件清单.json",
+    "professional_skills": 13,
+    "coordinator_skills": 1,
+    "validated_runtime_commit": "9771886f5e45e4cbfb095e549405f12120abcd61",
+    "isolated_verification": {
+      "workflow_run_id": 35462945269,
+      "job_id": 105949961669,
+      "completed_at_utc": "2026-09-19T19:00:21Z",
+      "environment": "ubuntu-latest / Python 3.11 / Node 22",
+      "python_compile": "PASS",
+      "pytest": {
+        "status": "PASS",
+        "count": 136
+      },
+      "html_contract": {
+        "status": "PASS",
+        "count": 20
+      },
+      "html_interaction": {
+        "status": "PASS",
+        "count": 19,
+        "scope": "DOM模拟，非原生浏览器视觉验收"
+      }
+    },
+    "release_tree_changes_after_verification": "只移除临时传输、修补及沙盒工作流，并更新README和本发布记录；正式运行脚本和测试沿用已验证内容",
+    "main_verification": "最终提交的Windows/Linux运行结果以.github/workflows/qto-regression.yml对应的Actions日志为准",
+    "business_adoption_promoted": false,
+    "local_installation_updated": false,
+    "real_dwg_autocad_tested": false,
+    "real_project_recognition_accuracy_verified": false,
+    "native_browser_visual_verified": false,
+    "historical_initial_release": {
+      "git_commit": "cac19cc2729abff6bb84757b5b80e1701f8751e3",
+      "file": "仓库发布核对.json",
+      "note": "最初217个文件原样上传和213个运行文件的历史核对保留在该提交，不代表当前修改后内容仍与初始包相同"
+    }
   }
 }

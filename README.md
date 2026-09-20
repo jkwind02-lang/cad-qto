@@ -4,6 +4,8 @@
 
 当前版本 **`0.2.0+codex.20260920`**。模型负责依据本次图纸识别对象与工程关系，程序负责提取事实、确定性计算和已编码约束检查。安装或合成测试通过，不代表所有专业已达到原图自动识别成熟状态，也不替代具体项目计量依据及专业复核。
 
+**主分支 `main` 已统一当前各工作分支的有效修改。** 获取最新版直接下载或更新主分支即可，包含人工算量路径修复、全专业完整HTML反馈、无需反馈码上传，以及腾讯云HTML文件名恢复。原工作分支保留用于追溯；各分支核对及整合方式见[主分支整合记录](docs/主分支整合记录_20260920.md)。
+
 ## 本轮改进与复核入口
 
 [人工算量计算路径复核](docs/人工算量计算路径复核_20260920.md) · [计算路径改进记录](docs/计算路径改进记录_20260920.md) · [运行输入与重算说明](skills/_qto-shared-evidence/references/按人工算量顺序执行与重算.md)
@@ -38,6 +40,8 @@
 共享 HTML 支持点线面、多图页、对象定位、同类问题分组及成员例外；用户填写结论和原因后，由所属专业复核重算，不直接将文字批注覆盖工程量。批注可以随HTML保存或导出JSON。详见[共享复核说明](skills/_qto-shared-evidence/references/HTML交互复核与批注.md)。
 
 全专业共用“保存并反馈”：同一次操作保存完整本地HTML并同步上传完全相同的文件，保留项目、图面、对象、确认结果和原因。腾讯云作为主站，Cloudflare作为备用；正常收件不向备用发送，网络故障时先查询主站，再按同一编号备用收件。维护者端点通过共用配置提供，用户确认整份HTML的发送范围后才联网，同事无需GitHub账号。主备服务已用合成HTML完成真实上传与私有取件验证；GitHub转交尚未配置。见[腾讯云主站与主备使用说明](feedback-service/腾讯云主站与主备使用说明.md)和[Cloudflare备用部署](feedback-service/Cloudflare部署说明.md)。
+
+换电脑使用时，反馈上传无需腾讯云或Cloudflare账号、账号登录或反馈码；云端服务签发单次上传所需的临时权限，管理员取件权限独立保留。已配置的接收地址随插件和生成的HTML提供，仍可选择仅本地保存。腾讯云正式收件保留中文`.html`文件名，旧`.bin`收件在核对完整性后兼容恢复；云端文件名修复无需重做既有复核页面。
 
 ## 获取与安装
 
@@ -75,9 +79,10 @@ python -m compileall -q skills tests
 python -m pytest tests -q
 python tests/run_html_review_tests.py --root skills --output-root .codex_work/html-review
 node tests/run_html_review_ui_tests.mjs --root skills --report .codex_work/html-review/最新核验.json
+node --test feedback-service/tests/*.test.mjs
 ```
 
-本轮隔离分支实际通过136项Python测试、20项HTML契约检查、19项交互逻辑检查；证据见[发布核对](仓库发布核对.json)。最终主分支提交的Windows/Linux结果以其Actions日志为准。测试不执行真实DWG、原生浏览器视觉或真实项目识别准确率验收。
+整合后的本地主分支实际通过136项Python测试、20项HTML契约检查、26项交互逻辑检查和23项服务测试；222个运行文件与本机已安装版本逐项一致。证据见[发布核对](仓库发布核对.json)。最终主分支提交的Windows/Linux结果以其Actions日志为准，CI还执行Workers打包与7项运行时核验。测试不执行真实DWG、原生浏览器视觉或真实项目识别准确率验收。
 
 修改运行文件后使用 `python maintenance/update_runtime_manifest.py` 重建清单，再运行测试。项目DWG、实际工程量、用户批注、账号凭据和运行缓存不得提交到仓库。
 
