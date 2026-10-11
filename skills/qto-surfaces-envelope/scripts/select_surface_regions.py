@@ -176,3 +176,41 @@ def select_hatches(source_dxf: Path, selection: dict, *, index: dict, unit: str,
     if _sha256(source_dxf) != digest:
         raise SurfaceSelectionError("source changed during selection")
     return {"source_sha256": digest, "layout": layout, "unit": unit, "unit_evidence": unit_evidence, "source_read_diagnostics": diagnostics.get("source_read_warnings", []), "source_identity_issues": diagnostics.get("source_identity_issues", []), "regions": regions}
+
+
+def main():
+    import argparse
+    import json
+    import sys
+
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dxf", required=True)
+    parser.add_argument("--index", required=True)
+    parser.add_argument("--selection-file", required=True)
+    parser.add_argument("--unit", required=True, choices=["mm", "m"])
+    parser.add_argument("--unit-evidence", default="")
+    args = parser.parse_args()
+
+
+    try:
+        index = json.loads(Path(args.index).read_text(encoding="utf-8"))
+        selection = json.loads(Path(args.selection_file).read_text(encoding="utf-8"))
+        result = select_hatches(
+            Path(args.dxf),
+            selection,
+            index=index,
+            unit=args.unit,
+            unit_evidence=args.unit_evidence,
+        )
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
+    except Exception as exc:
+        print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        return 2
+
+
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
