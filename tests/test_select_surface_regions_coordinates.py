@@ -47,7 +47,9 @@ def test_instance_transform_origin_and_nonzero_bounds(tmp_path):
     assert row["instance_transform"][7] == pytest.approx(20)
     result = select(dxf, index, oid)
     assert result["regions"][0]["area_m2"] == pytest.approx(600)
-    assert result["regions"][0]["bounds_m"][0] >= 50
+    assert result["regions"][0]["bounds_m"] == pytest.approx(
+        [50, 20, 70, 50]
+    )
 
 
 def test_minsert_non_first_cell_has_position(tmp_path):
@@ -65,8 +67,9 @@ def test_minsert_non_first_cell_has_position(tmp_path):
     assert len(ids) == 6
     non_first = next(k for k in ids if "[1,2]" in k)
     result = select(dxf, index, non_first)
-    assert result["regions"][0]["bounds_m"][0] == pytest.approx(40)
-    assert result["regions"][0]["bounds_m"][1] == pytest.approx(20)
+    assert result["regions"][0]["bounds_m"] == pytest.approx(
+        [60, 20, 70, 30]
+    )
 
 
 def test_two_level_insert_combines_transform(tmp_path):
@@ -84,3 +87,25 @@ def test_two_level_insert_combines_transform(tmp_path):
     oid = next(k for k, v in objects.items() if v["entity_type"] == "HATCH")
     result = select(dxf, index, oid)
     assert result["regions"][0]["area_m2"] == pytest.approx(600)
+    assert result["regions"][0]["bounds_m"] == pytest.approx(
+        [35, 0, 95, 10]
+    )
+
+
+def test_workbench_matrix_column_vector_basis_transform():
+    matrix = selector._workbench_matrix(
+        [
+            2, 0, 0, 10,
+            0, 3, 0, 20,
+            0, 0, 1, 0,
+            0, 0, 0, 1,
+        ]
+    )
+
+
+    assert tuple(matrix.transform((0, 0, 0))) == pytest.approx(
+        (10, 20, 0)
+    )
+    assert tuple(matrix.transform((1, 1, 0))) == pytest.approx(
+        (12, 23, 0)
+    )
