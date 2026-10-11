@@ -157,7 +157,7 @@ def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: 
         "start": geometry["start"],
         "end": geometry["end"],
         "raw_length": geometry["length"],
-        "closed": bool(getattr(entity, "closed", False) or getattr(entity, "is_closed", False)),
+        "closed": bool(geometry["geometry"]["closed"]) if geometry["geometry"] is not None else bool(getattr(entity, "closed", False) or getattr(entity, "is_closed", False)),
         "text": entity_text(entity),
         "block_name": block_name,
         "rotation": float(get_dxf(entity, "rotation", 0.0) or 0.0) * math.pi / 180.0,

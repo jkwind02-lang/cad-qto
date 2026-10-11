@@ -9,7 +9,7 @@ from pathlib import Path
 
 import ezdxf
 import pytest
-from test_audit_regressions import row
+from test_audit_regressions import row, geometry
 from test_manual_routes import ROOT
 from qto_cad_source_contract import check_unit_factor, verify_source_file
 
@@ -49,7 +49,7 @@ def bundle(tmp_path):
     for r in rows:r['source_sha256']=sha(source)
     stream=tmp_path/'layout.ndjson';stream.write_text('\n'.join(json.dumps(r) for r in rows),encoding='utf-8')
     blocks=tmp_path/'blocks.ndjson';blocks.write_text('',encoding='utf-8')
-    manifest=dict(schema_version='qto-cad-neutral-evidence/1.0',geometry_schema_version='qto-cad-geometry/1.1',
+    manifest=dict(schema_version='qto-cad-neutral-evidence/1.0',geometry_schema_version=geometry.GEOMETRY_SCHEMA,
         authoritative_source=dict(path=str(source),sha256=sha(source)),exchange_dxf=dict(path=str(exchange),sha256=sha(exchange)),
         drawing_unit=dict(raw_unit='Millimeters'),blocks=[],artifacts={
         'layout_entities':dict(path=str(stream),sha256=sha(stream)), 'block_definitions':dict(path=str(blocks),sha256=sha(blocks))})

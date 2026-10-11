@@ -12,7 +12,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / '_qto-shared-evidence/scripts'))
-from qto_cad_geometry import (IDENTITY, compose_matrix, conic_point, entity_geometry,
+from qto_cad_geometry import (GEOMETRY_SCHEMA, IDENTITY, compose_matrix, conic_point, entity_geometry,
                               summarize, transform_geometry, dimension_measurement_facts,
                               read_dxf_with_diagnostics)
 from qto_cad_source_contract import canonical_scale, verify_source_file
@@ -262,7 +262,7 @@ def measure(data):
                     nearest = [x+max(0., min(1., fraction))*d for x, d in zip(start, direction)]
                     require(math.dist(p, nearest) <= tolerance,
                             '构件插入点不在断口轴段内；须补充可验证端口证据')
-            geometry = {'schema': 'qto-cad-geometry/1.1', 'coordinate_system': 'WCS', 'parts': [part]}
+            geometry = {'schema': GEOMETRY_SCHEMA, 'coordinate_system': 'WCS', 'parts': [part]}
             facts = summarize(geometry)
             box = facts['bbox3d']
             require(bounds_contain(view['bounds3d'], [box[:3], box[3:]], tolerance), '路径越出当前视图范围')

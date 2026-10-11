@@ -16,7 +16,7 @@ import re
 import threading
 from typing import Any
 
-GEOMETRY_SCHEMA = "qto-cad-geometry/1.1"
+GEOMETRY_SCHEMA = "qto-cad-geometry/1.2"
 IDENTITY = (1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.)
 TAU = math.tau
 
@@ -700,6 +700,92 @@ def transform_row(row, matrix, instance_path, target_layout):
     return result
 
 
+def _straight_fitted_polyline(display, controls, closed):
+    """Prove a fitted curve is a single straight run, without tracing its frame.
+
+    Monotone collinear control points make an open quadratic/cubic B-spline
+    monotone on that same line. The stored display vertices must describe the
+    same run. Only floating arithmetic roundoff is allowed, not a drawing gap
+    or a project-specific geometric tolerance. Other fitted curves need an
+    exact/native measurement; their display tessellation has no error bound.
+    """
+    if closed or len(display) < 2 or not controls:
+        return False
+    if any(bulge != 0 for _, bulge in (*display, *controls)):
+        return False
+    a, b = display[0][0], display[-1][0]
+    length = math.dist(a, b)
+    if not math.isfinite(length) or length == 0:
+        return False
+    direction = [(y-x)/length for x, y in zip(a, b)]
+    tolerance = 64*math.ulp(length)
+    if math.dist(controls[0][0], a) > tolerance or math.dist(controls[-1][0], b) > tolerance:
+        return False
+    for chain in (display, controls):
+        previous = -tolerance
+        for point, _ in chain:
+            if not all(math.isfinite(x) for x in point):
+                return False
+            delta = [x-y for x, y in zip(point, a)]
+            parameter = math.fsum(x*y for x, y in zip(delta, direction))
+            residual = math.hypot(*(x-parameter*y for x, y in zip(delta, direction)))
+            if residual > tolerance or parameter < previous-tolerance or parameter > length+tolerance:
+                return False
+            previous = parameter
+    return True
+
+
+def _polyline_measurement_vertices(entity, values, raw):
+    """Select drawable VERTEX roles while retaining the full source sequence."""
+    flags = int(entity.dxf.flags)
+    vertex_flags = [int(v.dxf.flags) for v in entity.vertices]
+    raw.update(polyline_flags=flags, smooth_type=int(entity.dxf.smooth_type),
+               vertex_flags=vertex_flags,
+               vertex_handles=[v.dxf.get("handle") for v in entity.vertices],
+               vertex_tangents=[float(v.dxf.get("tangent", 0.)) for v in entity.vertices],
+               measurement_vertex_indices=list(range(len(values))),
+               excluded_control_vertex_indices=[], measurement_basis="drawn_polyline_segments")
+    fitting = flags & 6
+    if entity.is_3d_polyline:
+        if fitting or any(v & (1 | 8 | 16) for v in vertex_flags):
+            raw["measurement_vertex_indices"] = []
+            return [], "three_dimensional_polyline_fit_not_measured"
+        return values, None
+    if any(v & ~(1 | 2 | 8 | 16) for v in vertex_flags):
+        raw["measurement_vertex_indices"] = []
+        return [], "polyline_vertex_roles_unverified"
+    if not fitting:
+        if any(v & (1 | 8 | 16) for v in vertex_flags):
+            raw["measurement_vertex_indices"] = []
+            return [], "polyline_vertex_roles_unverified"
+        return values, None
+    if not flags & 4:  # Curve-fit extra vertices are part of the stored arc chain.
+        raw["measurement_basis"] = "drawn_curve_fit_bulge_segments"
+        if any(v & (8 | 16) for v in vertex_flags):
+            raw["measurement_vertex_indices"] = []
+            return [], "polyline_vertex_roles_unverified"
+        return values, None
+
+    controls = [i for i, v in enumerate(vertex_flags) if v & 16]
+    display = [i for i, v in enumerate(vertex_flags) if not v & 16 and v & (1 | 8)]
+    raw.update(excluded_control_vertex_indices=controls, display_vertex_indices=display,
+               measurement_vertex_indices=[],
+               measurement_basis="unverified_spline_fit_display_chain")
+    # A frame control point cannot simultaneously be a generated display point.
+    # An unmarked point in a spline-fit sequence has no proven role either.
+    if any((v & 16 and v & (1 | 8)) or not v & (1 | 8 | 16) for v in vertex_flags):
+        return [], "polyline_vertex_roles_unverified"
+    minimum_controls = {5: 3, 6: 4}.get(raw["smooth_type"])
+    if minimum_controls is None or len(controls) < minimum_controls or len(display) < 2:
+        return [], "spline_fit_polyline_data_incomplete"
+    measured, frame = [values[i] for i in display], [values[i] for i in controls]
+    if not _straight_fitted_polyline(measured, frame, bool(entity.is_closed)):
+        return [], "spline_fit_polyline_measurement_unverified"
+    raw.update(measurement_vertex_indices=display,
+               measurement_basis="proven_monotone_collinear_spline_fit")
+    return measured, None
+
+
 def entity_geometry(entity: Any):
     """Extract full curves in WCS without exploding the source drawing."""
     from ezdxf.math import Vec3
@@ -739,6 +825,10 @@ def entity_geometry(entity: Any):
                 if is2d:
                     values = [([p[0],p[1],elevation],b) for p,b in values]
             raw.update(vertices=[p for p,b in values], bulges=[b for p,b in values], closed=closed, coordinate_system="OCS" if is2d else "WCS")
+            if kind == "POLYLINE":
+                values, fit_issue = _polyline_measurement_vertices(entity, values, raw)
+                if fit_issue:
+                    unresolved(fit_issue, "拟合多段线保留顶点角色与控制框架；未证明可测的真实曲线，不以显示折线或控制框架冒充长度", "native_or_exact_fitted_polyline_measurement_required")
             ocs = entity.ocs()
             pairs = list(zip(values, values[1:]))
             if closed and len(values)>1:
@@ -758,12 +848,39 @@ def entity_geometry(entity: Any):
     elif kind in {"ARC","CIRCLE"}:
         ocs=entity.ocs()
         radius=float(entity.dxf.radius)
-        start=math.radians(float(entity.dxf.start_angle)) if kind=="ARC" else 0.
-        sweep=math.radians((float(entity.dxf.end_angle)-float(entity.dxf.start_angle))%360.) if kind=="ARC" else TAU
+        if not math.isfinite(radius) or radius <= 0:
+            raise ValueError("圆或圆弧半径必须为有限正数")
+        if kind == "ARC":
+            original_start, original_end = float(entity.dxf.start_angle), float(entity.dxf.end_angle)
+            if not math.isfinite(original_start) or not math.isfinite(original_end):
+                raise ValueError("圆弧起终角必须为有限数值")
+            # Preserve a local source difference before normalization: a tiny
+            # negative angle modulo 360 can round to exactly 360. For distant
+            # angles, signed remainders also avoid overflowing their difference.
+            start_degrees = math.remainder(original_start, 360.)
+            signed_span = original_end-original_start
+            if not -180. <= signed_span <= 180.:
+                end_degrees = math.remainder(original_end, 360.)
+                signed_span = math.fsum((end_degrees, -start_degrees))
+                if signed_span > 180.:
+                    signed_span = math.fsum((end_degrees, -start_degrees, -360.))
+                elif signed_span < -180.:
+                    signed_span = math.fsum((end_degrees, -start_degrees, 360.))
+            # Closedness follows exact source-direction equality, never a
+            # near-full sweep that rounds to 360 while converting to radians.
+            closed = signed_span == 0. and original_start != original_end
+            span_degrees = 360. if closed else signed_span % 360.
+            start, sweep = math.radians(start_degrees), math.radians(span_degrees)
+            raw.update(start_angle_degrees=original_start, end_angle_degrees=original_end)
+        else:
+            start, sweep = 0., TAU
+            closed = True
         raw.update(center=xyz(entity.dxf.center),radius=radius,start_param=start,sweep_param=sweep,coordinate_system="OCS")
         anchor=xyz(ocs.to_wcs(entity.dxf.center))
-        arc(anchor,ocs.ux*radius,ocs.uy*radius,start,sweep)
-        closed=kind=="CIRCLE"
+        if sweep == 0.:
+            unresolved("arc_zero_sweep", "圆弧起终角相同，未形成可测弧段；不能作为零长度实物计量", "native_geometry_read_required")
+        else:
+            arc(anchor,ocs.ux*radius,ocs.uy*radius,start,sweep)
     elif kind=="ELLIPSE":
         start,end=float(entity.dxf.start_param),float(entity.dxf.end_param)
         delta=end-start

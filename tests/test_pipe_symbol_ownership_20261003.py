@@ -29,7 +29,7 @@ def case(tmp_path,decision,nested,unit,name,anchor_outside=False):
     rows=[ex.convert(e,layout='Model',parent_block=None,source_hash=identity,raw_unit=unit,sequence=i) for i,e in enumerate(doc.modelspace())]
     definitions=[ex.convert(e,layout='BlockDefinition',parent_block=bb.name,source_hash=identity,raw_unit=unit,sequence=i) for bb in doc.blocks if not bb.is_any_layout for i,e in enumerate(bb)]
     layout.write_text(''.join(json.dumps(r)+'\n' for r in rows),encoding='utf-8');blocks.write_text(''.join(json.dumps(r)+'\n' for r in definitions),encoding='utf-8')
-    manifest=dict(schema_version='qto-cad-neutral-evidence/1.0',geometry_schema_version='qto-cad-geometry/1.1',
+    manifest=dict(schema_version='qto-cad-neutral-evidence/1.0',geometry_schema_version=ex.GEOMETRY_SCHEMA,
         authoritative_source=dict(path=str(source),sha256=identity),exchange_dxf=dict(path=str(source),sha256=identity),drawing_unit=dict(raw_unit=unit),
         blocks=[dict(block_name=bb.name,origin=list(bb.block.dxf.base_point)) for bb in doc.blocks if not bb.is_any_layout],
         artifacts=dict(layout_entities=dict(path=str(layout),sha256=sha(layout)),block_definitions=dict(path=str(blocks),sha256=sha(blocks))))
