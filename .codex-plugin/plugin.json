@@ -1,6 +1,6 @@
 {
   "name": "cad-qto",
-  "version": "0.2.0+codex.20261011.5",
+  "version": "0.2.0+codex.20261011.6",
   "description": "CAD全专业工程量计算与明细复核，按物理对象调用13个专业Skill，跨专业使用协调入口，共用取证、证据和校验资源。",
   "author": {
     "name": "Local developer"
@@ -9,7 +9,7 @@
   "interface": {
     "displayName": "CAD 算量",
     "shortDescription": "全专业算量与明细复核：统一插件管理，按专业执行",
-    "longDescription": "包含13个专业算量Skill、1个协调入口和公共取证校验资源。单一对象直达专业，多计算链统一交接与数量归属。支持确认量、规则推算量、方案暂估量与未决分列；依赖本机已有CAD及脚本环境。安装不代表全专业自动识别成熟。",
+    "longDescription": "包含13个专业算量Skill、1个协调入口和公共取证校验资源。按人工流程局部读图、建立实物与应计量项、运行专业计算、回图复核；支持实际文件依赖、任务恢复、并行分支和意见重算。单一对象直达专业，多计算链统一交接，确认/推算/方案量分列。依赖本机已有CAD及脚本环境，安装不代表全专业自动识别成熟。",
     "developerName": "Local developer",
     "category": "Productivity",
     "capabilities": [],
