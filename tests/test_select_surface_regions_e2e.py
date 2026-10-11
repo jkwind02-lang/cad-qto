@@ -197,6 +197,7 @@ def test_resolve_selection_ids_exact_layer_and_validation():
     assert module._resolve_selection_ids(objects, {"cadinst_ids": ["h1", "h2"], "layer_names": ["A.[1]"]}) == ["h1"]
     for selection in (
         {"layer_names": ["A[1]"]},
+        {"layer_names": ["A.[1]", "不存在层"]},
         {"cadinst_ids": []},
         {"cadinst_ids": None},
         {"layer_names": None},
