@@ -5,57 +5,56 @@ from pathlib import Path
 import ezdxf
 import pytest
 
+ROOT = Path(__file__).parents[1]
+SELECTOR = ROOT / "skills" / "qto-surfaces-envelope" / "scripts" / "select_surface_regions.py"
+WORKBENCH = ROOT / "skills" / "_qto-shared-evidence" / "scripts" / "qto_recognition_workbench.py"
 
-MODULE = Path(__file__).parents[1] / "skills" / "qto-surfaces-envelope" / "scripts" / "select_surface_regions.py"
-spec = importlib.util.spec_from_file_location("select_surface_regions", MODULE)
+spec = importlib.util.spec_from_file_location("select_surface_regions", SELECTOR)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 select_hatches = module.select_hatches
 SurfaceSelectionError = module.SurfaceSelectionError
 
+spec = importlib.util.spec_from_file_location("qto_recognition_workbench", WORKBENCH)
+workbench = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(workbench)
+
 
 def _make_fixture(path):
     doc = ezdxf.new()
     msp = doc.modelspace()
-    for layer, x in (("A", 0), ("B", 20)):
-        hatch = msp.add_hatch(dxfattribs={"layer": layer})
-        hatch.paths.add_polyline_path(
-            [(x, 0), (x + 10, 0), (x + 10, 10), (x, 10)],
-            is_closed=True,
-        )
+    for x in (0, 20):
+        hatch = msp.add_hatch(dxfattribs={"layer": "A"})
+        hatch.paths.add_polyline_path([(x, 0), (x + 10, 0), (x + 10, 10), (x, 10)], is_closed=True)
     doc.saveas(path)
 
 
-def _ids_from_fixture(path):
-    # Use the same extractor walk used by the adapter; the test does not invent IDs.
-    spec = importlib.util.spec_from_file_location(
-        "extract_surface_regions", Path(__file__).parents[1] / "skills" / "qto-surfaces-envelope" / "scripts" / "extract_surface_regions.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    doc = module.read_dxf_with_diagnostics(path)[0]
-    return ["CADINST-" + "/".join(identity) for identity, entity, failure, _ in module.walk(doc.modelspace()) if not failure and entity.dxftype() == "HATCH"]
+def _index(path):
+    source = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    return workbench.build_index(source, layout="Model")
 
 
-def test_exact_selection_selects_one_hatch_area(tmp_path):
+def test_exact_selection_uses_verified_index(tmp_path):
     dxf = tmp_path / "two_hatch.dxf"
     _make_fixture(dxf)
-    ids = _ids_from_fixture(dxf)
+    index = _index(dxf)
+    objects = workbench._verified_index(index)
+    ids = [k for k, v in objects.items() if v["entity_type"] == "HATCH"]
     assert len(ids) == 2
-    result = select_hatches(
-        dxf,
-        {"source_sha256": hashlib.sha256(dxf.read_bytes()).hexdigest(), "layout": "Model", "cadinst_ids": [ids[0]]},
-        layout="Model",
-        unit_scale=1.0,
-    )
+    result = select_hatches(dxf, {"layout": "Model", "cadinst_ids": [ids[0]]}, index=index, unit_scale=1.0)
     assert len(result["regions"]) == 1
     assert result["regions"][0]["area_m2"] == pytest.approx(100)
 
 
-def test_wrong_source_and_layout_rejected(tmp_path):
+def test_unverified_or_wrong_layout_rejected(tmp_path):
     dxf = tmp_path / "two_hatch.dxf"
     _make_fixture(dxf)
+    index = _index(dxf)
+    objects = workbench._verified_index(index)
+    hid = next(k for k, v in objects.items() if v["entity_type"] == "HATCH")
+    bad = dict(index)
+    bad["index_sha256"] = "0" * 64
     with pytest.raises(SurfaceSelectionError):
-        select_hatches(dxf, {"source_sha256": "0" * 64, "layout": "Model", "cadinst_ids": []}, layout="Model", unit_scale=1.0)
+        select_hatches(dxf, {"layout": "Model", "cadinst_ids": [hid]}, index=bad, unit_scale=1.0)
     with pytest.raises(SurfaceSelectionError):
-        select_hatches(dxf, {"source_sha256": hashlib.sha256(dxf.read_bytes()).hexdigest(), "layout": "Other", "cadinst_ids": []}, layout="Model", unit_scale=1.0)
+        select_hatches(dxf, {"layout": "Other", "cadinst_ids": [hid]}, index=index, unit_scale=1.0)
