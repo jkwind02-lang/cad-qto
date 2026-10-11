@@ -186,3 +186,62 @@ def test_insunits_zero_evidence_not_keyword_parsed():
     assert module._unit_scale_from_evidence(
         doc, "mm", "毫米及米换算见总说明"
     ) == pytest.approx(0.001)
+
+
+def test_resolve_selection_ids_exact_layer_and_validation():
+    objects = {
+        "h1": {"entity_type": "HATCH", "effective_layer": "A.[1]"},
+        "h2": {"entity_type": "HATCH", "effective_layer": "Axx1"},
+    }
+    assert module._resolve_selection_ids(objects, {"layer_names": ["A.[1]"]}) == ["h1"]
+    assert module._resolve_selection_ids(objects, {"cadinst_ids": ["h1", "h2"], "layer_names": ["A.[1]"]}) == ["h1"]
+    for selection in (
+        {"layer_names": ["A[1]"]},
+        {"cadinst_ids": []},
+        {"cadinst_ids": None},
+        {"layer_names": None},
+        {"cadinst_ids": ["bad"]},
+        {"layer_names": ["NONE"]},
+        {"cadinst_ids": ["h1"], "layer_names": ["Axx1"]},
+    ):
+        with pytest.raises(module.SurfaceSelectionError):
+            module._resolve_selection_ids(objects, selection)
+
+def test_select_surface_cli_layer_selection(tmp_path):
+    import json
+    import subprocess
+    import sys
+
+
+    dxf = tmp_path / "cli.dxf"
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 6
+    h1 = _hatch(doc.modelspace())
+    h1.dxf.layer = "A"
+    h2 = _hatch(doc.modelspace())
+    h2.dxf.layer = "B"
+    doc.saveas(dxf)
+
+
+    index = _index(dxf)
+    index_file = tmp_path / "index.json"
+    selection_file = tmp_path / "selection.json"
+    index_file.write_text(json.dumps(index), encoding="utf-8")
+    payload = {"source_sha256": _sha(dxf), "layout": "Model", "layer_names": ["A"]}
+    selection_file.write_text(json.dumps(payload), encoding="utf-8")
+
+
+    cmd = [sys.executable, str(SELECTOR), "--dxf", str(dxf),
+           "--index", str(index_file), "--selection-file", str(selection_file),
+           "--unit", "m"]
+    run = subprocess.run(cmd, capture_output=True, text=True)
+    assert run.returncode == 0
+    result = json.loads(run.stdout)
+    assert len(result["regions"]) == 1
+    assert result["regions"][0]["area_m2"] == pytest.approx(100)
+
+
+    selection_file.write_text(json.dumps({**payload, "layer_names": ["NONE"]}), encoding="utf-8")
+    run = subprocess.run(cmd, capture_output=True, text=True)
+    assert run.returncode == 2
+    assert run.stdout.strip() == ""
