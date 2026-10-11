@@ -20,41 +20,94 @@ workbench = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(workbench)
 
 
-def _make_fixture(path):
-    doc = ezdxf.new()
-    msp = doc.modelspace()
-    for x in (0, 20):
-        hatch = msp.add_hatch(dxfattribs={"layer": "A"})
-        hatch.paths.add_polyline_path([(x, 0), (x + 10, 0), (x + 10, 10), (x, 10)], is_closed=True)
-    doc.saveas(path)
+def _sha(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _index(path):
-    source = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
-    return workbench.build_index(source, layout="Model")
+def _hatch(container, size=10):
+    h = container.add_hatch()
+    h.paths.add_polyline_path([(0, 0), (size, 0), (size, size), (0, size)], is_closed=True)
+    return h
+
+
+def _index(path, layout="Model"):
+    return workbench.build_index({"path": str(path), "sha256": _sha(path)}, layout=layout)
+
+
+def _select(path, index, oid, unit_scale=1.0):
+    return select_hatches(path, {"source_sha256": _sha(path), "layout": index["layout"], "cadinst_ids": [oid]}, index=index, unit_scale=unit_scale)
 
 
 def test_exact_selection_uses_verified_index(tmp_path):
     dxf = tmp_path / "two_hatch.dxf"
-    _make_fixture(dxf)
+    doc = ezdxf.new()
+    _hatch(doc.modelspace())
+    _hatch(doc.modelspace(), 20)
+    doc.saveas(dxf)
     index = _index(dxf)
-    objects = workbench._verified_index(index)
-    ids = [k for k, v in objects.items() if v["entity_type"] == "HATCH"]
+    ids = [k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH"]
     assert len(ids) == 2
-    result = select_hatches(dxf, {"layout": "Model", "cadinst_ids": [ids[0]]}, index=index, unit_scale=1.0)
-    assert len(result["regions"]) == 1
+    assert _select(dxf, index, ids[0])["regions"][0]["area_m2"] == pytest.approx(100)
+
+
+def test_nested_insert_transform_changes_area(tmp_path):
+    dxf = tmp_path / "nested.dxf"
+    doc = ezdxf.new()
+    block = doc.blocks.new("SURFACE")
+    _hatch(block)
+    doc.modelspace().add_blockref("SURFACE", (0, 0), dxfattribs={"xscale": 2, "yscale": 3, "rotation": 37})
+    doc.saveas(dxf)
+    index = _index(dxf)
+    ids = [k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH"]
+    assert ids
+    assert _select(dxf, index, ids[0])["regions"][0]["area_m2"] == pytest.approx(600, rel=0.05)
+
+
+def test_minsert_keeps_array_cells_and_selects_one(tmp_path):
+    dxf = tmp_path / "array.dxf"
+    doc = ezdxf.new()
+    block = doc.blocks.new("ARRAY_SURFACE")
+    _hatch(block)
+    insert = doc.modelspace().add_blockref("ARRAY_SURFACE", (0, 0))
+    insert.grid(size=(2, 3), spacing=(20, 20))
+    doc.saveas(dxf)
+    index = _index(dxf)
+    ids = [k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH"]
+    assert len(ids) == 6
+    result = _select(dxf, index, ids[0])
     assert result["regions"][0]["area_m2"] == pytest.approx(100)
 
 
-def test_unverified_or_wrong_layout_rejected(tmp_path):
-    dxf = tmp_path / "two_hatch.dxf"
-    _make_fixture(dxf)
+def test_paperspace_layout_is_bound_to_selection(tmp_path):
+    dxf = tmp_path / "paper.dxf"
+    doc = ezdxf.new()
+    _hatch(doc.layout("Layout1"))
+    doc.saveas(dxf)
+    index = _index(dxf, "Layout1")
+    ids = [k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH"]
+    assert ids
+    assert _select(dxf, index, ids[0])["layout"] == "Layout1"
+
+
+def test_mm_unit_conversion_and_unknown_unit_rejection(tmp_path):
+    dxf = tmp_path / "mm.dxf"
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 4
+    _hatch(doc.modelspace(), 1000)
+    doc.saveas(dxf)
     index = _index(dxf)
-    objects = workbench._verified_index(index)
-    hid = next(k for k, v in objects.items() if v["entity_type"] == "HATCH")
-    bad = dict(index)
-    bad["index_sha256"] = "0" * 64
+    hid = next(k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH")
+    assert _select(dxf, index, hid, unit_scale=0.001)["regions"][0]["area_m2"] == pytest.approx(1)
     with pytest.raises(SurfaceSelectionError):
-        select_hatches(dxf, {"layout": "Model", "cadinst_ids": [hid]}, index=bad, unit_scale=1.0)
+        select_hatches(dxf, {"source_sha256": _sha(dxf), "layout": "Model", "cadinst_ids": [hid]}, index=index, unit_scale=None)
+
+
+def test_duplicate_selection_ids_rejected(tmp_path):
+    dxf = tmp_path / "dup.dxf"
+    doc = ezdxf.new()
+    _hatch(doc.modelspace())
+    doc.saveas(dxf)
+    index = _index(dxf)
+    hid = next(k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH")
     with pytest.raises(SurfaceSelectionError):
-        select_hatches(dxf, {"layout": "Other", "cadinst_ids": [hid]}, index=index, unit_scale=1.0)
+        select_hatches(dxf, {"source_sha256": _sha(dxf), "layout": "Model", "cadinst_ids": [hid, hid]}, index=index, unit_scale=1.0)
