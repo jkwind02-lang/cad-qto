@@ -183,7 +183,19 @@ def select_hatches(source_dxf: Path, selection: dict, *, index: dict, unit: str,
     _verified_objects(index)
     if _sha256(source_dxf) != digest:
         raise SurfaceSelectionError("source changed during selection")
-    return {"source_sha256": digest, "layout": layout, "unit": unit, "unit_evidence": unit_evidence, "source_read_diagnostics": diagnostics.get("source_read_warnings", []), "source_identity_issues": diagnostics.get("source_identity_issues", []), "regions": regions}
+    return {
+        "source_sha256": digest,
+        "layout": layout,
+        "unit": unit,
+        "unit_evidence": unit_evidence,
+        "source_read_diagnostics": diagnostics.get("source_read_warnings", []),
+        "source_identity_issues": diagnostics.get("source_identity_issues", []),
+        "index_sha256": index["index_sha256"],
+        "conversion_warnings": index.get("conversion_warnings", []),
+        "formal_adoption_allowed": False,
+        "adoption_scope": "working",
+        "regions": regions,
+    }
 
 
 def main():
