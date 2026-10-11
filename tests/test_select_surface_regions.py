@@ -19,8 +19,8 @@ SurfaceSelectionError = mod.SurfaceSelectionError
 
 def _make_fixture(path):
     doc = ezdxf.new()
-    msp = doc.modelspace()
-    hatch = msp.add_hatch(dxfattribs={"layer": "A"})
+    doc.header["$INSUNITS"] = 6
+    hatch = doc.modelspace().add_hatch(dxfattribs={"layer": "A"})
     hatch.paths.add_polyline_path([(0,0),(10,0),(10,10),(0,10)], is_closed=True)
     doc.saveas(path)
 
@@ -31,10 +31,8 @@ def test_selector_rejects_unverified_local_ids(tmp_path):
     with pytest.raises(SurfaceSelectionError):
         select_hatches(
             dxf,
-            {"source_sha256": hashlib.sha256(dxf.read_bytes()).hexdigest(), "cadinst_ids": ["CADINST-invalid/path"]},
-            index={
-                "schema_version": "invalid",
-                "kind": "index",
-            },
-            unit_scale=1.0,
+            {"source_sha256": hashlib.sha256(dxf.read_bytes()).hexdigest(), "layout": "Model", "cadinst_ids": ["CADINST-invalid/path"]},
+            index={"schema_version": "invalid", "kind": "index"},
+            unit="m",
+            unit_evidence="explicit_m",
         )
