@@ -25,13 +25,16 @@ def _make_fixture(path):
     doc.saveas(path)
 
 
-def test_selector_requires_workbench_rows_not_local_ids(tmp_path):
+def test_selector_rejects_unverified_local_ids(tmp_path):
     dxf = tmp_path / "one_hatch.dxf"
     _make_fixture(dxf)
     with pytest.raises(SurfaceSelectionError):
         select_hatches(
             dxf,
             {"source_sha256": hashlib.sha256(dxf.read_bytes()).hexdigest(), "cadinst_ids": ["CADINST-invalid/path"]},
-            workbench_rows=[],
+            index={
+                "schema_version": "invalid",
+                "kind": "index",
+            },
             unit_scale=1.0,
         )
