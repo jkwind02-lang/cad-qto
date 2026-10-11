@@ -1,0 +1,50 @@
+{
+  "recorded_at_utc": "2026-10-11T16:46:14.284859+00:00",
+  "baseline": {
+    "local_commit": "5735794fbaa99174dd9687bf93d50ef1fa080c02",
+    "remote_equivalent_commit": "41d915a",
+    "tree": "67c32c7606855f12ab7f2476f7d7827b6ce5e373",
+    "source_file_manifest": "baseline_run/source_version.json",
+    "captured_files_verified": 111
+  },
+  "tested_candidate": {
+    "local_commit": "8b0722bba6e88f699267bc8e50ee250ae41bb4fe",
+    "remote_equivalent_commit": "6b63825baa7e25adc2af7087f59b57080b1551a6",
+    "tree": "df3bb320368be6a7d4cd3e212d4a45101a8367b8",
+    "runtime_manifest_sha256": "a2f02dd393f52f2ae7fa167c63f18c3bdd2e05b01d16751bf9952f8248bcc72f"
+  },
+  "later_delivery_worktree": {
+    "git_commit": null,
+    "runtime_manifest_sha256": "abdbfb901c55a20f7d61390bedf60d73da501529ece05c32cd2e82de15abbe01",
+    "difference_from_tested_candidate": "Later actual rebar fixes and limited policy wording cleanup; not the snapshot used by these model runs.",
+    "model_trial_rerun": false
+  },
+  "equivalence_provenance": "Local clean worktree commits and trees checked by evaluator. Remote equivalence supplied by coordinating agent; no remote modification by evaluator.",
+  "quantity_engine_files": {
+    "skills/qto-pipe-networks/scripts/infer_pipe_network.py": {
+      "tested_candidate_sha256": "46bc3bcfc2f041291935388098165fdad7221f94366134d146037ec22b087293",
+      "later_worktree_sha256": "46bc3bcfc2f041291935388098165fdad7221f94366134d146037ec22b087293",
+      "unchanged": true
+    },
+    "skills/_qto-shared-evidence/scripts/qto_pipe_topology.py": {
+      "tested_candidate_sha256": "85486613260b1fbceb3567d935ed6a9b6230547be6fe0a134bea9993a5074021",
+      "later_worktree_sha256": "85486613260b1fbceb3567d935ed6a9b6230547be6fe0a134bea9993a5074021",
+      "unchanged": true
+    },
+    "skills/_qto-shared-evidence/scripts/qto_elevation_facts.py": {
+      "tested_candidate_sha256": "783a955729e4f63408de0d2bce4e3158ef135e0c1ec9e4490ecc0a92175803a8",
+      "later_worktree_sha256": "783a955729e4f63408de0d2bce4e3158ef135e0c1ec9e4490ecc0a92175803a8",
+      "unchanged": true
+    },
+    "skills/qto-surfaces-envelope/scripts/calculate_surfaces_envelope.py": {
+      "tested_candidate_sha256": "1fd4950e6458dd19da6de3d71a006e270f52b77b4e394f32234d71d17d20fdff",
+      "later_worktree_sha256": "1fd4950e6458dd19da6de3d71a006e270f52b77b4e394f32234d71d17d20fdff",
+      "unchanged": true
+    },
+    "skills/qto-surfaces-envelope/scripts/extract_surface_regions.py": {
+      "tested_candidate_sha256": "429a9d23cffa3577b1908ab967790b4e8279c39125f5bd11b52537bcfcd0e91b",
+      "later_worktree_sha256": "429a9d23cffa3577b1908ab967790b4e8279c39125f5bd11b52537bcfcd0e91b",
+      "unchanged": true
+    }
+  }
+}

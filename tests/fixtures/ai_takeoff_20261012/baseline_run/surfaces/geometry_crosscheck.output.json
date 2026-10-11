@@ -1,0 +1,14 @@
+{
+  "raw_boundary_m2": 27.88,
+  "raw_shaft_intersection_m2": 0.63,
+  "native_gross_sum_m2": 27.879999999999995,
+  "native_net_sum_m2": 27.25,
+  "native_hatch_gross_sum_m2": 27.880000000000006,
+  "hatch_repair_count": 0,
+  "source_boundary_valid": true,
+  "source_opening_valid": true,
+  "net_conservation_delta_m2": 0.0,
+  "gross_conservation_delta_m2": -1.0658141036401503e-14,
+  "status": "PASS",
+  "method": "Forward source geometry versus native output conservation only; not a comparison against hidden answers."
+}

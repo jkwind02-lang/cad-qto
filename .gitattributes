@@ -1,2 +1,6 @@
 # Preserve the published package bytes so SHA-256 records remain valid after clone.
 * -text
+
+# Frozen model-trial evidence retains its original DXF padding and CSV CRLF bytes.
+tests/fixtures/ai_takeoff_20261012/inputs/*/drawing.dxf whitespace=-blank-at-eol,blank-at-eof,space-before-tab
+tests/fixtures/ai_takeoff_20261012/candidate_run/*/quantity_details.csv whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

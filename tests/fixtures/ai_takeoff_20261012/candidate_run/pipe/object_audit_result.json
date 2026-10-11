@@ -1,0 +1,132 @@
+{
+  "schema_version": "qto-pipe-object-selection-audit/1.0",
+  "audit_id": "AUDIT-PIPE-01",
+  "unit": "m",
+  "status": "READY",
+  "meaning": "未决异常对象不进入确认中心线，但其他已筛选对象可继续计算",
+  "candidate_count": 13,
+  "included_count": 6,
+  "excluded_count": 7,
+  "unresolved_count": 0,
+  "included_segment_ids": [
+    "PIPE-A0",
+    "PIPE-A1",
+    "PIPE-A2",
+    "PIPE-A3",
+    "PIPE-A4",
+    "PIPE-RA-V"
+  ],
+  "excluded_object_ids": [
+    "EXCLUDE-D3",
+    "EXCLUDE-D6",
+    "EXCLUDE-D7",
+    "EXCLUDE-D8",
+    "EXCLUDE-D9",
+    "EXCLUDE-EC",
+    "EXCLUDE-EE"
+  ],
+  "unresolved_object_ids": [],
+  "source_ids": [
+    "LEDGER-PIPE-01",
+    "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+  ],
+  "parameters": {
+    "connection_tolerance": 1e-06,
+    "repeat_min_count": 3,
+    "signature_precision": 6
+  },
+  "anomaly_groups": [],
+  "decisions": [
+    {
+      "object_id": "EXCLUDE-D3",
+      "decision": "exclude",
+      "basis": "Existing DRN DN80; separate system and unmarked crossing is not a connection (D4,D5,FF).",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 0
+    },
+    {
+      "object_id": "EXCLUDE-D6",
+      "decision": "exclude",
+      "basis": "NTS system view of F1 plan route; correspondence only (FC).",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 1
+    },
+    {
+      "object_id": "EXCLUDE-D7",
+      "decision": "exclude",
+      "basis": "NTS system riser graphic; real vertical separately derived from E0,E1,DE,DF.",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 2
+    },
+    {
+      "object_id": "EXCLUDE-D8",
+      "decision": "exclude",
+      "basis": "NTS system view before reducer; F2 source A2 owns quantity.",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 2
+    },
+    {
+      "object_id": "EXCLUDE-D9",
+      "decision": "exclude",
+      "basis": "NTS system view after reducer; F2 sources A3,A4 own quantity.",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 1
+    },
+    {
+      "object_id": "EXCLUDE-EC",
+      "decision": "exclude",
+      "basis": "Legend SUP example only (EB,101).",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 0
+    },
+    {
+      "object_id": "EXCLUDE-EE",
+      "decision": "exclude",
+      "basis": "Legend DRN example only (EB,101).",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 0
+    },
+    {
+      "object_id": "PIPE-A0",
+      "decision": "include",
+      "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 1
+    },
+    {
+      "object_id": "PIPE-A1",
+      "decision": "include",
+      "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 2
+    },
+    {
+      "object_id": "PIPE-A2",
+      "decision": "include",
+      "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 2
+    },
+    {
+      "object_id": "PIPE-A3",
+      "decision": "include",
+      "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 2
+    },
+    {
+      "object_id": "PIPE-A4",
+      "decision": "include",
+      "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 1
+    },
+    {
+      "object_id": "PIPE-RA-V",
+      "decision": "include",
+      "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+      "source_id": "LEDGER-PIPE-01",
+      "connected_endpoint_match_count": 2
+    }
+  ]
+}

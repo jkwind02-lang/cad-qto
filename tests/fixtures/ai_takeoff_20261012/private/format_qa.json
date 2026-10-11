@@ -1,0 +1,32 @@
+[
+  {
+    "source": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+    "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+    "png_sha256": "3deafabc20af8672d107c0bd55cb73ffb2d1f4df89dd973a6bdd4d0d1a67ddc8",
+    "DXF_readable": true,
+    "DXF_audit_errors": 0,
+    "DXF_audit_fixes": 0,
+    "entity_types": [
+      "CIRCLE",
+      "LINE",
+      "LWPOLYLINE",
+      "TEXT"
+    ],
+    "author_qa": "Independent format and visual QA only; no QTO calculation or model solution run."
+  },
+  {
+    "source": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+    "source_sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+    "png_sha256": "dda222b97695aec8d6b5e22d5a866f6acf93487d0b05dbc429090fc582f2b690",
+    "DXF_readable": true,
+    "DXF_audit_errors": 0,
+    "DXF_audit_fixes": 0,
+    "entity_types": [
+      "HATCH",
+      "LINE",
+      "LWPOLYLINE",
+      "TEXT"
+    ],
+    "author_qa": "Independent format and visual QA only; no QTO calculation or model solution run."
+  }
+]

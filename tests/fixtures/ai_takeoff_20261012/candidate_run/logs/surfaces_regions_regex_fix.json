@@ -1,0 +1,28 @@
+{
+  "argv": [
+    "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+    "-B",
+    "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-candidate/skills/qto-surfaces-envelope/scripts/extract_surface_regions.py",
+    "--source-dxf",
+    "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+    "--output",
+    "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/hatch_regions_selected.json",
+    "--layers",
+    "FILL-[AB]",
+    "--unit",
+    "mm",
+    "--unit-evidence",
+    "A-01 Model TEXT handle 96; full-size millimetre plan boundaries"
+  ],
+  "cwd": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run",
+  "started_at_utc": "2026-10-11T16:26:46.371555+00:00",
+  "ended_at_utc": "2026-10-11T16:26:46.969938+00:00",
+  "duration_seconds": 0.5983983369987982,
+  "exit_code": 0,
+  "stdout": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_regions_regex_fix.stdout.txt",
+  "stderr": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_regions_regex_fix.stderr.txt",
+  "environment_overrides": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "MPLCONFIGDIR": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/mplconfig"
+  }
+}

@@ -1,0 +1,389 @@
+{
+  "schema_version": "qto-model-recognition-ledger/1.0",
+  "ledger_id": "LEDGER-PIPE-01",
+  "ledger_version": "1",
+  "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+  "adoption_scope": "working",
+  "review_status": "unreviewed",
+  "evidence": [
+    {
+      "evidence_id": "EV-VIEW",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.png",
+      "sha256": "3deafabc20af8672d107c0bd55cb73ffb2d1f4df89dd973a6bdd4d0d1a67ddc8",
+      "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "kind": "drawing_view",
+      "locator": "Full P-01 Rev A PNG, F1/F2 plans, system diagram, all notes and legend",
+      "observation": "Original supplied PNG was opened using view_image and visually inspected by this model before the source selections were authored. Native DXF neutral records supplied exact coordinates, text and handles."
+    },
+    {
+      "evidence_id": "EV-CAD",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/neutral/中性布局图元.ndjson",
+      "sha256": "7e8d6ad979ac240a5e31672c4eaf0d5cc4ea27f6c22ccb0d20df0808bbeea56c",
+      "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "kind": "cad_property",
+      "locator": "Model native neutral records by entity_handle",
+      "observation": "Exact line endpoints, source DN labels, plan dimensions, riser IDs and pipe-CL elevation notes read directly from the source-bound native stream."
+    }
+  ],
+  "entries": [
+    {
+      "adjudication_id": "MODEL-001",
+      "subject_id": "PIPE-A0",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "include",
+      "object_ids": [
+        "PIPE-A0"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [
+        "CAD-A0",
+        "CAD-AD",
+        "CAD-BA",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "basis": "S-IN to first plan elbow",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MODEL-002",
+      "subject_id": "PIPE-A1",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "include",
+      "object_ids": [
+        "PIPE-A1"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [
+        "CAD-A1",
+        "CAD-AE",
+        "CAD-C0",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "basis": "first plan elbow to R-A",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MODEL-003",
+      "subject_id": "PIPE-A2",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "include",
+      "object_ids": [
+        "PIPE-A2"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [
+        "CAD-A2",
+        "CAD-AF",
+        "CAD-C6",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "basis": "R-A to RED-A centre",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MODEL-004",
+      "subject_id": "PIPE-A3",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "include",
+      "object_ids": [
+        "PIPE-A3"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [
+        "CAD-A3",
+        "CAD-B0",
+        "CAD-CC",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "basis": "RED-A centre to upper plan elbow",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MODEL-005",
+      "subject_id": "PIPE-A4",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "include",
+      "object_ids": [
+        "PIPE-A4"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [
+        "CAD-A4",
+        "CAD-B1",
+        "CAD-D2",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "basis": "upper plan elbow to U-OUT",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MODEL-006",
+      "subject_id": "PIPE-RA-V",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "include",
+      "object_ids": [
+        "PIPE-RA-V"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [
+        "CAD-A5",
+        "CAD-A6",
+        "CAD-A7",
+        "CAD-A8",
+        "CAD-DB",
+        "CAD-DC",
+        "CAD-DD",
+        "CAD-DE",
+        "CAD-DF",
+        "CAD-E0",
+        "CAD-E1",
+        "CAD-FA",
+        "CAD-FB",
+        "CAD-FE"
+      ],
+      "basis": "One R-A riser, F1 PIPE CL to F2 PIPE CL",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MODEL-007",
+      "subject_id": "CAD-D3",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "exclude",
+      "object_ids": [
+        "CAD-D3"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [],
+      "basis": "Existing DRN DN80; separate system and unmarked crossing is not a connection (D4,D5,FF).",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MODEL-008",
+      "subject_id": "CAD-D6",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "exclude",
+      "object_ids": [
+        "CAD-D6"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [],
+      "basis": "NTS system view of F1 plan route; correspondence only (FC).",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MODEL-009",
+      "subject_id": "CAD-D7",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "exclude",
+      "object_ids": [
+        "CAD-D7"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [],
+      "basis": "NTS system riser graphic; real vertical separately derived from E0,E1,DE,DF.",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MODEL-010",
+      "subject_id": "CAD-D8",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "exclude",
+      "object_ids": [
+        "CAD-D8"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [],
+      "basis": "NTS system view before reducer; F2 source A2 owns quantity.",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MODEL-011",
+      "subject_id": "CAD-D9",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "exclude",
+      "object_ids": [
+        "CAD-D9"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [],
+      "basis": "NTS system view after reducer; F2 sources A3,A4 own quantity.",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MODEL-012",
+      "subject_id": "CAD-EC",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "exclude",
+      "object_ids": [
+        "CAD-EC"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [],
+      "basis": "Legend SUP example only (EB,101).",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MODEL-013",
+      "subject_id": "CAD-EE",
+      "professional_owner": "qto-pipe-networks",
+      "source_id": "SRC-PIPE-DXF",
+      "recognized_by": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+      "recognized_at": "2026-10-11T16:29:08.786277+00:00",
+      "status": "active",
+      "decision_origin": "model",
+      "decision": "exclude",
+      "object_ids": [
+        "CAD-EE"
+      ],
+      "evidence_ids": [
+        "EV-VIEW",
+        "EV-CAD"
+      ],
+      "source_object_ids": [],
+      "basis": "Legend DRN example only (EB,101).",
+      "scope_basis": "P-01 notes F8,FC,FD,FE,FF,100,101 and same physical riser FA define selection",
+      "identity_basis": "Unique CAD handles plus R-A same-physical-riser mapping; plan segments own horizontal quantity, system diagram supplies real elevation only.",
+      "cross_check": "Plan source lengths equal directly associated dimension texts; source endpoint continuity, reducer centre and complete start/end limits checked against viewed PNG.",
+      "uncertainties": []
+    }
+  ],
+  "human_interventions": [],
+  "formal_adoption_allowed": false
+}

@@ -1,0 +1,772 @@
+{
+  "schema_version": "ai-takeoff-first-run-assessment/1.0",
+  "assessed_at_utc": "2026-10-11T16:46:14.284859+00:00",
+  "assessment_scope": "Two original small synthetic drawing tasks; one fresh-context model execution per plugin version, including autonomous pre-freeze corrections.",
+  "not_a_pytest_fixture_solution": true,
+  "model_answers_authored_by_tests": false,
+  "author_oracle_origin": "Original design parameters and independent Decimal hand formulas; no production QTO result was consulted.",
+  "author_oracle_time_utc": "2026-10-11T16:10:28.494907+00:00",
+  "author_input_release_utc": "2026-10-11T16:10:34.864770+00:00",
+  "original_oracles_and_candidates_modified": false,
+  "conclusion": "Both versions completed both requested bounded tasks with correct physical-span quantities and drawing interpretations. No demonstrated accuracy improvement between versions.",
+  "limitations": [
+    "Original synthetic drawings with clear text and supported geometry; no real-project accuracy or generalization claim.",
+    "One run per version and case; no causal attribution of outcome or speed to the policy changes.",
+    "Model access isolation followed the task protocol; archived declarations, timestamps and hashes do not independently prove hidden-context blindness.",
+    "Original author reference is now published in this archive; these cases are regression material for any future reader, not a fresh blind holdout.",
+    "Native validators prove contracts and encoded invariants; engineering conclusions here are separately judged against the independent design.",
+    "This selected archive does not include all files in the original freeze lists, full plugin snapshots, full model conversations, or HTML/browser sessions.",
+    "The tested candidate snapshot precedes later rebar fixes and wording changes; those later changes were not rerun through this model trial."
+  ],
+  "mapping_policy": "Original reference identifiers are unchanged. After freezing, legitimate geometric primitive splits were grouped by the same physical spans. Units m²/m2 and source-specific wording for the same requested net-finish basis were explicitly normalized; no quantity was altered.",
+  "runs": {
+    "baseline_run": {
+      "first_candidate_sha256": "d4ed03ee4a1f55e5a114486d8f9769182573b97bbd619d7c2adee1cd6f73b3ba",
+      "freeze_sha256": "c2d02fe76c1cf631b7e681ef615c78fa4724bd8a2945a3812d66f38e94d1c596",
+      "frozen_at_utc": "2026-10-11T16:24:29.635979+00:00",
+      "original_freeze_unique_file_references_verified": 269,
+      "missing_or_changed_frozen_files": [],
+      "hash_verification_status": "PASS",
+      "candidate_to_native_scalar_checks": [
+        {
+          "case": "pipe",
+          "reported_value": 3.6,
+          "native_value": 3.6000000000000005,
+          "absolute_error": 4.440892098500626e-16,
+          "matches_display_rounding": true,
+          "original_native_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+          "json_pointer": "/segments/0/length"
+        },
+        {
+          "case": "pipe",
+          "reported_value": 2.4,
+          "native_value": 2.3999999999999995,
+          "absolute_error": 4.440892098500626e-16,
+          "matches_display_rounding": true,
+          "original_native_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+          "json_pointer": "/segments/1/length"
+        },
+        {
+          "case": "pipe",
+          "reported_value": 2.3,
+          "native_value": 2.3000000000000007,
+          "absolute_error": 8.881784197001252e-16,
+          "matches_display_rounding": true,
+          "original_native_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+          "json_pointer": "/segments/2/length"
+        },
+        {
+          "case": "pipe",
+          "reported_value": 2.4,
+          "native_value": 2.400000000000002,
+          "absolute_error": 2.220446049250313e-15,
+          "matches_display_rounding": true,
+          "original_native_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+          "json_pointer": "/segments/3/length"
+        },
+        {
+          "case": "pipe",
+          "reported_value": 1.9,
+          "native_value": 1.9000000000000004,
+          "absolute_error": 4.440892098500626e-16,
+          "matches_display_rounding": true,
+          "original_native_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+          "json_pointer": "/segments/4/length"
+        },
+        {
+          "case": "pipe",
+          "reported_value": 4.7,
+          "native_value": 4.699999999999999,
+          "absolute_error": 8.881784197001252e-16,
+          "matches_display_rounding": true,
+          "original_native_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+          "json_pointer": "/vertical_quantities/0/value"
+        },
+        {
+          "case": "surfaces",
+          "reported_value": 17.41,
+          "native_value": 17.41,
+          "absolute_error": 0.0,
+          "matches_display_rounding": true,
+          "original_native_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.output.json",
+          "json_pointer": "/工程量结果/0/结果/数值"
+        },
+        {
+          "case": "surfaces",
+          "reported_value": 9.84,
+          "native_value": 9.84,
+          "absolute_error": 0.0,
+          "matches_display_rounding": true,
+          "original_native_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.output.json",
+          "json_pointer": "/工程量结果/1/结果/数值"
+        }
+      ],
+      "actual_execution": {
+        "recorded_non_help_invocations": 26,
+        "nonzero_exit_invocations": [
+          "extract_pipe",
+          "extract_surfaces",
+          "pipe_infer",
+          "pipe_minimum_validate",
+          "pipe_minimum_validate_v2"
+        ],
+        "human_intervention": "None reported in frozen candidate; actual calculator commands are retained.",
+        "evidence": "execution_summary.json#/baseline_run"
+      },
+      "cases": {
+        "pipe": {
+          "status": "MATCHES_INDEPENDENT_REFERENCE_FOR_THIS_SCOPE",
+          "quantity_comparisons": [
+            {
+              "physical_object_key": "SUP/F1/S-IN-to-R-A",
+              "quantity_kind": "pipe_centerline_length",
+              "specification": "DN50",
+              "unit": "m",
+              "reference_quantity": 6.0,
+              "native_quantity": 6.0,
+              "absolute_error": 0.0,
+              "absolute_tolerance": 1e-09,
+              "within_tolerance": true,
+              "native_sources": [
+                {
+                  "archive_path": "baseline_run/pipe/network.output.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+                  "json_pointer": "/segments/0/length",
+                  "value": 3.6000000000000005
+                },
+                {
+                  "archive_path": "baseline_run/pipe/network.output.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+                  "json_pointer": "/segments/1/length",
+                  "value": 2.3999999999999995
+                }
+              ],
+              "mapping_method": "Evaluator physical-span correspondence after both candidates were frozen.",
+              "mapping_reason": "Both F1 plan primitives together own S-IN to R-A."
+            },
+            {
+              "physical_object_key": "SUP/R-A/F1-to-F2",
+              "quantity_kind": "pipe_centerline_length",
+              "specification": "DN50",
+              "unit": "m",
+              "reference_quantity": 4.7,
+              "native_quantity": 4.699999999999999,
+              "absolute_error": 8.881784197001252e-16,
+              "absolute_tolerance": 1e-09,
+              "within_tolerance": true,
+              "native_sources": [
+                {
+                  "archive_path": "baseline_run/pipe/network.output.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+                  "json_pointer": "/vertical_quantities/0/value",
+                  "value": 4.699999999999999
+                }
+              ],
+              "mapping_method": "Evaluator physical-span correspondence after both candidates were frozen.",
+              "mapping_reason": "Same R-A between the two pipe-centre elevations; counted once."
+            },
+            {
+              "physical_object_key": "SUP/F2/R-A-to-RED-A",
+              "quantity_kind": "pipe_centerline_length",
+              "specification": "DN50",
+              "unit": "m",
+              "reference_quantity": 2.3,
+              "native_quantity": 2.3000000000000007,
+              "absolute_error": 8.881784197001252e-16,
+              "absolute_tolerance": 1e-09,
+              "within_tolerance": true,
+              "native_sources": [
+                {
+                  "archive_path": "baseline_run/pipe/network.output.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+                  "json_pointer": "/segments/2/length",
+                  "value": 2.3000000000000007
+                }
+              ],
+              "mapping_method": "Evaluator physical-span correspondence after both candidates were frozen.",
+              "mapping_reason": "F2 source segment upstream of RED-A centre."
+            },
+            {
+              "physical_object_key": "SUP/F2/RED-A-to-U-OUT",
+              "quantity_kind": "pipe_centerline_length",
+              "specification": "DN32",
+              "unit": "m",
+              "reference_quantity": 4.3,
+              "native_quantity": 4.3000000000000025,
+              "absolute_error": 2.6645352591003757e-15,
+              "absolute_tolerance": 1e-09,
+              "within_tolerance": true,
+              "native_sources": [
+                {
+                  "archive_path": "baseline_run/pipe/network.output.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+                  "json_pointer": "/segments/3/length",
+                  "value": 2.400000000000002
+                },
+                {
+                  "archive_path": "baseline_run/pipe/network.output.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+                  "json_pointer": "/segments/4/length",
+                  "value": 1.9000000000000004
+                }
+              ],
+              "mapping_method": "Evaluator physical-span correspondence after both candidates were frozen.",
+              "mapping_reason": "Both F2 downstream primitives together own RED-A to U-OUT."
+            }
+          ],
+          "coverage": {
+            "independent_reference_required_quantity_items": 4,
+            "matched_and_compared_items": 4,
+            "missing_items": 0,
+            "extra_quantity_items": 0,
+            "duplicate_physical_quantity_items": 0,
+            "unresolved_requested_quantity_items": 0,
+            "physical_quantity_row_count": 6,
+            "reference_object_coverage": 1.0,
+            "quantity_comparison_coverage": 1.0,
+            "coverage_meaning": "Only the complete bounded original task as defined by this author oracle; not all CAD entities or a real project."
+          },
+          "numerical_error": {
+            "unit": "m",
+            "maximum_absolute_error": 2.6645352591003757e-15,
+            "absolute_error_sum": 4.440892098500626e-15,
+            "out_of_tolerance_count": 0,
+            "tolerance_rationale": "1e-9 in output units is a numeric-comparison tolerance for exact synthetic dimensions, not an engineering measurement accuracy claim."
+          },
+          "semantic_review": [
+            {
+              "id": "P-SCOPE",
+              "criterion": "Only new SUP between the defined end ports; DRN, grid and legend excluded.",
+              "evidence_role": "pipe/object_audit",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "P-ONE-RISER",
+              "criterion": "Plan/system R-A references mapped to one physical riser; schematic is not added.",
+              "evidence_role": "pipe/details_and_native_input",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "P-ELEVATION",
+              "criterion": "Pipe-centre values used with common datum; neither FFL difference nor schematic page length substituted.",
+              "evidence_role": "pipe/native_input_and_source_evidence",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "P-DN",
+              "criterion": "DN changes at RED-A; upstream/downstream intervals have the correct specifications.",
+              "evidence_role": "pipe/native_input_and_native_segments",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "P-FITTING",
+              "criterion": "No allowance, reducer symbol length or extra fitting quantity added to requested centreline length.",
+              "evidence_role": "candidate_and_report",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            }
+          ],
+          "native_final_validation": {
+            "calculator": "PASS",
+            "minimum_result": "PASS",
+            "professional_or_binding": "PASS_WITH_LIMITATIONS",
+            "formal_adoption": false
+          },
+          "representation": "Five native plan segments plus one typed cross-view elevation result. Native plan length_summary omits the separate vertical result; delivered DN total correctly includes it once.",
+          "nonquantity_diagnostics": "Native fitting candidates differ with input representation (baseline 3 versus candidate 5). These were explicitly excluded from requested quantity totals, so no fitting-count accuracy or superiority is scored."
+        },
+        "surfaces": {
+          "status": "MATCHES_INDEPENDENT_REFERENCE_FOR_THIS_SCOPE",
+          "quantity_comparisons": [
+            {
+              "physical_object_key": "STUDIO/RCP-01/CL-11",
+              "quantity_kind": "net_ceiling_finish_area",
+              "specification": "CL-11 acoustic ceiling panel",
+              "unit": "m2",
+              "reference_quantity": 17.41,
+              "native_quantity": 17.41,
+              "absolute_error": 0.0,
+              "absolute_tolerance": 1e-09,
+              "within_tolerance": true,
+              "native_sources": [
+                {
+                  "archive_path": "baseline_run/surfaces/surfaces.output.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.output.json",
+                  "json_pointer": "/工程量结果/0/结果/数值",
+                  "value": 17.41
+                }
+              ],
+              "mapping_method": "Evaluator physical-span correspondence after both candidates were frozen.",
+              "mapping_reason": "West finish zone CL-11 minus actual SH-1 footprint."
+            },
+            {
+              "physical_object_key": "STUDIO/RCP-01/CL-24",
+              "quantity_kind": "net_ceiling_finish_area",
+              "specification": "CL-24 painted gypsum-board ceiling finish",
+              "unit": "m2",
+              "reference_quantity": 9.84,
+              "native_quantity": 9.84,
+              "absolute_error": 0.0,
+              "absolute_tolerance": 1e-09,
+              "within_tolerance": true,
+              "native_sources": [
+                {
+                  "archive_path": "baseline_run/surfaces/surfaces.output.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.output.json",
+                  "json_pointer": "/工程量结果/1/结果/数值",
+                  "value": 9.84
+                }
+              ],
+              "mapping_method": "Evaluator physical-span correspondence after both candidates were frozen.",
+              "mapping_reason": "East finish zone CL-24; AP-1 retained; low screen does not remove finish."
+            }
+          ],
+          "coverage": {
+            "independent_reference_required_quantity_items": 2,
+            "matched_and_compared_items": 2,
+            "missing_items": 0,
+            "extra_quantity_items": 0,
+            "duplicate_physical_quantity_items": 0,
+            "unresolved_requested_quantity_items": 0,
+            "physical_quantity_row_count": 2,
+            "reference_object_coverage": 1.0,
+            "quantity_comparison_coverage": 1.0,
+            "coverage_meaning": "Only the complete bounded original task as defined by this author oracle; not all CAD entities or a real project."
+          },
+          "numerical_error": {
+            "unit": "m2",
+            "maximum_absolute_error": 0.0,
+            "absolute_error_sum": 0.0,
+            "out_of_tolerance_count": 0,
+            "tolerance_rationale": "1e-9 in output units is a numeric-comparison tolerance for exact synthetic dimensions, not an engineering measurement accuracy claim."
+          },
+          "semantic_review": [
+            {
+              "id": "S-BOUNDARY",
+              "criterion": "Internal ceiling boundary and true material division used; zones neither overlap nor leave a gap.",
+              "evidence_role": "surfaces/source_bound_geometry_and_native_manifest",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "S-OPENING",
+              "criterion": "SH-1 deducted once in its own zone; AP-1 retained according to design notes and detail.",
+              "evidence_role": "surfaces/native_manifest_and_coverage",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "S-SCREEN",
+              "criterion": "S-2 interpreted: low screen below continuous ceiling does not split or remove finish.",
+              "evidence_role": "surfaces/coverage_and_report",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "S-SCOPE",
+              "criterion": "Detail and legend not additional finish; no framing, returns, extra layers or waste added.",
+              "evidence_role": "surfaces/coverage_and_report",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            }
+          ],
+          "native_final_validation": {
+            "calculator": "PASS",
+            "minimum_result": "PASS",
+            "professional_or_binding": "PASS",
+            "formal_adoption": false
+          }
+        }
+      }
+    },
+    "candidate_run": {
+      "first_candidate_sha256": "4a32aa331c13a9be0951a49e7662f660e51ab3eb94e3e1aaa7f51f5b7d0455b6",
+      "freeze_sha256": "0347a255dde6b001b15f49d3deba2f9eb381a6b029cd8b5bfd9b9034e332a82d",
+      "frozen_at_utc": "2026-10-11T16:35:46.739801+00:00",
+      "original_freeze_unique_file_references_verified": 103,
+      "missing_or_changed_frozen_files": [],
+      "hash_verification_status": "PASS",
+      "candidate_to_native_scalar_checks": [
+        {
+          "case": "pipe",
+          "reported_value": 4.3,
+          "native_value": 4.3,
+          "absolute_error": 0.0,
+          "matches_display_rounding": true,
+          "original_native_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+          "json_pointer": "/length_summary/SUP/规则推算量/DN32"
+        },
+        {
+          "case": "pipe",
+          "reported_value": 13.0,
+          "native_value": 13.0,
+          "absolute_error": 0.0,
+          "matches_display_rounding": true,
+          "original_native_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+          "json_pointer": "/length_summary/SUP/规则推算量/DN50"
+        },
+        {
+          "case": "surfaces",
+          "reported_value": 17.41,
+          "native_value": 17.41,
+          "absolute_error": 0.0,
+          "matches_display_rounding": true,
+          "original_native_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_result.json",
+          "json_pointer": "/工程量结果/0/结果/数值"
+        },
+        {
+          "case": "surfaces",
+          "reported_value": 9.84,
+          "native_value": 9.84,
+          "absolute_error": 0.0,
+          "matches_display_rounding": true,
+          "original_native_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_result.json",
+          "json_pointer": "/工程量结果/1/结果/数值"
+        }
+      ],
+      "actual_execution": {
+        "recorded_non_help_invocations": 18,
+        "nonzero_exit_invocations": [
+          "pipe_extract",
+          "surfaces_extract"
+        ],
+        "human_intervention": "None reported in frozen candidate; actual calculator commands are retained.",
+        "evidence": "execution_summary.json#/candidate_run"
+      },
+      "cases": {
+        "pipe": {
+          "status": "MATCHES_INDEPENDENT_REFERENCE_FOR_THIS_SCOPE",
+          "quantity_comparisons": [
+            {
+              "physical_object_key": "SUP/F1/S-IN-to-R-A",
+              "quantity_kind": "pipe_centerline_length",
+              "specification": "DN50",
+              "unit": "m",
+              "reference_quantity": 6.0,
+              "native_quantity": 6.0,
+              "absolute_error": 0.0,
+              "absolute_tolerance": 1e-09,
+              "within_tolerance": true,
+              "native_sources": [
+                {
+                  "archive_path": "candidate_run/pipe/native_result.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+                  "json_pointer": "/segments/0/length",
+                  "value": 3.6000000000000005
+                },
+                {
+                  "archive_path": "candidate_run/pipe/native_result.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+                  "json_pointer": "/segments/1/length",
+                  "value": 2.3999999999999995
+                }
+              ],
+              "mapping_method": "Evaluator physical-span correspondence after both candidates were frozen.",
+              "mapping_reason": "Both F1 plan primitives together own S-IN to R-A."
+            },
+            {
+              "physical_object_key": "SUP/R-A/F1-to-F2",
+              "quantity_kind": "pipe_centerline_length",
+              "specification": "DN50",
+              "unit": "m",
+              "reference_quantity": 4.7,
+              "native_quantity": 4.699999999999999,
+              "absolute_error": 8.881784197001252e-16,
+              "absolute_tolerance": 1e-09,
+              "within_tolerance": true,
+              "native_sources": [
+                {
+                  "archive_path": "candidate_run/pipe/native_result.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+                  "json_pointer": "/segments/5/length",
+                  "value": 4.699999999999999
+                }
+              ],
+              "mapping_method": "Evaluator physical-span correspondence after both candidates were frozen.",
+              "mapping_reason": "Same R-A between the two pipe-centre elevations; counted once."
+            },
+            {
+              "physical_object_key": "SUP/F2/R-A-to-RED-A",
+              "quantity_kind": "pipe_centerline_length",
+              "specification": "DN50",
+              "unit": "m",
+              "reference_quantity": 2.3,
+              "native_quantity": 2.3,
+              "absolute_error": 0.0,
+              "absolute_tolerance": 1e-09,
+              "within_tolerance": true,
+              "native_sources": [
+                {
+                  "archive_path": "candidate_run/pipe/native_result.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+                  "json_pointer": "/segments/2/length",
+                  "value": 2.3
+                }
+              ],
+              "mapping_method": "Evaluator physical-span correspondence after both candidates were frozen.",
+              "mapping_reason": "F2 source segment upstream of RED-A centre."
+            },
+            {
+              "physical_object_key": "SUP/F2/RED-A-to-U-OUT",
+              "quantity_kind": "pipe_centerline_length",
+              "specification": "DN32",
+              "unit": "m",
+              "reference_quantity": 4.3,
+              "native_quantity": 4.3,
+              "absolute_error": 0.0,
+              "absolute_tolerance": 1e-09,
+              "within_tolerance": true,
+              "native_sources": [
+                {
+                  "archive_path": "candidate_run/pipe/native_result.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+                  "json_pointer": "/segments/3/length",
+                  "value": 2.3999999999999995
+                },
+                {
+                  "archive_path": "candidate_run/pipe/native_result.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+                  "json_pointer": "/segments/4/length",
+                  "value": 1.9000000000000004
+                }
+              ],
+              "mapping_method": "Evaluator physical-span correspondence after both candidates were frozen.",
+              "mapping_reason": "Both F2 downstream primitives together own RED-A to U-OUT."
+            }
+          ],
+          "coverage": {
+            "independent_reference_required_quantity_items": 4,
+            "matched_and_compared_items": 4,
+            "missing_items": 0,
+            "extra_quantity_items": 0,
+            "duplicate_physical_quantity_items": 0,
+            "unresolved_requested_quantity_items": 0,
+            "physical_quantity_row_count": 6,
+            "reference_object_coverage": 1.0,
+            "quantity_comparison_coverage": 1.0,
+            "coverage_meaning": "Only the complete bounded original task as defined by this author oracle; not all CAD entities or a real project."
+          },
+          "numerical_error": {
+            "unit": "m",
+            "maximum_absolute_error": 8.881784197001252e-16,
+            "absolute_error_sum": 8.881784197001252e-16,
+            "out_of_tolerance_count": 0,
+            "tolerance_rationale": "1e-9 in output units is a numeric-comparison tolerance for exact synthetic dimensions, not an engineering measurement accuracy claim."
+          },
+          "semantic_review": [
+            {
+              "id": "P-SCOPE",
+              "criterion": "Only new SUP between the defined end ports; DRN, grid and legend excluded.",
+              "evidence_role": "pipe/object_audit",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "P-ONE-RISER",
+              "criterion": "Plan/system R-A references mapped to one physical riser; schematic is not added.",
+              "evidence_role": "pipe/details_and_native_input",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "P-ELEVATION",
+              "criterion": "Pipe-centre values used with common datum; neither FFL difference nor schematic page length substituted.",
+              "evidence_role": "pipe/native_input_and_source_evidence",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "P-DN",
+              "criterion": "DN changes at RED-A; upstream/downstream intervals have the correct specifications.",
+              "evidence_role": "pipe/native_input_and_native_segments",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "P-FITTING",
+              "criterion": "No allowance, reducer symbol length or extra fitting quantity added to requested centreline length.",
+              "evidence_role": "candidate_and_report",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            }
+          ],
+          "native_final_validation": {
+            "calculator": "PASS",
+            "minimum_result": "PASS",
+            "professional_or_binding": "PASS_WITH_LIMITATIONS",
+            "formal_adoption": false
+          },
+          "representation": "Five plan segments plus one source-derived 3D riser segment. Model aligns views and assigns source pipe-centre elevations; native calculator measures all six. cross_view_link_count=0 is intentional and not a missing riser.",
+          "nonquantity_diagnostics": "Native fitting candidates differ with input representation (baseline 3 versus candidate 5). These were explicitly excluded from requested quantity totals, so no fitting-count accuracy or superiority is scored."
+        },
+        "surfaces": {
+          "status": "MATCHES_INDEPENDENT_REFERENCE_FOR_THIS_SCOPE",
+          "quantity_comparisons": [
+            {
+              "physical_object_key": "STUDIO/RCP-01/CL-11",
+              "quantity_kind": "net_ceiling_finish_area",
+              "specification": "CL-11 acoustic ceiling panel",
+              "unit": "m2",
+              "reference_quantity": 17.41,
+              "native_quantity": 17.41,
+              "absolute_error": 0.0,
+              "absolute_tolerance": 1e-09,
+              "within_tolerance": true,
+              "native_sources": [
+                {
+                  "archive_path": "candidate_run/surfaces/native_result.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_result.json",
+                  "json_pointer": "/工程量结果/0/结果/数值",
+                  "value": 17.41
+                }
+              ],
+              "mapping_method": "Evaluator physical-span correspondence after both candidates were frozen.",
+              "mapping_reason": "West finish zone CL-11 minus actual SH-1 footprint."
+            },
+            {
+              "physical_object_key": "STUDIO/RCP-01/CL-24",
+              "quantity_kind": "net_ceiling_finish_area",
+              "specification": "CL-24 painted gypsum-board ceiling finish",
+              "unit": "m2",
+              "reference_quantity": 9.84,
+              "native_quantity": 9.84,
+              "absolute_error": 0.0,
+              "absolute_tolerance": 1e-09,
+              "within_tolerance": true,
+              "native_sources": [
+                {
+                  "archive_path": "candidate_run/surfaces/native_result.json",
+                  "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_result.json",
+                  "json_pointer": "/工程量结果/1/结果/数值",
+                  "value": 9.84
+                }
+              ],
+              "mapping_method": "Evaluator physical-span correspondence after both candidates were frozen.",
+              "mapping_reason": "East finish zone CL-24; AP-1 retained; low screen does not remove finish."
+            }
+          ],
+          "coverage": {
+            "independent_reference_required_quantity_items": 2,
+            "matched_and_compared_items": 2,
+            "missing_items": 0,
+            "extra_quantity_items": 0,
+            "duplicate_physical_quantity_items": 0,
+            "unresolved_requested_quantity_items": 0,
+            "physical_quantity_row_count": 2,
+            "reference_object_coverage": 1.0,
+            "quantity_comparison_coverage": 1.0,
+            "coverage_meaning": "Only the complete bounded original task as defined by this author oracle; not all CAD entities or a real project."
+          },
+          "numerical_error": {
+            "unit": "m2",
+            "maximum_absolute_error": 0.0,
+            "absolute_error_sum": 0.0,
+            "out_of_tolerance_count": 0,
+            "tolerance_rationale": "1e-9 in output units is a numeric-comparison tolerance for exact synthetic dimensions, not an engineering measurement accuracy claim."
+          },
+          "semantic_review": [
+            {
+              "id": "S-BOUNDARY",
+              "criterion": "Internal ceiling boundary and true material division used; zones neither overlap nor leave a gap.",
+              "evidence_role": "surfaces/source_bound_geometry_and_native_manifest",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "S-OPENING",
+              "criterion": "SH-1 deducted once in its own zone; AP-1 retained according to design notes and detail.",
+              "evidence_role": "surfaces/native_manifest_and_coverage",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "S-SCREEN",
+              "criterion": "S-2 interpreted: low screen below continuous ceiling does not split or remove finish.",
+              "evidence_role": "surfaces/coverage_and_report",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            },
+            {
+              "id": "S-SCOPE",
+              "criterion": "Detail and legend not additional finish; no framing, returns, extra layers or waste added.",
+              "evidence_role": "surfaces/coverage_and_report",
+              "status": "PASS",
+              "review_method": "Independent author checked source drawing against frozen model facts, native inputs, outputs and report."
+            }
+          ],
+          "native_final_validation": {
+            "calculator": "PASS",
+            "minimum_result": "PASS",
+            "professional_or_binding": "PASS",
+            "formal_adoption": false
+          }
+        }
+      }
+    }
+  },
+  "actual_errors_and_recovery": [
+    {
+      "runs": [
+        "baseline_run",
+        "candidate_run"
+      ],
+      "case": "both",
+      "type": "native_partial_extraction",
+      "observed": "Both drawings return PARTIAL / exit 3 for unsupported SOLID CAD-7B in uninstantiated default _CLOSEDFILLED block definition.",
+      "independent_scope_judgment": "No model-space INSERT uses that definition. Requested geometry is readable and all author-required quantities are present. Keep diagnostic; do not relabel full parsing as PASS.",
+      "final_quantity_error": false
+    },
+    {
+      "runs": [
+        "baseline_run"
+      ],
+      "case": "pipe",
+      "type": "model_input_contract_error",
+      "observed": "First native calculation rejected missing nonempty dn_match_policy.thresholds (exit 2).",
+      "recovery": "A new v2 input supplied the explicit binding policy before freeze; original rejection retained. Geometry, quantities and DN choices were not fitted to reference.",
+      "final_quantity_error": false
+    },
+    {
+      "runs": [
+        "baseline_run"
+      ],
+      "case": "pipe",
+      "type": "delivery_status_and_identifier_errors",
+      "observed": "Minimum-result validation first rejected confirmed quantities using trial rules, then rejected ASM- assumption IDs.",
+      "recovery": "Final v3 delivery retains working/reference status with A- IDs, passes minimum validation; native numerical output unchanged.",
+      "final_quantity_error": false
+    },
+    {
+      "runs": [
+        "candidate_run"
+      ],
+      "case": "surfaces",
+      "type": "model_tool_argument_error",
+      "observed": "Comma-separated HATCH layer selector was interpreted as a regex and returned zero regions with exit 0.",
+      "recovery": "Model corrected selector and saved a separate extraction; the empty selection was not delivered as zero area.",
+      "final_quantity_error": false
+    },
+    {
+      "runs": [
+        "candidate_run"
+      ],
+      "case": "pipe",
+      "type": "normal_contract_completion",
+      "observed": "Working-recognition draft expanded to complete native ledger before final input and validated.",
+      "recovery": "Draft and completed ledger retained; no separate failed native calculation is recorded for this completion.",
+      "final_quantity_error": false
+    }
+  ],
+  "overall_error_summary": {
+    "final_requested_quantity_errors": 0,
+    "missing_or_extra_requested_items": 0,
+    "per_version_requested_tasks_completed": 2,
+    "accuracy_improvement_demonstrated": false,
+    "speed_improvement_demonstrated": false,
+    "real_engineering_accuracy_estimate": null
+  }
+}

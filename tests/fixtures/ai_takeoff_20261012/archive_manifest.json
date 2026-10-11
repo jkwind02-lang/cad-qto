@@ -1,0 +1,624 @@
+{
+  "schema_version": "selected-ai-takeoff-archive/1.0",
+  "selection_complete_freeze": false,
+  "files": [
+    {
+      "archive_path": ".gitattributes",
+      "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
+      "bytes": 8,
+      "kind": "evaluator_analysis_or_archive_support"
+    },
+    {
+      "archive_path": "README.md",
+      "sha256": "59d5d8d07766f0360a2be51b1a595dd52032f4664355b8e2ac5b3aa54f840704",
+      "bytes": 9910,
+      "kind": "evaluator_analysis_or_archive_support"
+    },
+    {
+      "archive_path": "archive_selection.json",
+      "sha256": "1eead80162ef65e7f19da41340825e27c3c035f429758e2aff1a8b3bfdf86b2a",
+      "bytes": 143832,
+      "kind": "evaluator_analysis_or_archive_support"
+    },
+    {
+      "archive_path": "assessment.json",
+      "sha256": "84d3651b36888e4691b49c900c34f60e35a0f201b316371a26c0adaca2b7cda0",
+      "bytes": 39484,
+      "kind": "evaluator_analysis_or_archive_support"
+    },
+    {
+      "archive_path": "baseline_run/candidate.json",
+      "sha256": "d4ed03ee4a1f55e5a114486d8f9769182573b97bbd619d7c2adee1cd6f73b3ba",
+      "bytes": 37501,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/candidate.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/freeze.json",
+      "sha256": "c2d02fe76c1cf631b7e681ef615c78fa4724bd8a2945a3812d66f38e94d1c596",
+      "bytes": 59829,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/freeze.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/pipe/elevation_facts.input.json",
+      "sha256": "bf94af89a972106120fb3a49eaaa9326659681e0380815c10428daaf049564d1",
+      "bytes": 3149,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/elevation_facts.input.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/pipe/model_recognition.json",
+      "sha256": "28bbb64c58126196b8b87637af1f9c0a7385ca71ca7b8ab804e3391b83da52bc",
+      "bytes": 14695,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/model_recognition.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/pipe/network.input.json",
+      "sha256": "8a6d881e0d9ec118aef96d4ae5e6c9312fc4debf9309c98519db2bfd9b5b09ba",
+      "bytes": 17401,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.input.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/pipe/network.output.json",
+      "sha256": "ada28106e80e656f6fc26c62389493c60ac888d00c4e81e6e72f56847d460e2f",
+      "bytes": 60227,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/pipe/network.v2.input.json",
+      "sha256": "84a4112ec3794823a2ff662651833f18b6a003c8b28b52c6ee0f36533c09b388",
+      "bytes": 18100,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.v2.input.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/pipe/neutral/CAD提取失败对象.json",
+      "sha256": "dcd5dccf085b74fc3d53b19b1483c7dfb52809cb1a34719c9ddced1e25dea35f",
+      "bytes": 524,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/neutral/CAD提取失败对象.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/pipe/object_audit.input.json",
+      "sha256": "5cc5de8a371c5a63a25b554eb0b3f4b818d10d31065c187a02456747471a51b9",
+      "bytes": 7694,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/object_audit.input.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/pipe/object_audit.output.json",
+      "sha256": "4694a99c1487c3c1e91d840e4b02e6f095abb5e8504c9381c5368516c5f24b33",
+      "bytes": 4450,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/object_audit.output.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/pipe/quantity_details.json",
+      "sha256": "8f890c732e142dddf76a21a1070a60e37a6382ae5c5703613998f6ddd31b8044",
+      "bytes": 6235,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/quantity_details.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/pipe/result_binding.json",
+      "sha256": "91704748f9615b893a94679968868c0453cb188e79816742c5c80df971d11462",
+      "bytes": 20501,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/result_binding.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/pipe/result_binding.v2.json",
+      "sha256": "5f7ecbf4434222af0d2e91b1e416ff84e95d321fdf33e1312e7331f51b6425f8",
+      "bytes": 22870,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/result_binding.v2.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/pipe/result_binding.v3.json",
+      "sha256": "5befcfad312fd10359ae56be1f3d48ea1fe270255d30a6fc306107499c136ba4",
+      "bytes": 22960,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/result_binding.v3.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/prepare_inputs.py",
+      "sha256": "1c9f81bfb2ecb5c109f1ed5966031da405257dbf44b6b06c9f3064c24c01b352",
+      "bytes": 19090,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/prepare_inputs.py",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/quantity_report.md",
+      "sha256": "c0669459302a3cfa2a56032ebaf64c3a56b9f0362fcab986a39fa3bb8bb40acf",
+      "bytes": 8236,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/quantity_report.md",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/source_identity.json",
+      "sha256": "9b246b7a782780e8ddf957e12a99a94d1d6f1bcbe0f452dea6ccd67cce712502",
+      "bytes": 1461,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_identity.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/source_version.json",
+      "sha256": "a464a92efbd54bb7a90782d1725adde5f3b22fc6524418618bdc58f66233234b",
+      "bytes": 45586,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_version.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/surfaces/bound_geometry.json",
+      "sha256": "b2d5a6c5eb774c7d5af6fc459e7b4611d3e9625f92d3b1fbe1891436107bdd45",
+      "bytes": 17690,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/bound_geometry.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/surfaces/coverage.json",
+      "sha256": "503e3dcf5a79d49c1f247ecb12426d9bdf197912f98dbeb6e19f9d78e3e6d4ca",
+      "bytes": 1981,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/coverage.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/surfaces/geometry_crosscheck.output.json",
+      "sha256": "657f1051b0fd88dd012d92349886210b6d92d252caefb3d48bbe1b4865f4ea55",
+      "bytes": 519,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/geometry_crosscheck.output.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/surfaces/hatch_regions.output.json",
+      "sha256": "d2ea2dd434ccdcc47d032feb85587ce89bbe75d8423a0598509ee371e1c7bb2f",
+      "bytes": 4966,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/hatch_regions.output.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/surfaces/neutral/CAD提取失败对象.json",
+      "sha256": "dcd5dccf085b74fc3d53b19b1483c7dfb52809cb1a34719c9ddced1e25dea35f",
+      "bytes": 524,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/neutral/CAD提取失败对象.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/surfaces/quantity_details.json",
+      "sha256": "b35c14e6b104300f5c60079b513b81c9bc577606701a8a6d3f2aae6c0f7adbe5",
+      "bytes": 2854,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/quantity_details.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/surfaces/surfaces.input.json",
+      "sha256": "82c460ed654fae3355ac11ca0a3bcc4abb2c32d539c812df90cafb2c2d56c59e",
+      "bytes": 14717,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.input.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/surfaces/surfaces.output.json",
+      "sha256": "82713fc8740fecae14956a297a4153db7b8083a9eeb696932ca89c7c2dde840f",
+      "bytes": 23229,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.output.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/tool_runs/pipe_infer/invocation.json",
+      "sha256": "871f093756d9b06d0085ebbc8a53c2ade1929b24eec30ef414a85f5b95f30c38",
+      "bytes": 777,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/tool_runs/pipe_infer/invocation.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/tool_runs/pipe_infer/stderr.txt",
+      "sha256": "299c6f27f9f2d96f968f3ad168f9b6a7b97dfd5110f850abc4ed370ed242d2db",
+      "bytes": 90,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/tool_runs/pipe_infer/stderr.txt",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/tool_runs/pipe_infer_v2/invocation.json",
+      "sha256": "bded83f2dd740cd8a58be9309e21e0ec567969a5e32b42f483db0797eacb322c",
+      "bytes": 780,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/tool_runs/pipe_infer_v2/invocation.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/tool_runs/pipe_infer_v2/stdout.txt",
+      "sha256": "0e2141827758b9259d391b418ba5911c563e987fd588eea09b270885ebf4a603",
+      "bytes": 427,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/tool_runs/pipe_infer_v2/stdout.txt",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/tool_runs/pipe_minimum_validate/invocation.json",
+      "sha256": "4a81cc5541e2499c45763f6186164cab260127f28832bcf712744e0bff2ead97",
+      "bytes": 654,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/tool_runs/pipe_minimum_validate/invocation.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/tool_runs/pipe_minimum_validate/stdout.txt",
+      "sha256": "73723448343f22f59a196209545d8ecb9e5cf9bb38db0662dee616587afc7134",
+      "bytes": 793,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/tool_runs/pipe_minimum_validate/stdout.txt",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/tool_runs/pipe_minimum_validate_v2/invocation.json",
+      "sha256": "bc2d27900ffa8aef849bdd5209765138944efeafd776f12ca56849e19637270d",
+      "bytes": 657,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/tool_runs/pipe_minimum_validate_v2/invocation.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/tool_runs/pipe_minimum_validate_v2/stdout.txt",
+      "sha256": "2f8fe235389445bb2876ba8ea30037cf881bec6342ce24941714e1045210990a",
+      "bytes": 1285,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/tool_runs/pipe_minimum_validate_v2/stdout.txt",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/tool_runs/surface_calculate/invocation.json",
+      "sha256": "380370e62de71cb3f630c17746949bf9e60243f7d51204dfcee1ffa30a8eca29",
+      "bytes": 816,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/tool_runs/surface_calculate/invocation.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/tool_runs/surface_calculate/stdout.txt",
+      "sha256": "427f5d1513bbb88ac90c26d405829f9d56a345e7d293887630d3658900669741",
+      "bytes": 156,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/tool_runs/surface_calculate/stdout.txt",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "baseline_run/visual_review.json",
+      "sha256": "ad3bcef7ad379d2965ebcb368fc24f1368f4ee5b87df5c1e8b8298ba59e2678c",
+      "bytes": 2169,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/visual_review.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/README.md",
+      "sha256": "5e500dec39881633b016af9e445a6fa68c59a6e7ea4fd47da116a00ab75ed0e1",
+      "bytes": 10033,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/README.md",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/candidate.json",
+      "sha256": "4a32aa331c13a9be0951a49e7662f660e51ab3eb94e3e1aaa7f51f5b7d0455b6",
+      "bytes": 10605,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/candidate.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/finalize_pipe_input.py",
+      "sha256": "c3aab1a0c4cafabd5f2f64ab53cf3fd74215d75851e226a2945738c5b139bad6",
+      "bytes": 3147,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/finalize_pipe_input.py",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/freeze.json",
+      "sha256": "0347a255dde6b001b15f49d3deba2f9eb381a6b029cd8b5bfd9b9034e332a82d",
+      "bytes": 34223,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/freeze.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/logs/pipe_calculate.json",
+      "sha256": "44f8e4e4ce00d7577c3ded4e8c2bb0cc016c4d298e43956085f4699b9ffa81e9",
+      "bytes": 1152,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_calculate.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/logs/pipe_calculate.stdout.txt",
+      "sha256": "38b2f119cf9c0fb910ce18cf86fb8235b0aebe481777a27318fd10c2b302d223",
+      "bytes": 439,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_calculate.stdout.txt",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/logs/surfaces_calculate.json",
+      "sha256": "34c1c948e8f421b9c459b2f85ccb2eb5737c74d886c21b8b3c0e7a9cb9095293",
+      "bytes": 1187,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_calculate.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/logs/surfaces_calculate.stdout.txt",
+      "sha256": "c5d40ec081f786ed98b15414a9ba98aaf2b276a24e3e3fcd8c62ebfcaf790b2d",
+      "bytes": 155,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_calculate.stdout.txt",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/logs/surfaces_regions.json",
+      "sha256": "eb8b2b108b8b53442615b8e5e00c1831d7573379f5388f8e317d39cc7c39d643",
+      "bytes": 1320,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_regions.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/logs/surfaces_regions.stdout.txt",
+      "sha256": "5012e7000de21291780d5715c835fad06bfade949b1b044f0774bbc8fdef8fd3",
+      "bytes": 222,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_regions.stdout.txt",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/logs/surfaces_regions_regex_fix.json",
+      "sha256": "553737708cc2664245b66bfdc04dceb704b420743db0c4459837cff1731d0a57",
+      "bytes": 1345,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_regions_regex_fix.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/logs/surfaces_regions_regex_fix.stdout.txt",
+      "sha256": "a28a54500f47f76b173b30736916b1a8f64fd37d3cdc773234ee90257dca3667",
+      "bytes": 231,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_regions_regex_fix.stdout.txt",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/pipe/native_input.json",
+      "sha256": "2dd7af02c69c3881670817a43a855891052fdf5e42a4b56205c93eae65203f24",
+      "bytes": 13028,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_input.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/pipe/native_result.json",
+      "sha256": "34fd66f4e57bab93b5d2af22233b43f31ecd8d3a7727ea0e3c26ed25aceaceaf",
+      "bytes": 30492,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/pipe/neutral/CAD提取失败对象.json",
+      "sha256": "dcd5dccf085b74fc3d53b19b1483c7dfb52809cb1a34719c9ddced1e25dea35f",
+      "bytes": 524,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/neutral/CAD提取失败对象.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/pipe/normalized_result.json",
+      "sha256": "ffd67d7e02603e19a45b6c72e75e1359ff5d474097c90ec23019390462a30ff2",
+      "bytes": 23789,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/normalized_result.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/pipe/object_audit_input.json",
+      "sha256": "607156898ee7c8b5f2181582748f9adb0f41a66ea26316d5f7f4fcda000c2ad1",
+      "bytes": 8080,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/object_audit_input.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/pipe/object_audit_result.json",
+      "sha256": "3ea793ebd3794c120f882450b8152a22bb7981507d78d62a76fe577a4f619edb",
+      "bytes": 4167,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/object_audit_result.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/pipe/quantity_details.csv",
+      "sha256": "5fa7952101cc1d17ab59209815314a1be48c93eec15f3b6ed5a27fb11d2db624",
+      "bytes": 840,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/quantity_details.csv",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/pipe/source_bound_details.json",
+      "sha256": "0ad663bf3760746da298b871946f35859f63a1beab5195e326da84b6362002f1",
+      "bytes": 7829,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/source_bound_details.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/pipe/working_recognition_ledger_v1.json",
+      "sha256": "54c8d74ee6848aca60f1131206d2e4b75c77edee23c40d0f9221ea9e09a26792",
+      "bytes": 16768,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/working_recognition_ledger_v1.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/prepare_inputs.py",
+      "sha256": "a7810fa16934fb56bcafa8f75d2afb9c1b67155742464fb05296ee04f4dec49b",
+      "bytes": 21590,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/prepare_inputs.py",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/return_review.json",
+      "sha256": "6fd90910ee2b7d27409bc4e8017919976410cd50a54a143a4606b16705a76b31",
+      "bytes": 2964,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/return_review.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/surfaces/coverage.json",
+      "sha256": "4687b5bb3d1a2c9f742dd7b1ed0be11cf739ff6aa42fd244a5f7282e5b702558",
+      "bytes": 1837,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/coverage.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/surfaces/hatch_regions.json",
+      "sha256": "af4f4d1af94aaf6e8de0960488a51ac76e05b4e393d7f41f4818bd32844b8dd1",
+      "bytes": 1614,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/hatch_regions.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/surfaces/hatch_regions_selected.json",
+      "sha256": "c0a829a351f8591188b1b0cab5241df0a6ec67dd03e865508b03172c00acc3cf",
+      "bytes": 4917,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/hatch_regions_selected.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/surfaces/native_manifest.json",
+      "sha256": "1b33db2d7164311a7c19c021ee1702aa9c6fdd84193e954555a25c27c411e706",
+      "bytes": 14867,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_manifest.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/surfaces/native_result.json",
+      "sha256": "6a056db379e9159d1b9baf00d55a358efea1f237801275b13780943d16058a3c",
+      "bytes": 22791,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_result.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/surfaces/neutral/CAD提取失败对象.json",
+      "sha256": "dcd5dccf085b74fc3d53b19b1483c7dfb52809cb1a34719c9ddced1e25dea35f",
+      "bytes": 524,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/neutral/CAD提取失败对象.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/surfaces/quantity_details.csv",
+      "sha256": "336bfbc8b10bb7cbffa8fd895ffd4cc0cd9361b90b4d246207ca474b027e12bc",
+      "bytes": 364,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/quantity_details.csv",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "candidate_run/surfaces/source_bound_geometry.json",
+      "sha256": "d6cf6bc78b468bab9bced7186957a018d067b8b31c5a2e6770527ed680e5c18a",
+      "bytes": 3486,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/source_bound_geometry.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "execution_summary.json",
+      "sha256": "4967be126f30f334cc6e2c5359da7b3c290024cd90da2e1d846b304ce7ce7b77",
+      "bytes": 109876,
+      "kind": "evaluator_analysis_or_archive_support"
+    },
+    {
+      "archive_path": "inputs/README.md",
+      "sha256": "b8d72689d77dd3e6112ea4ff550157d44632f1ba3685031344fc5fbf4e11282e",
+      "bytes": 629,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/README.md",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "inputs/pipe/drawing.dxf",
+      "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "bytes": 73083,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "inputs/pipe/drawing.png",
+      "sha256": "3deafabc20af8672d107c0bd55cb73ffb2d1f4df89dd973a6bdd4d0d1a67ddc8",
+      "bytes": 285097,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.png",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "inputs/pipe/task.md",
+      "sha256": "21cb0da0aaa3948040f0737bcea2e525540693cb760ef66bc344328d922aff16",
+      "bytes": 1006,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/task.md",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "inputs/surfaces/drawing.dxf",
+      "sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+      "bytes": 71811,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "inputs/surfaces/drawing.png",
+      "sha256": "dda222b97695aec8d6b5e22d5a866f6acf93487d0b05dbc429090fc582f2b690",
+      "bytes": 286826,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.png",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "inputs/surfaces/task.md",
+      "sha256": "a70ab7e9796f837207ff8a2377bf2a1a94086f28a5b796129816e3c63d57a9ce",
+      "bytes": 926,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/task.md",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "path_mapping.json",
+      "sha256": "3f57ca680459b6063ad9a601a9edbd57e4a5a569ee3a5013a84f15a2946a84b2",
+      "bytes": 13859,
+      "kind": "evaluator_analysis_or_archive_support"
+    },
+    {
+      "archive_path": "private/README.md",
+      "sha256": "86c97d71f15d825995030fd34d590e3602bbea8ed5ef8e9c1cd19ea54c681e22",
+      "bytes": 632,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/private/README.md",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "private/create_cases.py",
+      "sha256": "6439e599de248540a2d81ae2d50e21a1f05c7ffffeb092f514266519412252dd",
+      "bytes": 27871,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/private/create_cases.py",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "private/format_qa.json",
+      "sha256": "3bca95348cdf4460297bb0195b76d6ff8cd9b3da0242c4f4e07c38b82c45196a",
+      "bytes": 1126,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/private/format_qa.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "private/pipe_oracle.json",
+      "sha256": "f21d3cc55be564ad495c70851d88f5f1d69d07aa74c474ae921d925fa55d125d",
+      "bytes": 4166,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/private/pipe_oracle.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "private/release_manifest.json",
+      "sha256": "b2fb7d941409d7aabfa94337a0ff9fc57128376c7495c07b8bdd2b42f7a1a1d6",
+      "bytes": 1384,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/private/release_manifest.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "private/surfaces_oracle.json",
+      "sha256": "f867fb03aa7c7897dac249e0cea7ea978b5b0026af8af58b5b9a5e79dac09dd0",
+      "bytes": 2900,
+      "original_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/private/surfaces_oracle.json",
+      "kind": "unchanged_original"
+    },
+    {
+      "archive_path": "verify_archive.py",
+      "sha256": "9d081d9e680d4c9b54f48316283ccf42763fd658587ec6c23ed2536b990e9929",
+      "bytes": 2937,
+      "kind": "evaluator_analysis_or_archive_support"
+    },
+    {
+      "archive_path": "versions.json",
+      "sha256": "01eaaaeafff777be7755ab4a3c4ca77973bf2049755aba5a1e54270a0d5e6310",
+      "bytes": 2719,
+      "kind": "evaluator_analysis_or_archive_support"
+    }
+  ],
+  "manifest_self_hash_excluded": true,
+  "original_copied_files": 81,
+  "byte_preservation": "Original selected files copied byte-for-byte; embedded original absolute paths left intact."
+}

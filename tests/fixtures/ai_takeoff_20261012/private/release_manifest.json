@@ -1,0 +1,19 @@
+{
+  "released_at": "2026-10-11T16:10:34.864770+00:00",
+  "files": {
+    "inputs/README.md": "b8d72689d77dd3e6112ea4ff550157d44632f1ba3685031344fc5fbf4e11282e",
+    "inputs/pipe/drawing.dxf": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+    "inputs/pipe/drawing.png": "3deafabc20af8672d107c0bd55cb73ffb2d1f4df89dd973a6bdd4d0d1a67ddc8",
+    "inputs/pipe/task.md": "21cb0da0aaa3948040f0737bcea2e525540693cb760ef66bc344328d922aff16",
+    "inputs/surfaces/drawing.dxf": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+    "inputs/surfaces/drawing.png": "dda222b97695aec8d6b5e22d5a866f6acf93487d0b05dbc429090fc582f2b690",
+    "inputs/surfaces/task.md": "a70ab7e9796f837207ff8a2377bf2a1a94086f28a5b796129816e3c63d57a9ce"
+  },
+  "oracle_files": {
+    "pipe_oracle.json": "f21d3cc55be564ad495c70851d88f5f1d69d07aa74c474ae921d925fa55d125d",
+    "surfaces_oracle.json": "f867fb03aa7c7897dac249e0cea7ea978b5b0026af8af58b5b9a5e79dac09dd0"
+  },
+  "generator_sha256": "6439e599de248540a2d81ae2d50e21a1f05c7ffffeb092f514266519412252dd",
+  "independence": "Author-only design and oracle; the solver is to receive inputs/ only. Hashes prove consistency, not independent reasoning or access isolation.",
+  "limitations": "Original small synthetic cases using supported representations; no claim of real-engineering accuracy or cross-project generalization."
+}

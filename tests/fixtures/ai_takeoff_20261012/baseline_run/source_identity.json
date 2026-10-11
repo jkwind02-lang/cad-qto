@@ -1,0 +1,36 @@
+{
+  "pipe": {
+    "drawing.dxf": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+      "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "bytes": 73083
+    },
+    "drawing.png": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.png",
+      "sha256": "3deafabc20af8672d107c0bd55cb73ffb2d1f4df89dd973a6bdd4d0d1a67ddc8",
+      "bytes": 285097
+    },
+    "task.md": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/task.md",
+      "sha256": "21cb0da0aaa3948040f0737bcea2e525540693cb760ef66bc344328d922aff16",
+      "bytes": 1006
+    }
+  },
+  "surfaces": {
+    "drawing.dxf": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+      "sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+      "bytes": 71811
+    },
+    "drawing.png": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.png",
+      "sha256": "dda222b97695aec8d6b5e22d5a866f6acf93487d0b05dbc429090fc582f2b690",
+      "bytes": 286826
+    },
+    "task.md": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/task.md",
+      "sha256": "a70ab7e9796f837207ff8a2377bf2a1a94086f28a5b796129816e3c63d57a9ce",
+      "bytes": 926
+    }
+  }
+}

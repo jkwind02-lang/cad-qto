@@ -1,0 +1,324 @@
+{
+  "schema_version": "qto-model-recognition-ledger/1.0",
+  "ledger_id": "MODEL-PIPE-P01",
+  "ledger_version": "1",
+  "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+  "adoption_scope": "working",
+  "review_status": "unreviewed",
+  "evidence": [
+    {
+      "evidence_id": "EV-PNG",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.png",
+      "sha256": "3deafabc20af8672d107c0bd55cb73ffb2d1f4df89dd973a6bdd4d0d1a67ddc8",
+      "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "kind": "drawing_view",
+      "locator": "P-01 full sheet; F1 left, F2 middle, system right, notes below",
+      "observation": "Host view_image actually displayed the supplied PNG. S-IN to R-A to reducer to U-OUT; DRN crosses without junction. System diagram gives pipe CL elevations."
+    },
+    {
+      "evidence_id": "EV-CAD",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/observed_raw_facts.json",
+      "sha256": "40a8c09773f914f702181bbb7ac1c218715ba675d1fc26af1d39d1e55acad2a3",
+      "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "kind": "cad_property",
+      "locator": "Model; CAD-A0..A4; CAD-AD..B1; CAD-E0/E1; CAD-F8..101",
+      "observation": "Exact source line geometry, text and coordinates retained by original handle."
+    }
+  ],
+  "entries": [
+    {
+      "adjudication_id": "MR-A0",
+      "subject_id": "RULE-A0",
+      "professional_owner": "qto-pipe-networks",
+      "decision": "include",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+      "recognized_at": "2026-10-11T16:16:34.984618+00:00",
+      "source_id": "SRC-P01",
+      "evidence_ids": [
+        "EV-PNG",
+        "EV-CAD"
+      ],
+      "object_ids": [
+        "CAD-A0"
+      ],
+      "basis": "P-01 plan F1 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "scope_basis": "New SUP S-IN to U-OUT, including R-A between F1 and F2, P-01 Rev A notes 1-10.",
+      "identity_basis": "Original CAD handle and named plan/system identifiers; each physical extent has one quantity outlet.",
+      "cross_check": "Visual PNG plus source DXF geometry/text; not layer or proximity alone.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MR-A1",
+      "subject_id": "RULE-A1",
+      "professional_owner": "qto-pipe-networks",
+      "decision": "include",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+      "recognized_at": "2026-10-11T16:16:34.984632+00:00",
+      "source_id": "SRC-P01",
+      "evidence_ids": [
+        "EV-PNG",
+        "EV-CAD"
+      ],
+      "object_ids": [
+        "CAD-A1"
+      ],
+      "basis": "P-01 plan F1 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "scope_basis": "New SUP S-IN to U-OUT, including R-A between F1 and F2, P-01 Rev A notes 1-10.",
+      "identity_basis": "Original CAD handle and named plan/system identifiers; each physical extent has one quantity outlet.",
+      "cross_check": "Visual PNG plus source DXF geometry/text; not layer or proximity alone.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MR-A2",
+      "subject_id": "RULE-A2",
+      "professional_owner": "qto-pipe-networks",
+      "decision": "include",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+      "recognized_at": "2026-10-11T16:16:34.984636+00:00",
+      "source_id": "SRC-P01",
+      "evidence_ids": [
+        "EV-PNG",
+        "EV-CAD"
+      ],
+      "object_ids": [
+        "CAD-A2"
+      ],
+      "basis": "P-01 plan F2 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "scope_basis": "New SUP S-IN to U-OUT, including R-A between F1 and F2, P-01 Rev A notes 1-10.",
+      "identity_basis": "Original CAD handle and named plan/system identifiers; each physical extent has one quantity outlet.",
+      "cross_check": "Visual PNG plus source DXF geometry/text; not layer or proximity alone.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MR-A3",
+      "subject_id": "RULE-A3",
+      "professional_owner": "qto-pipe-networks",
+      "decision": "include",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+      "recognized_at": "2026-10-11T16:16:34.984639+00:00",
+      "source_id": "SRC-P01",
+      "evidence_ids": [
+        "EV-PNG",
+        "EV-CAD"
+      ],
+      "object_ids": [
+        "CAD-A3"
+      ],
+      "basis": "P-01 plan F2 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "scope_basis": "New SUP S-IN to U-OUT, including R-A between F1 and F2, P-01 Rev A notes 1-10.",
+      "identity_basis": "Original CAD handle and named plan/system identifiers; each physical extent has one quantity outlet.",
+      "cross_check": "Visual PNG plus source DXF geometry/text; not layer or proximity alone.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MR-A4",
+      "subject_id": "RULE-A4",
+      "professional_owner": "qto-pipe-networks",
+      "decision": "include",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+      "recognized_at": "2026-10-11T16:16:34.984641+00:00",
+      "source_id": "SRC-P01",
+      "evidence_ids": [
+        "EV-PNG",
+        "EV-CAD"
+      ],
+      "object_ids": [
+        "CAD-A4"
+      ],
+      "basis": "P-01 plan F2 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "scope_basis": "New SUP S-IN to U-OUT, including R-A between F1 and F2, P-01 Rev A notes 1-10.",
+      "identity_basis": "Original CAD handle and named plan/system identifiers; each physical extent has one quantity outlet.",
+      "cross_check": "Visual PNG plus source DXF geometry/text; not layer or proximity alone.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MR-D3",
+      "subject_id": "RULE-D3",
+      "professional_owner": "qto-pipe-networks",
+      "decision": "exclude",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+      "recognized_at": "2026-10-11T16:16:34.984643+00:00",
+      "source_id": "SRC-P01",
+      "evidence_ids": [
+        "EV-PNG",
+        "EV-CAD"
+      ],
+      "object_ids": [
+        "CAD-D3"
+      ],
+      "basis": "Existing DRN DN80 at unmarked crossing. CAD-D4, CAD-D5 and note CAD-FF explicitly exclude DRN from SUP.",
+      "scope_basis": "New SUP S-IN to U-OUT, including R-A between F1 and F2, P-01 Rev A notes 1-10.",
+      "identity_basis": "Original CAD handle and named plan/system identifiers; each physical extent has one quantity outlet.",
+      "cross_check": "Visual PNG plus source DXF geometry/text; not layer or proximity alone.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MR-D6",
+      "subject_id": "RULE-D6",
+      "professional_owner": "qto-pipe-networks",
+      "decision": "exclude",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+      "recognized_at": "2026-10-11T16:16:34.984646+00:00",
+      "source_id": "SRC-P01",
+      "evidence_ids": [
+        "EV-PNG",
+        "EV-CAD"
+      ],
+      "object_ids": [
+        "CAD-D6"
+      ],
+      "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+      "scope_basis": "New SUP S-IN to U-OUT, including R-A between F1 and F2, P-01 Rev A notes 1-10.",
+      "identity_basis": "Original CAD handle and named plan/system identifiers; each physical extent has one quantity outlet.",
+      "cross_check": "Visual PNG plus source DXF geometry/text; not layer or proximity alone.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MR-D7",
+      "subject_id": "RULE-D7",
+      "professional_owner": "qto-pipe-networks",
+      "decision": "exclude",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+      "recognized_at": "2026-10-11T16:16:34.984648+00:00",
+      "source_id": "SRC-P01",
+      "evidence_ids": [
+        "EV-PNG",
+        "EV-CAD"
+      ],
+      "object_ids": [
+        "CAD-D7"
+      ],
+      "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+      "scope_basis": "New SUP S-IN to U-OUT, including R-A between F1 and F2, P-01 Rev A notes 1-10.",
+      "identity_basis": "Original CAD handle and named plan/system identifiers; each physical extent has one quantity outlet.",
+      "cross_check": "Visual PNG plus source DXF geometry/text; not layer or proximity alone.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MR-D8",
+      "subject_id": "RULE-D8",
+      "professional_owner": "qto-pipe-networks",
+      "decision": "exclude",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+      "recognized_at": "2026-10-11T16:16:34.984654+00:00",
+      "source_id": "SRC-P01",
+      "evidence_ids": [
+        "EV-PNG",
+        "EV-CAD"
+      ],
+      "object_ids": [
+        "CAD-D8"
+      ],
+      "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+      "scope_basis": "New SUP S-IN to U-OUT, including R-A between F1 and F2, P-01 Rev A notes 1-10.",
+      "identity_basis": "Original CAD handle and named plan/system identifiers; each physical extent has one quantity outlet.",
+      "cross_check": "Visual PNG plus source DXF geometry/text; not layer or proximity alone.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MR-D9",
+      "subject_id": "RULE-D9",
+      "professional_owner": "qto-pipe-networks",
+      "decision": "exclude",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+      "recognized_at": "2026-10-11T16:16:34.984657+00:00",
+      "source_id": "SRC-P01",
+      "evidence_ids": [
+        "EV-PNG",
+        "EV-CAD"
+      ],
+      "object_ids": [
+        "CAD-D9"
+      ],
+      "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+      "scope_basis": "New SUP S-IN to U-OUT, including R-A between F1 and F2, P-01 Rev A notes 1-10.",
+      "identity_basis": "Original CAD handle and named plan/system identifiers; each physical extent has one quantity outlet.",
+      "cross_check": "Visual PNG plus source DXF geometry/text; not layer or proximity alone.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MR-EC",
+      "subject_id": "RULE-EC",
+      "professional_owner": "qto-pipe-networks",
+      "decision": "exclude",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+      "recognized_at": "2026-10-11T16:16:34.984659+00:00",
+      "source_id": "SRC-P01",
+      "evidence_ids": [
+        "EV-PNG",
+        "EV-CAD"
+      ],
+      "object_ids": [
+        "CAD-EC"
+      ],
+      "basis": "Legend examples only CAD-EB and note CAD-101; no installed physical centerline.",
+      "scope_basis": "New SUP S-IN to U-OUT, including R-A between F1 and F2, P-01 Rev A notes 1-10.",
+      "identity_basis": "Original CAD handle and named plan/system identifiers; each physical extent has one quantity outlet.",
+      "cross_check": "Visual PNG plus source DXF geometry/text; not layer or proximity alone.",
+      "uncertainties": []
+    },
+    {
+      "adjudication_id": "MR-EE",
+      "subject_id": "RULE-EE",
+      "professional_owner": "qto-pipe-networks",
+      "decision": "exclude",
+      "status": "active",
+      "decision_origin": "model",
+      "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+      "recognized_at": "2026-10-11T16:16:34.984661+00:00",
+      "source_id": "SRC-P01",
+      "evidence_ids": [
+        "EV-PNG",
+        "EV-CAD"
+      ],
+      "object_ids": [
+        "CAD-EE"
+      ],
+      "basis": "Legend examples only CAD-EB and note CAD-101; no installed physical centerline.",
+      "scope_basis": "New SUP S-IN to U-OUT, including R-A between F1 and F2, P-01 Rev A notes 1-10.",
+      "identity_basis": "Original CAD handle and named plan/system identifiers; each physical extent has one quantity outlet.",
+      "cross_check": "Visual PNG plus source DXF geometry/text; not layer or proximity alone.",
+      "uncertainties": []
+    }
+  ],
+  "notes": {
+    "95": "P-01 | WEST SERVICE SUPPLY | REV A | SYNTHETIC DESIGN",
+    "96": "Native CAD: millimetres. Plans are full-size. System diagram is NOT TO SCALE.",
+    "97": "LOWER LEVEL PLAN / F1",
+    "98": "UPPER LEVEL PLAN / F2",
+    "99": "SYSTEM DIAGRAM / NOT TO SCALE",
+    "F8": "1. Scope: new SUP from S-IN to U-OUT, including the connection between levels.",
+    "F9": "2. Plan dimensions and coordinates locate horizontal pipe centrelines in millimetres.",
+    "FA": "3. Riser R-A in the plans and system diagram represents the same physical riser.",
+    "FB": "4. Pipe CL elevations are in metres from the project datum; FFL is not pipe CL.",
+    "FC": "5. The system diagram explains connections and elevations; do not scale its drawn lengths.",
+    "FD": "6. Centreline quantity includes continuous length through inline fittings. No fitting allowances.",
+    "FE": "7. DN changes at the indicated reducer centre; there are no unshown offsets in this task.",
+    "FF": "8. Lines crossing without a filled junction dot are not connected; DRN is outside SUP scope.",
+    "100": "9. End ports define the measurement limit. Do not add lengths beyond S-IN or U-OUT.",
+    "101": "10. The legend is explanatory only. No waste, insulation, supports, or cost quantities requested."
+  },
+  "true_human_intervention": []
+}

@@ -1,0 +1,21 @@
+{
+  "status": "FAIL",
+  "files_checked": 1,
+  "reports": [
+    {
+      "file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/result_binding.json",
+      "status": "FAIL",
+      "error_count": 6,
+      "errors": [
+        "QTY-P-1确认量不得引用试用规则: R-PN-003, R-PN-005",
+        "QTY-P-2确认量不得引用试用规则: R-PN-003, R-PN-005",
+        "QTY-P-3确认量不得引用试用规则: R-PN-003, R-PN-005",
+        "QTY-P-4确认量不得引用试用规则: R-PN-003, R-PN-005",
+        "QTY-P-5确认量不得引用试用规则: R-PN-003, R-PN-005",
+        "QTY-P-6确认量不得引用试用规则: R-PN-004, R-PN-005"
+      ]
+    }
+  ],
+  "schema_validation": "JSON Schema Draft 2020-12",
+  "business_correctness_proven": false
+}

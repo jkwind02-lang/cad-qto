@@ -1,0 +1,1 @@
+{"status": "selected_regions_analyzed", "regions": 0, "failures": 0, "proxy_entities_not_expanded": 0, "output": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/hatch_regions.json"}

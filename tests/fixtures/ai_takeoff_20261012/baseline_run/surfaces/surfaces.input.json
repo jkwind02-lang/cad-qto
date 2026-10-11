@@ -1,0 +1,389 @@
+{
+  "manifest_version": "qto-surfaces-envelope-manifest/1.0",
+  "task": {
+    "project_id": "A01-SYNTHETIC-STUDIO",
+    "business_discipline": "建筑吊顶饰面",
+    "main_objects": "工作室吊顶下表面单层饰面",
+    "system": "Studio suspended ceiling",
+    "building": "图示工作室",
+    "zone": "RCP-01 CL-11 与 CL-24",
+    "drawing_type": "反射平面、做法表、说明、S-2详图",
+    "drawing_version": "A-01 REV A",
+    "output_dimension": "按材料的水平净饰面面积",
+    "applicable_rule_status": "confirmed"
+  },
+  "sources": [
+    {
+      "source_id": "SRC-A01",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+      "sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+      "file_role": "dxf",
+      "source_role": "project_drawing",
+      "selection": "selected",
+      "source_type": "本轮原图证据",
+      "reason": "本任务指定原图或由本轮读取直接形成的证据",
+      "neutral_facts": "原图边界、材料标签、说明、详图、尺寸与单位",
+      "not_used_impact": "不使用将失去相应对象定位或范围依据"
+    },
+    {
+      "source_id": "SRC-GEO",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/bound_geometry.json",
+      "sha256": "b2d5a6c5eb774c7d5af6fc459e7b4611d3e9625f92d3b1fbe1891436107bdd45",
+      "file_role": "json",
+      "source_role": "calculation_evidence",
+      "selection": "selected",
+      "source_type": "本轮原图证据",
+      "reason": "本任务指定原图或由本轮读取直接形成的证据",
+      "neutral_facts": "源边及本次模型解释的局部坐标系，保留原实体和哈希",
+      "not_used_impact": "不使用将失去相应对象定位或范围依据"
+    },
+    {
+      "source_id": "SRC-COVERAGE",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/coverage.json",
+      "sha256": "503e3dcf5a79d49c1f247ecb12426d9bdf197912f98dbeb6e19f9d78e3e6d4ca",
+      "file_role": "json",
+      "source_role": "coverage_report",
+      "selection": "selected",
+      "source_type": "本轮原图证据",
+      "reason": "本任务指定原图或由本轮读取直接形成的证据",
+      "neutral_facts": "本轮模型沿图核对的纳入、扣减、保留与排除范围",
+      "not_used_impact": "不使用将失去相应对象定位或范围依据"
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "EV-ID",
+      "source_id": "SRC-A01",
+      "evidence_class": "source_identity",
+      "fact_status": "reference",
+      "locator": "A-01 Model CAD-95/96",
+      "fact": "A-01 | STUDIO SUSPENDED CEILING | REV A | SYNTHETIC DESIGN; Native CAD: millimetres. Plan boundaries are full-size. Detail S-2 is schematic.",
+      "extraction": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "quality": "本轮模型工作识别；未人工复核",
+      "object_keys": [
+        "A01"
+      ],
+      "limitation": "可复核工作证据；不宣称工程正式采用或真实工程准确率"
+    },
+    {
+      "evidence_id": "EV-GEO-CL-11",
+      "source_id": "SRC-GEO",
+      "evidence_class": "surface_geometry",
+      "fact_status": "reference",
+      "locator": "/surface_frames/CL-11; /edges/EDGE-RCP-SOUTH; CAD-9A/9B; dimensions C6/CC/D8",
+      "fact": "Boundary from outer 9A and full-height material division 9B, located on RCP-01 internal finish boundary.",
+      "extraction": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "quality": "本轮模型工作识别；未人工复核",
+      "object_keys": [
+        "SURF-CL-11",
+        "EDGE-RCP-SOUTH"
+      ],
+      "limitation": "可复核工作证据；不宣称工程正式采用或真实工程准确率"
+    },
+    {
+      "evidence_id": "EV-LAYER-CL-11",
+      "source_id": "SRC-A01",
+      "evidence_class": "layer_assignment",
+      "fact_status": "reference",
+      "locator": "RCP-01 CAD-9C; finish schedule CAD-E7/E8",
+      "fact": "CL-11 = acoustic ceiling panel / 吸声吊顶板; divider is solid finish line, not P-1 projection.",
+      "extraction": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "quality": "本轮模型工作识别；未人工复核",
+      "object_keys": [
+        "SURF-CL-11",
+        "LAYER-CL-11"
+      ],
+      "limitation": "可复核工作证据；不宣称工程正式采用或真实工程准确率"
+    },
+    {
+      "evidence_id": "EV-COVER-CL-11",
+      "source_id": "SRC-COVERAGE",
+      "evidence_class": "coverage_complete",
+      "fact_status": "reference",
+      "locator": "coverage.json /included; /exclusions; A-01 RCP-01 and S-2",
+      "fact": "Requested one underside finish layer by horizontal net material area; source notes explicitly close excluded accessory scope.",
+      "extraction": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "quality": "本轮模型工作识别；未人工复核",
+      "object_keys": [
+        "SURF-CL-11"
+      ],
+      "limitation": "可复核工作证据；不宣称工程正式采用或真实工程准确率"
+    },
+    {
+      "evidence_id": "EV-OPEN-SH1",
+      "source_id": "SRC-GEO",
+      "evidence_class": "opening_union",
+      "fact_status": "reference",
+      "locator": "raw_entities/9E; A-01 CAD-A1, CAD-E9, dimensions CAD-A7/AD",
+      "fact": "The only deductive shaft SH-1 has a closed rectangle inside CL-11; exact footprint deducted once; crossing diagonals are symbol only.",
+      "extraction": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "quality": "本轮模型工作识别；未人工复核",
+      "object_keys": [
+        "SURF-CL-11",
+        "SH-1"
+      ],
+      "limitation": "可复核工作证据；不宣称工程正式采用或真实工程准确率"
+    },
+    {
+      "evidence_id": "EV-GEO-CL-24",
+      "source_id": "SRC-GEO",
+      "evidence_class": "surface_geometry",
+      "fact_status": "reference",
+      "locator": "/surface_frames/CL-24; /edges/EDGE-RCP-SOUTH; CAD-9A/9B; dimensions C6/CC/D8",
+      "fact": "Boundary from outer 9A and full-height material division 9B, located on RCP-01 internal finish boundary.",
+      "extraction": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "quality": "本轮模型工作识别；未人工复核",
+      "object_keys": [
+        "SURF-CL-24",
+        "EDGE-RCP-SOUTH"
+      ],
+      "limitation": "可复核工作证据；不宣称工程正式采用或真实工程准确率"
+    },
+    {
+      "evidence_id": "EV-LAYER-CL-24",
+      "source_id": "SRC-A01",
+      "evidence_class": "layer_assignment",
+      "fact_status": "reference",
+      "locator": "RCP-01 CAD-9D; finish schedule CAD-E7/E8",
+      "fact": "CL-24 = painted gypsum-board ceiling finish / 涂饰石膏板吊顶饰面; divider is solid finish line, not P-1 projection.",
+      "extraction": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "quality": "本轮模型工作识别；未人工复核",
+      "object_keys": [
+        "SURF-CL-24",
+        "LAYER-CL-24"
+      ],
+      "limitation": "可复核工作证据；不宣称工程正式采用或真实工程准确率"
+    },
+    {
+      "evidence_id": "EV-COVER-CL-24",
+      "source_id": "SRC-COVERAGE",
+      "evidence_class": "coverage_complete",
+      "fact_status": "reference",
+      "locator": "coverage.json /included; /exclusions; A-01 RCP-01 and S-2",
+      "fact": "Requested one underside finish layer by horizontal net material area; source notes explicitly close excluded accessory scope.",
+      "extraction": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "quality": "本轮模型工作识别；未人工复核",
+      "object_keys": [
+        "SURF-CL-24"
+      ],
+      "limitation": "可复核工作证据；不宣称工程正式采用或真实工程准确率"
+    },
+    {
+      "evidence_id": "EV-RETAIN-AP1",
+      "source_id": "SRC-A01",
+      "evidence_class": "requirement",
+      "fact_status": "reference",
+      "locator": "CAD-AE/B1 and CAD-EA/EB; S-2 CAD-E3/E5",
+      "fact": "AP-1 flush removable panel carries the same finish as CL-24 and is explicitly retained in this material area.",
+      "extraction": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "quality": "本轮模型工作识别；未人工复核",
+      "object_keys": [
+        "SURF-CL-24",
+        "AP-1",
+        "LAYER-CL-24"
+      ],
+      "limitation": "可复核工作证据；不宣称工程正式采用或真实工程准确率"
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": "R-SE-001",
+      "name": "表面/层/侧别/口径唯一",
+      "source": "当前qto-surfaces-envelope规则及A-01说明",
+      "decision": "试用",
+      "maturity": "试运行",
+      "execution": "按本图明确设计物理口径形成参考工作量",
+      "evidence_locator": "CAD-E7/E8/ED"
+    },
+    {
+      "rule_id": "R-SE-002",
+      "name": "毛面扣实际洞口并集",
+      "source": "当前qto-surfaces-envelope规则及A-01说明",
+      "decision": "试用",
+      "maturity": "试运行",
+      "execution": "按本图明确设计物理口径形成参考工作量",
+      "evidence_locator": "CAD-9E/E9；AP-1按EA/EB保留"
+    },
+    {
+      "rule_id": "R-SE-003",
+      "name": "天棚水平净饰面面积",
+      "source": "当前qto-surfaces-envelope规则及A-01说明",
+      "decision": "试用",
+      "maturity": "候选",
+      "execution": "按本图明确设计物理口径形成参考工作量",
+      "evidence_locator": "CAD-ED/EE/EF/F0；S-2的E0/E1/E2"
+    },
+    {
+      "rule_id": "R-SE-008",
+      "name": "范围闭合核对",
+      "source": "当前qto-surfaces-envelope规则及A-01说明",
+      "decision": "试用",
+      "maturity": "试运行",
+      "execution": "按本图明确设计物理口径形成参考工作量",
+      "evidence_locator": "coverage.json"
+    }
+  ],
+  "unresolved": [],
+  "items": [
+    {
+      "item_id": "QTY-CL-11",
+      "name": "CL-11 acoustic ceiling panel / 吸声吊顶板净面积",
+      "object_type": "ceiling_finish",
+      "physical_surface_id": "SURF-CL-11",
+      "layer_id": "LAYER-CL-11",
+      "side_scope": "下表面饰面",
+      "measurement_basis": "horizontal_projection",
+      "method": "rectangle_openings_net",
+      "unit": "m²",
+      "scope_status": "complete",
+      "adoption_role": "reference",
+      "quantity_role": "physical_area",
+      "result_use": "本合成原图限定范围内的模型工作计算，候选规则试用；未人工复核，不进入正式采用量",
+      "evidence_refs": [
+        "EV-ID",
+        "EV-GEO-CL-11",
+        "EV-LAYER-CL-11",
+        "EV-COVER-CL-11",
+        "EV-OPEN-SH1"
+      ],
+      "rule_refs": [
+        "R-SE-001",
+        "R-SE-002",
+        "R-SE-003",
+        "R-SE-008"
+      ],
+      "unresolved_refs": [],
+      "coverage_evidence_ref": "EV-COVER-CL-11",
+      "frame_binding": {
+        "frame_evidence_ref": "EV-GEO-CL-11",
+        "source_pointer": "/surface_frames/CL-11",
+        "edge_evidence_ref": "EV-GEO-CL-11",
+        "edge_source_pointer": "/edges/EDGE-RCP-SOUTH"
+      },
+      "local_coordinate_frame": {
+        "coordinate_system_id": "A01-MODEL-PROJECTION",
+        "origin_m": [
+          1.6,
+          6.1000000000000005,
+          0.0
+        ],
+        "x_axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "up_axis": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "source_edge_id": "EDGE-RCP-SOUTH",
+        "source_edge_direction": "same",
+        "source_edge_interval_m": [
+          0.0,
+          4.4
+        ],
+        "vertical_range_m": [
+          0.0,
+          4.1
+        ],
+        "vertical_origin_m": 0.0
+      },
+      "inputs": {
+        "length_m": 4.4,
+        "height_m": 4.1,
+        "openings": [
+          {
+            "opening_id": "SH-1",
+            "rectangle_m": [
+              0.7999999999999998,
+              2.2,
+              1.5,
+              3.1000000000000005
+            ]
+          }
+        ],
+        "other_deductions_area_m2": 0.0,
+        "reveal_or_return_area_m2": 0.0
+      },
+      "opening_union_evidence_ref": "EV-OPEN-SH1"
+    },
+    {
+      "item_id": "QTY-CL-24",
+      "name": "CL-24 painted gypsum-board ceiling finish / 涂饰石膏板吊顶饰面净面积",
+      "object_type": "ceiling_finish",
+      "physical_surface_id": "SURF-CL-24",
+      "layer_id": "LAYER-CL-24",
+      "side_scope": "下表面饰面",
+      "measurement_basis": "horizontal_projection",
+      "method": "rectangle_openings_net",
+      "unit": "m²",
+      "scope_status": "complete",
+      "adoption_role": "reference",
+      "quantity_role": "physical_area",
+      "result_use": "本合成原图限定范围内的模型工作计算，候选规则试用；未人工复核，不进入正式采用量",
+      "evidence_refs": [
+        "EV-ID",
+        "EV-GEO-CL-24",
+        "EV-LAYER-CL-24",
+        "EV-COVER-CL-24",
+        "EV-RETAIN-AP1"
+      ],
+      "rule_refs": [
+        "R-SE-001",
+        "R-SE-002",
+        "R-SE-003",
+        "R-SE-008"
+      ],
+      "unresolved_refs": [],
+      "coverage_evidence_ref": "EV-COVER-CL-24",
+      "frame_binding": {
+        "frame_evidence_ref": "EV-GEO-CL-24",
+        "source_pointer": "/surface_frames/CL-24",
+        "edge_evidence_ref": "EV-GEO-CL-24",
+        "edge_source_pointer": "/edges/EDGE-RCP-SOUTH"
+      },
+      "local_coordinate_frame": {
+        "coordinate_system_id": "A01-MODEL-PROJECTION",
+        "origin_m": [
+          6.0,
+          6.1000000000000005,
+          0.0
+        ],
+        "x_axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "up_axis": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "source_edge_id": "EDGE-RCP-SOUTH",
+        "source_edge_direction": "same",
+        "source_edge_interval_m": [
+          4.4,
+          6.8
+        ],
+        "vertical_range_m": [
+          0.0,
+          4.1
+        ],
+        "vertical_origin_m": 0.0
+      },
+      "inputs": {
+        "length_m": 2.4,
+        "height_m": 4.1,
+        "openings": [],
+        "other_deductions_area_m2": 0.0,
+        "reveal_or_return_area_m2": 0.0
+      }
+    }
+  ],
+  "recognition_status": {
+    "origin": "model",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false
+  }
+}

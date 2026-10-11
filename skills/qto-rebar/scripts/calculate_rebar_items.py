@@ -608,13 +608,48 @@ def calculate_group(
         fail(f"{group_id} 根数为 0 时必须提供 zero_evidence")
 
     if method == "count_only":
-        if set(outputs) != {"count"}:
-            fail(f"{group_id} count_only 只能提供 count 输出")
+        # Connectors may have no bar specification, but a supplied one uses the
+        # same types as ordinary rebar; text "8.0" is not a second identity.
+        if "grade" in group:
+            require_text(group, "grade", group_id)
+        if "diameter_mm" in group:
+            require_number(group, "diameter_mm", group_id, positive=True)
+        deferred_dimensions = group.get("deferred_dimensions", [])
+        if (not isinstance(deferred_dimensions, list)
+                or any(not isinstance(dimension, str) or dimension not in {"length", "weight"}
+                       for dimension in deferred_dimensions)
+                or len(set(deferred_dimensions)) != len(deferred_dimensions)):
+            fail(f"{group_id} count_only.deferred_dimensions 只能是不重复的 length/weight 数组")
+        if set(outputs) != {"count", *deferred_dimensions}:
+            fail(f"{group_id} count_only 只能提供 count 和明确列出的未决维度输出")
         unit = require_text(group, "count_unit", group_id)
+        if deferred_dimensions:
+            if status != "partial" or unit != "根":
+                fail(f"{group_id} count_only 的未决长度/重量要求 status=partial 且 count_unit=根")
+            reason = require_text(group, "deferred_reason", group_id)
+            # A missing node must not be supplied as a fabricated length which
+            # this counting path would otherwise silently ignore.
+            length_fields = {"developed_length_each_m", "base_length_each_m", "additions_each_m",
+                             "total_length_m", "weight_kg"}
+            if any(key in group for key in length_fields):
+                fail(f"{group_id} count_only 未决长度/重量不得同时填写展开长度或汇总长度/重量数值")
+            group_calc.update(deferred_dimensions=deferred_dimensions, deferred_reason=reason,
+                              dimension_quantity_levels={"count": context["quantity_level"],
+                                  **{dimension: "unresolved" for dimension in deferred_dimensions}})
         results.append(make_result_item(
             scope, group, require_text(outputs, "count", f"{group_id}.outputs"),
-            "count", "连接或成品数量", count, unit, count_formula, "整数", context,
+            "count", "钢筋根数" if unit == "根" else "连接或成品数量", count, unit, count_formula, "整数", context,
         ))
+        if deferred_dimensions:
+            unresolved_group = {**group, "status": "unresolved"}
+            unresolved_context = {**context, "quantity_level": "unresolved"}
+            for dimension in deferred_dimensions:
+                results.append(make_result_item(
+                    scope, unresolved_group, require_text(outputs, dimension, f"{group_id}.outputs"),
+                    dimension, {"length": "钢筋中心线展开长度", "weight": "钢筋理论重量"}[dimension],
+                    None, {"length": "m", "weight": "kg"}[dimension], reason,
+                    "未计算；待决定性输入闭合", unresolved_context,
+                ))
         group_calc.update({"count": count, "count_unit": unit})
         return results, group_calc
 
@@ -816,12 +851,20 @@ def main() -> int:
         output_ids: set[str] = set()
         physical_signatures: set[tuple[str, str, str, str, str]] = set()
         for group_id, group in groups.items():
+            diameter = group.get("diameter_mm")
+            # JSON 8 and 8.0 denote the same diameter.  Canonicalise their exact
+            # decimal values, without a tolerance that would merge real sizes.
+            if ((isinstance(diameter, int) and not isinstance(diameter, bool))
+                    or (isinstance(diameter, float) and math.isfinite(diameter))):
+                diameter_signature = str(Fraction(str(diameter)))
+            else:
+                diameter_signature = str(diameter)
             signature = (
                 require_text(group, "physical_object_id", group_id),
                 require_text(group, "member_id", group_id),
                 require_text(group, "position", group_id),
-                str(group.get("grade")),
-                str(group.get("diameter_mm")),
+                str(group.get("grade")).strip(),
+                diameter_signature,
             )
             if signature in physical_signatures:
                 fail(f"钢筋组物理身份重复，不能靠改 group_id 重复计算: {group_id}")

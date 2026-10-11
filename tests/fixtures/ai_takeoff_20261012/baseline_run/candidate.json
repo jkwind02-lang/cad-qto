@@ -1,0 +1,927 @@
+{
+  "schema": "ai-autonomy-takeoff-candidate/1.0",
+  "solver": "ai_baseline_takeoff",
+  "plugin": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline",
+  "created_utc": "2026-10-11T16:21:00.784603+00:00",
+  "scope": "Synthetic restricted execution test only; no assertion of real engineering accuracy",
+  "reference_exposure": "No case generator, gold standard, other-agent result, alternative plugin or historical solver output read. Required plugin maturity documents read only for capability status.",
+  "source_version_file": "source_version.json",
+  "source_identity_file": "source_identity.json",
+  "human_intervention": [],
+  "artifact_directory": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run",
+  "user_report": "quantity_report.md",
+  "review": "review.html",
+  "cases": {
+    "pipe": {
+      "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "source_files": {
+        "drawing.dxf": {
+          "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+          "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+          "bytes": 73083
+        },
+        "drawing.png": {
+          "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.png",
+          "sha256": "3deafabc20af8672d107c0bd55cb73ffb2d1f4df89dd973a6bdd4d0d1a67ddc8",
+          "bytes": 285097
+        },
+        "task.md": {
+          "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/task.md",
+          "sha256": "21cb0da0aaa3948040f0737bcea2e525540693cb760ef66bc344328d922aff16",
+          "bytes": 1006
+        }
+      },
+      "native_input": "pipe/network.v2.input.json",
+      "native_output": "pipe/network.output.json",
+      "native_files": [
+        "pipe/object_audit.input.json",
+        "pipe/object_audit.output.json",
+        "pipe/network.input.json",
+        "pipe/network.v2.input.json",
+        "pipe/elevation_facts.input.json",
+        "pipe/network.output.json",
+        "pipe/neutral/CAD中性取证清单.json",
+        "pipe/neutral/CAD提取失败对象.json",
+        "pipe/neutral/CAD读取覆盖与待补读.json",
+        "pipe/neutral/中性块定义图元.ndjson",
+        "pipe/neutral/中性布局图元.ndjson"
+      ],
+      "quantities": [
+        {
+          "object_id": "P01-F1-A0",
+          "name": "F1 S-IN 至平面转折点",
+          "quantity_kind": "pipe_centerline_length",
+          "value": 3.6,
+          "unit": "m",
+          "specification": "DN50",
+          "component": "plan_horizontal",
+          "source_location": {
+            "drawing": "P-01 REV A",
+            "view": "F1",
+            "layout": "Model",
+            "handles": [
+              "A0"
+            ],
+            "bounds_mm": [
+              1800.0,
+              6700.0,
+              5400.0,
+              6700.0
+            ],
+            "start_mm": [
+              1800.0,
+              6700.0,
+              0.0
+            ],
+            "end_mm": [
+              5400.0,
+              6700.0,
+              0.0
+            ]
+          },
+          "native_output": "pipe/network.output.json",
+          "native_result_field": "/segments/0/length",
+          "native_object_field": "/segments/0",
+          "basis": "原始平面实体长度与相应尺寸标注核对；每段SUP直接标注规格；原生推算器复算几何长度",
+          "review_status": "unreviewed",
+          "formal_adoption_allowed": false,
+          "native_evidence_level": "确认量",
+          "delivery_evidence_level": "规则试算工作参考；候选/试运行规则未提升为采用"
+        },
+        {
+          "object_id": "P01-F1-A1",
+          "name": "F1 平面转折点至 R-A",
+          "quantity_kind": "pipe_centerline_length",
+          "value": 2.4,
+          "unit": "m",
+          "specification": "DN50",
+          "component": "plan_horizontal",
+          "source_location": {
+            "drawing": "P-01 REV A",
+            "view": "F1",
+            "layout": "Model",
+            "handles": [
+              "A1"
+            ],
+            "bounds_mm": [
+              5400.0,
+              6700.0,
+              5400.0,
+              9100.0
+            ],
+            "start_mm": [
+              5400.0,
+              6700.0,
+              0.0
+            ],
+            "end_mm": [
+              5400.0,
+              9100.0,
+              0.0
+            ]
+          },
+          "native_output": "pipe/network.output.json",
+          "native_result_field": "/segments/1/length",
+          "native_object_field": "/segments/1",
+          "basis": "原始平面实体长度与相应尺寸标注核对；每段SUP直接标注规格；原生推算器复算几何长度",
+          "review_status": "unreviewed",
+          "formal_adoption_allowed": false,
+          "native_evidence_level": "确认量",
+          "delivery_evidence_level": "规则试算工作参考；候选/试运行规则未提升为采用"
+        },
+        {
+          "object_id": "P01-F2-A2",
+          "name": "F2 R-A 至 RED-A 变径中心",
+          "quantity_kind": "pipe_centerline_length",
+          "value": 2.3,
+          "unit": "m",
+          "specification": "DN50",
+          "component": "plan_horizontal",
+          "source_location": {
+            "drawing": "P-01 REV A",
+            "view": "F2",
+            "layout": "Model",
+            "handles": [
+              "A2"
+            ],
+            "bounds_mm": [
+              19700.0,
+              9100.0,
+              22000.0,
+              9100.0
+            ],
+            "start_mm": [
+              19700.0,
+              9100.0,
+              0.0
+            ],
+            "end_mm": [
+              22000.0,
+              9100.0,
+              0.0
+            ]
+          },
+          "native_output": "pipe/network.output.json",
+          "native_result_field": "/segments/2/length",
+          "native_object_field": "/segments/2",
+          "basis": "原始平面实体长度与相应尺寸标注核对；每段SUP直接标注规格；原生推算器复算几何长度",
+          "review_status": "unreviewed",
+          "formal_adoption_allowed": false,
+          "native_evidence_level": "确认量",
+          "delivery_evidence_level": "规则试算工作参考；候选/试运行规则未提升为采用"
+        },
+        {
+          "object_id": "P01-F2-A3",
+          "name": "F2 RED-A 变径中心至转折点",
+          "quantity_kind": "pipe_centerline_length",
+          "value": 2.4,
+          "unit": "m",
+          "specification": "DN32",
+          "component": "plan_horizontal",
+          "source_location": {
+            "drawing": "P-01 REV A",
+            "view": "F2",
+            "layout": "Model",
+            "handles": [
+              "A3"
+            ],
+            "bounds_mm": [
+              22000.0,
+              9100.0,
+              24400.0,
+              9100.0
+            ],
+            "start_mm": [
+              22000.0,
+              9100.0,
+              0.0
+            ],
+            "end_mm": [
+              24400.0,
+              9100.0,
+              0.0
+            ]
+          },
+          "native_output": "pipe/network.output.json",
+          "native_result_field": "/segments/3/length",
+          "native_object_field": "/segments/3",
+          "basis": "原始平面实体长度与相应尺寸标注核对；每段SUP直接标注规格；原生推算器复算几何长度",
+          "review_status": "unreviewed",
+          "formal_adoption_allowed": false,
+          "native_evidence_level": "确认量",
+          "delivery_evidence_level": "规则试算工作参考；候选/试运行规则未提升为采用"
+        },
+        {
+          "object_id": "P01-F2-A4",
+          "name": "F2 转折点至 U-OUT",
+          "quantity_kind": "pipe_centerline_length",
+          "value": 1.9,
+          "unit": "m",
+          "specification": "DN32",
+          "component": "plan_horizontal",
+          "source_location": {
+            "drawing": "P-01 REV A",
+            "view": "F2",
+            "layout": "Model",
+            "handles": [
+              "A4"
+            ],
+            "bounds_mm": [
+              24400.0,
+              9100.0,
+              24400.0,
+              11000.0
+            ],
+            "start_mm": [
+              24400.0,
+              9100.0,
+              0.0
+            ],
+            "end_mm": [
+              24400.0,
+              11000.0,
+              0.0
+            ]
+          },
+          "native_output": "pipe/network.output.json",
+          "native_result_field": "/segments/4/length",
+          "native_object_field": "/segments/4",
+          "basis": "原始平面实体长度与相应尺寸标注核对；每段SUP直接标注规格；原生推算器复算几何长度",
+          "review_status": "unreviewed",
+          "formal_adoption_allowed": false,
+          "native_evidence_level": "确认量",
+          "delivery_evidence_level": "规则试算工作参考；候选/试运行规则未提升为采用"
+        },
+        {
+          "object_id": "P01-R-A",
+          "name": "R-A：F1 管中心至 F2 管中心",
+          "quantity_kind": "pipe_centerline_length",
+          "value": 4.7,
+          "unit": "m",
+          "specification": "DN50",
+          "component": "vertical",
+          "source_location": {
+            "drawing": "P-01 REV A",
+            "view": "F1 ↔ F2 via system diagram",
+            "layout": "Model",
+            "handles": [
+              "A5",
+              "A6",
+              "A7",
+              "A8",
+              "DC",
+              "DD",
+              "DE",
+              "DF",
+              "E0",
+              "E1",
+              "FA",
+              "FB"
+            ],
+            "bounds_mm": [
+              34200.0,
+              6600.0,
+              34200.0,
+              11100.0
+            ],
+            "f1_plan_port_mm": [
+              5400.0,
+              9100.0,
+              0.0
+            ],
+            "f2_plan_port_mm": [
+              19700.0,
+              9100.0,
+              0.0
+            ]
+          },
+          "native_output": "pipe/network.output.json",
+          "native_result_field": "/vertical_quantities/0/value",
+          "native_object_field": "/vertical_quantities/0",
+          "basis": "同编号R-A唯一对应；图注明确竖直，起止PIPE CL分别+3.15m、+7.85m，原生typed-elevation计算差值；不量系统图绘制长度",
+          "review_status": "unreviewed",
+          "formal_adoption_allowed": false,
+          "native_evidence_level": "确认量",
+          "delivery_evidence_level": "规则试算工作参考；候选/试运行规则未提升为采用"
+        }
+      ],
+      "totals": [
+        {
+          "specification": "DN50",
+          "quantity_kind": "pipe_centerline_length",
+          "value": 13.0,
+          "unit": "m",
+          "aggregation": "sum of distinct native segment / vertical result fields",
+          "native_result_fields": [
+            "/segments/0/length",
+            "/segments/1/length",
+            "/segments/2/length",
+            "/vertical_quantities/0/value"
+          ],
+          "plan_horizontal_m": 8.3,
+          "vertical_m": 4.7
+        },
+        {
+          "specification": "DN32",
+          "quantity_kind": "pipe_centerline_length",
+          "value": 4.3,
+          "unit": "m",
+          "aggregation": "sum of distinct native segment / vertical result fields",
+          "native_result_fields": [
+            "/segments/3/length",
+            "/segments/4/length"
+          ],
+          "plan_horizontal_m": 4.3,
+          "vertical_m": 0.0
+        }
+      ],
+      "overall_same_unit_total": {
+        "value": 17.3,
+        "unit": "m"
+      },
+      "covered_scope": [
+        "Five full-size SUP plan segments A0-A4 from S-IN to U-OUT",
+        "One R-A vertical extent bound between the F1/F2 plan ports by typed CL elevations",
+        "DN50/DN32 split at RED-A center",
+        "Same-layer DRN, system drawings and legend lines explicitly excluded"
+      ],
+      "unfinished_scope": [],
+      "key_engineering_conclusions": [
+        {
+          "conclusion": "R-A is one physical riser linking F1 and F2. Use PIPE CL +3.15m and +7.85m, not FFL or schematic length.",
+          "location": [
+            "P-01 CAD-A5/A6/A7/A8/DC",
+            "CAD-DE/DF/E0/E1/FA/FB"
+          ]
+        },
+        {
+          "conclusion": "DN changes only at RED-A center; inline fitting continuity retained, no allowances.",
+          "location": [
+            "P-01 Model (22000,9100)mm",
+            "CAD-B2/B3/FD/FE"
+          ]
+        },
+        {
+          "conclusion": "DRN is excluded and does not connect at unmarked crossing; system/legend are not extra quantities.",
+          "location": [
+            "CAD-D3/D4/D5/FF",
+            "CAD-99/FC",
+            "CAD-EB/EC/EE/101"
+          ]
+        }
+      ],
+      "native_status": "CALCULATED",
+      "model_working_not_formal": true,
+      "actual_human_intervention": [],
+      "errors": [
+        {
+          "case": "both",
+          "tool": "extract_cad_neutral.py",
+          "exit_code": 3,
+          "status": "PARTIAL",
+          "error": "BlockDefinition _CLOSEDFILLED CAD-7B SOLID尚无中性几何解析器",
+          "artifact_paths": [
+            "pipe/neutral/CAD提取失败对象.json",
+            "surfaces/neutral/CAD提取失败对象.json"
+          ],
+          "resolution": "通过ezdxf实际补查该默认SOLID定义，Model中无INSERT，未参与计量对象；原始错误不删改。",
+          "remaining_quantity_impact": null
+        },
+        {
+          "case": "pipe",
+          "tool": "infer_pipe_network.py",
+          "exit_code": 2,
+          "status": "INPUT_REQUIRED",
+          "error": "dn_match_policy.thresholds 必须是非空对象",
+          "input": "pipe/network.input.json",
+          "log": "tool_runs/pipe_infer/stderr.txt",
+          "resolution": "v2填写显式人工智能图面绑定策略，未使用数值距离阈值；保留原输入；对象、DN、几何、标高与证据等级无变动。",
+          "remaining_quantity_impact": null
+        },
+        {
+          "case": "pipe",
+          "tool": "validate_minimum_result.py",
+          "exit_code": 1,
+          "status": "FAIL",
+          "error": "六项规范化成果的确认量不得引用试用规则",
+          "input": "pipe/result_binding.json",
+          "log": "tool_runs/pipe_minimum_validate/stdout.txt",
+          "resolution": "result_binding.v2.json降低交付层级为规则试算工作参考并保留假定编号；原生输入输出不变，候选规则未提升为采用。",
+          "remaining_quantity_impact": null
+        },
+        {
+          "case": "pipe",
+          "tool": "validate_minimum_result.py",
+          "exit_code": 1,
+          "status": "FAIL",
+          "error": "v2假定编号ASM-TRIAL-RULE-USE不符合A-前缀模式",
+          "input": "pipe/result_binding.v2.json",
+          "log": "tool_runs/pipe_minimum_validate_v2/stdout.txt",
+          "resolution": "result_binding.v3.json只更正编号前缀及双向引用；验证通过，原生数字与规则状态不变。",
+          "remaining_quantity_impact": null
+        }
+      ],
+      "normalized_delivery": "pipe/result_binding.v3.json",
+      "normalized_delivery_history": [
+        "pipe/result_binding.json",
+        "pipe/result_binding.v2.json",
+        "pipe/result_binding.v3.json"
+      ],
+      "native_auxiliary_diagnostics": {
+        "role_status": "未定（无器具点位工作包；不影响已标DN的中心线长度）",
+        "fitting_candidates": "保留原生输出，不在用户要求数量范围内，不增减长度",
+        "valve_instances": 0,
+        "gap_bridges": 0
+      },
+      "completion_status": "complete_for_requested_quantity_scope"
+    },
+    "surfaces": {
+      "source_sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+      "source_files": {
+        "drawing.dxf": {
+          "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+          "sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+          "bytes": 71811
+        },
+        "drawing.png": {
+          "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.png",
+          "sha256": "dda222b97695aec8d6b5e22d5a866f6acf93487d0b05dbc429090fc582f2b690",
+          "bytes": 286826
+        },
+        "task.md": {
+          "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/task.md",
+          "sha256": "a70ab7e9796f837207ff8a2377bf2a1a94086f28a5b796129816e3c63d57a9ce",
+          "bytes": 926
+        }
+      },
+      "native_input": "surfaces/surfaces.input.json",
+      "native_output": "surfaces/surfaces.output.json",
+      "native_files": [
+        "surfaces/surfaces.input.json",
+        "surfaces/surfaces.output.json",
+        "surfaces/hatch_regions.output.json",
+        "surfaces/neutral/CAD中性取证清单.json",
+        "surfaces/neutral/CAD提取失败对象.json",
+        "surfaces/neutral/CAD读取覆盖与待补读.json",
+        "surfaces/neutral/中性块定义图元.ndjson",
+        "surfaces/neutral/中性布局图元.ndjson"
+      ],
+      "quantities": [
+        {
+          "object_id": "SURF-CL-11",
+          "name": "CL-11 acoustic ceiling panel / 吸声吊顶板净面积",
+          "quantity_kind": "net_ceiling_finish_area",
+          "value": 17.41,
+          "unit": "m²",
+          "specification": "CL-11",
+          "component": "one_underside_finish_layer",
+          "source_location": {
+            "drawing": "A-01 REV A",
+            "view": "RCP-01 / S-2 / finish schedule",
+            "layout": "Model",
+            "handles": [
+              "9A",
+              "9B",
+              "9C",
+              "E7",
+              "E8",
+              "ED"
+            ],
+            "corners_mm": [
+              [
+                1600.0,
+                6100.0
+              ],
+              [
+                6000.0,
+                6100.0
+              ],
+              [
+                6000.0,
+                10200.0
+              ],
+              [
+                1600.0,
+                10200.0
+              ]
+            ]
+          },
+          "gross_area_m2": 18.04,
+          "deduction_m2": 0.63,
+          "native_output": "surfaces/surfaces.output.json",
+          "native_result_field": "/工程量结果/0/结果/数值",
+          "native_object_field": "/工程量结果/0",
+          "gross_native_field": "/工程量结果/0/专业检查/输入审计/gross_area_m2",
+          "deduction_native_field": "/工程量结果/0/专业检查/输入审计/opening_union_area_m2",
+          "frame_binding_status": "bound_consistent",
+          "evidence_level": "本图直接几何与明确做法说明支持的工作量；候选技能分支试用",
+          "review_status": "unreviewed",
+          "formal_adoption_allowed": false
+        },
+        {
+          "object_id": "SURF-CL-24",
+          "name": "CL-24 painted gypsum-board ceiling finish / 涂饰石膏板吊顶饰面净面积",
+          "quantity_kind": "net_ceiling_finish_area",
+          "value": 9.84,
+          "unit": "m²",
+          "specification": "CL-24",
+          "component": "one_underside_finish_layer",
+          "source_location": {
+            "drawing": "A-01 REV A",
+            "view": "RCP-01 / S-2 / finish schedule",
+            "layout": "Model",
+            "handles": [
+              "9A",
+              "9B",
+              "9D",
+              "E7",
+              "E8",
+              "ED"
+            ],
+            "corners_mm": [
+              [
+                6000.0,
+                6100.0
+              ],
+              [
+                8400.0,
+                6100.0
+              ],
+              [
+                8400.0,
+                10200.0
+              ],
+              [
+                6000.0,
+                10200.0
+              ]
+            ]
+          },
+          "gross_area_m2": 9.84,
+          "deduction_m2": 0.0,
+          "native_output": "surfaces/surfaces.output.json",
+          "native_result_field": "/工程量结果/1/结果/数值",
+          "native_object_field": "/工程量结果/1",
+          "gross_native_field": "/工程量结果/1/专业检查/输入审计/gross_area_m2",
+          "deduction_native_field": "/工程量结果/1/专业检查/输入审计/opening_union_area_m2",
+          "frame_binding_status": "bound_consistent",
+          "evidence_level": "本图直接几何与明确做法说明支持的工作量；候选技能分支试用",
+          "review_status": "unreviewed",
+          "formal_adoption_allowed": false
+        }
+      ],
+      "totals": [
+        {
+          "specification": "CL-11",
+          "quantity_kind": "net_ceiling_finish_area",
+          "value": 17.41,
+          "unit": "m²",
+          "native_result_field": "/工程量结果/0/结果/数值"
+        },
+        {
+          "specification": "CL-24",
+          "quantity_kind": "net_ceiling_finish_area",
+          "value": 9.84,
+          "unit": "m²",
+          "native_result_field": "/工程量结果/1/结果/数值"
+        }
+      ],
+      "overall_same_unit_total": {
+        "value": 27.25,
+        "unit": "m²"
+      },
+      "covered_scope": [
+        "RCP-01 internal finish rectangle split by solid material division 9B",
+        "CL-11 acoustic panel with SH-1 actual footprint removed once",
+        "CL-24 painted gypsum-board finish including AP-1 flush same-finish panel",
+        "P-1 lower screen projection retained; S-2 and legend not extra surfaces"
+      ],
+      "unfinished_scope": [],
+      "key_engineering_conclusions": [
+        {
+          "conclusion": "Measure horizontal net finish by internal boundary, material division 9B only.",
+          "location": [
+            "A-01 RCP-01 CAD-9A/9B/9C/9D",
+            "CAD-E7/E8/ED"
+          ]
+        },
+        {
+          "conclusion": "SH-1 true opening deducted; AP-1 same-finish panel retained.",
+          "location": [
+            "CAD-9E/A1/E9/A7/AD",
+            "CAD-AE/B1/EA/EB",
+            "S-2 CAD-E3/E5"
+          ]
+        },
+        {
+          "conclusion": "P-1 is below ceiling, so finish continues above; no deduction, no material division.",
+          "location": [
+            "CAD-BE/BF/C0",
+            "S-2 CAD-E0/E1/E2",
+            "CAD-EC"
+          ]
+        },
+        {
+          "conclusion": "No reveals, returns, extra layers or unshown projections; no waste or procurement factor.",
+          "location": [
+            "CAD-EE/EF/F0"
+          ]
+        }
+      ],
+      "native_status": "PASS",
+      "model_working_not_formal": true,
+      "actual_human_intervention": [],
+      "errors": [
+        {
+          "case": "both",
+          "tool": "extract_cad_neutral.py",
+          "exit_code": 3,
+          "status": "PARTIAL",
+          "error": "BlockDefinition _CLOSEDFILLED CAD-7B SOLID尚无中性几何解析器",
+          "artifact_paths": [
+            "pipe/neutral/CAD提取失败对象.json",
+            "surfaces/neutral/CAD提取失败对象.json"
+          ],
+          "resolution": "通过ezdxf实际补查该默认SOLID定义，Model中无INSERT，未参与计量对象；原始错误不删改。",
+          "remaining_quantity_impact": null
+        }
+      ],
+      "geometry_conservation_check": "surfaces/geometry_crosscheck.output.json",
+      "completion_status": "complete_for_requested_quantity_scope"
+    }
+  },
+  "all_errors": [
+    {
+      "case": "both",
+      "tool": "extract_cad_neutral.py",
+      "exit_code": 3,
+      "status": "PARTIAL",
+      "error": "BlockDefinition _CLOSEDFILLED CAD-7B SOLID尚无中性几何解析器",
+      "artifact_paths": [
+        "pipe/neutral/CAD提取失败对象.json",
+        "surfaces/neutral/CAD提取失败对象.json"
+      ],
+      "resolution": "通过ezdxf实际补查该默认SOLID定义，Model中无INSERT，未参与计量对象；原始错误不删改。",
+      "remaining_quantity_impact": null
+    },
+    {
+      "case": "pipe",
+      "tool": "infer_pipe_network.py",
+      "exit_code": 2,
+      "status": "INPUT_REQUIRED",
+      "error": "dn_match_policy.thresholds 必须是非空对象",
+      "input": "pipe/network.input.json",
+      "log": "tool_runs/pipe_infer/stderr.txt",
+      "resolution": "v2填写显式人工智能图面绑定策略，未使用数值距离阈值；保留原输入；对象、DN、几何、标高与证据等级无变动。",
+      "remaining_quantity_impact": null
+    },
+    {
+      "case": "pipe",
+      "tool": "validate_minimum_result.py",
+      "exit_code": 1,
+      "status": "FAIL",
+      "error": "六项规范化成果的确认量不得引用试用规则",
+      "input": "pipe/result_binding.json",
+      "log": "tool_runs/pipe_minimum_validate/stdout.txt",
+      "resolution": "result_binding.v2.json降低交付层级为规则试算工作参考并保留假定编号；原生输入输出不变，候选规则未提升为采用。",
+      "remaining_quantity_impact": null
+    },
+    {
+      "case": "pipe",
+      "tool": "validate_minimum_result.py",
+      "exit_code": 1,
+      "status": "FAIL",
+      "error": "v2假定编号ASM-TRIAL-RULE-USE不符合A-前缀模式",
+      "input": "pipe/result_binding.v2.json",
+      "log": "tool_runs/pipe_minimum_validate_v2/stdout.txt",
+      "resolution": "result_binding.v3.json只更正编号前缀及双向引用；验证通过，原生数字与规则状态不变。",
+      "remaining_quantity_impact": null
+    }
+  ],
+  "validation_records": {
+    "pipe_summary_validate": {
+      "argv": [
+        "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_user_summary.py",
+        "--inference",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+        "--summary",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/quantity_report.md"
+      ],
+      "start_utc": "2026-10-11T16:21:12.228422+00:00",
+      "end_utc": "2026-10-11T16:21:12.285297+00:00",
+      "exit_code": 0,
+      "script_sha256": {
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_user_summary.py": "5dd2e4d5d65e41f9657304e59bf638bd950ecc978aa953b74cf9bb4fff50f963"
+      }
+    },
+    "pipe_summary_validate_final": {
+      "argv": [
+        "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_user_summary.py",
+        "--inference",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+        "--summary",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/quantity_report.md"
+      ],
+      "start_utc": "2026-10-11T16:22:35.252939+00:00",
+      "end_utc": "2026-10-11T16:22:35.303568+00:00",
+      "exit_code": 0,
+      "script_sha256": {
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_user_summary.py": "5dd2e4d5d65e41f9657304e59bf638bd950ecc978aa953b74cf9bb4fff50f963"
+      }
+    },
+    "pipe_minimum_validate": {
+      "argv": [
+        "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/validate_minimum_result.py",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/result_binding.json"
+      ],
+      "start_utc": "2026-10-11T16:21:12.218482+00:00",
+      "end_utc": "2026-10-11T16:21:12.477071+00:00",
+      "exit_code": 1,
+      "script_sha256": {
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/validate_minimum_result.py": "3e8f313a6dfa65c7546642fcc0bc4f28e917107f0f9bda540f9cddb53c96f779"
+      }
+    },
+    "surface_minimum_validate": {
+      "argv": [
+        "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/validate_minimum_result.py",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.output.json"
+      ],
+      "start_utc": "2026-10-11T16:16:54.841118+00:00",
+      "end_utc": "2026-10-11T16:16:55.057622+00:00",
+      "exit_code": 0,
+      "script_sha256": {
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/validate_minimum_result.py": "3e8f313a6dfa65c7546642fcc0bc4f28e917107f0f9bda540f9cddb53c96f779"
+      }
+    },
+    "surface_binding_validate": {
+      "argv": [
+        "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/scripts/validate_surfaces_envelope_result.py",
+        "--calculator",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/scripts/calculate_surfaces_envelope.py",
+        "--manifest",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.input.json",
+        "--binding",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.output.json"
+      ],
+      "start_utc": "2026-10-11T16:16:54.875299+00:00",
+      "end_utc": "2026-10-11T16:16:55.056386+00:00",
+      "exit_code": 0,
+      "script_sha256": {
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/scripts/validate_surfaces_envelope_result.py": "c7a102dcbb9becce93b11ee8b6c172d5b29f61dfed66322f42f5f133cc1aa7ff",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/scripts/calculate_surfaces_envelope.py": "1fd4950e6458dd19da6de3d71a006e270f52b77b4e394f32234d71d17d20fdff"
+      }
+    },
+    "pipe_professional_validate_v2": {
+      "argv": [
+        "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_result.py",
+        "--result",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/result_binding.v2.json",
+        "--inference",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json"
+      ],
+      "start_utc": "2026-10-11T16:22:34.601403+00:00",
+      "end_utc": "2026-10-11T16:22:34.687309+00:00",
+      "exit_code": 0,
+      "script_sha256": {
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_result.py": "6624c87193b46f7fd1e6b003b92025c27ed5c6579630cb590a498908d50f8be9"
+      }
+    },
+    "pipe_professional_validate": {
+      "argv": [
+        "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_result.py",
+        "--result",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/result_binding.json",
+        "--inference",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json"
+      ],
+      "start_utc": "2026-10-11T16:21:12.234708+00:00",
+      "end_utc": "2026-10-11T16:21:12.347774+00:00",
+      "exit_code": 0,
+      "script_sha256": {
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_result.py": "6624c87193b46f7fd1e6b003b92025c27ed5c6579630cb590a498908d50f8be9"
+      }
+    },
+    "pipe_summary_validate_help": {
+      "argv": [
+        "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_user_summary.py",
+        "--help"
+      ],
+      "start_utc": "2026-10-11T16:17:30.546812+00:00",
+      "end_utc": "2026-10-11T16:17:30.642200+00:00",
+      "exit_code": 0,
+      "script_sha256": {
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_user_summary.py": "5dd2e4d5d65e41f9657304e59bf638bd950ecc978aa953b74cf9bb4fff50f963"
+      }
+    },
+    "pipe_professional_validate_v3": {
+      "argv": [
+        "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_result.py",
+        "--result",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/result_binding.v3.json",
+        "--inference",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json"
+      ],
+      "start_utc": "2026-10-11T16:22:51.205094+00:00",
+      "end_utc": "2026-10-11T16:22:51.270655+00:00",
+      "exit_code": 0,
+      "script_sha256": {
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_result.py": "6624c87193b46f7fd1e6b003b92025c27ed5c6579630cb590a498908d50f8be9"
+      }
+    },
+    "pipe_minimum_validate_v2": {
+      "argv": [
+        "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/validate_minimum_result.py",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/result_binding.v2.json"
+      ],
+      "start_utc": "2026-10-11T16:22:33.838043+00:00",
+      "end_utc": "2026-10-11T16:22:34.045836+00:00",
+      "exit_code": 1,
+      "script_sha256": {
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/validate_minimum_result.py": "3e8f313a6dfa65c7546642fcc0bc4f28e917107f0f9bda540f9cddb53c96f779"
+      }
+    },
+    "pipe_minimum_validate_v3": {
+      "argv": [
+        "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/validate_minimum_result.py",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/result_binding.v3.json"
+      ],
+      "start_utc": "2026-10-11T16:22:50.423788+00:00",
+      "end_utc": "2026-10-11T16:22:50.648835+00:00",
+      "exit_code": 0,
+      "script_sha256": {
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/validate_minimum_result.py": "3e8f313a6dfa65c7546642fcc0bc4f28e917107f0f9bda540f9cddb53c96f779"
+      }
+    },
+    "pipe_validate_help": {
+      "argv": [
+        "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_result.py",
+        "--help"
+      ],
+      "start_utc": "2026-10-11T16:17:30.533580+00:00",
+      "end_utc": "2026-10-11T16:17:30.641848+00:00",
+      "exit_code": 0,
+      "script_sha256": {
+        "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_result.py": "6624c87193b46f7fd1e6b003b92025c27ed5c6579630cb590a498908d50f8be9"
+      }
+    }
+  },
+  "finalization": "Answer completed; freeze.json is the authoritative subsequent freeze record. No changes to this answer after that freeze.",
+  "native_display_files": [
+    "review.input.json",
+    "review.html",
+    "review_build.output.json"
+  ],
+  "failed_invocations": [
+    {
+      "run": "extract_pipe",
+      "record": "tool_runs/extract_pipe/invocation.json",
+      "exit_code": 3,
+      "stdout": "tool_runs/extract_pipe/stdout.txt",
+      "stderr": "tool_runs/extract_pipe/stderr.txt"
+    },
+    {
+      "run": "pipe_minimum_validate",
+      "record": "tool_runs/pipe_minimum_validate/invocation.json",
+      "exit_code": 1,
+      "stdout": "tool_runs/pipe_minimum_validate/stdout.txt",
+      "stderr": "tool_runs/pipe_minimum_validate/stderr.txt"
+    },
+    {
+      "run": "extract_surfaces",
+      "record": "tool_runs/extract_surfaces/invocation.json",
+      "exit_code": 3,
+      "stdout": "tool_runs/extract_surfaces/stdout.txt",
+      "stderr": "tool_runs/extract_surfaces/stderr.txt"
+    },
+    {
+      "run": "pipe_infer",
+      "record": "tool_runs/pipe_infer/invocation.json",
+      "exit_code": 2,
+      "stdout": "tool_runs/pipe_infer/stdout.txt",
+      "stderr": "tool_runs/pipe_infer/stderr.txt"
+    },
+    {
+      "run": "pipe_minimum_validate_v2",
+      "record": "tool_runs/pipe_minimum_validate_v2/invocation.json",
+      "exit_code": 1,
+      "stdout": "tool_runs/pipe_minimum_validate_v2/stdout.txt",
+      "stderr": "tool_runs/pipe_minimum_validate_v2/stderr.txt"
+    }
+  ],
+  "visual_review_file": "visual_review.json",
+  "source_integrity_file": "source_integrity.output.json",
+  "overall_completion_status": "BOTH_REQUESTED_QUANTITY_SCOPES_COMPLETED_WITH_DISCLOSED_DIAGNOSTICS",
+  "formal_adoption_allowed": false
+}

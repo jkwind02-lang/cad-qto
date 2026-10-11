@@ -1,0 +1,342 @@
+{
+  "sources": [
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+      "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "bytes": 73083,
+      "role": "authoritative original drawing"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.png",
+      "sha256": "3deafabc20af8672d107c0bd55cb73ffb2d1f4df89dd973a6bdd4d0d1a67ddc8",
+      "bytes": 285097,
+      "role": "viewed unmarked drawing image"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/task.md",
+      "sha256": "21cb0da0aaa3948040f0737bcea2e525540693cb760ef66bc344328d922aff16",
+      "bytes": 1006,
+      "role": "user task"
+    }
+  ],
+  "objects": [
+    {
+      "object_id": "PIPE-A0",
+      "view": "F1 plan",
+      "location": "S-IN to first plan elbow",
+      "entity_handle": "A0",
+      "layout": "Model",
+      "source_ids": [
+        "CAD-A0",
+        "CAD-AD",
+        "CAD-BA",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "source_start_mm": [
+        1800.0,
+        6700.0,
+        0.0
+      ],
+      "source_end_mm": [
+        5400.0,
+        6700.0,
+        0.0
+      ],
+      "raw_length_mm": 3600.0,
+      "dimension_handle": "BA",
+      "dn": "DN50",
+      "dn_text_handle": "AD",
+      "calculation_start_m": [
+        1.8,
+        6.7,
+        3.15
+      ],
+      "calculation_end_m": [
+        5.4,
+        6.7,
+        3.15
+      ],
+      "length_m": 3.6000000000000005,
+      "quantity_type": "horizontal",
+      "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+    },
+    {
+      "object_id": "PIPE-A1",
+      "view": "F1 plan",
+      "location": "first plan elbow to R-A",
+      "entity_handle": "A1",
+      "layout": "Model",
+      "source_ids": [
+        "CAD-A1",
+        "CAD-AE",
+        "CAD-C0",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "source_start_mm": [
+        5400.0,
+        6700.0,
+        0.0
+      ],
+      "source_end_mm": [
+        5400.0,
+        9100.0,
+        0.0
+      ],
+      "raw_length_mm": 2400.0,
+      "dimension_handle": "C0",
+      "dn": "DN50",
+      "dn_text_handle": "AE",
+      "calculation_start_m": [
+        5.4,
+        6.7,
+        3.15
+      ],
+      "calculation_end_m": [
+        5.4,
+        9.1,
+        3.15
+      ],
+      "length_m": 2.3999999999999995,
+      "quantity_type": "horizontal",
+      "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+    },
+    {
+      "object_id": "PIPE-A2",
+      "view": "F2 plan",
+      "location": "R-A to RED-A centre",
+      "entity_handle": "A2",
+      "layout": "Model",
+      "source_ids": [
+        "CAD-A2",
+        "CAD-AF",
+        "CAD-C6",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "source_start_mm": [
+        19700.0,
+        9100.0,
+        0.0
+      ],
+      "source_end_mm": [
+        22000.0,
+        9100.0,
+        0.0
+      ],
+      "raw_length_mm": 2300.0,
+      "dimension_handle": "C6",
+      "dn": "DN50",
+      "dn_text_handle": "AF",
+      "calculation_start_m": [
+        5.4,
+        9.1,
+        7.85
+      ],
+      "calculation_end_m": [
+        7.7,
+        9.1,
+        7.85
+      ],
+      "length_m": 2.3,
+      "quantity_type": "horizontal",
+      "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+    },
+    {
+      "object_id": "PIPE-A3",
+      "view": "F2 plan",
+      "location": "RED-A centre to upper plan elbow",
+      "entity_handle": "A3",
+      "layout": "Model",
+      "source_ids": [
+        "CAD-A3",
+        "CAD-B0",
+        "CAD-CC",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "source_start_mm": [
+        22000.0,
+        9100.0,
+        0.0
+      ],
+      "source_end_mm": [
+        24400.0,
+        9100.0,
+        0.0
+      ],
+      "raw_length_mm": 2400.0,
+      "dimension_handle": "CC",
+      "dn": "DN32",
+      "dn_text_handle": "B0",
+      "calculation_start_m": [
+        7.7,
+        9.1,
+        7.85
+      ],
+      "calculation_end_m": [
+        10.1,
+        9.1,
+        7.85
+      ],
+      "length_m": 2.3999999999999995,
+      "quantity_type": "horizontal",
+      "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+    },
+    {
+      "object_id": "PIPE-A4",
+      "view": "F2 plan",
+      "location": "upper plan elbow to U-OUT",
+      "entity_handle": "A4",
+      "layout": "Model",
+      "source_ids": [
+        "CAD-A4",
+        "CAD-B1",
+        "CAD-D2",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "source_start_mm": [
+        24400.0,
+        9100.0,
+        0.0
+      ],
+      "source_end_mm": [
+        24400.0,
+        11000.0,
+        0.0
+      ],
+      "raw_length_mm": 1900.0,
+      "dimension_handle": "D2",
+      "dn": "DN32",
+      "dn_text_handle": "B1",
+      "calculation_start_m": [
+        10.1,
+        9.1,
+        7.85
+      ],
+      "calculation_end_m": [
+        10.1,
+        11.0,
+        7.85
+      ],
+      "length_m": 1.9000000000000004,
+      "quantity_type": "horizontal",
+      "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+    },
+    {
+      "object_id": "PIPE-RA-V",
+      "view": "F1/F2 plans + system diagram",
+      "location": "One R-A riser, F1 PIPE CL to F2 PIPE CL",
+      "entity_handles": [
+        "A5",
+        "A7",
+        "DB",
+        "D7"
+      ],
+      "source_ids": [
+        "CAD-A5",
+        "CAD-A6",
+        "CAD-A7",
+        "CAD-A8",
+        "CAD-DB",
+        "CAD-DC",
+        "CAD-DD",
+        "CAD-DE",
+        "CAD-DF",
+        "CAD-E0",
+        "CAD-E1",
+        "CAD-FA",
+        "CAD-FB",
+        "CAD-FE"
+      ],
+      "layout": "Model",
+      "dn": "DN50",
+      "quantity_type": "vertical",
+      "start_pipe_cl_m": 3.15,
+      "end_pipe_cl_m": 7.85,
+      "calculation_start_m": [
+        5.4,
+        9.1,
+        3.15
+      ],
+      "calculation_end_m": [
+        5.4,
+        9.1,
+        7.85
+      ],
+      "length_m": 4.699999999999999,
+      "formula": "abs(F2 PIPE CL - F1 PIPE CL)",
+      "drawn_system_line_length_used": false,
+      "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+    }
+  ],
+  "exclusions": [
+    {
+      "entity_handle": "D3",
+      "reason": "Existing DRN DN80; separate system and unmarked crossing is not a connection (D4,D5,FF)."
+    },
+    {
+      "entity_handle": "D6",
+      "reason": "NTS system view of F1 plan route; correspondence only (FC)."
+    },
+    {
+      "entity_handle": "D7",
+      "reason": "NTS system riser graphic; real vertical separately derived from E0,E1,DE,DF."
+    },
+    {
+      "entity_handle": "D8",
+      "reason": "NTS system view before reducer; F2 source A2 owns quantity."
+    },
+    {
+      "entity_handle": "D9",
+      "reason": "NTS system view after reducer; F2 sources A3,A4 own quantity."
+    },
+    {
+      "entity_handle": "EC",
+      "reason": "Legend SUP example only (EB,101)."
+    },
+    {
+      "entity_handle": "EE",
+      "reason": "Legend DRN example only (EB,101)."
+    }
+  ],
+  "cross_view_mapping": {
+    "physical_riser": "R-A",
+    "F1_handle": "A5",
+    "F2_handle": "A7",
+    "system_handle": "DB",
+    "F2_plan_translation_mm_to_F1": [
+      -14300.0,
+      -0.0
+    ],
+    "mapping_basis_handles": [
+      "FA",
+      "DE",
+      "DF",
+      "E0",
+      "E1"
+    ],
+    "system_lengths_not_to_scale": true
+  },
+  "rules": [
+    {
+      "rule_id": "R-PN-003",
+      "decision": "试用",
+      "maturity": "试运行"
+    },
+    {
+      "rule_id": "R-PN-004",
+      "decision": "试用",
+      "maturity": "候选"
+    },
+    {
+      "rule_id": "R-PN-005",
+      "decision": "试用",
+      "maturity": "候选"
+    }
+  ],
+  "unresolved": [],
+  "human_interventions": []
+}

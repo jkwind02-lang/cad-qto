@@ -1,0 +1,83 @@
+{
+  "schema_version": "qto-authored-synthetic-oracle/1.0",
+  "case_id": "surfaces",
+  "authored_at": "2026-10-11T16:10:28.494907+00:00",
+  "source": {
+    "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+    "sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4"
+  },
+  "parameters": {
+    "width_mm": 6800,
+    "height_mm": 4100,
+    "split_mm": 4400,
+    "shaft": [
+      800,
+      2200,
+      1500,
+      3100
+    ],
+    "access": [
+      5500,
+      2500,
+      6000,
+      3200
+    ],
+    "screen_y_mm": 1400,
+    "screen_height_mm": 1700,
+    "ceiling_z_mm": 2800,
+    "structure_z_mm": 3650
+  },
+  "origin": "Original design dimensions and independent Decimal rectangle arithmetic; no production QTO result was consulted.",
+  "scope_complete": true,
+  "records": [
+    {
+      "record_id": "STUDIO/RCP-01/CL-11",
+      "physical_object_key": "STUDIO/RCP-01/CL-11",
+      "quantity_kind": "net_ceiling_finish_area",
+      "classification": "ceiling_finish",
+      "specification": "CL-11 acoustic ceiling panel",
+      "quantity": 17.41,
+      "unit": "m2",
+      "measurement_basis": "horizontal_actual_net_finish_area",
+      "status": "determined",
+      "evidence_status": "supported",
+      "evidence_refs": [
+        "A-01 RCP-01 boundary and SH-1 footprint; schedule and S-2 treatment"
+      ],
+      "relations": {}
+    },
+    {
+      "record_id": "STUDIO/RCP-01/CL-24",
+      "physical_object_key": "STUDIO/RCP-01/CL-24",
+      "quantity_kind": "net_ceiling_finish_area",
+      "classification": "ceiling_finish",
+      "specification": "CL-24 painted gypsum-board ceiling finish",
+      "quantity": 9.84,
+      "unit": "m2",
+      "measurement_basis": "horizontal_actual_net_finish_area",
+      "status": "determined",
+      "evidence_status": "supported",
+      "evidence_refs": [
+        "A-01 RCP-01 material zone; AP-1 retained under project note and S-2"
+      ],
+      "relations": {}
+    }
+  ],
+  "arithmetic": {
+    "CL-11": "4400*4100/1000000 - 700*900/1000000",
+    "CL-24": "(6800-4400)*4100/1000000"
+  },
+  "audit_values_m2": {
+    "gross_left": 18.04,
+    "gross_right": 9.84,
+    "shaft_deduction": 0.63,
+    "access_footprint_retained": 0.35
+  },
+  "required_semantic_decisions": [
+    "Use the actual material division and the internal ceiling finish boundary.",
+    "Deduct SH-1 as a true ceiling void, not AP-1 which retains its matching finish.",
+    "Read S-2 and notes to see P-1 lies below continuous ceiling and causes no ceiling deduction.",
+    "Do not count detail geometry, legend, screen, framing or additional layers as ceiling finish."
+  ],
+  "matching_policy": "Match after freeze by physical finish zone and material. Candidate may use any IDs and may split geometry without changing total physical coverage. An aggregate alone does not prove correct deduction reasoning."
+}

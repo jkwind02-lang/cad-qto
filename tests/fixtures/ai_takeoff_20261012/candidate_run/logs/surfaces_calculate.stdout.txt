@@ -1,0 +1,1 @@
+{"status": "PASS", "output": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_result.json", "item_count": 2}

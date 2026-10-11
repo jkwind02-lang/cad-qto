@@ -559,11 +559,85 @@
     "branch": "feat/ai-takeoff-reasoning-20261012",
     "record": "docs/AI自主算量改进_20261012.md",
     "runtime_files": 265,
-    "runtime_manifest_sha256": "a2f02dd393f52f2ae7fa167c63f18c3bdd2e05b01d16751bf9952f8248bcc72f",
-    "status": "candidate_under_validation",
+    "runtime_manifest_sha256": "abdbfb901c55a20f7d61390bedf60d73da501529ece05c32cd2e82de15abbe01",
+    "status": "reviewed_with_local_validation",
     "maintainer_machine_installation_updated": false,
     "real_dwg_autocad_tested": false,
     "real_project_recognition_accuracy_verified": false,
-    "professional_maturity_changed": false
+    "professional_maturity_changed": false,
+    "registered_workflow_tools": 23,
+    "drawing_view_schema": "qto-cad-drawing-view/1.0",
+    "geometry_schema": "qto-cad-geometry/1.2",
+    "implemented": [
+      "13专业及协调器由模型自主选择观察、工程解释和推算方法，具体工具依赖仍须满足",
+      "无需预填工程分类的来源绑定DXF图样观察及实际PNG颜色、线型、文字诊断",
+      "cad_view实际调用、输入字节绑定、真实来源依赖与输出保护",
+      "有来源依据的钢筋工作推算，精确首末中心或显式中心列表计数",
+      "同一钢筋组保留已知根数和未决长度重量，补节点后沿原ID重算",
+      "等值数值直径防重与可选规格类型校验，保持正式采用门槛",
+      "原生成果项编号的唯一数量身份绑定"
+    ],
+    "python_regression": {
+      "environment": "Linux / Python 3.12.14 / declared requirements",
+      "passed": 1651,
+      "skipped": 9,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 73.63,
+      "skip_scope": "Windows PowerShell/export integration",
+      "pip_check": "PASS",
+      "compileall": "PASS",
+      "runtime_manifest": "PASS"
+    },
+    "targeted_verification": {
+      "rebar_working_cases": 68,
+      "cad_drawing_view_cases": 28,
+      "independent_rebar_cli_scenarios": 14,
+      "professional_and_coordinator_skill_format_checks": 14,
+      "actual_cjk_color_linetype_viewed": true,
+      "workflow_raw_dxf_and_descriptor_entries": "PASS"
+    },
+    "model_trial": {
+      "kind": "original_synthetic_drawings_with_independent_reference",
+      "tasks": [
+        "pipe",
+        "surfaces"
+      ],
+      "runs_per_version": 1,
+      "model": "current host model in separate fresh-context agents",
+      "human_answer_interventions": 0,
+      "source_inputs": [
+        "DXF",
+        "unannotated PNG",
+        "task text"
+      ],
+      "reference_hidden_until_both_candidates_frozen": true,
+      "baseline_freeze_utc": "2026-10-11T16:24:29Z",
+      "candidate_freeze_utc": "2026-10-11T16:35:46.739801Z",
+      "baseline_candidate_sha256": "d4ed03ee4a1f55e5a114486d8f9769182573b97bbd619d7c2adee1cd6f73b3ba",
+      "candidate_candidate_sha256": "4a32aa331c13a9be0951a49e7662f660e51ab3eb94e3e1aaa7f51f5b7d0455b6",
+      "execution_snapshot_local_commit": "8b0722bba6e88f699267bc8e50ee250ae41bb4fe",
+      "execution_snapshot_remote_equivalent_commit": "6b63825baa7e25adc2af7087f59b57080b1551a6",
+      "execution_snapshot_runtime_manifest_sha256": "a2f02dd393f52f2ae7fa167c63f18c3bdd2e05b01d16751bf9952f8248bcc72f",
+      "both_versions_match_reference_line_items": true,
+      "reference_quantities": {
+        "pipe_DN50_m": 13.0,
+        "pipe_DN32_m": 4.3,
+        "surfaces_CL11_m2": 17.41,
+        "surfaces_CL24_m2": 9.84
+      },
+      "accuracy_or_speed_improvement_claimed": false,
+      "post_trial_runtime_changes": "rebar partial dimensions/specification dedup fixes and three strategy wording corrections; pipe/surface numeric engines unchanged",
+      "record": "tests/fixtures/ai_takeoff_20261012/assessment.json"
+    },
+    "cross_review": "独立共享策略与实际工具接入审核、图样来源核验、钢筋14场景交叉复验完成，无剩余阻断",
+    "remote_ci": {
+      "pull_request": "https://github.com/jkwind02-lang/cad-qto/pull/4",
+      "first_candidate_run": "https://github.com/jkwind02-lang/cad-qto/actions/runs/38155387037",
+      "first_candidate_windows_passed": 1629,
+      "first_candidate_linux_passed": 1620,
+      "first_candidate_linux_skipped": 9,
+      "final_commit_checks": "对应PR及main提交Actions分别记录，首候选结果不替代最终提交检查"
+    }
   }
 }

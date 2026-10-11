@@ -1,0 +1,473 @@
+{
+  "schema_version": "qto-pipe-network-inference-input/1.2",
+  "network_id": "P01-WEST-SERVICE-SUPPLY",
+  "unit": "m",
+  "recognition_basis": {
+    "schema_version": "qto-model-recognition-ledger/1.0",
+    "ledger_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/working_recognition_ledger_v1.json",
+    "ledger_sha256": "54c8d74ee6848aca60f1131206d2e4b75c77edee23c40d0f9221ea9e09a26792",
+    "decision_origin": "model",
+    "recognized_by": [
+      "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff"
+    ],
+    "adoption_scope": "working",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false,
+    "meaning": "模型依据本轮图纸作工作识别；未取得人工复核或正式采用资格"
+  },
+  "parameters": {
+    "snap_tolerance": 1e-06,
+    "gap_max": 0.001,
+    "terminal_attach_max": 1e-06
+  },
+  "segments": [
+    {
+      "segment_id": "PIPE-A0",
+      "system": "SUP",
+      "start": [
+        1.8,
+        6.7,
+        3.15
+      ],
+      "end": [
+        5.4,
+        6.7,
+        3.15
+      ],
+      "length": 3.6000000000000005,
+      "source_ids": [
+        "CAD-A0",
+        "CAD-AD",
+        "CAD-BA",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "physical_id": "PIPE-A0",
+      "extent_id": "centreline",
+      "space_id": "P01-SUP-3D",
+      "dn_seeds": []
+    },
+    {
+      "segment_id": "PIPE-A1",
+      "system": "SUP",
+      "start": [
+        5.4,
+        6.7,
+        3.15
+      ],
+      "end": [
+        5.4,
+        9.1,
+        3.15
+      ],
+      "length": 2.3999999999999995,
+      "source_ids": [
+        "CAD-A1",
+        "CAD-AE",
+        "CAD-C0",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "physical_id": "PIPE-A1",
+      "extent_id": "centreline",
+      "space_id": "P01-SUP-3D",
+      "dn_seeds": []
+    },
+    {
+      "segment_id": "PIPE-A2",
+      "system": "SUP",
+      "start": [
+        5.4,
+        9.1,
+        7.85
+      ],
+      "end": [
+        7.7,
+        9.1,
+        7.85
+      ],
+      "length": 2.3,
+      "source_ids": [
+        "CAD-A2",
+        "CAD-AF",
+        "CAD-C6",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "physical_id": "PIPE-A2",
+      "extent_id": "centreline",
+      "space_id": "P01-SUP-3D",
+      "dn_seeds": []
+    },
+    {
+      "segment_id": "PIPE-A3",
+      "system": "SUP",
+      "start": [
+        7.7,
+        9.1,
+        7.85
+      ],
+      "end": [
+        10.1,
+        9.1,
+        7.85
+      ],
+      "length": 2.3999999999999995,
+      "source_ids": [
+        "CAD-A3",
+        "CAD-B0",
+        "CAD-CC",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "physical_id": "PIPE-A3",
+      "extent_id": "centreline",
+      "space_id": "P01-SUP-3D",
+      "dn_seeds": []
+    },
+    {
+      "segment_id": "PIPE-A4",
+      "system": "SUP",
+      "start": [
+        10.1,
+        9.1,
+        7.85
+      ],
+      "end": [
+        10.1,
+        11.0,
+        7.85
+      ],
+      "length": 1.9000000000000004,
+      "source_ids": [
+        "CAD-A4",
+        "CAD-B1",
+        "CAD-D2",
+        "CAD-F9",
+        "CAD-FD"
+      ],
+      "physical_id": "PIPE-A4",
+      "extent_id": "centreline",
+      "space_id": "P01-SUP-3D",
+      "dn_seeds": []
+    },
+    {
+      "segment_id": "PIPE-RA-V",
+      "system": "SUP",
+      "start": [
+        5.4,
+        9.1,
+        3.15
+      ],
+      "end": [
+        5.4,
+        9.1,
+        7.85
+      ],
+      "length": 4.699999999999999,
+      "source_ids": [
+        "CAD-A5",
+        "CAD-A6",
+        "CAD-A7",
+        "CAD-A8",
+        "CAD-DB",
+        "CAD-DC",
+        "CAD-DD",
+        "CAD-DE",
+        "CAD-DF",
+        "CAD-E0",
+        "CAD-E1",
+        "CAD-FA",
+        "CAD-FB",
+        "CAD-FE"
+      ],
+      "physical_id": "R-A",
+      "extent_id": "F1-CL-to-F2-CL",
+      "space_id": "P01-SUP-3D",
+      "dn_seeds": []
+    }
+  ],
+  "dn_match_candidates": [
+    {
+      "candidate_id": "DN-A0",
+      "segment_id": "PIPE-A0",
+      "dn": "DN50",
+      "source_id": "CAD-AD",
+      "disposition": "seed",
+      "evidence_level": "inferred",
+      "assumption_id": "A-MODEL-PIPE",
+      "method": "model visual and source-segment binding",
+      "threshold_sensitive": false,
+      "reason": "Explicit adjacent plan label and continuous segment bounded by elbows/reducer; cross-checked against system labels."
+    },
+    {
+      "candidate_id": "DN-A1",
+      "segment_id": "PIPE-A1",
+      "dn": "DN50",
+      "source_id": "CAD-AE",
+      "disposition": "seed",
+      "evidence_level": "inferred",
+      "assumption_id": "A-MODEL-PIPE",
+      "method": "model visual and source-segment binding",
+      "threshold_sensitive": false,
+      "reason": "Explicit adjacent plan label and continuous segment bounded by elbows/reducer; cross-checked against system labels."
+    },
+    {
+      "candidate_id": "DN-A2",
+      "segment_id": "PIPE-A2",
+      "dn": "DN50",
+      "source_id": "CAD-AF",
+      "disposition": "seed",
+      "evidence_level": "inferred",
+      "assumption_id": "A-MODEL-PIPE",
+      "method": "model visual and source-segment binding",
+      "threshold_sensitive": false,
+      "reason": "Explicit adjacent plan label and continuous segment bounded by elbows/reducer; cross-checked against system labels."
+    },
+    {
+      "candidate_id": "DN-A3",
+      "segment_id": "PIPE-A3",
+      "dn": "DN32",
+      "source_id": "CAD-B0",
+      "disposition": "seed",
+      "evidence_level": "inferred",
+      "assumption_id": "A-MODEL-PIPE",
+      "method": "model visual and source-segment binding",
+      "threshold_sensitive": false,
+      "reason": "Explicit adjacent plan label and continuous segment bounded by elbows/reducer; cross-checked against system labels."
+    },
+    {
+      "candidate_id": "DN-A4",
+      "segment_id": "PIPE-A4",
+      "dn": "DN32",
+      "source_id": "CAD-B1",
+      "disposition": "seed",
+      "evidence_level": "inferred",
+      "assumption_id": "A-MODEL-PIPE",
+      "method": "model visual and source-segment binding",
+      "threshold_sensitive": false,
+      "reason": "Explicit adjacent plan label and continuous segment bounded by elbows/reducer; cross-checked against system labels."
+    },
+    {
+      "candidate_id": "DN-RA-V",
+      "segment_id": "PIPE-RA-V",
+      "dn": "DN50",
+      "source_id": "CAD-DD",
+      "disposition": "seed",
+      "evidence_level": "inferred",
+      "assumption_id": "A-MODEL-PIPE",
+      "method": "same identified physical riser, system DN label and plan-to-system correspondence",
+      "threshold_sensitive": false,
+      "reason": "R-A links both plans and the straight vertical between pipe CL elevations."
+    }
+  ],
+  "dn_match_policy": {
+    "policy_id": "EXPLICIT-SOURCE-BINDINGS",
+    "detected_candidate_count": 6,
+    "source_ids": [
+      "LEDGER-PIPE-01"
+    ],
+    "thresholds": {
+      "method": "explicit model-bound source labels; no nearest-distance classification"
+    },
+    "sensitivity_scenarios": []
+  },
+  "change_nodes": [
+    {
+      "change_id": "RED-A",
+      "system": "SUP",
+      "point": [
+        7.7,
+        9.1,
+        7.85
+      ],
+      "evidence_level": "inferred",
+      "source_id": "CAD-B2/B3/FE"
+    }
+  ],
+  "roots": [
+    {
+      "root_id": "S-IN",
+      "system": "SUP",
+      "point": [
+        1.8,
+        6.7,
+        3.15
+      ],
+      "evidence_level": "inferred",
+      "source_id": "CAD-A9/AA/F8/100",
+      "root_role": "network_root"
+    }
+  ],
+  "terminals": [
+    {
+      "terminal_id": "U-OUT",
+      "system": "SUP",
+      "point": [
+        10.1,
+        11.0,
+        7.85
+      ],
+      "terminal_type": "measurement end port",
+      "port_dn": "DN32",
+      "evidence_level": "inferred",
+      "port_evidence_level": "inferred",
+      "source_id": "CAD-AB/AC/B1/100",
+      "propagation_scope": "interface_only"
+    }
+  ],
+  "endpoint_handoff": {
+    "handoff_id": "PIPE-SOURCE-ENDPORT",
+    "required": false,
+    "reason": "No point-object workpackage; the single U-OUT end port is source-derived solely to close this pipe measurement route.",
+    "source_instance_count": 1,
+    "source_endpoint_port_count": 1,
+    "source_physical_instance_count": 1,
+    "delivered_count": 1,
+    "not_applicable_count": 0,
+    "unresolved_count": 0,
+    "source_id": "CAD-AB/AC/100"
+  },
+  "valves": [],
+  "gap_exclusions": [],
+  "assumptions": [
+    {
+      "assumption_id": "A-MODEL-PIPE",
+      "type": "model source interpretation",
+      "basis": "Source drawing notes and explicit same-riser identity; no added design parameter.",
+      "status": "working/unreviewed"
+    }
+  ],
+  "object_selection": {
+    "schema_version": "qto-pipe-object-selection-audit/1.0",
+    "audit_id": "AUDIT-PIPE-01",
+    "unit": "m",
+    "status": "READY",
+    "meaning": "未决异常对象不进入确认中心线，但其他已筛选对象可继续计算",
+    "candidate_count": 13,
+    "included_count": 6,
+    "excluded_count": 7,
+    "unresolved_count": 0,
+    "included_segment_ids": [
+      "PIPE-A0",
+      "PIPE-A1",
+      "PIPE-A2",
+      "PIPE-A3",
+      "PIPE-A4",
+      "PIPE-RA-V"
+    ],
+    "excluded_object_ids": [
+      "EXCLUDE-D3",
+      "EXCLUDE-D6",
+      "EXCLUDE-D7",
+      "EXCLUDE-D8",
+      "EXCLUDE-D9",
+      "EXCLUDE-EC",
+      "EXCLUDE-EE"
+    ],
+    "unresolved_object_ids": [],
+    "source_ids": [
+      "LEDGER-PIPE-01",
+      "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+    ],
+    "parameters": {
+      "connection_tolerance": 1e-06,
+      "repeat_min_count": 3,
+      "signature_precision": 6
+    },
+    "anomaly_groups": [],
+    "decisions": [
+      {
+        "object_id": "EXCLUDE-D3",
+        "decision": "exclude",
+        "basis": "Existing DRN DN80; separate system and unmarked crossing is not a connection (D4,D5,FF).",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 0
+      },
+      {
+        "object_id": "EXCLUDE-D6",
+        "decision": "exclude",
+        "basis": "NTS system view of F1 plan route; correspondence only (FC).",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 1
+      },
+      {
+        "object_id": "EXCLUDE-D7",
+        "decision": "exclude",
+        "basis": "NTS system riser graphic; real vertical separately derived from E0,E1,DE,DF.",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 2
+      },
+      {
+        "object_id": "EXCLUDE-D8",
+        "decision": "exclude",
+        "basis": "NTS system view before reducer; F2 source A2 owns quantity.",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 2
+      },
+      {
+        "object_id": "EXCLUDE-D9",
+        "decision": "exclude",
+        "basis": "NTS system view after reducer; F2 sources A3,A4 own quantity.",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 1
+      },
+      {
+        "object_id": "EXCLUDE-EC",
+        "decision": "exclude",
+        "basis": "Legend SUP example only (EB,101).",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 0
+      },
+      {
+        "object_id": "EXCLUDE-EE",
+        "decision": "exclude",
+        "basis": "Legend DRN example only (EB,101).",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 0
+      },
+      {
+        "object_id": "PIPE-A0",
+        "decision": "include",
+        "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 1
+      },
+      {
+        "object_id": "PIPE-A1",
+        "decision": "include",
+        "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 2
+      },
+      {
+        "object_id": "PIPE-A2",
+        "decision": "include",
+        "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 2
+      },
+      {
+        "object_id": "PIPE-A3",
+        "decision": "include",
+        "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 2
+      },
+      {
+        "object_id": "PIPE-A4",
+        "decision": "include",
+        "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 1
+      },
+      {
+        "object_id": "PIPE-RA-V",
+        "decision": "include",
+        "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+        "source_id": "LEDGER-PIPE-01",
+        "connected_endpoint_match_count": 2
+      }
+    ]
+  }
+}

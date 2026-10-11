@@ -1,0 +1,389 @@
+{
+  "manifest_version": "qto-surfaces-envelope-manifest/1.0",
+  "task": {
+    "project_id": "A01-STUDIO",
+    "business_discipline": "Ceiling finishes",
+    "main_objects": "Two horizontal ceiling finish material zones",
+    "system": "Studio ceiling",
+    "building": "A-01 Studio",
+    "zone": "RCP-01",
+    "drawing_type": "Reflected plan, schedule, notes and S-2 detail",
+    "drawing_version": "Rev A synthetic drawing",
+    "output_dimension": "Material, surface, square metres",
+    "applicable_rule_status": "confirmed"
+  },
+  "sources": [
+    {
+      "source_id": "SRC-DXF",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+      "sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+      "file_role": "dxf",
+      "source_role": "project_drawing",
+      "source_type": "dxf",
+      "selection": "selected",
+      "reason": "User-supplied original A-01 Rev A",
+      "neutral_facts": "Current source identity, raw handles/coordinates/text, or model working interpretation as explicitly stated",
+      "not_used_impact": "No unsupported original-source substitution"
+    },
+    {
+      "source_id": "SRC-GEOM",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/source_bound_geometry.json",
+      "sha256": "d6cf6bc78b468bab9bced7186957a018d067b8b31c5a2e6770527ed680e5c18a",
+      "file_role": "json",
+      "source_role": "calculation_evidence",
+      "source_type": "json",
+      "selection": "selected",
+      "reason": "Source-bound coordinate conversion and selected surface frames",
+      "neutral_facts": "Current source identity, raw handles/coordinates/text, or model working interpretation as explicitly stated",
+      "not_used_impact": "No unsupported original-source substitution"
+    },
+    {
+      "source_id": "SRC-COVER",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/coverage.json",
+      "sha256": "4687b5bb3d1a2c9f742dd7b1ed0be11cf739ff6aa42fd244a5f7282e5b702558",
+      "file_role": "json",
+      "source_role": "coverage_report",
+      "source_type": "json",
+      "selection": "selected",
+      "reason": "Model coverage statement, no human review",
+      "neutral_facts": "Current source identity, raw handles/coordinates/text, or model working interpretation as explicitly stated",
+      "not_used_impact": "No unsupported original-source substitution"
+    },
+    {
+      "source_id": "SRC-REGIONS",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/hatch_regions_selected.json",
+      "sha256": "c0a829a351f8591188b1b0cab5241df0a6ec67dd03e865508b03172c00acc3cf",
+      "file_role": "json",
+      "source_role": "calculation_evidence",
+      "source_type": "json",
+      "selection": "selected",
+      "reason": "Native HATCH geometry evidence; no material semantics inferred by tool",
+      "neutral_facts": "Current source identity, raw handles/coordinates/text, or model working interpretation as explicitly stated",
+      "not_used_impact": "No unsupported original-source substitution"
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "EV-SOURCE",
+      "source_id": "SRC-DXF",
+      "evidence_class": "source_identity",
+      "fact_status": "reference",
+      "locator": "Model TEXT 95,96",
+      "fact": "A-01 STUDIO SUSPENDED CEILING Rev A; native millimetres, full-size plan, schematic detail.",
+      "extraction": "Actual model image observation with native DXF neutral coordinates and task adapter; no human confirmation",
+      "quality": "source-bound working evidence",
+      "object_keys": [
+        "SURF-CL-11",
+        "SURF-CL-24"
+      ],
+      "limitation": "Professional meaning is model interpretation of this drawing; not formal adoption."
+    },
+    {
+      "evidence_id": "EV-GEOM-CL-11",
+      "source_id": "SRC-GEOM",
+      "evidence_class": "surface_geometry",
+      "fact_status": "reference",
+      "locator": "/surface_frames/CL-11; raw Model handles 9A,9B; dimensions C6,CC,D2,D8",
+      "fact": "Closed rectangle from the internal finish boundary and solid material divider; source-bound local frame.",
+      "extraction": "Actual model image observation with native DXF neutral coordinates and task adapter; no human confirmation",
+      "quality": "source-bound working evidence",
+      "object_keys": [
+        "SURF-CL-11",
+        "EDGE-9A-0"
+      ],
+      "limitation": "Professional meaning is model interpretation of this drawing; not formal adoption."
+    },
+    {
+      "evidence_id": "EV-LAYER-CL-11",
+      "source_id": "SRC-DXF",
+      "evidence_class": "layer_assignment",
+      "fact_status": "reference",
+      "locator": "Model TEXT 9C,E7,E8,ED; RCP-01",
+      "fact": "Material CL-11 is acoustic ceiling panel in its bounded RCP zone; horizontal net finish area.",
+      "extraction": "Actual model image observation with native DXF neutral coordinates and task adapter; no human confirmation",
+      "quality": "source-bound working evidence",
+      "object_keys": [
+        "SURF-CL-11",
+        "LAYER-CL-11"
+      ],
+      "limitation": "Professional meaning is model interpretation of this drawing; not formal adoption."
+    },
+    {
+      "evidence_id": "EV-COVER-CL-11",
+      "source_id": "SRC-COVER",
+      "evidence_class": "coverage_complete",
+      "fact_status": "reference",
+      "locator": "/covered_surfaces; whole RCP and S-2",
+      "fact": "All edges and tagged features accounted for in this material region.",
+      "extraction": "Actual model image observation with native DXF neutral coordinates and task adapter; no human confirmation",
+      "quality": "source-bound working evidence",
+      "object_keys": [
+        "SURF-CL-11"
+      ],
+      "limitation": "Professional meaning is model interpretation of this drawing; not formal adoption."
+    },
+    {
+      "evidence_id": "EV-OPEN-CL-11",
+      "source_id": "SRC-GEOM",
+      "evidence_class": "opening_union",
+      "fact_status": "reference",
+      "locator": "/surfaces/CL-11/openings; Model 9E,A1,A7,AD,E9",
+      "fact": "One rectangular actual shaft opening, deduplicated and wholly inside this zone.",
+      "extraction": "Actual model image observation with native DXF neutral coordinates and task adapter; no human confirmation",
+      "quality": "source-bound working evidence",
+      "object_keys": [
+        "SURF-CL-11",
+        "SH-1"
+      ],
+      "limitation": "Professional meaning is model interpretation of this drawing; not formal adoption."
+    },
+    {
+      "evidence_id": "EV-GEOM-CL-24",
+      "source_id": "SRC-GEOM",
+      "evidence_class": "surface_geometry",
+      "fact_status": "reference",
+      "locator": "/surface_frames/CL-24; raw Model handles 9A,9B; dimensions C6,CC,D2,D8",
+      "fact": "Closed rectangle from the internal finish boundary and solid material divider; source-bound local frame.",
+      "extraction": "Actual model image observation with native DXF neutral coordinates and task adapter; no human confirmation",
+      "quality": "source-bound working evidence",
+      "object_keys": [
+        "SURF-CL-24",
+        "EDGE-9A-0"
+      ],
+      "limitation": "Professional meaning is model interpretation of this drawing; not formal adoption."
+    },
+    {
+      "evidence_id": "EV-LAYER-CL-24",
+      "source_id": "SRC-DXF",
+      "evidence_class": "layer_assignment",
+      "fact_status": "reference",
+      "locator": "Model TEXT 9D,E7,E8,ED; RCP-01",
+      "fact": "Material CL-24 is painted gypsum-board ceiling finish in its bounded RCP zone; horizontal net finish area.",
+      "extraction": "Actual model image observation with native DXF neutral coordinates and task adapter; no human confirmation",
+      "quality": "source-bound working evidence",
+      "object_keys": [
+        "SURF-CL-24",
+        "LAYER-CL-24"
+      ],
+      "limitation": "Professional meaning is model interpretation of this drawing; not formal adoption."
+    },
+    {
+      "evidence_id": "EV-COVER-CL-24",
+      "source_id": "SRC-COVER",
+      "evidence_class": "coverage_complete",
+      "fact_status": "reference",
+      "locator": "/covered_surfaces; whole RCP and S-2",
+      "fact": "All edges and tagged features accounted for in this material region.",
+      "extraction": "Actual model image observation with native DXF neutral coordinates and task adapter; no human confirmation",
+      "quality": "source-bound working evidence",
+      "object_keys": [
+        "SURF-CL-24"
+      ],
+      "limitation": "Professional meaning is model interpretation of this drawing; not formal adoption."
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": "R-SE-001",
+      "name": "Unique surface, layer, side and basis",
+      "source": "Current qto-surfaces-envelope skill and A-01 drawing notes E8-F0",
+      "decision": "试用",
+      "maturity": "试运行",
+      "execution": "Reference working calculation using explicitly stated geometric finish-area scope",
+      "evidence_locator": "A-01 Model notes E8-F0; RCP handles 9A,9B,9E,AE"
+    },
+    {
+      "rule_id": "R-SE-002",
+      "name": "Gross minus union of actual openings",
+      "source": "Current qto-surfaces-envelope skill and A-01 drawing notes E8-F0",
+      "decision": "试用",
+      "maturity": "试运行",
+      "execution": "Reference working calculation using explicitly stated geometric finish-area scope",
+      "evidence_locator": "A-01 Model notes E8-F0; RCP handles 9A,9B,9E,AE"
+    },
+    {
+      "rule_id": "R-SE-003",
+      "name": "Ceiling design finish boundaries",
+      "source": "Current qto-surfaces-envelope skill and A-01 drawing notes E8-F0",
+      "decision": "试用",
+      "maturity": "候选",
+      "execution": "Reference working calculation using explicitly stated geometric finish-area scope",
+      "evidence_locator": "A-01 Model notes E8-F0; RCP handles 9A,9B,9E,AE"
+    },
+    {
+      "rule_id": "R-SE-008",
+      "name": "Complete coverage evidence",
+      "source": "Current qto-surfaces-envelope skill and A-01 drawing notes E8-F0",
+      "decision": "试用",
+      "maturity": "试运行",
+      "execution": "Reference working calculation using explicitly stated geometric finish-area scope",
+      "evidence_locator": "A-01 Model notes E8-F0; RCP handles 9A,9B,9E,AE"
+    }
+  ],
+  "unresolved": [],
+  "items": [
+    {
+      "item_id": "QTY-CL-11",
+      "name": "CL-11 acoustic ceiling panel net ceiling finish area",
+      "object_type": "ceiling_finish",
+      "physical_surface_id": "SURF-CL-11",
+      "layer_id": "LAYER-CL-11",
+      "side_scope": "underside finish",
+      "measurement_basis": "horizontal_net_finish_boundary",
+      "method": "rectangle_openings_net",
+      "unit": "m²",
+      "scope_status": "complete",
+      "adoption_role": "reference",
+      "quantity_role": "physical_area",
+      "result_use": "Current model working quantity for synthetic task; unreviewed, not formally adopted.",
+      "evidence_refs": [
+        "EV-SOURCE",
+        "EV-GEOM-CL-11",
+        "EV-LAYER-CL-11",
+        "EV-COVER-CL-11",
+        "EV-OPEN-CL-11"
+      ],
+      "rule_refs": [
+        "R-SE-001",
+        "R-SE-002",
+        "R-SE-003",
+        "R-SE-008"
+      ],
+      "unresolved_refs": [],
+      "coverage_evidence_ref": "EV-COVER-CL-11",
+      "local_coordinate_frame": {
+        "coordinate_system_id": "A01-RCP-Model-metres",
+        "origin_m": [
+          1.6,
+          6.1,
+          0
+        ],
+        "x_axis": [
+          1,
+          0,
+          0
+        ],
+        "up_axis": [
+          0,
+          1,
+          0
+        ],
+        "source_edge_id": "EDGE-9A-0",
+        "source_edge_direction": "same",
+        "source_edge_interval_m": [
+          0.0,
+          4.4
+        ],
+        "vertical_range_m": [
+          0,
+          4.1
+        ],
+        "vertical_origin_m": 0
+      },
+      "frame_binding": {
+        "frame_evidence_ref": "EV-GEOM-CL-11",
+        "source_pointer": "/surface_frames/CL-11",
+        "edge_evidence_ref": "EV-GEOM-CL-11",
+        "edge_source_pointer": "/edges/EDGE-9A-0"
+      },
+      "inputs": {
+        "length_m": 4.4,
+        "height_m": 4.1,
+        "openings": [
+          {
+            "opening_id": "SH-1",
+            "rectangle_m": [
+              0.8,
+              2.2,
+              1.5,
+              3.1
+            ]
+          }
+        ],
+        "other_deductions_area_m2": 0,
+        "reveal_or_return_area_m2": 0
+      },
+      "precision": "0.01 m² displayed; 0.000000001 m² calculation output",
+      "opening_union_evidence_ref": "EV-OPEN-CL-11"
+    },
+    {
+      "item_id": "QTY-CL-24",
+      "name": "CL-24 painted gypsum-board ceiling finish net ceiling finish area",
+      "object_type": "ceiling_finish",
+      "physical_surface_id": "SURF-CL-24",
+      "layer_id": "LAYER-CL-24",
+      "side_scope": "underside finish",
+      "measurement_basis": "horizontal_net_finish_boundary",
+      "method": "rectangle_openings_net",
+      "unit": "m²",
+      "scope_status": "complete",
+      "adoption_role": "reference",
+      "quantity_role": "physical_area",
+      "result_use": "Current model working quantity for synthetic task; unreviewed, not formally adopted.",
+      "evidence_refs": [
+        "EV-SOURCE",
+        "EV-GEOM-CL-24",
+        "EV-LAYER-CL-24",
+        "EV-COVER-CL-24"
+      ],
+      "rule_refs": [
+        "R-SE-001",
+        "R-SE-002",
+        "R-SE-003",
+        "R-SE-008"
+      ],
+      "unresolved_refs": [],
+      "coverage_evidence_ref": "EV-COVER-CL-24",
+      "local_coordinate_frame": {
+        "coordinate_system_id": "A01-RCP-Model-metres",
+        "origin_m": [
+          6.0,
+          6.1,
+          0
+        ],
+        "x_axis": [
+          1,
+          0,
+          0
+        ],
+        "up_axis": [
+          0,
+          1,
+          0
+        ],
+        "source_edge_id": "EDGE-9A-0",
+        "source_edge_direction": "same",
+        "source_edge_interval_m": [
+          4.4,
+          6.8
+        ],
+        "vertical_range_m": [
+          0,
+          4.1
+        ],
+        "vertical_origin_m": 0
+      },
+      "frame_binding": {
+        "frame_evidence_ref": "EV-GEOM-CL-24",
+        "source_pointer": "/surface_frames/CL-24",
+        "edge_evidence_ref": "EV-GEOM-CL-24",
+        "edge_source_pointer": "/edges/EDGE-9A-0"
+      },
+      "inputs": {
+        "length_m": 2.4,
+        "height_m": 4.1,
+        "openings": [],
+        "other_deductions_area_m2": 0,
+        "reveal_or_return_area_m2": 0
+      },
+      "precision": "0.01 m² displayed; 0.000000001 m² calculation output"
+    }
+  ],
+  "recognition_provenance": {
+    "decision_origin": "model",
+    "model": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false,
+    "human_interventions": []
+  }
+}

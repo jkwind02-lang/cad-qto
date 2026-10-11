@@ -1,0 +1,20 @@
+{
+  "failures": [
+    {
+      "layout": "BlockDefinition",
+      "parent_block": "_CLOSEDFILLED",
+      "record_id": "CAD-7B",
+      "entity_handle": "7B",
+      "entity_type": "SOLID",
+      "geometry_status": "unsupported",
+      "issue_codes": [
+        "entity_type_not_supported"
+      ],
+      "recommended_actions": [
+        "native_geometry_read_required"
+      ],
+      "error": "SOLID尚无中性几何解析器；保留对象身份，不将未取得的几何视为零",
+      "record_retained": true
+    }
+  ]
+}

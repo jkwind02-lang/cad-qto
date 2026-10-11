@@ -1,0 +1,104 @@
+[
+  {
+    "object_id": "SURF-CL-11",
+    "name": "CL-11 acoustic ceiling panel / 吸声吊顶板净面积",
+    "quantity_kind": "net_ceiling_finish_area",
+    "value": 17.41,
+    "unit": "m²",
+    "specification": "CL-11",
+    "component": "one_underside_finish_layer",
+    "source_location": {
+      "drawing": "A-01 REV A",
+      "view": "RCP-01 / S-2 / finish schedule",
+      "layout": "Model",
+      "handles": [
+        "9A",
+        "9B",
+        "9C",
+        "E7",
+        "E8",
+        "ED"
+      ],
+      "corners_mm": [
+        [
+          1600.0,
+          6100.0
+        ],
+        [
+          6000.0,
+          6100.0
+        ],
+        [
+          6000.0,
+          10200.0
+        ],
+        [
+          1600.0,
+          10200.0
+        ]
+      ]
+    },
+    "gross_area_m2": 18.04,
+    "deduction_m2": 0.63,
+    "native_output": "surfaces/surfaces.output.json",
+    "native_result_field": "/工程量结果/0/结果/数值",
+    "native_object_field": "/工程量结果/0",
+    "gross_native_field": "/工程量结果/0/专业检查/输入审计/gross_area_m2",
+    "deduction_native_field": "/工程量结果/0/专业检查/输入审计/opening_union_area_m2",
+    "frame_binding_status": "bound_consistent",
+    "evidence_level": "本图直接几何与明确做法说明支持的工作量；候选技能分支试用",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false
+  },
+  {
+    "object_id": "SURF-CL-24",
+    "name": "CL-24 painted gypsum-board ceiling finish / 涂饰石膏板吊顶饰面净面积",
+    "quantity_kind": "net_ceiling_finish_area",
+    "value": 9.84,
+    "unit": "m²",
+    "specification": "CL-24",
+    "component": "one_underside_finish_layer",
+    "source_location": {
+      "drawing": "A-01 REV A",
+      "view": "RCP-01 / S-2 / finish schedule",
+      "layout": "Model",
+      "handles": [
+        "9A",
+        "9B",
+        "9D",
+        "E7",
+        "E8",
+        "ED"
+      ],
+      "corners_mm": [
+        [
+          6000.0,
+          6100.0
+        ],
+        [
+          8400.0,
+          6100.0
+        ],
+        [
+          8400.0,
+          10200.0
+        ],
+        [
+          6000.0,
+          10200.0
+        ]
+      ]
+    },
+    "gross_area_m2": 9.84,
+    "deduction_m2": 0.0,
+    "native_output": "surfaces/surfaces.output.json",
+    "native_result_field": "/工程量结果/1/结果/数值",
+    "native_object_field": "/工程量结果/1",
+    "gross_native_field": "/工程量结果/1/专业检查/输入审计/gross_area_m2",
+    "deduction_native_field": "/工程量结果/1/专业检查/输入审计/opening_union_area_m2",
+    "frame_binding_status": "bound_consistent",
+    "evidence_level": "本图直接几何与明确做法说明支持的工作量；候选技能分支试用",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false
+  }
+]

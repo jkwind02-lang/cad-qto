@@ -1,0 +1,253 @@
+[
+  {
+    "object_id": "P01-F1-A0",
+    "name": "F1 S-IN 至平面转折点",
+    "quantity_kind": "pipe_centerline_length",
+    "value": 3.6,
+    "unit": "m",
+    "specification": "DN50",
+    "component": "plan_horizontal",
+    "source_location": {
+      "drawing": "P-01 REV A",
+      "view": "F1",
+      "layout": "Model",
+      "handles": [
+        "A0"
+      ],
+      "bounds_mm": [
+        1800.0,
+        6700.0,
+        5400.0,
+        6700.0
+      ],
+      "start_mm": [
+        1800.0,
+        6700.0,
+        0.0
+      ],
+      "end_mm": [
+        5400.0,
+        6700.0,
+        0.0
+      ]
+    },
+    "native_output": "pipe/network.output.json",
+    "native_result_field": "/segments/0/length",
+    "native_object_field": "/segments/0",
+    "basis": "原始平面实体长度与相应尺寸标注核对；每段SUP直接标注规格；原生推算器复算几何长度",
+    "evidence_level": "确认量",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false
+  },
+  {
+    "object_id": "P01-F1-A1",
+    "name": "F1 平面转折点至 R-A",
+    "quantity_kind": "pipe_centerline_length",
+    "value": 2.4,
+    "unit": "m",
+    "specification": "DN50",
+    "component": "plan_horizontal",
+    "source_location": {
+      "drawing": "P-01 REV A",
+      "view": "F1",
+      "layout": "Model",
+      "handles": [
+        "A1"
+      ],
+      "bounds_mm": [
+        5400.0,
+        6700.0,
+        5400.0,
+        9100.0
+      ],
+      "start_mm": [
+        5400.0,
+        6700.0,
+        0.0
+      ],
+      "end_mm": [
+        5400.0,
+        9100.0,
+        0.0
+      ]
+    },
+    "native_output": "pipe/network.output.json",
+    "native_result_field": "/segments/1/length",
+    "native_object_field": "/segments/1",
+    "basis": "原始平面实体长度与相应尺寸标注核对；每段SUP直接标注规格；原生推算器复算几何长度",
+    "evidence_level": "确认量",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false
+  },
+  {
+    "object_id": "P01-F2-A2",
+    "name": "F2 R-A 至 RED-A 变径中心",
+    "quantity_kind": "pipe_centerline_length",
+    "value": 2.3,
+    "unit": "m",
+    "specification": "DN50",
+    "component": "plan_horizontal",
+    "source_location": {
+      "drawing": "P-01 REV A",
+      "view": "F2",
+      "layout": "Model",
+      "handles": [
+        "A2"
+      ],
+      "bounds_mm": [
+        19700.0,
+        9100.0,
+        22000.0,
+        9100.0
+      ],
+      "start_mm": [
+        19700.0,
+        9100.0,
+        0.0
+      ],
+      "end_mm": [
+        22000.0,
+        9100.0,
+        0.0
+      ]
+    },
+    "native_output": "pipe/network.output.json",
+    "native_result_field": "/segments/2/length",
+    "native_object_field": "/segments/2",
+    "basis": "原始平面实体长度与相应尺寸标注核对；每段SUP直接标注规格；原生推算器复算几何长度",
+    "evidence_level": "确认量",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false
+  },
+  {
+    "object_id": "P01-F2-A3",
+    "name": "F2 RED-A 变径中心至转折点",
+    "quantity_kind": "pipe_centerline_length",
+    "value": 2.4,
+    "unit": "m",
+    "specification": "DN32",
+    "component": "plan_horizontal",
+    "source_location": {
+      "drawing": "P-01 REV A",
+      "view": "F2",
+      "layout": "Model",
+      "handles": [
+        "A3"
+      ],
+      "bounds_mm": [
+        22000.0,
+        9100.0,
+        24400.0,
+        9100.0
+      ],
+      "start_mm": [
+        22000.0,
+        9100.0,
+        0.0
+      ],
+      "end_mm": [
+        24400.0,
+        9100.0,
+        0.0
+      ]
+    },
+    "native_output": "pipe/network.output.json",
+    "native_result_field": "/segments/3/length",
+    "native_object_field": "/segments/3",
+    "basis": "原始平面实体长度与相应尺寸标注核对；每段SUP直接标注规格；原生推算器复算几何长度",
+    "evidence_level": "确认量",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false
+  },
+  {
+    "object_id": "P01-F2-A4",
+    "name": "F2 转折点至 U-OUT",
+    "quantity_kind": "pipe_centerline_length",
+    "value": 1.9,
+    "unit": "m",
+    "specification": "DN32",
+    "component": "plan_horizontal",
+    "source_location": {
+      "drawing": "P-01 REV A",
+      "view": "F2",
+      "layout": "Model",
+      "handles": [
+        "A4"
+      ],
+      "bounds_mm": [
+        24400.0,
+        9100.0,
+        24400.0,
+        11000.0
+      ],
+      "start_mm": [
+        24400.0,
+        9100.0,
+        0.0
+      ],
+      "end_mm": [
+        24400.0,
+        11000.0,
+        0.0
+      ]
+    },
+    "native_output": "pipe/network.output.json",
+    "native_result_field": "/segments/4/length",
+    "native_object_field": "/segments/4",
+    "basis": "原始平面实体长度与相应尺寸标注核对；每段SUP直接标注规格；原生推算器复算几何长度",
+    "evidence_level": "确认量",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false
+  },
+  {
+    "object_id": "P01-R-A",
+    "name": "R-A：F1 管中心至 F2 管中心",
+    "quantity_kind": "pipe_centerline_length",
+    "value": 4.7,
+    "unit": "m",
+    "specification": "DN50",
+    "component": "vertical",
+    "source_location": {
+      "drawing": "P-01 REV A",
+      "view": "F1 ↔ F2 via system diagram",
+      "layout": "Model",
+      "handles": [
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "DC",
+        "DD",
+        "DE",
+        "DF",
+        "E0",
+        "E1",
+        "FA",
+        "FB"
+      ],
+      "bounds_mm": [
+        34200.0,
+        6600.0,
+        34200.0,
+        11100.0
+      ],
+      "f1_plan_port_mm": [
+        5400.0,
+        9100.0,
+        0.0
+      ],
+      "f2_plan_port_mm": [
+        19700.0,
+        9100.0,
+        0.0
+      ]
+    },
+    "native_output": "pipe/network.output.json",
+    "native_result_field": "/vertical_quantities/0/value",
+    "native_object_field": "/vertical_quantities/0",
+    "basis": "同编号R-A唯一对应；图注明确竖直，起止PIPE CL分别+3.15m、+7.85m，原生typed-elevation计算差值；不量系统图绘制长度",
+    "evidence_level": "确认量",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false
+  }
+]

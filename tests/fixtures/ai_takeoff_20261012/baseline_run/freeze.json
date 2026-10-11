@@ -1,0 +1,1527 @@
+{
+  "schema": "ai-autonomy-takeoff-freeze/1.0",
+  "solver": "ai_baseline_takeoff",
+  "frozen": true,
+  "started_clock_utc": "2026-10-11 16:11:53 UTC",
+  "clock_tool_utc": "2026-10-11 16:24:29 UTC",
+  "written_utc": "2026-10-11T16:24:29.635979+00:00",
+  "clock_provenance": "Actual tools.clock__curr_time result supplied immediately before this invocation",
+  "candidate": {
+    "path": "candidate.json",
+    "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/candidate.json",
+    "sha256": "d4ed03ee4a1f55e5a114486d8f9769182573b97bbd619d7c2adee1cd6f73b3ba"
+  },
+  "all_native_inputs_outputs": [
+    {
+      "case": "pipe",
+      "path": "pipe/object_audit.input.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/object_audit.input.json",
+      "sha256": "5cc5de8a371c5a63a25b554eb0b3f4b818d10d31065c187a02456747471a51b9",
+      "bytes": 7694
+    },
+    {
+      "case": "pipe",
+      "path": "pipe/object_audit.output.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/object_audit.output.json",
+      "sha256": "4694a99c1487c3c1e91d840e4b02e6f095abb5e8504c9381c5368516c5f24b33",
+      "bytes": 4450
+    },
+    {
+      "case": "pipe",
+      "path": "pipe/network.input.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.input.json",
+      "sha256": "8a6d881e0d9ec118aef96d4ae5e6c9312fc4debf9309c98519db2bfd9b5b09ba",
+      "bytes": 17401
+    },
+    {
+      "case": "pipe",
+      "path": "pipe/network.v2.input.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.v2.input.json",
+      "sha256": "84a4112ec3794823a2ff662651833f18b6a003c8b28b52c6ee0f36533c09b388",
+      "bytes": 18100
+    },
+    {
+      "case": "pipe",
+      "path": "pipe/elevation_facts.input.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/elevation_facts.input.json",
+      "sha256": "bf94af89a972106120fb3a49eaaa9326659681e0380815c10428daaf049564d1",
+      "bytes": 3149
+    },
+    {
+      "case": "pipe",
+      "path": "pipe/network.output.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json",
+      "sha256": "ada28106e80e656f6fc26c62389493c60ac888d00c4e81e6e72f56847d460e2f",
+      "bytes": 60227
+    },
+    {
+      "case": "pipe",
+      "path": "pipe/neutral/CAD中性取证清单.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/neutral/CAD中性取证清单.json",
+      "sha256": "06ed9be091268578942a6fba9cdfcd9a538f6cbf2ea4c7575e46a027c113fe29",
+      "bytes": 4935
+    },
+    {
+      "case": "pipe",
+      "path": "pipe/neutral/CAD提取失败对象.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/neutral/CAD提取失败对象.json",
+      "sha256": "dcd5dccf085b74fc3d53b19b1483c7dfb52809cb1a34719c9ddced1e25dea35f",
+      "bytes": 524
+    },
+    {
+      "case": "pipe",
+      "path": "pipe/neutral/CAD读取覆盖与待补读.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/neutral/CAD读取覆盖与待补读.json",
+      "sha256": "3776df48d7d28cde5e6b2af916560a27ab4284e953b9dd1383acdcc9412febe7",
+      "bytes": 1720
+    },
+    {
+      "case": "pipe",
+      "path": "pipe/neutral/中性块定义图元.ndjson",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/neutral/中性块定义图元.ndjson",
+      "sha256": "917298ff84356fbc2ff5db192c75f7623e2912987081d8f8ef9c0a228ef1ebbd",
+      "bytes": 4570
+    },
+    {
+      "case": "pipe",
+      "path": "pipe/neutral/中性布局图元.ndjson",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/neutral/中性布局图元.ndjson",
+      "sha256": "7e8d6ad979ac240a5e31672c4eaf0d5cc4ea27f6c22ccb0d20df0808bbeea56c",
+      "bytes": 142412
+    },
+    {
+      "case": "surfaces",
+      "path": "surfaces/surfaces.input.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.input.json",
+      "sha256": "82c460ed654fae3355ac11ca0a3bcc4abb2c32d539c812df90cafb2c2d56c59e",
+      "bytes": 14717
+    },
+    {
+      "case": "surfaces",
+      "path": "surfaces/surfaces.output.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.output.json",
+      "sha256": "82713fc8740fecae14956a297a4153db7b8083a9eeb696932ca89c7c2dde840f",
+      "bytes": 23229
+    },
+    {
+      "case": "surfaces",
+      "path": "surfaces/hatch_regions.output.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/hatch_regions.output.json",
+      "sha256": "d2ea2dd434ccdcc47d032feb85587ce89bbe75d8423a0598509ee371e1c7bb2f",
+      "bytes": 4966
+    },
+    {
+      "case": "surfaces",
+      "path": "surfaces/neutral/CAD中性取证清单.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/neutral/CAD中性取证清单.json",
+      "sha256": "73130890ae0de285fce136393fe1550ddbdf49dd3222ce4474f6477395c63d34",
+      "bytes": 5032
+    },
+    {
+      "case": "surfaces",
+      "path": "surfaces/neutral/CAD提取失败对象.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/neutral/CAD提取失败对象.json",
+      "sha256": "dcd5dccf085b74fc3d53b19b1483c7dfb52809cb1a34719c9ddced1e25dea35f",
+      "bytes": 524
+    },
+    {
+      "case": "surfaces",
+      "path": "surfaces/neutral/CAD读取覆盖与待补读.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/neutral/CAD读取覆盖与待补读.json",
+      "sha256": "654c36ebe3cd54d252ec112941a91766502a0dba2b21d8b37fb875837a9417c3",
+      "bytes": 2694
+    },
+    {
+      "case": "surfaces",
+      "path": "surfaces/neutral/中性块定义图元.ndjson",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/neutral/中性块定义图元.ndjson",
+      "sha256": "4a142c4c3e487617570fef5518a5b58bc1250e7c5322bae931e082f3a1243cfc",
+      "bytes": 4570
+    },
+    {
+      "case": "surfaces",
+      "path": "surfaces/neutral/中性布局图元.ndjson",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/neutral/中性布局图元.ndjson",
+      "sha256": "3f532125c60c9381e68e782352822bedc9868c7a1d81e270c11014535e296511",
+      "bytes": 135537
+    },
+    {
+      "case": "review",
+      "path": "review.input.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/review.input.json",
+      "sha256": "867205765ba9cf07de3f8996abb8b2088a3f6b289330fb80dccda87825ea030f",
+      "bytes": 64682
+    },
+    {
+      "case": "review",
+      "path": "review.html",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/review.html",
+      "sha256": "e82c69aacf144500063ca92bd564dba3d3bb88d38b7e95ca6bc76a263e5973c7",
+      "bytes": 69878
+    },
+    {
+      "case": "review",
+      "path": "review_build.output.json",
+      "absolute_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/review_build.output.json",
+      "sha256": "e3f433326897e598a77478742c0afa64fb8c306ca58905fc1a87ad3ce4cf8085",
+      "bytes": 560
+    }
+  ],
+  "source_input_files": {
+    "drawing.dxf": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+      "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "bytes": 73083
+    },
+    "drawing.png": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.png",
+      "sha256": "3deafabc20af8672d107c0bd55cb73ffb2d1f4df89dd973a6bdd4d0d1a67ddc8",
+      "bytes": 285097
+    },
+    "task.md": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/task.md",
+      "sha256": "21cb0da0aaa3948040f0737bcea2e525540693cb760ef66bc344328d922aff16",
+      "bytes": 1006
+    },
+    "surfaces_drawing.dxf": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+      "sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+      "bytes": 71811
+    },
+    "surfaces_drawing.png": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.png",
+      "sha256": "dda222b97695aec8d6b5e22d5a866f6acf93487d0b05dbc429090fc582f2b690",
+      "bytes": 286826
+    },
+    "surfaces_task.md": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/task.md",
+      "sha256": "a70ab7e9796f837207ff8a2377bf2a1a94086f28a5b796129816e3c63d57a9ce",
+      "bytes": 926
+    }
+  },
+  "source_version": {
+    "path": "source_version.json",
+    "sha256": "a464a92efbd54bb7a90782d1725adde5f3b22fc6524418618bdc58f66233234b"
+  },
+  "all_artifacts": [
+    {
+      "path": "assemble_deliverables.py",
+      "sha256": "34b622a6d45d489e60b50a64705996ae9695175690edc65d319f72899e5a5f7d",
+      "bytes": 27587
+    },
+    {
+      "path": "candidate.json",
+      "sha256": "d4ed03ee4a1f55e5a114486d8f9769182573b97bbd619d7c2adee1cd6f73b3ba",
+      "bytes": 37501
+    },
+    {
+      "path": "complete_pipe_policy.py",
+      "sha256": "0291960b7fe83fcc8bde4f5f762211d76d4485d18d1566c36b42fdbdb73218e1",
+      "bytes": 795
+    },
+    {
+      "path": "finalize_before_freeze.py",
+      "sha256": "7b7cf1a3e96820faf1e2956b5680551d8c3bab13a6fcf07e15fe00d09a929ecc",
+      "bytes": 6177
+    },
+    {
+      "path": "fix_assumption_prefix.py",
+      "sha256": "d8590c301653f89f175d50d5127d821d53fc846378be186410107bf044382228",
+      "bytes": 511
+    },
+    {
+      "path": "freeze_run.py",
+      "sha256": "2351bab6fcb02a205e96a22817c9f8571901e93b94691e2beb0726656b041f0e",
+      "bytes": 2890
+    },
+    {
+      "path": "inspect_sources.py",
+      "sha256": "0b699e733b3e3d709abe13db24e43bd3b49120ab6563b2a53e1672865d7897a9",
+      "bytes": 2709
+    },
+    {
+      "path": "pipe/elevation_facts.input.json",
+      "sha256": "bf94af89a972106120fb3a49eaaa9326659681e0380815c10428daaf049564d1",
+      "bytes": 3149
+    },
+    {
+      "path": "pipe/entity_inventory.txt",
+      "sha256": "122a9dd5d4ab75132ab9684a5b5b8e6441500cf99b894709b8b58bdbcf0571f1",
+      "bytes": 10623
+    },
+    {
+      "path": "pipe/model_recognition.json",
+      "sha256": "28bbb64c58126196b8b87637af1f9c0a7385ca71ca7b8ab804e3391b83da52bc",
+      "bytes": 14695
+    },
+    {
+      "path": "pipe/network.input.json",
+      "sha256": "8a6d881e0d9ec118aef96d4ae5e6c9312fc4debf9309c98519db2bfd9b5b09ba",
+      "bytes": 17401
+    },
+    {
+      "path": "pipe/network.output.json",
+      "sha256": "ada28106e80e656f6fc26c62389493c60ac888d00c4e81e6e72f56847d460e2f",
+      "bytes": 60227
+    },
+    {
+      "path": "pipe/network.output_97ecf17d1c_复核摘要.md",
+      "sha256": "97ecf17d1cb035a7891598b649f7fb3c1183ab4cb3ff870a8ff7ced387db66f1",
+      "bytes": 1253
+    },
+    {
+      "path": "pipe/network.v2.input.json",
+      "sha256": "84a4112ec3794823a2ff662651833f18b6a003c8b28b52c6ee0f36533c09b388",
+      "bytes": 18100
+    },
+    {
+      "path": "pipe/neutral/CAD中性取证清单.json",
+      "sha256": "06ed9be091268578942a6fba9cdfcd9a538f6cbf2ea4c7575e46a027c113fe29",
+      "bytes": 4935
+    },
+    {
+      "path": "pipe/neutral/CAD提取失败对象.json",
+      "sha256": "dcd5dccf085b74fc3d53b19b1483c7dfb52809cb1a34719c9ddced1e25dea35f",
+      "bytes": 524
+    },
+    {
+      "path": "pipe/neutral/CAD读取覆盖与待补读.json",
+      "sha256": "3776df48d7d28cde5e6b2af916560a27ab4284e953b9dd1383acdcc9412febe7",
+      "bytes": 1720
+    },
+    {
+      "path": "pipe/neutral/中性块定义图元.ndjson",
+      "sha256": "917298ff84356fbc2ff5db192c75f7623e2912987081d8f8ef9c0a228ef1ebbd",
+      "bytes": 4570
+    },
+    {
+      "path": "pipe/neutral/中性布局图元.ndjson",
+      "sha256": "7e8d6ad979ac240a5e31672c4eaf0d5cc4ea27f6c22ccb0d20df0808bbeea56c",
+      "bytes": 142412
+    },
+    {
+      "path": "pipe/object_audit.input.json",
+      "sha256": "5cc5de8a371c5a63a25b554eb0b3f4b818d10d31065c187a02456747471a51b9",
+      "bytes": 7694
+    },
+    {
+      "path": "pipe/object_audit.output.json",
+      "sha256": "4694a99c1487c3c1e91d840e4b02e6f095abb5e8504c9381c5368516c5f24b33",
+      "bytes": 4450
+    },
+    {
+      "path": "pipe/observed_raw_facts.json",
+      "sha256": "40a8c09773f914f702181bbb7ac1c218715ba675d1fc26af1d39d1e55acad2a3",
+      "bytes": 110544
+    },
+    {
+      "path": "pipe/quantity_details.json",
+      "sha256": "8f890c732e142dddf76a21a1070a60e37a6382ae5c5703613998f6ddd31b8044",
+      "bytes": 6235
+    },
+    {
+      "path": "pipe/quantity_review.png",
+      "sha256": "77d01d1e097f3a612bc2dd611a6dac9c4c7d8996c6b65513148b30e2ea65f9a0",
+      "bytes": 108853
+    },
+    {
+      "path": "pipe/quantity_review.svg",
+      "sha256": "a3abd81d65689cb03671b7f3aaee3d89bb8de88aec8a9224e27faf9b44636a7f",
+      "bytes": 18323
+    },
+    {
+      "path": "pipe/result_binding.json",
+      "sha256": "91704748f9615b893a94679968868c0453cb188e79816742c5c80df971d11462",
+      "bytes": 20501
+    },
+    {
+      "path": "pipe/result_binding.v2.json",
+      "sha256": "5f7ecbf4434222af0d2e91b1e416ff84e95d321fdf33e1312e7331f51b6425f8",
+      "bytes": 22870
+    },
+    {
+      "path": "pipe/result_binding.v3.json",
+      "sha256": "5befcfad312fd10359ae56be1f3d48ea1fe270255d30a6fc306107499c136ba4",
+      "bytes": 22960
+    },
+    {
+      "path": "prepare_inputs.py",
+      "sha256": "1c9f81bfb2ecb5c109f1ed5966031da405257dbf44b6b06c9f3064c24c01b352",
+      "bytes": 19090
+    },
+    {
+      "path": "quantity_report.md",
+      "sha256": "c0669459302a3cfa2a56032ebaf64c3a56b9f0362fcab986a39fa3bb8bb40acf",
+      "bytes": 8236
+    },
+    {
+      "path": "quantity_report.pre_final.md",
+      "sha256": "f976881bad035b7350b0009aaeb3ed6a49b700fa2daa6ff7731959bd38d86197",
+      "bytes": 7886
+    },
+    {
+      "path": "review.html",
+      "sha256": "e82c69aacf144500063ca92bd564dba3d3bb88d38b7e95ca6bc76a263e5973c7",
+      "bytes": 69878
+    },
+    {
+      "path": "review.input.json",
+      "sha256": "867205765ba9cf07de3f8996abb8b2088a3f6b289330fb80dccda87825ea030f",
+      "bytes": 64682
+    },
+    {
+      "path": "review_build.output.json",
+      "sha256": "e3f433326897e598a77478742c0afa64fb8c306ca58905fc1a87ad3ce4cf8085",
+      "bytes": 560
+    },
+    {
+      "path": "revise_delivery_classification.py",
+      "sha256": "08395d2a3c5526bec8f6399531f1c820eb17989cceb77b11e036866fa1cb3fc1",
+      "bytes": 5787
+    },
+    {
+      "path": "run_tool.py",
+      "sha256": "ceb3a04bd59db873f2125f14d04b7e3699a8a1a4c044f303db03cda1ddb2998c",
+      "bytes": 1071
+    },
+    {
+      "path": "source_identity.json",
+      "sha256": "9b246b7a782780e8ddf957e12a99a94d1d6f1bcbe0f452dea6ccd67cce712502",
+      "bytes": 1461
+    },
+    {
+      "path": "source_integrity.output.json",
+      "sha256": "550cbf11f99ecfb067778342af8e019e45e2a29c5289815fe4146f1113070f0b",
+      "bytes": 1537
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/assets/review/feedback-endpoints.json",
+      "sha256": "aef642745c631255492a13b3c14c0ffe3be4b2e2fba39a2be2c8a7c2ec88580e",
+      "bytes": 265
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/assets/模型工作识别记录模板.json",
+      "sha256": "700a0edf7b506da1e5cc0944e025dedfcf3f6dcc19a4b3211ca4bf11a87ce83f",
+      "bytes": 1442
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/CAD中性事实提取.md",
+      "sha256": "27dc0158312e2343494e534b3bd66257ab1741bd7787a4b6d4cda7b0465b9254",
+      "bytes": 6917
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/HTML交互复核与批注.md",
+      "sha256": "178c533df3360610554377458d1f9a5e63b2ab93dd681a9d68c9519afbe4c3f6",
+      "bytes": 13267
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/PDF图片与表格提取.md",
+      "sha256": "e3139f4999c2cfd74a24fcf833433b010cee77a0d862317fa73bb895f793d85a",
+      "bytes": 2315
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/人工思路识图与算量流程.md",
+      "sha256": "8e5da85ff71ccf282cb8bfa6fd55505aee21a4d19f17dffc121fefa0a236bf5a",
+      "bytes": 9397
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/公共资源调用与停止条件.md",
+      "sha256": "d15406ae51fb1ab485e7f4269b687189156cc3e0879b3974ce4f6250a5507ea9",
+      "bytes": 3268
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/原图独立算量实测.md",
+      "sha256": "e1c590e41105c64233b89b75c7791655f8575d3c2ad4e07bef0ef1905219ab02",
+      "bytes": 4286
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/各专业持续算量执行路径.md",
+      "sha256": "e8f0d27e27797aa2ed57510e567219e5ff654d0c327ea987f497da063a6a3afc",
+      "bytes": 21109
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/图纸与资料范围筛选.md",
+      "sha256": "0da2d338c0191c7b6d8805881929e6058da942b2d19716d9b737859ef93a9cff",
+      "bytes": 3153
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/尺寸指向与尺寸链复核.md",
+      "sha256": "436b2436ed09b1a7a924e9b9e313922cc820838ebe4d7c183c85bbb1d37b8e51",
+      "bytes": 11449
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/局部识图与对象操作.md",
+      "sha256": "a755b5f26d8bcb0556145c4b7bbb0189f19a2f4777f8ca5eaa8a33738cf244ce",
+      "bytes": 14171
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/工程量成果最小字段.schema.json",
+      "sha256": "31df37f3976271ca50eea8245eaa1cf85c2d85fb1cac5e4a4b64f34c52a58213",
+      "bytes": 22547
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/按人工算量顺序执行与重算.md",
+      "sha256": "12cc586177d04b5ee0d797d77587812baa4265e604e5123445ef8f45a83eb80a",
+      "bytes": 9409
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/按任务阶段读取.md",
+      "sha256": "5c8377436e2b6a06127c33a008274ff094181244b51a7bb093670380deb58b02",
+      "bytes": 4000
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/推算假定与发布分层协议.md",
+      "sha256": "fc31dbd27ec93e78db5153205ff6d7dea46fa9cfe4220ac7ef308ca6dc7bf896",
+      "bytes": 6217
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/模型工作识别记录格式.md",
+      "sha256": "f78162acbf6a0e171aac47e232a0051267a229a1f082c9d295e35834ff275ebf",
+      "bytes": 3530
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/现行规则来源选择门.md",
+      "sha256": "c937a35378b3de5cf45724f0f14fbda211cdd2c22d835e3b4d0df5bb8cf666c2",
+      "bytes": 1768
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/缓存身份与复用条件.md",
+      "sha256": "452eed38b93a20f1053e2fe3a25e07694e1c9dbe21bbbd3d7f3ebfe4ac661b98",
+      "bytes": 3833
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/证据引用要求.md",
+      "sha256": "d4d419870040b281fd65d45fbec195089c7993cce90ca3a59e84ea3e2e9d273c",
+      "bytes": 2336
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/读取覆盖与补读.md",
+      "sha256": "900e1db123085d350a6bda66cec666f25ef208fcff0f3b4ca50822879a040c38",
+      "bytes": 11487
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/跨图对象候选对应.md",
+      "sha256": "d8410c2e83c4fb49862decbd00faad43465a113a5f6860680e78f08a1cfa0ceb",
+      "bytes": 6810
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/跨图接口与标高换算.md",
+      "sha256": "d3d9e09b91c1b66558658207fc85d6a6083a1ccd4b4fd53dcaa85d05109cf611",
+      "bytes": 9744
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/逐实例构造要求与附属量.md",
+      "sha256": "8e0be84ffbd5f185f297b06acec47543199ccd66251f5e28836bf0457b49506c",
+      "bytes": 9814
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/通用成果字段与状态.md",
+      "sha256": "dcde8910617951ae611de10a92e2f7375ddc03592359d9701fb68d4614585771",
+      "bytes": 10755
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/项目作业台账与持续执行.md",
+      "sha256": "4d8bff246d28b102b3e03301bc1da31d7c44ebe407f99488262e19cb38f62afe",
+      "bytes": 14883
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/references/项目文档条款提取.md",
+      "sha256": "c8fd7ca2fd0487f8a0df7b0d99ec99907159ffb6bef0be3bb7092ab86ba0aaef",
+      "bytes": 1764
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/build_qto_review_html.py",
+      "sha256": "43cf2c33d6f707282ea8147df652acb64149d094bdd0a32e10aa703de39df554",
+      "bytes": 6026
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/extract_cad_neutral.py",
+      "sha256": "755f3d4fb05d12b57df32b86c02880775b565697fff0af9314c7f8bcf4220c47",
+      "bytes": 22605
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/migrate_cad_review_view.py",
+      "sha256": "413687f4fd99fc9006ad22e076424d5ba3e1052458f6eb5bf086d6a68fa41e75",
+      "bytes": 4779
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/model_recognition_basis.py",
+      "sha256": "6f6cd8f4b427859bd091996788fbedacd01e09d313088ecb2de7bf7611d8e98f",
+      "bytes": 6685
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_cad_geometry.py",
+      "sha256": "8d67baff0e5dc8f7cdf08138f197ff0dcb7e5a5e6f6b2e4a11658965d7b75009",
+      "bytes": 56885
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_cad_source_contract.py",
+      "sha256": "27896acd4e407c3a5fa23824bd06e71ff29e201b022ca786b657ab986bc579cb",
+      "bytes": 2133
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_dimension_semantics.py",
+      "sha256": "e3148758d84355e80d4322011eb0fd6b1f76778d6ae71dece3d40b046286627f",
+      "bytes": 35637
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_elevation_facts.py",
+      "sha256": "783a955729e4f63408de0d2bce4e3158ef135e0c1ec9e4490ecc0a92175803a8",
+      "bytes": 26117
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_instance_requirements.py",
+      "sha256": "f65d9866f65671bfc677bd1caf42e6c9c2b9b21be3fa92f6db6c2ccfc914d971",
+      "bytes": 29507
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_object_correspondence.py",
+      "sha256": "140d700a0820b790132943332af77e2bfe74f3f02c671d9555f76cdb2c1ed26c",
+      "bytes": 17677
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_pipe_quantity_contract.py",
+      "sha256": "5b51840dc12e04d55fe1cd8f699af32b35a2c33122a2968b076fc19d752dfcec",
+      "bytes": 7769
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_pipe_scope_quantity.py",
+      "sha256": "963255ceddf9a9ee86a3c41c6faab54f61b355f15561809a618a39354851aac4",
+      "bytes": 5501
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_pipe_topology.py",
+      "sha256": "85486613260b1fbceb3567d935ed6a9b6230547be6fe0a134bea9993a5074021",
+      "bytes": 38715
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_recognition_workbench.py",
+      "sha256": "490bb7ae13bc0c4e0c152110c82cea4e0c579bd630c23440345a924442c911c3",
+      "bytes": 49915
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_review_contract.py",
+      "sha256": "9ac79b0c17adc96012fc3088cd673f1b14f7752769127ac0af04f8237a3e100a",
+      "bytes": 12264
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_review_revision.py",
+      "sha256": "f0e4644726a356a3dd53b69b22dd0a160de958772e7e5f48d6015405b819427a",
+      "bytes": 4378
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_spatial.py",
+      "sha256": "d228ad667878b54244414844df23562feb9ca6471b183d1f4302124e83a84a25",
+      "bytes": 6283
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_workflow_dependencies.py",
+      "sha256": "b9eaa9501aea910c7dc4a25b008b1f48e78dfb1688cf48c3f445212022f773d6",
+      "bytes": 14476
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_workflow_quantities.py",
+      "sha256": "6b176dec49dd07e3a54c2991b08c2bd9ae591072be0d14485c14224550fbe10e",
+      "bytes": 55199
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_workflow_review.py",
+      "sha256": "97f0907879d31d8efe67e3b58731e80c7bd323250721fd71e43bdbc5aa4ac12e",
+      "bytes": 27937
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_workflow_state.py",
+      "sha256": "f9ff4d50f304bf40885c192ef2075f5ef00b95edd9ec6f8ec0ddf9a8e1c89fa5",
+      "bytes": 31611
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/qto_workflow_tools.py",
+      "sha256": "37c37ae75130745fd11f57b84c59c10b801771147671b3d1e5d90557e2928d29",
+      "bytes": 15290
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/read_cad_scope.py",
+      "sha256": "3c4c97f4687da3da28ed5544914ba2c941307fc6ea288bba80b33c71385059e2",
+      "bytes": 26514
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/read_qto_review_feedback.py",
+      "sha256": "b9a5cc060cd80c388b3bc9017ec556a1528c665e2917ce559b37914a8a02da17",
+      "bytes": 2202
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/recompute_qto_dependencies.py",
+      "sha256": "13f4427b8d37538aa9bdb8c71537429c7ba1d883f6d64f9ca03c2ec588208b4d",
+      "bytes": 15337
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/validate_minimum_result.py",
+      "sha256": "3e8f313a6dfa65c7546642fcc0bc4f28e917107f0f9bda540f9cddb53c96f779",
+      "bytes": 29449
+    },
+    {
+      "path": "source_snapshot/skills/_qto-shared-evidence/scripts/validate_shared_evidence.py",
+      "sha256": "a5a8622eee71ff7f13ce868f1bbda83fda2fce9e0fed7d4f48538ff44e749576",
+      "bytes": 8144
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/SKILL.md",
+      "sha256": "744bba1012f53018abc098a42620f3c0fd9d579a1af9a5ba2e8c6b2e677eb3b0",
+      "bytes": 15875
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/assets/末端类型DN候选规则.json",
+      "sha256": "476b36391c97a5478aa2eb62d0071155aefdb320d8f752014b3f13d212969bd9",
+      "bytes": 2610
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/assets/管网识别配置模板.json",
+      "sha256": "be36399210176801e24eda553f4d173882c425369da5b2583880c3e68e1b5c9e",
+      "bytes": 1301
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/assets/阀门类型候选规则.json",
+      "sha256": "aec519b28d2aa776ccbcb95dd0911471358f864dc33407609af95f245554ca8c",
+      "bytes": 877
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/assets/项目裁决台账模板.json",
+      "sha256": "8244a83c9d8af2042b59b5277b99c0e53d5f98994cc49934953d7b0cb04dfb4e",
+      "bytes": 736
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/capability.json",
+      "sha256": "2238fbf7a00c48fb2ce8cd0ebd167a390e404f32e9d6faa8034988f83eb3cdbc",
+      "bytes": 1569
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/中心线计算清单格式.md",
+      "sha256": "5476f8c3758a3d48c6547d1892af615cca8d3f9fe77708c40d1752af71c1d5ab",
+      "bytes": 2545
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/实例规格与逐台接管.md",
+      "sha256": "8bb4035fd7d24be9797c8f4a6ac3e56e4d0a7d51a36bbe14ae22da5776309dff",
+      "bytes": 6542
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/对象范围与相邻边界.md",
+      "sha256": "e2cd68ffa70e3134909f3a0cbe63e58153528a0524fd2ca39a114ea797e6bc9f",
+      "bytes": 3603
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/工艺与室外管网规则.md",
+      "sha256": "26b8a25f9f95d8bae2fc34c0ebda707ab26b7b8d6863f849c654a4c718e40b55",
+      "bytes": 1705
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/排水管道规则.md",
+      "sha256": "03eb215d935139e7a2631fc44ba9bfe282b25b0f04dd647aff4f5553a5fcdf6b",
+      "bytes": 1756
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/暖通水与制冷剂管道规则.md",
+      "sha256": "95987deb0da4fbf1bba21cf9195600225b088c96b66f26f99d92ba3f2a498976",
+      "bytes": 2081
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/消防水管道规则.md",
+      "sha256": "25576bd4e1132896537b4a0a60e3fad04e861b544ec1f39d0fe5771f58630c10",
+      "bytes": 1571
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/现行计量标准摘要.md",
+      "sha256": "5d9bef5200a7578334b025f068f4c7180f5f7e30430b8a57e939b2066fd7f4b7",
+      "bytes": 2464
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/管网拓扑与规格推算流程.md",
+      "sha256": "eada502258ae06f1a0db85f4d16d72773440d70f815f81876c654efe9ef20ea8",
+      "bytes": 10775
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/管网推算输入格式.md",
+      "sha256": "249587c61afaedfea2d1ddacc12a41e257aff3ebf726b50196af283a9d3467ae",
+      "bytes": 6602
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/结果检查与输出.md",
+      "sha256": "5b21876e425c925cb3c5baa07964fa3f67d077c9757a8553712445c8c53ee21e",
+      "bytes": 7041
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/给水管道规则.md",
+      "sha256": "b10ab037fbc66c53eaef448fc3774b0b0b8e8df50a70c5d969675824057822d1",
+      "bytes": 2511
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/规则清单与成熟状态.md",
+      "sha256": "4860832d2c34d6a6880959bcc350cc909135f06d0284b147389fc151ce9876c6",
+      "bytes": 8518
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/计算与证据流程.md",
+      "sha256": "4bdd5e8b71f917ebaec8335228c1cae19c9805269967c53611f6eb825074e6b6",
+      "bytes": 7362
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/阀组接管与人工底稿对应.md",
+      "sha256": "aa3141546d83a9d3accc9b0db2c990ffb2734e53c69dc8d5a05cc307eccfc9a9",
+      "bytes": 6094
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/阀组详图轴线路径计算.md",
+      "sha256": "240c1783d50905fc0e20728c68fce0bbc009874d8bc9150e2b33d24e8ee7c9b0",
+      "bytes": 5431
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/references/高程竖段与原管网合并.md",
+      "sha256": "4c8930bed28a57d12c0655083651a7dfed8a65464cbb8c7cf831c8154807e374",
+      "bytes": 7357
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/scripts/audit_pipe_correspondence.py",
+      "sha256": "111bbf6671ed4323faef4e9b95cace060065f9413892eabc685320401a9b2878",
+      "bytes": 11163
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/scripts/audit_pipe_object_selection.py",
+      "sha256": "9c80ede5b87bb1818b97d7aac735aadb0c742e8e54e85c6259a53c73fcc03bd4",
+      "bytes": 12668
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/scripts/bind_pipe_callouts.py",
+      "sha256": "55802bb45117c41308c986c96655b649749e411bd031a32e626618494afdbf15",
+      "bytes": 6966
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/scripts/build_pipe_inference_input.py",
+      "sha256": "77aa9a12bfc6e2882ccd9b4b03a29583d3b00dd76484303fef62643ed1e7acd0",
+      "bytes": 67861
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/scripts/infer_pipe_network.py",
+      "sha256": "46bc3bcfc2f041291935388098165fdad7221f94366134d146037ec22b087293",
+      "bytes": 92533
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/scripts/measure_pipe_centerlines.py",
+      "sha256": "018ede42cfe89080cbf929477c8ec6c647635a35a00fd91a6c1948f28030ffb5",
+      "bytes": 23114
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/scripts/measure_pipe_detail_routes.py",
+      "sha256": "945e53dce442af6c9c126771893f955282b87389fc225a088cb09fba6acc4e01",
+      "bytes": 19345
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/scripts/merge_pipe_elevation_segments.py",
+      "sha256": "cfc1502854910533187ce1643077c8bc880efa46b23936aca320a42c167e52ad",
+      "bytes": 27849
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/scripts/merge_pipe_instance_requirements.py",
+      "sha256": "1af14d04bbeefd5da3731e5200ca9e7ff9ad92e254d539a979661a735b0045c4",
+      "bytes": 15606
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/scripts/partition_pipe_detail_specs.py",
+      "sha256": "afef6abe6408aa1e46f3cf0e095af2255eee1c6248828a02ddb6094626d260b5",
+      "bytes": 7396
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/scripts/validate_pipe_result.py",
+      "sha256": "6624c87193b46f7fd1e6b003b92025c27ed5c6579630cb590a498908d50f8be9",
+      "bytes": 23573
+    },
+    {
+      "path": "source_snapshot/skills/qto-pipe-networks/scripts/validate_pipe_user_summary.py",
+      "sha256": "5dd2e4d5d65e41f9657304e59bf638bd950ecc978aa953b74cf9bb4fff50f963",
+      "bytes": 8201
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/SKILL.md",
+      "sha256": "d900bcb2eb41281a6892da9cc836f0bef12cab39e9188541e7836979d11236f7",
+      "bytes": 12431
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/capability.json",
+      "sha256": "cb01f0c13fd1c4ca07519b2458c36650578e2e35296932d216f4ea9480d823e6",
+      "bytes": 1812
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/围护板与幕墙面板规则.md",
+      "sha256": "62bb77daa424b47db64119ee34b651dd0d7cc2a02f0c0327621aae7cbcf0d0a8",
+      "bytes": 1819
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/填充面域识别与去重.md",
+      "sha256": "ce719bd6e1ab26dfc4bae366f6afed5d37fb2e7954824f01ec870c5589472bb3",
+      "bytes": 3707
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/对象范围与相邻边界.md",
+      "sha256": "2bfa70f0f6423b19a56ff6377e6029f76507ba11872d6c5f7a137ac158163b90",
+      "bytes": 2476
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/屋面防水保温规则.md",
+      "sha256": "97d461dbb6c9d0c50a8b4b85e00b0f430a05397edf3de67b8371400087b1eef8",
+      "bytes": 1716
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/旧资产复核与真实案例结论.md",
+      "sha256": "cbbc2b299723a9eacafdee1842b30678b1324453fea05267b668d79eb3bc750c",
+      "bytes": 1924
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/普通线网面域与房间对应.md",
+      "sha256": "acd4c1be83914ce35ef3d7d7c7bbcd59d9fe86a83d129d8915e67b76c7b8c3b9",
+      "bytes": 5648
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/材料基层矩形分区.md",
+      "sha256": "3501d7c18275ab162fa6153f9989ffb0b745d4f0b2a209a4365baf74399a441f",
+      "bytes": 11781
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/案例成熟度与建设门槛.md",
+      "sha256": "7cd730a86bbf216201e9a28dbea189692cc9fa3811ed96ab86391201e553df82",
+      "bytes": 4232
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/楼地面墙面天棚规则.md",
+      "sha256": "fefb85bf2f28e65095335fff2eed48cc1f12670f6836633c0236e313c50a410b",
+      "bytes": 4270
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/洞口扣减与面域边界.md",
+      "sha256": "ef7ae95c9b811ce53a0c6edabf5fe9915c1fc9914f86bd5a706e261eb162da28",
+      "bytes": 1724
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/现行计量标准摘要.md",
+      "sha256": "a0874818507980a33275507739035c1dbd28d74e36e6fed0db37563c0669999d",
+      "bytes": 2024
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/结果检查与输出.md",
+      "sha256": "7d762b2b75b40cb8d4882daae2e0d833e29062844a7e0c06c8e178d730de6144",
+      "bytes": 1873
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/表面与构造层清单格式.md",
+      "sha256": "dc55372b430950fc81e7c70fb380a8ab937f0d49ed8431cc7f15a7553acc5e55",
+      "bytes": 15123
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/规则清单与成熟状态.md",
+      "sha256": "7849a544d31e6709654d34a61140f461461376bfe392cc95ca97bc2cf15318c3",
+      "bytes": 2249
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/references/计算与证据流程.md",
+      "sha256": "27bb0fa830ed0aa95d6e2145bf911d88fd569b13e9599354403756c38ddd7b53",
+      "bytes": 3510
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/scripts/calculate_surfaces_envelope.py",
+      "sha256": "1fd4950e6458dd19da6de3d71a006e270f52b77b4e394f32234d71d17d20fdff",
+      "bytes": 79431
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/scripts/extract_surface_linework.py",
+      "sha256": "89616f5b19a446ecdb8fdbcd31d83ee248eea74a29125ab0ba3c2d134ee65953",
+      "bytes": 16421
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/scripts/extract_surface_regions.py",
+      "sha256": "429a9d23cffa3577b1908ab967790b4e8279c39125f5bd11b52537bcfcd0e91b",
+      "bytes": 23489
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/scripts/material_rectangle_partition.py",
+      "sha256": "c43e27d02f98658805987aaac20adc36fbb00f6d5aca91a7f71b7073a06e54d2",
+      "bytes": 15135
+    },
+    {
+      "path": "source_snapshot/skills/qto-surfaces-envelope/scripts/validate_surfaces_envelope_result.py",
+      "sha256": "c7a102dcbb9becce93b11ee8b6c172d5b29f61dfed66322f42f5f133cc1aa7ff",
+      "bytes": 20020
+    },
+    {
+      "path": "source_version.json",
+      "sha256": "a464a92efbd54bb7a90782d1725adde5f3b22fc6524418618bdc58f66233234b",
+      "bytes": 45586
+    },
+    {
+      "path": "surfaces/bound_geometry.json",
+      "sha256": "b2d5a6c5eb774c7d5af6fc459e7b4611d3e9625f92d3b1fbe1891436107bdd45",
+      "bytes": 17690
+    },
+    {
+      "path": "surfaces/coverage.json",
+      "sha256": "503e3dcf5a79d49c1f247ecb12426d9bdf197912f98dbeb6e19f9d78e3e6d4ca",
+      "bytes": 1981
+    },
+    {
+      "path": "surfaces/entity_inventory.txt",
+      "sha256": "0e05bb0cc240b918341ec38672fae2934f0c55b67b77d369e8008a3c5a2b1952",
+      "bytes": 9731
+    },
+    {
+      "path": "surfaces/geometry_crosscheck.output.json",
+      "sha256": "657f1051b0fd88dd012d92349886210b6d92d252caefb3d48bbe1b4865f4ea55",
+      "bytes": 519
+    },
+    {
+      "path": "surfaces/hatch_regions.output.json",
+      "sha256": "d2ea2dd434ccdcc47d032feb85587ce89bbe75d8423a0598509ee371e1c7bb2f",
+      "bytes": 4966
+    },
+    {
+      "path": "surfaces/neutral/CAD中性取证清单.json",
+      "sha256": "73130890ae0de285fce136393fe1550ddbdf49dd3222ce4474f6477395c63d34",
+      "bytes": 5032
+    },
+    {
+      "path": "surfaces/neutral/CAD提取失败对象.json",
+      "sha256": "dcd5dccf085b74fc3d53b19b1483c7dfb52809cb1a34719c9ddced1e25dea35f",
+      "bytes": 524
+    },
+    {
+      "path": "surfaces/neutral/CAD读取覆盖与待补读.json",
+      "sha256": "654c36ebe3cd54d252ec112941a91766502a0dba2b21d8b37fb875837a9417c3",
+      "bytes": 2694
+    },
+    {
+      "path": "surfaces/neutral/中性块定义图元.ndjson",
+      "sha256": "4a142c4c3e487617570fef5518a5b58bc1250e7c5322bae931e082f3a1243cfc",
+      "bytes": 4570
+    },
+    {
+      "path": "surfaces/neutral/中性布局图元.ndjson",
+      "sha256": "3f532125c60c9381e68e782352822bedc9868c7a1d81e270c11014535e296511",
+      "bytes": 135537
+    },
+    {
+      "path": "surfaces/observed_raw_facts.json",
+      "sha256": "01428dc9bc31da728ba71cd309d561cf905e30e050ae6baa4e081675eee29de4",
+      "bytes": 110254
+    },
+    {
+      "path": "surfaces/quantity_details.json",
+      "sha256": "b35c14e6b104300f5c60079b513b81c9bc577606701a8a6d3f2aae6c0f7adbe5",
+      "bytes": 2854
+    },
+    {
+      "path": "surfaces/quantity_review.png",
+      "sha256": "c148a3528a40a972dff2b4c04f507f2f6dbffd8df59da6bbda64e178bd6cc0c3",
+      "bytes": 106426
+    },
+    {
+      "path": "surfaces/quantity_review.svg",
+      "sha256": "192fbb87191a2a2fa2b49f9af9cb948a3fb45b4808526cfde53ebcdf87f7d979",
+      "bytes": 17680
+    },
+    {
+      "path": "surfaces/surfaces.input.json",
+      "sha256": "82c460ed654fae3355ac11ca0a3bcc4abb2c32d539c812df90cafb2c2d56c59e",
+      "bytes": 14717
+    },
+    {
+      "path": "surfaces/surfaces.output.json",
+      "sha256": "82713fc8740fecae14956a297a4153db7b8083a9eeb696932ca89c7c2dde840f",
+      "bytes": 23229
+    },
+    {
+      "path": "tool_runs/assemble_deliverables/invocation.json",
+      "sha256": "fbf039a519276436565e7f84a5effdb8394d2ffc3c54ee415b26f355245f02d4",
+      "bytes": 519
+    },
+    {
+      "path": "tool_runs/assemble_deliverables/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/assemble_deliverables/stdout.txt",
+      "sha256": "89112fa04d71efef0dabba13d211604aafc6b51d5af7c4ea3688bfceba8ea860",
+      "bytes": 4029
+    },
+    {
+      "path": "tool_runs/assemble_pipe/invocation.json",
+      "sha256": "a347ee49602c78a3cc3290283998ac3a0355eb77743081daab5f25b13f2df212",
+      "bytes": 526
+    },
+    {
+      "path": "tool_runs/assemble_pipe/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/assemble_pipe/stdout.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/complete_pipe_policy/invocation.json",
+      "sha256": "cc1f8453c50273765de010f93132dfe96badc307af8f245b05af5f4cf5df1b10",
+      "bytes": 517
+    },
+    {
+      "path": "tool_runs/complete_pipe_policy/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/complete_pipe_policy/stdout.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/extract_help/invocation.json",
+      "sha256": "2a51a85fa9e47fe3c12a73d722776aa45633e852c9ae53ec47425f36fda6ac22",
+      "bytes": 551
+    },
+    {
+      "path": "tool_runs/extract_help/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/extract_help/stdout.txt",
+      "sha256": "cbdddef86fc3fe7a57013528fda6ee658e1bce20c86f0314409d93faab78d088",
+      "bytes": 439
+    },
+    {
+      "path": "tool_runs/extract_pipe/invocation.json",
+      "sha256": "7714d39467c97a550048e190dee93738a64a114ecbd616ee5992c38d19bd1355",
+      "bytes": 769
+    },
+    {
+      "path": "tool_runs/extract_pipe/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/extract_pipe/stdout.txt",
+      "sha256": "868c1afbfcf0965dc69df648e2df83f6b2eb91f6d313e4d5d64bff47fa92951b",
+      "bytes": 206
+    },
+    {
+      "path": "tool_runs/extract_surfaces/invocation.json",
+      "sha256": "d89f480c98631b9fa8b6f38455cdb82829f3e3572549e3659f9fa9fcc203f5dc",
+      "bytes": 777
+    },
+    {
+      "path": "tool_runs/extract_surfaces/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/extract_surfaces/stdout.txt",
+      "sha256": "c4cff963fa61ee8375d11aa414b8f2bc5c14f7312cafb95e5a9d878c175c297f",
+      "bytes": 210
+    },
+    {
+      "path": "tool_runs/finalize_before_freeze/invocation.json",
+      "sha256": "e68afd04e7e681e0649634737575f866c9faf118d73cdfaca798dd6545871d5b",
+      "bytes": 521
+    },
+    {
+      "path": "tool_runs/finalize_before_freeze/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/finalize_before_freeze/stdout.txt",
+      "sha256": "ebef3fc9d8ec491597188a92a5e8b92f05ad205f520864a13f20506f7d82bbbc",
+      "bytes": 239
+    },
+    {
+      "path": "tool_runs/fix_assumption_prefix/invocation.json",
+      "sha256": "5c22c072f2c5e27df5db8721355a8c77a2b5f1d5f44c7b6e151f6b180d185c8c",
+      "bytes": 519
+    },
+    {
+      "path": "tool_runs/fix_assumption_prefix/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/fix_assumption_prefix/stdout.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/infer_help/invocation.json",
+      "sha256": "b371edde3d88ef2385e1c6e0b2697cd71520f9cca3d252748cabb873db778c61",
+      "bytes": 543
+    },
+    {
+      "path": "tool_runs/infer_help/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/infer_help/stdout.txt",
+      "sha256": "eb3dd8b086496ec8219aadea2f3e5c467ff0ef290b978f264f3cbe0aa4a1f899",
+      "bytes": 216
+    },
+    {
+      "path": "tool_runs/inspect_raw/invocation.json",
+      "sha256": "39018424067974068f4051252507ad17b8929f31a6058bf17017c0049bea9ba3",
+      "bytes": 507
+    },
+    {
+      "path": "tool_runs/inspect_raw/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/inspect_raw/stdout.txt",
+      "sha256": "3253a5274bdcd5d3040f227c0ff8eaf97a60541f6fe79b7ed1b83b4793f02099",
+      "bytes": 20370
+    },
+    {
+      "path": "tool_runs/pipe_infer/invocation.json",
+      "sha256": "871f093756d9b06d0085ebbc8a53c2ade1929b24eec30ef414a85f5b95f30c38",
+      "bytes": 777
+    },
+    {
+      "path": "tool_runs/pipe_infer/stderr.txt",
+      "sha256": "299c6f27f9f2d96f968f3ad168f9b6a7b97dfd5110f850abc4ed370ed242d2db",
+      "bytes": 90
+    },
+    {
+      "path": "tool_runs/pipe_infer/stdout.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_infer_v2/invocation.json",
+      "sha256": "bded83f2dd740cd8a58be9309e21e0ec567969a5e32b42f483db0797eacb322c",
+      "bytes": 780
+    },
+    {
+      "path": "tool_runs/pipe_infer_v2/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_infer_v2/stdout.txt",
+      "sha256": "0e2141827758b9259d391b418ba5911c563e987fd588eea09b270885ebf4a603",
+      "bytes": 427
+    },
+    {
+      "path": "tool_runs/pipe_minimum_validate/invocation.json",
+      "sha256": "4a81cc5541e2499c45763f6186164cab260127f28832bcf712744e0bff2ead97",
+      "bytes": 654
+    },
+    {
+      "path": "tool_runs/pipe_minimum_validate/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_minimum_validate/stdout.txt",
+      "sha256": "73723448343f22f59a196209545d8ecb9e5cf9bb38db0662dee616587afc7134",
+      "bytes": 793
+    },
+    {
+      "path": "tool_runs/pipe_minimum_validate_v2/invocation.json",
+      "sha256": "bc2d27900ffa8aef849bdd5209765138944efeafd776f12ca56849e19637270d",
+      "bytes": 657
+    },
+    {
+      "path": "tool_runs/pipe_minimum_validate_v2/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_minimum_validate_v2/stdout.txt",
+      "sha256": "2f8fe235389445bb2876ba8ea30037cf881bec6342ce24941714e1045210990a",
+      "bytes": 1285
+    },
+    {
+      "path": "tool_runs/pipe_minimum_validate_v3/invocation.json",
+      "sha256": "117a80e71d7448af7c817b643494bfc025f6af9ab8f861135ce8968023ab6b3f",
+      "bytes": 657
+    },
+    {
+      "path": "tool_runs/pipe_minimum_validate_v3/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_minimum_validate_v3/stdout.txt",
+      "sha256": "b48c0551653b70b5ed7d17cf61e6c8128619b83768d31961ee9adc07b79a34dd",
+      "bytes": 358
+    },
+    {
+      "path": "tool_runs/pipe_object_audit/invocation.json",
+      "sha256": "a5dd6468bc04582447f8bd84841f1a5fc96ec8a4679cc9e5b11fb518746b77e0",
+      "bytes": 805
+    },
+    {
+      "path": "tool_runs/pipe_object_audit/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_object_audit/stdout.txt",
+      "sha256": "a9962dca53f37d0c0f740bcdaf493f4fa942a8f3f06e0f42fa9441e54b902796",
+      "bytes": 228
+    },
+    {
+      "path": "tool_runs/pipe_professional_validate/invocation.json",
+      "sha256": "f551b9db59efc607027f26442a1a4b0765e8222b4ccdc6340ee03acd3bd02eba",
+      "bytes": 786
+    },
+    {
+      "path": "tool_runs/pipe_professional_validate/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_professional_validate/stdout.txt",
+      "sha256": "109513cd3dfb045df4901bb15b0b125b4b60f3fded895dd1d88b41172a744c16",
+      "bytes": 443
+    },
+    {
+      "path": "tool_runs/pipe_professional_validate_v2/invocation.json",
+      "sha256": "66086f6caa6610bdc53f047ea5790c622cab9c81a16167b08cce1dd786e885da",
+      "bytes": 789
+    },
+    {
+      "path": "tool_runs/pipe_professional_validate_v2/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_professional_validate_v2/stdout.txt",
+      "sha256": "e85da5d8981ae97a0c759347279fa7237246b7a3432d1be780b94a64abfb9d7a",
+      "bytes": 446
+    },
+    {
+      "path": "tool_runs/pipe_professional_validate_v3/invocation.json",
+      "sha256": "5a77d1cbadedb17ae706005343877ee4e7684f35859fc035a6c8da22e5353eb5",
+      "bytes": 789
+    },
+    {
+      "path": "tool_runs/pipe_professional_validate_v3/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_professional_validate_v3/stdout.txt",
+      "sha256": "db04851074a24ac63da3861610e500228a530895dcee0bbabf0e117a98fea570",
+      "bytes": 446
+    },
+    {
+      "path": "tool_runs/pipe_summary_validate/invocation.json",
+      "sha256": "d53b036490bfaf2e699bdaec170518c9cb4ace88aa276ad01606b4a83751b83e",
+      "bytes": 793
+    },
+    {
+      "path": "tool_runs/pipe_summary_validate/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_summary_validate/stdout.txt",
+      "sha256": "9e400a853b7876bc8422005713b858431eba562072540db5f82e90c796de3c1e",
+      "bytes": 443
+    },
+    {
+      "path": "tool_runs/pipe_summary_validate_final/invocation.json",
+      "sha256": "bc7ead587f9f2c54aae4302ce1e6cad9c9beef2357e6d907473cdf6fabacd35c",
+      "bytes": 793
+    },
+    {
+      "path": "tool_runs/pipe_summary_validate_final/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_summary_validate_final/stdout.txt",
+      "sha256": "9e400a853b7876bc8422005713b858431eba562072540db5f82e90c796de3c1e",
+      "bytes": 443
+    },
+    {
+      "path": "tool_runs/pipe_summary_validate_help/invocation.json",
+      "sha256": "280652661c291192dee94f2d8a7ab297161975c115c0de3fed34c39b15cdcea7",
+      "bytes": 559
+    },
+    {
+      "path": "tool_runs/pipe_summary_validate_help/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_summary_validate_help/stdout.txt",
+      "sha256": "5db056adfc44efcf4aeddf61ca3b756f3b0316683a8e473ffa598fb236c3b6dd",
+      "bytes": 291
+    },
+    {
+      "path": "tool_runs/pipe_validate_help/invocation.json",
+      "sha256": "b3b91c50f1bb9e5259c0964bbca3d5bfae16bbf53172a8213caa07bb099c27ee",
+      "bytes": 547
+    },
+    {
+      "path": "tool_runs/pipe_validate_help/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/pipe_validate_help/stdout.txt",
+      "sha256": "96a378d4ec00feb7e1ca053333f369ea8a9aac63481ff4db8d2a213f65ce4d62",
+      "bytes": 346
+    },
+    {
+      "path": "tool_runs/prepare_inputs/invocation.json",
+      "sha256": "086b732712e14d1250be047951e30d60397bd0d4e590cef947386995acde244e",
+      "bytes": 520
+    },
+    {
+      "path": "tool_runs/prepare_inputs/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/prepare_inputs/stdout.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/review_html_build/invocation.json",
+      "sha256": "9dcd06fa4a95fe1a311042acfe8849ab883afa0eb6d73624b8763156d5d37480",
+      "bytes": 915
+    },
+    {
+      "path": "tool_runs/review_html_build/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/review_html_build/stdout.txt",
+      "sha256": "b104dcf59f71967cd1aa78dcef00a991be79f5a30c4898bfeb2b1f3f5770dfb3",
+      "bytes": 561
+    },
+    {
+      "path": "tool_runs/review_html_help/invocation.json",
+      "sha256": "46a15469b89486ccb80a52c97c4bbded5b482397f76ecfca3c22410463452e8a",
+      "bytes": 555
+    },
+    {
+      "path": "tool_runs/review_html_help/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/review_html_help/stdout.txt",
+      "sha256": "99ca079825a25882715867558e2f9fbf88b00a88c134137e6c313383414d6533",
+      "bytes": 671
+    },
+    {
+      "path": "tool_runs/revise_delivery_classification/invocation.json",
+      "sha256": "55fae59b2e05a01097adcb690a36f5d20c3fd2dfe6acac76c157f66aec7da449",
+      "bytes": 537
+    },
+    {
+      "path": "tool_runs/revise_delivery_classification/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/revise_delivery_classification/stdout.txt",
+      "sha256": "41e80534d8514fb7d30218633483dadae69b3526b62481529814a1b5fc162f06",
+      "bytes": 629
+    },
+    {
+      "path": "tool_runs/surface_binding_validate/invocation.json",
+      "sha256": "c0b9a8c6a3909fcd96c6dc0214909701baeff9706e7cce076d155b16bc24fdf5",
+      "bytes": 1171
+    },
+    {
+      "path": "tool_runs/surface_binding_validate/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/surface_binding_validate/stdout.txt",
+      "sha256": "0fe08b8e010391572dccecf7a600abc74e496f2b17171dcd45e2d571e579cf08",
+      "bytes": 582
+    },
+    {
+      "path": "tool_runs/surface_calculate/invocation.json",
+      "sha256": "380370e62de71cb3f630c17746949bf9e60243f7d51204dfcee1ffa30a8eca29",
+      "bytes": 816
+    },
+    {
+      "path": "tool_runs/surface_calculate/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/surface_calculate/stdout.txt",
+      "sha256": "427f5d1513bbb88ac90c26d405829f9d56a345e7d293887630d3658900669741",
+      "bytes": 156
+    },
+    {
+      "path": "tool_runs/surface_extractor_help/invocation.json",
+      "sha256": "c96194a18d505c3775ca92bf22ede6bc5c952a4400c7ba9849adbaf0cd1d5d84",
+      "bytes": 561
+    },
+    {
+      "path": "tool_runs/surface_extractor_help/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/surface_extractor_help/stdout.txt",
+      "sha256": "d89a9a303ce20539b69fb9171aae7a54a2471738f300a464aaa56e02a7a8dc57",
+      "bytes": 1471
+    },
+    {
+      "path": "tool_runs/surface_hatch_extract/invocation.json",
+      "sha256": "a8c56eec235c775eff93d70678cdf196e23ce1c1ff7ce976cf3c503b608e9744",
+      "bytes": 1001
+    },
+    {
+      "path": "tool_runs/surface_hatch_extract/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/surface_hatch_extract/stdout.txt",
+      "sha256": "b519d31c05e55f7a3b353339ea87ac8eddbc88dfb1b8c00677b885e7d294fbc6",
+      "bytes": 228
+    },
+    {
+      "path": "tool_runs/surface_minimum_validate/invocation.json",
+      "sha256": "5ab6997caa936f95878b38a85cc75a11d60a678186ded5eb306238f6a35298c7",
+      "bytes": 659
+    },
+    {
+      "path": "tool_runs/surface_minimum_validate/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "tool_runs/surface_minimum_validate/stdout.txt",
+      "sha256": "7801e7bfc8a7315a29ae661f86cbed5f66c58670659b674a895615965a1d47a5",
+      "bytes": 360
+    },
+    {
+      "path": "visual_review.json",
+      "sha256": "ad3bcef7ad379d2965ebcb368fc24f1368f4ee5b87df5c1e8b8298ba59e2678c",
+      "bytes": 2169
+    }
+  ],
+  "post_freeze_policy": "No answer or native input/output edits after freeze; any later comparison must be separate.",
+  "reference_access_before_freeze": false,
+  "true_human_intervention": [],
+  "native_quantity_pointer_verification": "All eight delivered object values resolve to actual native output fields and agree within display rounding."
+}

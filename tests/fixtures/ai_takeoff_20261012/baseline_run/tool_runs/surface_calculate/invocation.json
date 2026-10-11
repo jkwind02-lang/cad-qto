@@ -1,0 +1,16 @@
+{
+  "argv": [
+    "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+    "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/scripts/calculate_surfaces_envelope.py",
+    "--manifest",
+    "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.input.json",
+    "--output",
+    "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/surfaces.output.json"
+  ],
+  "start_utc": "2026-10-11T16:16:44.740327+00:00",
+  "end_utc": "2026-10-11T16:16:44.928365+00:00",
+  "exit_code": 0,
+  "script_sha256": {
+    "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/scripts/calculate_surfaces_envelope.py": "1fd4950e6458dd19da6de3d71a006e270f52b77b4e394f32234d71d17d20fdff"
+  }
+}

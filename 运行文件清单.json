@@ -96,8 +96,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/按人工算量顺序执行与重算.md",
-      "sha256": "12cc586177d04b5ee0d797d77587812baa4265e604e5123445ef8f45a83eb80a",
-      "bytes": 9409
+      "sha256": "5d88a7e41060aa047e1ad2d2046895ebaa2b4a3b9f3a66d98c92634d3ce0d104",
+      "bytes": 9621
     },
     {
       "path": "_qto-shared-evidence/references/按任务阶段读取.md",
@@ -466,8 +466,8 @@
     },
     {
       "path": "qto-coordinator/SKILL.md",
-      "sha256": "24db11d00a58301da29cc7598e4ff121630cd09b809d3f3c9d5d23fb24f756a1",
-      "bytes": 9736
+      "sha256": "74aaddeeb4f3142a58c6c3e322d0e78a10ad811c46c5b69a20738ceca4029abf",
+      "bytes": 9864
     },
     {
       "path": "qto-coordinator/agents/openai.yaml",
@@ -841,8 +841,8 @@
     },
     {
       "path": "qto-pipe-networks/SKILL.md",
-      "sha256": "9fa4f458e644d0edec40f27c699ff2de65d8ba2a02387fca3c0387cdf7553d6f",
-      "bytes": 16004
+      "sha256": "c3b0dfb07f11ac42ccc63d34423a6956570fc46c57d04bdd497d15e4f39559b5",
+      "bytes": 16118
     },
     {
       "path": "qto-pipe-networks/agents/openai.yaml",
@@ -1021,8 +1021,8 @@
     },
     {
       "path": "qto-rebar/SKILL.md",
-      "sha256": "d16b6fcc7187398fcd571ae665e55fc1c09b974f854bf9188346f1f8e360008e",
-      "bytes": 13787
+      "sha256": "e5a0aa36e7f00e5a3aac281b9a6fa08ac645db2c9010f45c6531c2b4400cd8cf",
+      "bytes": 13872
     },
     {
       "path": "qto-rebar/agents/openai.yaml",
@@ -1031,8 +1031,8 @@
     },
     {
       "path": "qto-rebar/capability.json",
-      "sha256": "4b910604b07bda4153008d0f0a5532711e88c88456c99622d2c1da160accaa24",
-      "bytes": 2175
+      "sha256": "d5dfd80c9bdff5d4e93bdddfbbbda4eea7623c32dbbbc9108dde4e3cac1cc318",
+      "bytes": 2250
     },
     {
       "path": "qto-rebar/references/对象范围与相邻边界.md",
@@ -1071,8 +1071,8 @@
     },
     {
       "path": "qto-rebar/references/钢筋计算清单格式.md",
-      "sha256": "f3915eff48455fe10595961abc3ac6544aba009967ccbb0dbce0d9b2f12403f4",
-      "bytes": 10462
+      "sha256": "d6374085ee9b1e4689b8f925765f60db3d01f1bcac152a66f35b35bdcd3ab761",
+      "bytes": 11874
     },
     {
       "path": "qto-rebar/references/钢筋识别与构件配筋规则.md",
@@ -1081,13 +1081,13 @@
     },
     {
       "path": "qto-rebar/scripts/calculate_rebar_items.py",
-      "sha256": "e9fdc5020599a21e4c655339fbd76a884159ffea835aaffa3555c6940aed8adb",
-      "bytes": 49216
+      "sha256": "c4a69281dcd85af400dfd8c61633952fa61e1c7c42cfe7d8323f0d8f3b4da6ca",
+      "bytes": 52325
     },
     {
       "path": "qto-rebar/scripts/validate_rebar_result.py",
-      "sha256": "6bfc3a689885c05d1aa59f358fd081149fdaacb392599c5924cf637e3b9b0b5c",
-      "bytes": 10317
+      "sha256": "949ffc32363b97b2bbda1dbd261679dadcdaac0e0cc638731adabbf560fb7c8a",
+      "bytes": 12723
     },
     {
       "path": "qto-roads-siteworks/SKILL.md",

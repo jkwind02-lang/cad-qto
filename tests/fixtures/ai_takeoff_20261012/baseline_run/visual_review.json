@@ -1,0 +1,34 @@
+{
+  "schema": "model-visual-review-record/1.0",
+  "reviewer": "GPT-6 Astra Pro / ai_baseline_takeoff",
+  "origin": "model",
+  "human_intervention": [],
+  "status": "completed",
+  "actual_views": [
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.png",
+      "view_method": "host tools.view_image",
+      "observation": "Original full P-01 visually inspected: both plans, system diagram, notes and legend. SUP route endpoints, single R-A and RED-A boundary checked."
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.png",
+      "view_method": "host tools.view_image",
+      "observation": "Original full A-01 visually inspected: plan, schedule/notes, S-2 and legend. SH-1 open shaft, AP-1 flush panel and P-1 low screen meanings checked."
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/quantity_review.png",
+      "sha256": "77d01d1e097f3a612bc2dd611a6dac9c4c7d8996c6b65513148b30e2ea65f9a0",
+      "view_method": "host tools.view_image",
+      "observation": "Five highlighted plan segments stop at S-IN/U-OUT and RED-A division; one displayed system riser is labelled 4.700 m from actual CL elevations; system horizontal lines and DRN remain uncounted."
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/quantity_review.png",
+      "sha256": "c148a3528a40a972dff2b4c04f507f2f6dbffd8df59da6bbda64e178bd6cc0c3",
+      "view_method": "host tools.view_image",
+      "observation": "Two coloured material rectangles match source finish division; SH-1 cutout lies only in CL-11. AP-1 retained within CL-24. Both materials extend across the screen projection."
+    }
+  ],
+  "html_validation": "Native shared generator structure check passed. Browser interaction validation was not performed; no claim of browser QA.",
+  "geometric_figure_limit": "Review PNG/SVG redraw raw native geometry for location; source drawing.png remains authoritative visual copy.",
+  "review_record_created_utc": "2026-10-11T16:23:47.848973+00:00"
+}

@@ -1,0 +1,7 @@
+﻿object_id,view,location,DN,quantity_m,kind,source_handles,native_json_pointer
+PIPE-A0,F1 plan,S-IN to first plan elbow,DN50,3.6,horizontal,CAD-A0;CAD-AD;CAD-BA;CAD-F9;CAD-FD,/segments/0
+PIPE-A1,F1 plan,first plan elbow to R-A,DN50,2.4,horizontal,CAD-A1;CAD-AE;CAD-C0;CAD-F9;CAD-FD,/segments/1
+PIPE-A2,F2 plan,R-A to RED-A centre,DN50,2.3,horizontal,CAD-A2;CAD-AF;CAD-C6;CAD-F9;CAD-FD,/segments/2
+PIPE-A3,F2 plan,RED-A centre to upper plan elbow,DN32,2.4,horizontal,CAD-A3;CAD-B0;CAD-CC;CAD-F9;CAD-FD,/segments/3
+PIPE-A4,F2 plan,upper plan elbow to U-OUT,DN32,1.9,horizontal,CAD-A4;CAD-B1;CAD-D2;CAD-F9;CAD-FD,/segments/4
+PIPE-RA-V,F1/F2 plans + system diagram,"One R-A riser, F1 PIPE CL to F2 PIPE CL",DN50,4.7,vertical,CAD-A5;CAD-A6;CAD-A7;CAD-A8;CAD-DB;CAD-DC;CAD-DD;CAD-DE;CAD-DF;CAD-E0;CAD-E1;CAD-FA;CAD-FB;CAD-FE,/segments/5

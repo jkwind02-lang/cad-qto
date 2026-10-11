@@ -1,0 +1,48 @@
+{
+  "model": "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff",
+  "recorded_at_utc": "2026-10-11T16:29:08.786277+00:00",
+  "review_status": "unreviewed",
+  "source_sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+  "observed_views": [
+    "Entire supplied PNG: RCP-01",
+    "Entire S-2 ceiling/screen/access detail",
+    "Finish schedule and all project notes",
+    "Legend"
+  ],
+  "covered_surfaces": [
+    "SURF-CL-11",
+    "SURF-CL-24"
+  ],
+  "material_boundary_handles": [
+    "9A",
+    "9B"
+  ],
+  "quantity_feature_handles": [
+    "9E",
+    "AE",
+    "BE",
+    "BF"
+  ],
+  "coverage_conclusion": "Outer finish boundary is closed; solid divider partitions it into two nonoverlapping materials. All tagged RCP features accounted for. S-2 supplies applicability only, not additional area.",
+  "excluded": [
+    "Detail drawing as an additional surface",
+    "Legend symbol as an opening",
+    "Low screen footprint as a ceiling deduction",
+    "Shaft reveals, vertical returns, extra layers, bulkheads, unshown projections per EE",
+    "Framing, substrate bodies, panel equipment counts, procurement/loss/prices per EF,F0 and task"
+  ],
+  "unresolved_quantity_items": [],
+  "neutral_pending_disposition": [
+    {
+      "record_id": "CAD-7B",
+      "block": "_CLOSEDFILLED",
+      "action": "noninstantiated default arrow-block definition; no INSERT entities occur in Model; not a finish or opening"
+    },
+    {
+      "record_id": "CAD-98/CAD-99",
+      "action": "Native hatch-region adapter run; two successfully extracted regions. Area ownership is still determined by solid boundary and finish schedule."
+    }
+  ],
+  "human_interventions": [],
+  "actual_observation": "Both original task PNGs were actually viewed by this model. This record is model work, not human sign-off."
+}

@@ -1,0 +1,58 @@
+{
+  "schema_version": "actual-model-return-review/1.0",
+  "recorded_at_utc": "2026-10-11T16:35:38.751436+00:00",
+  "observer": "Current ChatGPT model execution agent /root/ai_candidate_takeoff",
+  "human_reviewer": null,
+  "human_signoff": false,
+  "original_pngs_actually_viewed": true,
+  "post_calculation_overlays_actually_viewed": true,
+  "observed_files": [
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/review_overlay.png",
+      "sha256": "e0a446a4032648ff72cb7e16e6b3fdab5187183b05bd0af6b9d2d79b6541f5e3"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/review_overlay.png",
+      "sha256": "386e45724c00bc2e2c2bf023116854e358983ed96b1b90800a3ea000e781aa74"
+    }
+  ],
+  "pipe_review": {
+    "actual_viewed_scope": "Entire P-01 overlay including both plans, system diagram and notes/legend",
+    "finding": "All six labelled measured segments align with the intended source route. Reverse trace from U-OUT through the reducer to the single R-A and onward to S-IN closes. Existing DRN crossing, legend lines and system-plan duplication remain outside raw length. R-A overlay location represents the elevation-derived segment, not a scaled diagram length.",
+    "quantity_revision_after_review": false
+  },
+  "surfaces_review": {
+    "actual_viewed_scope": "Entire A-01 overlay, both material regions, shaft, access panel and screen detail",
+    "finding": "The two measured boundaries coincide with the source internal perimeter and material divider. SH-1 is the only cutout in the CL-11 outline; AP-1 remains within the CL-24 material surface; screen projection does not divide or deduct either surface. Source dimensions and material labels remain legible.",
+    "quantity_revision_after_review": false
+  },
+  "html_validation": "Native shared generator schema/binding check passed. The HTML is local-only; browser UI interaction was not exercised. No human feedback or adoption receipts were fabricated.",
+  "native_link_checks": [
+    {
+      "task": "pipe",
+      "quantity": "DN32",
+      "native_pointer": "/length_summary/SUP/规则推算量/DN32",
+      "value_matches_native": true
+    },
+    {
+      "task": "pipe",
+      "quantity": "DN50",
+      "native_pointer": "/length_summary/SUP/规则推算量/DN50",
+      "value_matches_native": true
+    },
+    {
+      "task": "surfaces",
+      "quantity": "CL-11",
+      "native_pointer": "/工程量结果/0/结果/数值",
+      "value_matches_native": true
+    },
+    {
+      "task": "surfaces",
+      "quantity": "CL-24",
+      "native_pointer": "/工程量结果/1/结果/数值",
+      "value_matches_native": true
+    }
+  ],
+  "source_hashes_unchanged": true,
+  "native_quantity_arithmetic_checks": "Native group and item totals consistent; HATCH gross regions corroborate surface rectangles; pipe input quantities match direct source dimensions and native lengths."
+}

@@ -1,0 +1,76 @@
+{
+  "source_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+  "source_sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+  "review_status": "unreviewed",
+  "recognized_by": "GPT-6 Astra Pro / ai_baseline_takeoff",
+  "actual_visual_review": "Supplied full-sheet PNG viewed with host view_image; original CAD entities and notes checked.",
+  "included": [
+    {
+      "surface": "SURF-CL-11",
+      "plan": "RCP-01",
+      "boundary_handles": [
+        "9A",
+        "9B"
+      ],
+      "material_handles": [
+        "9C",
+        "E7",
+        "E8"
+      ],
+      "opening_handles": [
+        "9E",
+        "A1",
+        "E9"
+      ]
+    },
+    {
+      "surface": "SURF-CL-24",
+      "plan": "RCP-01",
+      "boundary_handles": [
+        "9A",
+        "9B"
+      ],
+      "material_handles": [
+        "9D",
+        "E7",
+        "E8"
+      ],
+      "retained_access": [
+        "AE",
+        "B1",
+        "EA",
+        "EB",
+        "E3",
+        "E5"
+      ]
+    }
+  ],
+  "exclusions": [
+    {
+      "handles": [
+        "BE",
+        "BF",
+        "C0",
+        "DD",
+        "E1",
+        "E2",
+        "EC"
+      ],
+      "reason": "Low screen P-1 top 1.700 is below ceiling finish 2.800; continuous finish above. Its projected footprint does not divide/deduct ceiling."
+    },
+    {
+      "handles": [
+        "D9",
+        "DC",
+        "E3",
+        "F1",
+        "F2",
+        "F6"
+      ],
+      "reason": "Detail schematic and legend are supporting evidence, not additional installed finishes."
+    }
+  ],
+  "scope_closed": "Outer internal finish rectangle and material division are complete; only SH-1 is a deductive opening; AP-1 retained; no returns or extra layers per EE/EF/F0.",
+  "unresolved_in_requested_quantity_scope": [],
+  "raw_extraction_limit": "Unused _CLOSEDFILLED SOLID definition unsupported in neutral extractor; no INSERT exists in Model, not part of ceiling boundary."
+}

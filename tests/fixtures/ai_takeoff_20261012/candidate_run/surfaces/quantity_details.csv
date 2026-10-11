@@ -1,0 +1,3 @@
+﻿item_id,material,gross_m2,opening_union_m2,net_m2,boundary_handles,feature_decision,native_json_pointer
+QTY-CL-11,LAYER-CL-11,18.04,0.6299999999999999,17.41,9A;9B,SH-1 deduct; AP-1 retain; P-1 retain,/工程量结果/0/结果/数值
+QTY-CL-24,LAYER-CL-24,9.839999999999998,0.0,9.84,9A;9B,SH-1 deduct; AP-1 retain; P-1 retain,/工程量结果/1/结果/数值

@@ -16,6 +16,9 @@ node_modules/
 *.p12
 *.dwg
 *.dxf
+# Original synthetic drawings for the archived model trial; real project DXF stays ignored.
+!tests/fixtures/ai_takeoff_20261012/inputs/pipe/drawing.dxf
+!tests/fixtures/ai_takeoff_20261012/inputs/surfaces/drawing.dxf
 *.dwl
 *.dwl2
 *.bak

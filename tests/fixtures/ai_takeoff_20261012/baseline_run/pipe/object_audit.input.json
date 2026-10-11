@@ -1,0 +1,342 @@
+{
+  "schema_version": "qto-pipe-object-selection-input/1.0",
+  "audit_id": "AUDIT-P01",
+  "unit": "m",
+  "parameters": {
+    "connection_tolerance": 0.001,
+    "repeat_min_count": 3,
+    "signature_precision": 9
+  },
+  "candidates": [
+    {
+      "object_id": "SEG-CAD-A0",
+      "system": "SUP",
+      "entity_type": "LINE",
+      "start": [
+        1.8,
+        6.7,
+        0.0
+      ],
+      "end": [
+        5.4,
+        6.7,
+        0.0
+      ],
+      "length": 3.6,
+      "space_id": "F1",
+      "source_ids": [
+        "SRC-P01",
+        "CAD-A0"
+      ]
+    },
+    {
+      "object_id": "SEG-CAD-A1",
+      "system": "SUP",
+      "entity_type": "LINE",
+      "start": [
+        5.4,
+        6.7,
+        0.0
+      ],
+      "end": [
+        5.4,
+        9.1,
+        0.0
+      ],
+      "length": 2.4,
+      "space_id": "F1",
+      "source_ids": [
+        "SRC-P01",
+        "CAD-A1"
+      ]
+    },
+    {
+      "object_id": "SEG-CAD-A2",
+      "system": "SUP",
+      "entity_type": "LINE",
+      "start": [
+        19.7,
+        9.1,
+        0.0
+      ],
+      "end": [
+        22.0,
+        9.1,
+        0.0
+      ],
+      "length": 2.3000000000000003,
+      "space_id": "F2",
+      "source_ids": [
+        "SRC-P01",
+        "CAD-A2"
+      ]
+    },
+    {
+      "object_id": "SEG-CAD-A3",
+      "system": "SUP",
+      "entity_type": "LINE",
+      "start": [
+        22.0,
+        9.1,
+        0.0
+      ],
+      "end": [
+        24.400000000000002,
+        9.1,
+        0.0
+      ],
+      "length": 2.4,
+      "space_id": "F2",
+      "source_ids": [
+        "SRC-P01",
+        "CAD-A3"
+      ]
+    },
+    {
+      "object_id": "SEG-CAD-A4",
+      "system": "SUP",
+      "entity_type": "LINE",
+      "start": [
+        24.400000000000002,
+        9.1,
+        0.0
+      ],
+      "end": [
+        24.400000000000002,
+        11.0,
+        0.0
+      ],
+      "length": 1.9000000000000001,
+      "space_id": "F2",
+      "source_ids": [
+        "SRC-P01",
+        "CAD-A4"
+      ]
+    },
+    {
+      "object_id": "SEG-CAD-D3",
+      "system": "DRN",
+      "entity_type": "LINE",
+      "start": [
+        3.9,
+        6.1000000000000005,
+        0.0
+      ],
+      "end": [
+        3.9,
+        10.0,
+        0.0
+      ],
+      "length": 3.9,
+      "space_id": "F1",
+      "source_ids": [
+        "SRC-P01",
+        "CAD-D3"
+      ]
+    },
+    {
+      "object_id": "SEG-CAD-D6",
+      "system": "SUP",
+      "entity_type": "LINE",
+      "start": [
+        31.3,
+        6.6000000000000005,
+        0.0
+      ],
+      "end": [
+        34.2,
+        6.6000000000000005,
+        0.0
+      ],
+      "length": 2.9,
+      "space_id": "SYSTEM-NTS",
+      "source_ids": [
+        "SRC-P01",
+        "CAD-D6"
+      ]
+    },
+    {
+      "object_id": "SEG-CAD-D7",
+      "system": "SUP",
+      "entity_type": "LINE",
+      "start": [
+        34.2,
+        6.6000000000000005,
+        0.0
+      ],
+      "end": [
+        34.2,
+        11.1,
+        0.0
+      ],
+      "length": 4.5,
+      "space_id": "SYSTEM-NTS",
+      "source_ids": [
+        "SRC-P01",
+        "CAD-D7"
+      ]
+    },
+    {
+      "object_id": "SEG-CAD-D8",
+      "system": "SUP",
+      "entity_type": "LINE",
+      "start": [
+        34.2,
+        11.1,
+        0.0
+      ],
+      "end": [
+        37.9,
+        11.1,
+        0.0
+      ],
+      "length": 3.7,
+      "space_id": "SYSTEM-NTS",
+      "source_ids": [
+        "SRC-P01",
+        "CAD-D8"
+      ]
+    },
+    {
+      "object_id": "SEG-CAD-D9",
+      "system": "SUP",
+      "entity_type": "LINE",
+      "start": [
+        37.9,
+        11.1,
+        0.0
+      ],
+      "end": [
+        40.7,
+        11.1,
+        0.0
+      ],
+      "length": 2.8000000000000003,
+      "space_id": "SYSTEM-NTS",
+      "source_ids": [
+        "SRC-P01",
+        "CAD-D9"
+      ]
+    },
+    {
+      "object_id": "SEG-CAD-EC",
+      "system": "SUP",
+      "entity_type": "LINE",
+      "start": [
+        1.0,
+        3.3000000000000003,
+        0.0
+      ],
+      "end": [
+        3.1,
+        3.3000000000000003,
+        0.0
+      ],
+      "length": 2.1,
+      "space_id": "LEGEND",
+      "source_ids": [
+        "SRC-P01",
+        "CAD-EC"
+      ]
+    },
+    {
+      "object_id": "SEG-CAD-EE",
+      "system": "DRN",
+      "entity_type": "LINE",
+      "start": [
+        1.0,
+        2.8000000000000003,
+        0.0
+      ],
+      "end": [
+        3.1,
+        2.8000000000000003,
+        0.0
+      ],
+      "length": 2.1,
+      "space_id": "LEGEND",
+      "source_ids": [
+        "SRC-P01",
+        "CAD-EE"
+      ]
+    }
+  ],
+  "dispositions": [
+    {
+      "object_id": "SEG-CAD-A0",
+      "decision": "include",
+      "basis": "P-01 plan F1 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "source_id": "SRC-P01"
+    },
+    {
+      "object_id": "SEG-CAD-A1",
+      "decision": "include",
+      "basis": "P-01 plan F1 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "source_id": "SRC-P01"
+    },
+    {
+      "object_id": "SEG-CAD-A2",
+      "decision": "include",
+      "basis": "P-01 plan F2 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "source_id": "SRC-P01"
+    },
+    {
+      "object_id": "SEG-CAD-A3",
+      "decision": "include",
+      "basis": "P-01 plan F2 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "source_id": "SRC-P01"
+    },
+    {
+      "object_id": "SEG-CAD-A4",
+      "decision": "include",
+      "basis": "P-01 plan F2 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "source_id": "SRC-P01"
+    },
+    {
+      "object_id": "SEG-CAD-D3",
+      "decision": "exclude",
+      "basis": "Existing DRN DN80 at unmarked crossing. CAD-D4, CAD-D5 and note CAD-FF explicitly exclude DRN from SUP.",
+      "source_id": "SRC-P01"
+    },
+    {
+      "object_id": "SEG-CAD-D6",
+      "decision": "exclude",
+      "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+      "source_id": "SRC-P01"
+    },
+    {
+      "object_id": "SEG-CAD-D7",
+      "decision": "exclude",
+      "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+      "source_id": "SRC-P01"
+    },
+    {
+      "object_id": "SEG-CAD-D8",
+      "decision": "exclude",
+      "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+      "source_id": "SRC-P01"
+    },
+    {
+      "object_id": "SEG-CAD-D9",
+      "decision": "exclude",
+      "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+      "source_id": "SRC-P01"
+    },
+    {
+      "object_id": "SEG-CAD-EC",
+      "decision": "exclude",
+      "basis": "Legend examples only CAD-EB and note CAD-101; no installed physical centerline.",
+      "source_id": "SRC-P01"
+    },
+    {
+      "object_id": "SEG-CAD-EE",
+      "decision": "exclude",
+      "basis": "Legend examples only CAD-EB and note CAD-101; no installed physical centerline.",
+      "source_id": "SRC-P01"
+    }
+  ],
+  "source_ids": [
+    "SRC-P01",
+    "MODEL-PIPE-P01"
+  ]
+}
