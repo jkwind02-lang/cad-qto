@@ -34,6 +34,27 @@ def _verified_objects(index):
         raise SurfaceSelectionError(str(exc)) from exc
 
 
+def _reject_unverified_ancestors(objects, oid):
+    seen = set()
+    current = oid
+    while current:
+        if current in seen:
+            raise SurfaceSelectionError("parent_object_id cycle detected")
+        seen.add(current)
+        row = objects.get(current)
+        if row is None:
+            raise SurfaceSelectionError("missing parent_object_id")
+        if row.get("entity_type") == "INSERT":
+            issues = row.get("issues") or []
+            text = " ".join(str(x) for x in issues)
+            if ("外部参照需核验载入与版本；当前仅列出实际可见定义对象" in text
+                    or "可能含动态块或扩展数据；可见状态需原生CAD或模型另核" in text):
+                raise SurfaceSelectionError(
+                    {"unverified_parent_insert": current}
+                )
+        current = row.get("parent_object_id")
+
+
 def _entity_by_handle(doc, handle):
     for entity in doc.modelspace():
         if str(entity.dxf.get("handle") or "") == str(handle):
@@ -87,6 +108,8 @@ def _unit_scale_from_evidence(doc, unit, unit_evidence):
 def select_hatches(source_dxf: Path, selection: dict, *, index: dict, unit: str, unit_evidence: str):
     digest = _sha256(source_dxf)
     objects = _verified_objects(index)
+    if index.get("source_identity_issues"):
+        raise SurfaceSelectionError("index source_identity_issues prevent normal quantity output")
     if index.get("source", {}).get("sha256") != digest:
         raise SurfaceSelectionError("source_sha256 does not match verified index")
     layout = index.get("layout")
@@ -107,6 +130,7 @@ def select_hatches(source_dxf: Path, selection: dict, *, index: dict, unit: str,
     regions = []
     for oid in raw_ids:
         row = objects[oid]
+        _reject_unverified_ancestors(objects, oid)
         if row.get("entity_type") != "HATCH":
             raise SurfaceSelectionError({"cadinst_not_hatch": oid})
         entity = _entity_by_handle(doc, row.get("source_handle"))
@@ -114,4 +138,7 @@ def select_hatches(source_dxf: Path, selection: dict, *, index: dict, unit: str,
             raise SurfaceSelectionError({"unresolved_source_handle": oid})
         geometry = EXTRACT.hatch_geometry(_transform_entity(entity, row.get("instance_transform")), scale)
         regions.append({"cadinst_id": oid, "area_m2": geometry.area, "bounds_m": list(geometry.bounds)})
+    _verified_objects(index)
+    if _sha256(source_dxf) != digest:
+        raise SurfaceSelectionError("source changed during selection")
     return {"source_sha256": digest, "layout": layout, "unit": unit, "unit_evidence": unit_evidence, "source_read_diagnostics": diagnostics.get("source_read_warnings", []), "source_identity_issues": diagnostics.get("source_identity_issues", []), "regions": regions}
