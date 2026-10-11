@@ -105,6 +105,47 @@ def _unit_scale_from_evidence(doc, unit, unit_evidence):
     return {"mm": 0.001, "m": 1.0}[unit]
 
 
+def _resolve_selection_ids(objects, selection):
+    cadinst_ids = selection.get("cadinst_ids")
+    layer_names = selection.get("layer_names")
+
+
+    if "cadinst_ids" in selection:
+        if (not isinstance(cadinst_ids, list) or not cadinst_ids or
+                any(not isinstance(x, str) or not x for x in cadinst_ids)):
+            raise SurfaceSelectionError("invalid cadinst_ids")
+        if len(cadinst_ids) != len(set(cadinst_ids)):
+            raise SurfaceSelectionError("duplicate cadinst_ids")
+        selected = []
+        for oid in cadinst_ids:
+            if oid not in objects or objects[oid].get("entity_type") != "HATCH":
+                raise SurfaceSelectionError({"invalid_cadinst": oid})
+            selected.append(oid)
+    else:
+        selected = None
+
+
+    if "layer_names" in selection:
+        if (not isinstance(layer_names, list) or not layer_names or
+                any(not isinstance(x, str) or not x for x in layer_names)):
+            raise SurfaceSelectionError("invalid layer_names")
+        layer_selected = [
+            oid for oid, row in objects.items()
+            if row.get("entity_type") == "HATCH"
+            and row.get("effective_layer") in layer_names
+        ]
+        if not layer_selected:
+            raise SurfaceSelectionError("no layer match")
+        selected = layer_selected if selected is None else [
+            oid for oid in selected if oid in layer_selected
+        ]
+
+
+    if selected is None or not selected:
+        raise SurfaceSelectionError("selection matched no hatch")
+    return selected
+
+
 def select_hatches(source_dxf: Path, selection: dict, *, index: dict, unit: str, unit_evidence: str):
     digest = _sha256(source_dxf)
     objects = _verified_objects(index)
@@ -115,14 +156,7 @@ def select_hatches(source_dxf: Path, selection: dict, *, index: dict, unit: str,
     layout = index.get("layout")
     if selection.get("source_sha256") != digest or selection.get("layout") != layout:
         raise SurfaceSelectionError("selection binding mismatch")
-    raw_ids = selection.get("cadinst_ids", [])
-    if not isinstance(raw_ids, list) or not raw_ids:
-        raise SurfaceSelectionError("cadinst_ids required")
-    if len(raw_ids) != len(set(raw_ids)):
-        raise SurfaceSelectionError("duplicate cadinst_ids are not allowed")
-    missing = sorted(set(raw_ids) - set(objects))
-    if missing:
-        raise SurfaceSelectionError({"unmatched_cadinst": missing})
+    raw_ids = _resolve_selection_ids(objects, selection)
     doc, diagnostics = EXTRACT.read_dxf_with_diagnostics(source_dxf)
     if diagnostics.get("source_identity_issues"):
         raise SurfaceSelectionError("source_identity_issues prevent normal quantity output")
