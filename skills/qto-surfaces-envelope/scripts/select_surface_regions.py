@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exact HATCH selection adapter using existing CAD traversal and geometry."""
+"""Exact HATCH selection adapter using existing surface traversal and geometry."""
 from __future__ import annotations
 
 import hashlib
@@ -19,15 +19,14 @@ def _load(name, path):
 
 
 ROOT = Path(__file__).resolve().parents[2]
-GEOM = _load("qto_cad_geometry", ROOT / "_qto-shared-evidence/scripts/qto_cad_geometry.py")
 EXTRACT = _load("extract_surface_regions", Path(__file__).resolve().parent / "extract_surface_regions.py")
 
 
-def select_hatches(source_dxf: Path, selection: dict, *, layout: str, unit_scale: float = 1.0):
+def select_hatches(source_dxf: Path, selection: dict, *, layout: str, unit_scale: float):
     digest = hashlib.sha256(source_dxf.read_bytes()).hexdigest()
     if selection.get("source_sha256", "").lower() != digest.lower():
         raise SurfaceSelectionError("source_sha256 does not match DXF")
-    if not layout or selection.get("layout") != layout:
+    if not isinstance(layout, str) or not layout or selection.get("layout") != layout:
         raise SurfaceSelectionError("layout does not match")
     if not isinstance(unit_scale, (int, float)) or isinstance(unit_scale, bool) or unit_scale <= 0:
         raise SurfaceSelectionError("invalid unit scale")
@@ -36,9 +35,9 @@ def select_hatches(source_dxf: Path, selection: dict, *, layout: str, unit_scale
     if not wanted:
         raise SurfaceSelectionError("cadinst_ids required")
 
-    doc, _ = GEOM.read_dxf_with_diagnostics(source_dxf)
+    doc = EXTRACT.read_dxf_with_diagnostics(source_dxf)[0]
     found = []
-    for identity, entity, failure, _ in GEOM.walk(doc.modelspace()):
+    for identity, entity, failure, _ in EXTRACT.walk(doc.modelspace()):
         object_id = "CADINST-" + "/".join(identity)
         if object_id not in wanted:
             continue
@@ -52,8 +51,11 @@ def select_hatches(source_dxf: Path, selection: dict, *, layout: str, unit_scale
     if missing:
         raise SurfaceSelectionError({"unmatched_cadinst": missing})
 
-    regions = []
-    for object_id, entity in found:
-        geometry = EXTRACT.hatch_geometry(entity, unit_scale)
-        regions.append({"cadinst_id": object_id, "area": geometry.area})
-    return {"source_sha256": digest, "layout": layout, "regions": regions}
+    return {
+        "source_sha256": digest,
+        "layout": layout,
+        "regions": [
+            {"cadinst_id": object_id, "area_m2": EXTRACT.hatch_geometry(entity, unit_scale).area}
+            for object_id, entity in found
+        ],
+    }
