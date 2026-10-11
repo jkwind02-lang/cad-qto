@@ -113,3 +113,76 @@ def test_unknown_unit_requires_evidence(tmp_path):
     with pytest.raises(SurfaceSelectionError):
         _select(dxf, index, oid, "m", "")
     assert _select(dxf, index, oid, "m", "drawing_note_m")
+
+
+def test_source_change_after_geometry_is_rejected(tmp_path, monkeypatch):
+    dxf = tmp_path / "source_change.dxf"
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 6
+    block = doc.blocks.new("A")
+    _hatch(block)
+    doc.modelspace().add_blockref("A", (0, 0))
+    doc.saveas(dxf)
+
+
+    index = _index(dxf)
+    oid = next(
+        k for k, v in module.WORKBENCH._verified_index(index).items()
+        if v["entity_type"] == "HATCH"
+    )
+
+
+    original = module.EXTRACT.hatch_geometry
+
+
+    def wrapped(*args, **kwargs):
+        geometry = original(*args, **kwargs)
+        with open(dxf, "ab") as fp:
+            fp.write(b"changed")
+        return geometry
+
+
+    monkeypatch.setattr(module.EXTRACT, "hatch_geometry", wrapped)
+
+
+    with pytest.raises(module.SurfaceSelectionError):
+        _select(dxf, index, oid)
+
+def test_xref_parent_insert_is_rejected(tmp_path):
+    dxf = tmp_path / "xref_parent.dxf"
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 6
+    block = doc.blocks.new("XREF_BLOCK")
+    block.block.dxf.flags = 4
+    _hatch(block)
+    doc.modelspace().add_blockref("XREF_BLOCK", (0, 0))
+    doc.saveas(dxf)
+
+
+    index = _index(dxf)
+    oid = next(
+        k for k, v in module.WORKBENCH._verified_index(index).items()
+        if v["entity_type"] == "HATCH"
+    )
+
+
+    with pytest.raises(module.SurfaceSelectionError):
+        _select(dxf, index, oid)
+
+@pytest.mark.parametrize("insunits", [1, 2, 5])
+@pytest.mark.parametrize("unit", ["mm", "m"])
+def test_invalid_insunits_rejected(insunits, unit):
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = insunits
+    with pytest.raises(module.SurfaceSelectionError):
+        module._unit_scale_from_evidence(doc, unit, "explicit")
+
+
+
+
+def test_insunits_zero_evidence_not_keyword_parsed():
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 0
+    assert module._unit_scale_from_evidence(
+        doc, "mm", "毫米及米换算见总说明"
+    ) == pytest.approx(0.001)
