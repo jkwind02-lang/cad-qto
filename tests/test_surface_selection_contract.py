@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 import sys
+import pytest
 
 
 MODULE = Path(__file__).parents[1] / "skills" / "qto-surfaces-envelope" / "scripts" / "surface_selection_contract.py"
@@ -21,12 +22,8 @@ VALID_SHA = "a" * 64
 def test_explicit_layer_names_are_separate_from_regex():
     assert normalize_layer_names(["FILL-A", "FILL,B"]) == ("FILL-A", "FILL,B")
     for value in ("FILL-A,FILL-B", {"FILL-A"}):
-        try:
+        with pytest.raises(SurfaceSelectionError):
             normalize_layer_names(value)
-        except SurfaceSelectionError:
-            pass
-        else:
-            raise AssertionError("explicit layer names must require list/tuple")
 
 
 def test_cadinst_selection_requires_real_source_and_layout_binding():
