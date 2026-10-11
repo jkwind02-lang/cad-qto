@@ -1,15 +1,15 @@
 {
   "name": "cad-qto",
-  "version": "0.2.0+codex.20261011.6",
-  "description": "CAD全专业工程量计算与明细复核，按物理对象调用13个专业Skill，跨专业使用协调入口，共用取证、证据和校验资源。",
+  "version": "0.2.0+codex.20261012.1",
+  "description": "AI自主读图与工程量计算，运用工程知识和人工算量方法选择取证、推导与校核；按物理对象调用13个专业Skill，共用CAD观察、精确计算和证据资源。",
   "author": {
     "name": "Local developer"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "CAD 算量",
-    "shortDescription": "全专业算量与明细复核：统一插件管理，按专业执行",
-    "longDescription": "包含13个专业算量Skill、1个协调入口和公共取证校验资源。按人工流程局部读图、建立实物与应计量项、运行专业计算、回图复核；支持实际文件依赖、任务恢复、并行分支和意见重算。单一对象直达专业，多计算链统一交接，确认/推算/方案量分列。依赖本机已有CAD及脚本环境，安装不代表全专业自动识别成熟。",
+    "shortDescription": "AI理解图纸与构造，工具精确取量，按专业形成可复核工程量",
+    "longDescription": "由当前模型运用图文理解和工程知识，自主选择读图、取证、尺寸推导与查漏方法；插件提供CAD图样观察、精确实体和专业计算。包含13个专业Skill及协调入口，支持工作推算、实际文件依赖与局部重算。人工方法是可选策略，模型负责形成计算输入；来源、单位和数量层级分别核查。依赖本机CAD及脚本环境，安装不代表全专业原图识别成熟。",
     "developerName": "Local developer",
     "category": "Productivity",
     "capabilities": [],

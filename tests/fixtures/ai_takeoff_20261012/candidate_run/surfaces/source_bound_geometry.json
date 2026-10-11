@@ -1,0 +1,181 @@
+{
+  "source_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+  "source_sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+  "raw_unit": "mm",
+  "conversion_to_m": 0.001,
+  "raw_boundary_handles": [
+    "9A",
+    "9B"
+  ],
+  "raw_shaft_handle": "9E",
+  "raw_access_handle": "AE",
+  "raw_boundary_mm": [
+    1600.0,
+    6100.0,
+    8400.0,
+    10200.0
+  ],
+  "raw_shaft_mm": [
+    2400.0,
+    8300.0,
+    3100.0,
+    9200.0
+  ],
+  "raw_access_panel_mm": [
+    7100.0,
+    8600.0,
+    7600.0,
+    9300.0
+  ],
+  "edges": {
+    "EDGE-9A-0": {
+      "edge_id": "EDGE-9A-0",
+      "coordinate_system_id": "A01-RCP-Model-metres",
+      "start": [
+        1.6,
+        6.1,
+        0
+      ],
+      "end": [
+        8.4,
+        6.1,
+        0
+      ],
+      "unit": "m",
+      "source_handle": "9A",
+      "source_geometry_part_index": 0
+    }
+  },
+  "surface_frames": {
+    "CL-11": {
+      "coordinate_system_id": "A01-RCP-Model-metres",
+      "origin_m": [
+        1.6,
+        6.1,
+        0
+      ],
+      "x_axis": [
+        1,
+        0,
+        0
+      ],
+      "up_axis": [
+        0,
+        1,
+        0
+      ],
+      "source_edge_id": "EDGE-9A-0",
+      "source_edge_direction": "same",
+      "source_edge_interval_m": [
+        0.0,
+        4.4
+      ],
+      "vertical_range_m": [
+        0,
+        4.1
+      ],
+      "vertical_origin_m": 0
+    },
+    "CL-24": {
+      "coordinate_system_id": "A01-RCP-Model-metres",
+      "origin_m": [
+        6.0,
+        6.1,
+        0
+      ],
+      "x_axis": [
+        1,
+        0,
+        0
+      ],
+      "up_axis": [
+        0,
+        1,
+        0
+      ],
+      "source_edge_id": "EDGE-9A-0",
+      "source_edge_direction": "same",
+      "source_edge_interval_m": [
+        4.4,
+        6.8
+      ],
+      "vertical_range_m": [
+        0,
+        4.1
+      ],
+      "vertical_origin_m": 0
+    }
+  },
+  "surfaces": {
+    "CL-11": {
+      "bounds_mm": [
+        1600.0,
+        6100.0,
+        6000.0,
+        10200.0
+      ],
+      "label_handle": "9C",
+      "material": "acoustic ceiling panel",
+      "local_coordinate_meaning": "x/y are the RCP CAD drawing-plane axes, not building elevation; ceiling elevation is independently noted +2.800.",
+      "openings": [
+        {
+          "opening_id": "SH-1",
+          "rectangle_m": [
+            0.8,
+            2.2,
+            1.5,
+            3.1
+          ]
+        }
+      ]
+    },
+    "CL-24": {
+      "bounds_mm": [
+        6000.0,
+        6100.0,
+        8400.0,
+        10200.0
+      ],
+      "label_handle": "9D",
+      "material": "painted gypsum-board ceiling finish",
+      "local_coordinate_meaning": "x/y are the RCP CAD drawing-plane axes, not building elevation; ceiling elevation is independently noted +2.800.",
+      "openings": []
+    }
+  },
+  "feature_decisions": {
+    "SH-1": {
+      "action": "deduct true open shaft footprint",
+      "source_handles": [
+        "9E",
+        "A1",
+        "A7",
+        "AD",
+        "E9"
+      ]
+    },
+    "AP-1": {
+      "action": "retain same-finish flush panel as material area",
+      "source_handles": [
+        "AE",
+        "B1",
+        "EA",
+        "EB",
+        "E3",
+        "E5"
+      ]
+    },
+    "P-1": {
+      "action": "retain ceiling continuous above low screen",
+      "source_handles": [
+        "BE",
+        "BF",
+        "C0",
+        "DD",
+        "E0",
+        "E1",
+        "E2",
+        "EC"
+      ]
+    }
+  }
+}

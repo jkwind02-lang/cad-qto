@@ -1,0 +1,520 @@
+{
+  "契约版本": "qto-result-minimum/1.0",
+  "recognition_basis": {
+    "schema_version": "qto-model-recognition-ledger/1.0",
+    "ledger_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/working_recognition_ledger_v1.json",
+    "ledger_sha256": "54c8d74ee6848aca60f1131206d2e4b75c77edee23c40d0f9221ea9e09a26792",
+    "decision_origin": "model",
+    "recognized_by": [
+      "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff"
+    ],
+    "adoption_scope": "working",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false,
+    "meaning": "模型依据本轮图纸作工作识别；未取得人工复核或正式采用资格"
+  },
+  "任务范围": {
+    "业务专业": "给水管道",
+    "主要物理对象": "新设 SUP 中心线",
+    "系统": "SUP",
+    "楼栋": "WEST SERVICE SUPPLY",
+    "楼层或区域": "F1、F2 与 R-A 层间连接，S-IN 至 U-OUT",
+    "图纸类型": "平面、系统、图例及设计说明",
+    "图纸版本": "P-01 Rev A",
+    "输出维度": "管段、楼层、DN、m"
+  },
+  "资料选择": [
+    {
+      "资料编号": "SRC-PIPE-DXF",
+      "路径": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+      "资料类型": "DXF",
+      "版本身份": "P-01 Rev A SHA256:ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "选择结论": "已选择",
+      "原因": "用户指定的本轮原图",
+      "拟提取中性事实": "线段、符号、文字、尺寸、标高及单位",
+      "未使用影响": "无替代资料"
+    }
+  ],
+  "证据目录": [
+    {
+      "证据编号": "EV-PIPE-A0",
+      "资料编号": "SRC-PIPE-DXF",
+      "来源类型": "DXF",
+      "中性事实": "{\"object_id\": \"PIPE-A0\", \"view\": \"F1 plan\", \"location\": \"S-IN to first plan elbow\", \"entity_handle\": \"A0\", \"layout\": \"Model\", \"source_ids\": [\"CAD-A0\", \"CAD-AD\", \"CAD-BA\", \"CAD-F9\", \"CAD-FD\"], \"source_start_mm\": [1800.0, 6700.0, 0.0], \"source_end_mm\": [5400.0, 6700.0, 0.0], \"raw_length_mm\": 3600.0, \"dimension_handle\": \"BA\", \"dn\": \"DN50\", \"dn_text_handle\": \"AD\", \"calculation_start_m\": [1.8, 6.7, 3.15], \"calculation_end_m\": [5.4, 6.7, 3.15], \"length_m\": 3.6000000000000005, \"quantity_type\": \"horizontal\", \"source_sha256\": \"ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7\"}",
+      "定位": "Model / CAD-A0, CAD-AD, CAD-BA, CAD-F9, CAD-FD",
+      "来源身份": "SHA256:ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "提取方式": "本轮模型实际 PNG 识图；原生中性实体读取；来源绑定坐标与文字适配；原生 infer_pipe_network.py 计算",
+      "质量状态": "模型工作识别，未人工复核",
+      "限制": "不是正式采用；平面毫米坐标转换与跨图实物对应由模型本轮输入明确声明。"
+    },
+    {
+      "证据编号": "EV-PIPE-A1",
+      "资料编号": "SRC-PIPE-DXF",
+      "来源类型": "DXF",
+      "中性事实": "{\"object_id\": \"PIPE-A1\", \"view\": \"F1 plan\", \"location\": \"first plan elbow to R-A\", \"entity_handle\": \"A1\", \"layout\": \"Model\", \"source_ids\": [\"CAD-A1\", \"CAD-AE\", \"CAD-C0\", \"CAD-F9\", \"CAD-FD\"], \"source_start_mm\": [5400.0, 6700.0, 0.0], \"source_end_mm\": [5400.0, 9100.0, 0.0], \"raw_length_mm\": 2400.0, \"dimension_handle\": \"C0\", \"dn\": \"DN50\", \"dn_text_handle\": \"AE\", \"calculation_start_m\": [5.4, 6.7, 3.15], \"calculation_end_m\": [5.4, 9.1, 3.15], \"length_m\": 2.3999999999999995, \"quantity_type\": \"horizontal\", \"source_sha256\": \"ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7\"}",
+      "定位": "Model / CAD-A1, CAD-AE, CAD-C0, CAD-F9, CAD-FD",
+      "来源身份": "SHA256:ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "提取方式": "本轮模型实际 PNG 识图；原生中性实体读取；来源绑定坐标与文字适配；原生 infer_pipe_network.py 计算",
+      "质量状态": "模型工作识别，未人工复核",
+      "限制": "不是正式采用；平面毫米坐标转换与跨图实物对应由模型本轮输入明确声明。"
+    },
+    {
+      "证据编号": "EV-PIPE-A2",
+      "资料编号": "SRC-PIPE-DXF",
+      "来源类型": "DXF",
+      "中性事实": "{\"object_id\": \"PIPE-A2\", \"view\": \"F2 plan\", \"location\": \"R-A to RED-A centre\", \"entity_handle\": \"A2\", \"layout\": \"Model\", \"source_ids\": [\"CAD-A2\", \"CAD-AF\", \"CAD-C6\", \"CAD-F9\", \"CAD-FD\"], \"source_start_mm\": [19700.0, 9100.0, 0.0], \"source_end_mm\": [22000.0, 9100.0, 0.0], \"raw_length_mm\": 2300.0, \"dimension_handle\": \"C6\", \"dn\": \"DN50\", \"dn_text_handle\": \"AF\", \"calculation_start_m\": [5.4, 9.1, 7.85], \"calculation_end_m\": [7.7, 9.1, 7.85], \"length_m\": 2.3, \"quantity_type\": \"horizontal\", \"source_sha256\": \"ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7\"}",
+      "定位": "Model / CAD-A2, CAD-AF, CAD-C6, CAD-F9, CAD-FD",
+      "来源身份": "SHA256:ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "提取方式": "本轮模型实际 PNG 识图；原生中性实体读取；来源绑定坐标与文字适配；原生 infer_pipe_network.py 计算",
+      "质量状态": "模型工作识别，未人工复核",
+      "限制": "不是正式采用；平面毫米坐标转换与跨图实物对应由模型本轮输入明确声明。"
+    },
+    {
+      "证据编号": "EV-PIPE-A3",
+      "资料编号": "SRC-PIPE-DXF",
+      "来源类型": "DXF",
+      "中性事实": "{\"object_id\": \"PIPE-A3\", \"view\": \"F2 plan\", \"location\": \"RED-A centre to upper plan elbow\", \"entity_handle\": \"A3\", \"layout\": \"Model\", \"source_ids\": [\"CAD-A3\", \"CAD-B0\", \"CAD-CC\", \"CAD-F9\", \"CAD-FD\"], \"source_start_mm\": [22000.0, 9100.0, 0.0], \"source_end_mm\": [24400.0, 9100.0, 0.0], \"raw_length_mm\": 2400.0, \"dimension_handle\": \"CC\", \"dn\": \"DN32\", \"dn_text_handle\": \"B0\", \"calculation_start_m\": [7.7, 9.1, 7.85], \"calculation_end_m\": [10.1, 9.1, 7.85], \"length_m\": 2.3999999999999995, \"quantity_type\": \"horizontal\", \"source_sha256\": \"ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7\"}",
+      "定位": "Model / CAD-A3, CAD-B0, CAD-CC, CAD-F9, CAD-FD",
+      "来源身份": "SHA256:ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "提取方式": "本轮模型实际 PNG 识图；原生中性实体读取；来源绑定坐标与文字适配；原生 infer_pipe_network.py 计算",
+      "质量状态": "模型工作识别，未人工复核",
+      "限制": "不是正式采用；平面毫米坐标转换与跨图实物对应由模型本轮输入明确声明。"
+    },
+    {
+      "证据编号": "EV-PIPE-A4",
+      "资料编号": "SRC-PIPE-DXF",
+      "来源类型": "DXF",
+      "中性事实": "{\"object_id\": \"PIPE-A4\", \"view\": \"F2 plan\", \"location\": \"upper plan elbow to U-OUT\", \"entity_handle\": \"A4\", \"layout\": \"Model\", \"source_ids\": [\"CAD-A4\", \"CAD-B1\", \"CAD-D2\", \"CAD-F9\", \"CAD-FD\"], \"source_start_mm\": [24400.0, 9100.0, 0.0], \"source_end_mm\": [24400.0, 11000.0, 0.0], \"raw_length_mm\": 1900.0, \"dimension_handle\": \"D2\", \"dn\": \"DN32\", \"dn_text_handle\": \"B1\", \"calculation_start_m\": [10.1, 9.1, 7.85], \"calculation_end_m\": [10.1, 11.0, 7.85], \"length_m\": 1.9000000000000004, \"quantity_type\": \"horizontal\", \"source_sha256\": \"ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7\"}",
+      "定位": "Model / CAD-A4, CAD-B1, CAD-D2, CAD-F9, CAD-FD",
+      "来源身份": "SHA256:ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "提取方式": "本轮模型实际 PNG 识图；原生中性实体读取；来源绑定坐标与文字适配；原生 infer_pipe_network.py 计算",
+      "质量状态": "模型工作识别，未人工复核",
+      "限制": "不是正式采用；平面毫米坐标转换与跨图实物对应由模型本轮输入明确声明。"
+    },
+    {
+      "证据编号": "EV-PIPE-RA-V",
+      "资料编号": "SRC-PIPE-DXF",
+      "来源类型": "DXF",
+      "中性事实": "{\"object_id\": \"PIPE-RA-V\", \"view\": \"F1/F2 plans + system diagram\", \"location\": \"One R-A riser, F1 PIPE CL to F2 PIPE CL\", \"entity_handles\": [\"A5\", \"A7\", \"DB\", \"D7\"], \"source_ids\": [\"CAD-A5\", \"CAD-A6\", \"CAD-A7\", \"CAD-A8\", \"CAD-DB\", \"CAD-DC\", \"CAD-DD\", \"CAD-DE\", \"CAD-DF\", \"CAD-E0\", \"CAD-E1\", \"CAD-FA\", \"CAD-FB\", \"CAD-FE\"], \"layout\": \"Model\", \"dn\": \"DN50\", \"quantity_type\": \"vertical\", \"start_pipe_cl_m\": 3.15, \"end_pipe_cl_m\": 7.85, \"calculation_start_m\": [5.4, 9.1, 3.15], \"calculation_end_m\": [5.4, 9.1, 7.85], \"length_m\": 4.699999999999999, \"formula\": \"abs(F2 PIPE CL - F1 PIPE CL)\", \"drawn_system_line_length_used\": false, \"source_sha256\": \"ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7\"}",
+      "定位": "Model / CAD-A5, CAD-A6, CAD-A7, CAD-A8, CAD-DB, CAD-DC, CAD-DD, CAD-DE, CAD-DF, CAD-E0, CAD-E1, CAD-FA, CAD-FB, CAD-FE",
+      "来源身份": "SHA256:ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "提取方式": "本轮模型实际 PNG 识图；原生中性实体读取；来源绑定坐标与文字适配；原生 infer_pipe_network.py 计算",
+      "质量状态": "模型工作识别，未人工复核",
+      "限制": "不是正式采用；平面毫米坐标转换与跨图实物对应由模型本轮输入明确声明。"
+    }
+  ],
+  "本次规则清单": [
+    {
+      "规则编号": "R-PN-003",
+      "规则名称": "中心线几何长度",
+      "规则来源": "qto-pipe-networks 本轮插件 SKILL 及 P-01 Rev A 设计说明",
+      "本次判定": "试用",
+      "成熟状态": "试运行",
+      "执行结果": "原生管网计算器按模型源绑定输入复算，保留为工作参考量",
+      "证据位置": "P-01 Model F8-FE,100,101"
+    },
+    {
+      "规则编号": "R-PN-004",
+      "规则名称": "真实管中心标高及同立管对应",
+      "规则来源": "qto-pipe-networks 本轮插件 SKILL 及 P-01 Rev A 设计说明",
+      "本次判定": "试用",
+      "成熟状态": "候选",
+      "执行结果": "原生管网计算器按模型源绑定输入复算，保留为工作参考量",
+      "证据位置": "P-01 Model F8-FE,100,101"
+    },
+    {
+      "规则编号": "R-PN-005",
+      "规则名称": "直接标注与变径边界绑定规格",
+      "规则来源": "qto-pipe-networks 本轮插件 SKILL 及 P-01 Rev A 设计说明",
+      "本次判定": "试用",
+      "成熟状态": "候选",
+      "执行结果": "原生管网计算器按模型源绑定输入复算，保留为工作参考量",
+      "证据位置": "P-01 Model F8-FE,100,101"
+    }
+  ],
+  "工程量结果": [
+    {
+      "成果项编号": "QTY-PIPE-A0",
+      "范围": {
+        "业务专业": "给水管道",
+        "主要对象": "S-IN to first plan elbow",
+        "系统": "SUP",
+        "楼栋": "WEST SERVICE SUPPLY",
+        "楼层或区域": "F1 plan",
+        "规格": "DN50",
+        "输出维度": "中心线米"
+      },
+      "结果": {
+        "名称": "PIPE-A0 S-IN to first plan elbow",
+        "数值": 3.6,
+        "数值状态": "已计算",
+        "计算式或说明": "DXF handle A0 source curve length × 0.001",
+        "精度": "0.01 m 展示，原生双精度保留"
+      },
+      "单位": "m",
+      "来源": [
+        "EV-PIPE-A0"
+      ],
+      "规则": [
+        "R-PN-003",
+        "R-PN-004",
+        "R-PN-005"
+      ],
+      "状态": "已计算",
+      "未决事项": [],
+      "试运行结果": true,
+      "零值复核": null,
+      "专业检查": {
+        "计量对象": "水平管段",
+        "规格赋值方式": "对应源文字及明确变径节点绑定",
+        "二维符号作为竖向长度": false,
+        "候选断口计入": false,
+        "完整性边界": "S-IN 至 U-OUT 全部规定中心线范围已覆盖；不扩展端口以外",
+        "native_result_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+        "native_result_json_pointer": "/segments/0"
+      },
+      "成果分层": {
+        "数量层级": "规则推算量",
+        "计算完整性": "完整",
+        "置信等级": "高",
+        "确认状态": "待确认",
+        "发布状态": "内部工作",
+        "假定编号": [
+          "A-MODEL-PIPE"
+        ],
+        "替代方案": [],
+        "依赖成果项": [],
+        "进入工作量": true,
+        "进入正式量": false,
+        "重算范围": "PIPE-A0 及对应 DN 合计"
+      }
+    },
+    {
+      "成果项编号": "QTY-PIPE-A1",
+      "范围": {
+        "业务专业": "给水管道",
+        "主要对象": "first plan elbow to R-A",
+        "系统": "SUP",
+        "楼栋": "WEST SERVICE SUPPLY",
+        "楼层或区域": "F1 plan",
+        "规格": "DN50",
+        "输出维度": "中心线米"
+      },
+      "结果": {
+        "名称": "PIPE-A1 first plan elbow to R-A",
+        "数值": 2.4,
+        "数值状态": "已计算",
+        "计算式或说明": "DXF handle A1 source curve length × 0.001",
+        "精度": "0.01 m 展示，原生双精度保留"
+      },
+      "单位": "m",
+      "来源": [
+        "EV-PIPE-A1"
+      ],
+      "规则": [
+        "R-PN-003",
+        "R-PN-004",
+        "R-PN-005"
+      ],
+      "状态": "已计算",
+      "未决事项": [],
+      "试运行结果": true,
+      "零值复核": null,
+      "专业检查": {
+        "计量对象": "水平管段",
+        "规格赋值方式": "对应源文字及明确变径节点绑定",
+        "二维符号作为竖向长度": false,
+        "候选断口计入": false,
+        "完整性边界": "S-IN 至 U-OUT 全部规定中心线范围已覆盖；不扩展端口以外",
+        "native_result_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+        "native_result_json_pointer": "/segments/1"
+      },
+      "成果分层": {
+        "数量层级": "规则推算量",
+        "计算完整性": "完整",
+        "置信等级": "高",
+        "确认状态": "待确认",
+        "发布状态": "内部工作",
+        "假定编号": [
+          "A-MODEL-PIPE"
+        ],
+        "替代方案": [],
+        "依赖成果项": [],
+        "进入工作量": true,
+        "进入正式量": false,
+        "重算范围": "PIPE-A1 及对应 DN 合计"
+      }
+    },
+    {
+      "成果项编号": "QTY-PIPE-A2",
+      "范围": {
+        "业务专业": "给水管道",
+        "主要对象": "R-A to RED-A centre",
+        "系统": "SUP",
+        "楼栋": "WEST SERVICE SUPPLY",
+        "楼层或区域": "F2 plan",
+        "规格": "DN50",
+        "输出维度": "中心线米"
+      },
+      "结果": {
+        "名称": "PIPE-A2 R-A to RED-A centre",
+        "数值": 2.3,
+        "数值状态": "已计算",
+        "计算式或说明": "DXF handle A2 source curve length × 0.001",
+        "精度": "0.01 m 展示，原生双精度保留"
+      },
+      "单位": "m",
+      "来源": [
+        "EV-PIPE-A2"
+      ],
+      "规则": [
+        "R-PN-003",
+        "R-PN-004",
+        "R-PN-005"
+      ],
+      "状态": "已计算",
+      "未决事项": [],
+      "试运行结果": true,
+      "零值复核": null,
+      "专业检查": {
+        "计量对象": "水平管段",
+        "规格赋值方式": "对应源文字及明确变径节点绑定",
+        "二维符号作为竖向长度": false,
+        "候选断口计入": false,
+        "完整性边界": "S-IN 至 U-OUT 全部规定中心线范围已覆盖；不扩展端口以外",
+        "native_result_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+        "native_result_json_pointer": "/segments/2"
+      },
+      "成果分层": {
+        "数量层级": "规则推算量",
+        "计算完整性": "完整",
+        "置信等级": "高",
+        "确认状态": "待确认",
+        "发布状态": "内部工作",
+        "假定编号": [
+          "A-MODEL-PIPE"
+        ],
+        "替代方案": [],
+        "依赖成果项": [],
+        "进入工作量": true,
+        "进入正式量": false,
+        "重算范围": "PIPE-A2 及对应 DN 合计"
+      }
+    },
+    {
+      "成果项编号": "QTY-PIPE-A3",
+      "范围": {
+        "业务专业": "给水管道",
+        "主要对象": "RED-A centre to upper plan elbow",
+        "系统": "SUP",
+        "楼栋": "WEST SERVICE SUPPLY",
+        "楼层或区域": "F2 plan",
+        "规格": "DN32",
+        "输出维度": "中心线米"
+      },
+      "结果": {
+        "名称": "PIPE-A3 RED-A centre to upper plan elbow",
+        "数值": 2.4,
+        "数值状态": "已计算",
+        "计算式或说明": "DXF handle A3 source curve length × 0.001",
+        "精度": "0.01 m 展示，原生双精度保留"
+      },
+      "单位": "m",
+      "来源": [
+        "EV-PIPE-A3"
+      ],
+      "规则": [
+        "R-PN-003",
+        "R-PN-004",
+        "R-PN-005"
+      ],
+      "状态": "已计算",
+      "未决事项": [],
+      "试运行结果": true,
+      "零值复核": null,
+      "专业检查": {
+        "计量对象": "水平管段",
+        "规格赋值方式": "对应源文字及明确变径节点绑定",
+        "二维符号作为竖向长度": false,
+        "候选断口计入": false,
+        "完整性边界": "S-IN 至 U-OUT 全部规定中心线范围已覆盖；不扩展端口以外",
+        "native_result_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+        "native_result_json_pointer": "/segments/3"
+      },
+      "成果分层": {
+        "数量层级": "规则推算量",
+        "计算完整性": "完整",
+        "置信等级": "高",
+        "确认状态": "待确认",
+        "发布状态": "内部工作",
+        "假定编号": [
+          "A-MODEL-PIPE"
+        ],
+        "替代方案": [],
+        "依赖成果项": [],
+        "进入工作量": true,
+        "进入正式量": false,
+        "重算范围": "PIPE-A3 及对应 DN 合计"
+      }
+    },
+    {
+      "成果项编号": "QTY-PIPE-A4",
+      "范围": {
+        "业务专业": "给水管道",
+        "主要对象": "upper plan elbow to U-OUT",
+        "系统": "SUP",
+        "楼栋": "WEST SERVICE SUPPLY",
+        "楼层或区域": "F2 plan",
+        "规格": "DN32",
+        "输出维度": "中心线米"
+      },
+      "结果": {
+        "名称": "PIPE-A4 upper plan elbow to U-OUT",
+        "数值": 1.9,
+        "数值状态": "已计算",
+        "计算式或说明": "DXF handle A4 source curve length × 0.001",
+        "精度": "0.01 m 展示，原生双精度保留"
+      },
+      "单位": "m",
+      "来源": [
+        "EV-PIPE-A4"
+      ],
+      "规则": [
+        "R-PN-003",
+        "R-PN-004",
+        "R-PN-005"
+      ],
+      "状态": "已计算",
+      "未决事项": [],
+      "试运行结果": true,
+      "零值复核": null,
+      "专业检查": {
+        "计量对象": "水平管段",
+        "规格赋值方式": "对应源文字及明确变径节点绑定",
+        "二维符号作为竖向长度": false,
+        "候选断口计入": false,
+        "完整性边界": "S-IN 至 U-OUT 全部规定中心线范围已覆盖；不扩展端口以外",
+        "native_result_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+        "native_result_json_pointer": "/segments/4"
+      },
+      "成果分层": {
+        "数量层级": "规则推算量",
+        "计算完整性": "完整",
+        "置信等级": "高",
+        "确认状态": "待确认",
+        "发布状态": "内部工作",
+        "假定编号": [
+          "A-MODEL-PIPE"
+        ],
+        "替代方案": [],
+        "依赖成果项": [],
+        "进入工作量": true,
+        "进入正式量": false,
+        "重算范围": "PIPE-A4 及对应 DN 合计"
+      }
+    },
+    {
+      "成果项编号": "QTY-PIPE-RA-V",
+      "范围": {
+        "业务专业": "给水管道",
+        "主要对象": "One R-A riser, F1 PIPE CL to F2 PIPE CL",
+        "系统": "SUP",
+        "楼栋": "WEST SERVICE SUPPLY",
+        "楼层或区域": "F1/F2 plans + system diagram",
+        "规格": "DN50",
+        "输出维度": "中心线米"
+      },
+      "结果": {
+        "名称": "PIPE-RA-V One R-A riser, F1 PIPE CL to F2 PIPE CL",
+        "数值": 4.7,
+        "数值状态": "已计算",
+        "计算式或说明": "abs(7.85 - 3.15)",
+        "精度": "0.01 m 展示，原生双精度保留"
+      },
+      "单位": "m",
+      "来源": [
+        "EV-PIPE-RA-V"
+      ],
+      "规则": [
+        "R-PN-003",
+        "R-PN-004",
+        "R-PN-005"
+      ],
+      "状态": "已计算",
+      "未决事项": [],
+      "试运行结果": true,
+      "零值复核": null,
+      "专业检查": {
+        "计量对象": "竖向管段",
+        "规格赋值方式": "对应源文字及明确变径节点绑定",
+        "二维符号作为竖向长度": false,
+        "候选断口计入": false,
+        "完整性边界": "S-IN 至 U-OUT 全部规定中心线范围已覆盖；不扩展端口以外",
+        "native_result_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+        "native_result_json_pointer": "/segments/5",
+        "竖向证据方式": "系统图唯一绑定"
+      },
+      "成果分层": {
+        "数量层级": "规则推算量",
+        "计算完整性": "完整",
+        "置信等级": "高",
+        "确认状态": "待确认",
+        "发布状态": "内部工作",
+        "假定编号": [
+          "A-MODEL-PIPE"
+        ],
+        "替代方案": [],
+        "依赖成果项": [],
+        "进入工作量": true,
+        "进入正式量": false,
+        "重算范围": "PIPE-RA-V 及对应 DN 合计"
+      }
+    }
+  ],
+  "整体未决事项": [],
+  "推算协议版本": "qto-inference/1.0",
+  "假定与裁决清单": [
+    {
+      "假定编号": "A-MODEL-PIPE",
+      "假定内容": "模型依据本图明确标注作对象、规格及同立管的工作解释；没有新增设计数值。",
+      "类型": "事实推定",
+      "依据": [
+        "EV-PIPE-A0",
+        "EV-PIPE-A1",
+        "EV-PIPE-A2",
+        "EV-PIPE-A3",
+        "EV-PIPE-A4",
+        "EV-PIPE-RA-V"
+      ],
+      "使用规则": [
+        "R-PN-003",
+        "R-PN-004",
+        "R-PN-005"
+      ],
+      "置信等级": "高",
+      "替代方案": [],
+      "推荐方案": "按图内说明和指定计量端口完成本轮中心线工作量",
+      "状态": "自动接受",
+      "影响成果项": [
+        "QTY-PIPE-A0",
+        "QTY-PIPE-A1",
+        "QTY-PIPE-A2",
+        "QTY-PIPE-A3",
+        "QTY-PIPE-A4",
+        "QTY-PIPE-RA-V"
+      ],
+      "影响说明": "全部六个管段及 DN 分项；确认状态仅指尚无人工复核",
+      "所需确认方": "未来正式采用时的实际项目复核责任方；本次工作计算不需用户补填",
+      "重算范围": "受修改源实体、规格或标高影响的管段及分项"
+    }
+  ],
+  "成果汇总": {
+    "DN分项": {
+      "DN32": 4.3,
+      "DN50": 13.0
+    },
+    "工作量_m": 17.3,
+    "正式采用": false
+  },
+  "原生证据路径": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json"
+}

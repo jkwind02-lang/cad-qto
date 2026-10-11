@@ -1,0 +1,182 @@
+{
+  "schema_version": "qto-surface-regions/1.0",
+  "source_dxf": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+  "source_sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+  "status": "selected_regions_analyzed",
+  "source_identity_status": "no_conflict_detected",
+  "source_identity_issues": [],
+  "source_read_warnings": [],
+  "source_unit": "mm",
+  "insunits": 4,
+  "unit_evidence": "A-01 Model TEXT handle 96; full-size millimetre plan boundaries",
+  "max_implicit_gap_m": 0.001,
+  "stitch_tolerance_m": 0.0,
+  "layer_regex": "FILL-[AB]",
+  "allow_implicit_segments": false,
+  "allow_geometry_repair": false,
+  "interpretation": "未分配视图及材料的中性面域；不得直接合计为工程量；隐式补线与拓扑修补只输出候选，必须回图确认",
+  "regions": [
+    {
+      "region_id": "REG-93190b64f6958a04",
+      "entity_path": "4:98",
+      "layer": "FILL-A",
+      "raw_layer": "FILL-A",
+      "unverified_reference_paths": [],
+      "geometry_coordinate_system": "WCS_XY",
+      "locator_coordinate_system": "WCS_XY_projection",
+      "pattern": "SOLID",
+      "pattern_scale": 1,
+      "pattern_angle": 0,
+      "hatch_style": 0,
+      "boundary_path_count": 1,
+      "entity_invisible": false,
+      "layer_off": false,
+      "layer_frozen": false,
+      "rendered_path_count": 1,
+      "locator_bounds_m": [
+        1.6,
+        6.1000000000000005,
+        6.0,
+        10.200000000000001
+      ],
+      "pattern_lines": [],
+      "status": "geometry_extracted",
+      "geometry_status_before_source_check": "geometry_extracted",
+      "source_identity_status": "no_conflict_detected",
+      "implicit_segments": [],
+      "geometry_repairs": [],
+      "area_m2": 18.040000000000003,
+      "perimeter_m": 17.0,
+      "bounds_m": [
+        1.6,
+        6.1000000000000005,
+        6.0,
+        10.200000000000001
+      ],
+      "anchor_m": [
+        3.8,
+        8.15
+      ],
+      "polygons": [
+        {
+          "exterior_m": [
+            [
+              1.6,
+              10.200000000000001
+            ],
+            [
+              6.0,
+              10.200000000000001
+            ],
+            [
+              6.0,
+              6.1000000000000005
+            ],
+            [
+              1.6,
+              6.1000000000000005
+            ],
+            [
+              1.6,
+              10.200000000000001
+            ]
+          ],
+          "holes_m": []
+        }
+      ]
+    },
+    {
+      "region_id": "REG-0117ef9cbd2f6043",
+      "entity_path": "5:99",
+      "layer": "FILL-B",
+      "raw_layer": "FILL-B",
+      "unverified_reference_paths": [],
+      "geometry_coordinate_system": "WCS_XY",
+      "locator_coordinate_system": "WCS_XY_projection",
+      "pattern": "SOLID",
+      "pattern_scale": 1,
+      "pattern_angle": 0,
+      "hatch_style": 0,
+      "boundary_path_count": 1,
+      "entity_invisible": false,
+      "layer_off": false,
+      "layer_frozen": false,
+      "rendered_path_count": 1,
+      "locator_bounds_m": [
+        6.0,
+        6.1000000000000005,
+        8.4,
+        10.200000000000001
+      ],
+      "pattern_lines": [],
+      "status": "geometry_extracted",
+      "geometry_status_before_source_check": "geometry_extracted",
+      "source_identity_status": "no_conflict_detected",
+      "implicit_segments": [],
+      "geometry_repairs": [],
+      "area_m2": 9.840000000000003,
+      "perimeter_m": 13.000000000000004,
+      "bounds_m": [
+        6.0,
+        6.1000000000000005,
+        8.4,
+        10.200000000000001
+      ],
+      "anchor_m": [
+        7.2,
+        8.15
+      ],
+      "polygons": [
+        {
+          "exterior_m": [
+            [
+              6.0,
+              10.200000000000001
+            ],
+            [
+              8.4,
+              10.200000000000001
+            ],
+            [
+              8.4,
+              6.1000000000000005
+            ],
+            [
+              6.0,
+              6.1000000000000005
+            ],
+            [
+              6.0,
+              10.200000000000001
+            ]
+          ],
+          "holes_m": []
+        }
+      ]
+    }
+  ],
+  "failures": [],
+  "locator_texts": [
+    {
+      "entity_path": "82:E6",
+      "text": "FINISH SCHEDULE AND PROJECT NOTES",
+      "point_m": [
+        0.9,
+        3.95
+      ],
+      "layer": "ANNOTATION",
+      "raw_layer": "ANNOTATION"
+    }
+  ],
+  "coverage": {
+    "scope": "modelspace_hatches_on_effective_layers",
+    "status": "selected_scope_analyzed",
+    "selected_hatches_seen": 2,
+    "regions_extracted": 2,
+    "selected_hatch_failures": 0,
+    "unresolved_insert_instances": 0,
+    "unseen_entities_possible": false,
+    "interpretation": "已见 HATCH 数不包含未载入外参或未展开对象；外参告警不受图层筛选隐藏，缓存面域来源未核验时保持候选"
+  },
+  "proxy_entities_not_expanded": 0
+}

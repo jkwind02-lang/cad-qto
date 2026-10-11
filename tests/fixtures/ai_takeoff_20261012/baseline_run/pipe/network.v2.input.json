@@ -1,0 +1,566 @@
+{
+  "schema_version": "qto-pipe-network-inference-input/1.2",
+  "network_id": "P01-NEW-SUP",
+  "unit": "m",
+  "parameters": {
+    "snap_tolerance": 0.001,
+    "gap_max": 0.05,
+    "terminal_attach_max": 0.01,
+    "valve_attach_max": 0.01
+  },
+  "recognition_basis": {
+    "schema_version": "qto-model-recognition-ledger/1.0",
+    "ledger_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/model_recognition.json",
+    "ledger_sha256": "28bbb64c58126196b8b87637af1f9c0a7385ca71ca7b8ab804e3391b83da52bc",
+    "decision_origin": "model",
+    "recognized_by": [
+      "GPT-6 Astra Pro / ai_baseline_takeoff"
+    ],
+    "adoption_scope": "working",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false
+  },
+  "object_selection": {
+    "schema_version": "qto-pipe-object-selection-audit/1.0",
+    "audit_id": "AUDIT-P01",
+    "unit": "m",
+    "status": "READY",
+    "meaning": "未决异常对象不进入确认中心线，但其他已筛选对象可继续计算",
+    "candidate_count": 12,
+    "included_count": 5,
+    "excluded_count": 7,
+    "unresolved_count": 0,
+    "included_segment_ids": [
+      "SEG-CAD-A0",
+      "SEG-CAD-A1",
+      "SEG-CAD-A2",
+      "SEG-CAD-A3",
+      "SEG-CAD-A4"
+    ],
+    "excluded_object_ids": [
+      "SEG-CAD-D3",
+      "SEG-CAD-D6",
+      "SEG-CAD-D7",
+      "SEG-CAD-D8",
+      "SEG-CAD-D9",
+      "SEG-CAD-EC",
+      "SEG-CAD-EE"
+    ],
+    "unresolved_object_ids": [],
+    "source_ids": [
+      "SRC-P01",
+      "MODEL-PIPE-P01"
+    ],
+    "parameters": {
+      "connection_tolerance": 0.001,
+      "repeat_min_count": 3,
+      "signature_precision": 9
+    },
+    "anomaly_groups": [],
+    "decisions": [
+      {
+        "object_id": "SEG-CAD-A0",
+        "decision": "include",
+        "basis": "P-01 plan F1 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+        "source_id": "SRC-P01",
+        "connected_endpoint_match_count": 1
+      },
+      {
+        "object_id": "SEG-CAD-A1",
+        "decision": "include",
+        "basis": "P-01 plan F1 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+        "source_id": "SRC-P01",
+        "connected_endpoint_match_count": 1
+      },
+      {
+        "object_id": "SEG-CAD-A2",
+        "decision": "include",
+        "basis": "P-01 plan F2 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+        "source_id": "SRC-P01",
+        "connected_endpoint_match_count": 1
+      },
+      {
+        "object_id": "SEG-CAD-A3",
+        "decision": "include",
+        "basis": "P-01 plan F2 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+        "source_id": "SRC-P01",
+        "connected_endpoint_match_count": 2
+      },
+      {
+        "object_id": "SEG-CAD-A4",
+        "decision": "include",
+        "basis": "P-01 plan F2 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+        "source_id": "SRC-P01",
+        "connected_endpoint_match_count": 1
+      },
+      {
+        "object_id": "SEG-CAD-D3",
+        "decision": "exclude",
+        "basis": "Existing DRN DN80 at unmarked crossing. CAD-D4, CAD-D5 and note CAD-FF explicitly exclude DRN from SUP.",
+        "source_id": "SRC-P01",
+        "connected_endpoint_match_count": 0
+      },
+      {
+        "object_id": "SEG-CAD-D6",
+        "decision": "exclude",
+        "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+        "source_id": "SRC-P01",
+        "connected_endpoint_match_count": 1
+      },
+      {
+        "object_id": "SEG-CAD-D7",
+        "decision": "exclude",
+        "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+        "source_id": "SRC-P01",
+        "connected_endpoint_match_count": 2
+      },
+      {
+        "object_id": "SEG-CAD-D8",
+        "decision": "exclude",
+        "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+        "source_id": "SRC-P01",
+        "connected_endpoint_match_count": 2
+      },
+      {
+        "object_id": "SEG-CAD-D9",
+        "decision": "exclude",
+        "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+        "source_id": "SRC-P01",
+        "connected_endpoint_match_count": 1
+      },
+      {
+        "object_id": "SEG-CAD-EC",
+        "decision": "exclude",
+        "basis": "Legend examples only CAD-EB and note CAD-101; no installed physical centerline.",
+        "source_id": "SRC-P01",
+        "connected_endpoint_match_count": 0
+      },
+      {
+        "object_id": "SEG-CAD-EE",
+        "decision": "exclude",
+        "basis": "Legend examples only CAD-EB and note CAD-101; no installed physical centerline.",
+        "source_id": "SRC-P01",
+        "connected_endpoint_match_count": 0
+      }
+    ]
+  },
+  "segments": [
+    {
+      "segment_id": "SEG-CAD-A0",
+      "physical_id": "P01-F1-A0",
+      "extent_id": "whole_original_line",
+      "system": "SUP",
+      "space_id": "F1",
+      "start": [
+        1.8,
+        6.7,
+        0.0
+      ],
+      "end": [
+        5.4,
+        6.7,
+        0.0
+      ],
+      "length": 3.6,
+      "source_ids": [
+        "SRC-P01",
+        "CAD-A0"
+      ],
+      "dn_seeds": []
+    },
+    {
+      "segment_id": "SEG-CAD-A1",
+      "physical_id": "P01-F1-A1",
+      "extent_id": "whole_original_line",
+      "system": "SUP",
+      "space_id": "F1",
+      "start": [
+        5.4,
+        6.7,
+        0.0
+      ],
+      "end": [
+        5.4,
+        9.1,
+        0.0
+      ],
+      "length": 2.4,
+      "source_ids": [
+        "SRC-P01",
+        "CAD-A1"
+      ],
+      "dn_seeds": []
+    },
+    {
+      "segment_id": "SEG-CAD-A2",
+      "physical_id": "P01-F2-A2",
+      "extent_id": "whole_original_line",
+      "system": "SUP",
+      "space_id": "F2",
+      "start": [
+        19.7,
+        9.1,
+        0.0
+      ],
+      "end": [
+        22.0,
+        9.1,
+        0.0
+      ],
+      "length": 2.3000000000000003,
+      "source_ids": [
+        "SRC-P01",
+        "CAD-A2"
+      ],
+      "dn_seeds": []
+    },
+    {
+      "segment_id": "SEG-CAD-A3",
+      "physical_id": "P01-F2-A3",
+      "extent_id": "whole_original_line",
+      "system": "SUP",
+      "space_id": "F2",
+      "start": [
+        22.0,
+        9.1,
+        0.0
+      ],
+      "end": [
+        24.400000000000002,
+        9.1,
+        0.0
+      ],
+      "length": 2.4,
+      "source_ids": [
+        "SRC-P01",
+        "CAD-A3"
+      ],
+      "dn_seeds": []
+    },
+    {
+      "segment_id": "SEG-CAD-A4",
+      "physical_id": "P01-F2-A4",
+      "extent_id": "whole_original_line",
+      "system": "SUP",
+      "space_id": "F2",
+      "start": [
+        24.400000000000002,
+        9.1,
+        0.0
+      ],
+      "end": [
+        24.400000000000002,
+        11.0,
+        0.0
+      ],
+      "length": 1.9000000000000001,
+      "source_ids": [
+        "SRC-P01",
+        "CAD-A4"
+      ],
+      "dn_seeds": []
+    }
+  ],
+  "roots": [
+    {
+      "root_id": "S-IN",
+      "system": "SUP",
+      "space_id": "F1",
+      "segment_id": "SEG-CAD-A0",
+      "point": [
+        1.8,
+        6.7,
+        0.0
+      ],
+      "source_id": "CAD-A9;CAD-F8",
+      "evidence_level": "confirmed",
+      "root_role": "network_root"
+    }
+  ],
+  "terminals": [],
+  "change_nodes": [
+    {
+      "change_id": "RED-A",
+      "system": "SUP",
+      "space_id": "F2",
+      "segment_id": "SEG-CAD-A2",
+      "point": [
+        22.0,
+        9.1,
+        0.0
+      ],
+      "evidence_level": "confirmed",
+      "source_id": "CAD-B2;CAD-B3;CAD-FE"
+    }
+  ],
+  "valves": [],
+  "gap_exclusions": [],
+  "dn_match_candidates": [
+    {
+      "candidate_id": "MATCH-AD-A0",
+      "segment_id": "SEG-CAD-A0",
+      "dn": "DN50",
+      "source_id": "CAD-AD",
+      "disposition": "seed",
+      "evidence_level": "confirmed",
+      "method": "model_direct_plan_callout_binding",
+      "threshold_sensitive": false,
+      "reason": "Visually aligned direct SUP callout on this uninterrupted plan segment; corroborated by RED-A boundary and system diagram; no nearest-distance threshold used.",
+      "diagnostics": {
+        "text_record": "CAD-AD",
+        "plan": "F1",
+        "text": "SUP  DN50"
+      }
+    },
+    {
+      "candidate_id": "MATCH-AE-A1",
+      "segment_id": "SEG-CAD-A1",
+      "dn": "DN50",
+      "source_id": "CAD-AE",
+      "disposition": "seed",
+      "evidence_level": "confirmed",
+      "method": "model_direct_plan_callout_binding",
+      "threshold_sensitive": false,
+      "reason": "Visually aligned direct SUP callout on this uninterrupted plan segment; corroborated by RED-A boundary and system diagram; no nearest-distance threshold used.",
+      "diagnostics": {
+        "text_record": "CAD-AE",
+        "plan": "F1",
+        "text": "SUP  DN50"
+      }
+    },
+    {
+      "candidate_id": "MATCH-AF-A2",
+      "segment_id": "SEG-CAD-A2",
+      "dn": "DN50",
+      "source_id": "CAD-AF",
+      "disposition": "seed",
+      "evidence_level": "confirmed",
+      "method": "model_direct_plan_callout_binding",
+      "threshold_sensitive": false,
+      "reason": "Visually aligned direct SUP callout on this uninterrupted plan segment; corroborated by RED-A boundary and system diagram; no nearest-distance threshold used.",
+      "diagnostics": {
+        "text_record": "CAD-AF",
+        "plan": "F2",
+        "text": "SUP DN50"
+      }
+    },
+    {
+      "candidate_id": "MATCH-B0-A3",
+      "segment_id": "SEG-CAD-A3",
+      "dn": "DN32",
+      "source_id": "CAD-B0",
+      "disposition": "seed",
+      "evidence_level": "confirmed",
+      "method": "model_direct_plan_callout_binding",
+      "threshold_sensitive": false,
+      "reason": "Visually aligned direct SUP callout on this uninterrupted plan segment; corroborated by RED-A boundary and system diagram; no nearest-distance threshold used.",
+      "diagnostics": {
+        "text_record": "CAD-B0",
+        "plan": "F2",
+        "text": "SUP DN32"
+      }
+    },
+    {
+      "candidate_id": "MATCH-B1-A4",
+      "segment_id": "SEG-CAD-A4",
+      "dn": "DN32",
+      "source_id": "CAD-B1",
+      "disposition": "seed",
+      "evidence_level": "confirmed",
+      "method": "model_direct_plan_callout_binding",
+      "threshold_sensitive": false,
+      "reason": "Visually aligned direct SUP callout on this uninterrupted plan segment; corroborated by RED-A boundary and system diagram; no nearest-distance threshold used.",
+      "diagnostics": {
+        "text_record": "CAD-B1",
+        "plan": "F2",
+        "text": "SUP DN32"
+      }
+    }
+  ],
+  "dn_match_policy": {
+    "policy_id": "P01-VISUAL-DIRECT-CALLOUTS",
+    "detected_candidate_count": 5,
+    "source_ids": [
+      "CAD-AD",
+      "CAD-AE",
+      "CAD-AF",
+      "CAD-B0",
+      "CAD-B1",
+      "CAD-B3",
+      "CAD-FE"
+    ],
+    "basis": "All five relevant plan SUP callouts explicitly mapped; system duplicates are corroboration, DRN outside scope, legend not installed.",
+    "sensitivity_scenarios": [],
+    "thresholds": {
+      "matching_mode": "explicit_model_plan_callout_binding",
+      "distance_threshold_used": false,
+      "scope_boundary": "source drawing plan and reducer center",
+      "reason": "No automatic nearest-text matching was used; every seed has an explicit drawing annotation/segment pair."
+    }
+  },
+  "endpoint_handoff": {
+    "handoff_id": "P01-LENGTH-ONLY",
+    "required": false,
+    "source_instance_count": 0,
+    "source_endpoint_port_count": 0,
+    "source_physical_instance_count": 0,
+    "delivered_count": 0,
+    "not_applicable_count": 0,
+    "unresolved_count": 0,
+    "source_workpackage_complete": true,
+    "source_id": "CAD-100;CAD-101",
+    "reason": "No equipment/fixture point workpackage in supplied scope. S-IN and U-OUT are measurement limits only; no appliance quantities requested."
+  },
+  "cross_view_links": [
+    {
+      "link_id": "R-A-F1-F2",
+      "physical_id": "P01-R-A",
+      "system": "SUP",
+      "a": {
+        "segment_id": "SEG-CAD-A1",
+        "end": "end"
+      },
+      "b": {
+        "segment_id": "SEG-CAD-A2",
+        "end": "start"
+      },
+      "basis": "Same R-A identifier CAD-A6/A8/DC and explicit note CAD-FA; F1 end and F2 start are unique matching riser ports.",
+      "source_ids": [
+        "CAD-A5",
+        "CAD-A6",
+        "CAD-A7",
+        "CAD-A8",
+        "CAD-DC",
+        "CAD-FA"
+      ],
+      "dn": "DN50",
+      "dn_continuity": true,
+      "dn_continuity_source_id": "CAD-DD;CAD-AE;CAD-AF",
+      "elevation_facts": {
+        "schema": "qto-elevation-link/1.0",
+        "calculation_id": "CALC-RA-CL",
+        "system": "SUP",
+        "from": {
+          "value": 3.15,
+          "unit": "m",
+          "datum_id": "P01-PROJECT-DATUM",
+          "reference_id": "R-A-F1-PIPE-CL",
+          "measurement_kind": "pipe_center",
+          "system": "SUP",
+          "level": "confirmed",
+          "fact_id": "FACT-E0",
+          "source_ids": [
+            "SRC-E0"
+          ],
+          "basis": "Direct original PIPE CL label; project datum explicitly defined at CAD-FB. No FFL substitution."
+        },
+        "to": {
+          "value": 7.85,
+          "unit": "m",
+          "datum_id": "P01-PROJECT-DATUM",
+          "reference_id": "R-A-F2-PIPE-CL",
+          "measurement_kind": "pipe_center",
+          "system": "SUP",
+          "level": "confirmed",
+          "fact_id": "FACT-E1",
+          "source_ids": [
+            "SRC-E1"
+          ],
+          "basis": "Direct original PIPE CL label; project datum explicitly defined at CAD-FB. No FFL substitution."
+        },
+        "target_datum": "P01-PROJECT-DATUM",
+        "sources": [
+          {
+            "id": "SRC-E0",
+            "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+            "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+            "locator": "P-01 Model CAD-E0 bbox=[30600.0, 6150.0, 30600.0, 6150.0]; note CAD-FB; F1 PIPE CL +3.15 m",
+            "facts": [
+              {
+                "id": "FACT-E0",
+                "value": 3.15,
+                "unit": "m",
+                "datum_id": "P01-PROJECT-DATUM",
+                "reference_id": "R-A-F1-PIPE-CL",
+                "measurement_kind": "pipe_center",
+                "system": "SUP",
+                "level": "confirmed"
+              }
+            ]
+          },
+          {
+            "id": "SRC-E1",
+            "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+            "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+            "locator": "P-01 Model CAD-E1 bbox=[30600.0, 11530.0, 30600.0, 11530.0]; note CAD-FB; F2 PIPE CL +7.85 m",
+            "facts": [
+              {
+                "id": "FACT-E1",
+                "value": 7.85,
+                "unit": "m",
+                "datum_id": "P01-PROJECT-DATUM",
+                "reference_id": "R-A-F2-PIPE-CL",
+                "measurement_kind": "pipe_center",
+                "system": "SUP",
+                "level": "confirmed"
+              }
+            ]
+          },
+          {
+            "id": "SRC-RA-ROUTE",
+            "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+            "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+            "locator": "P-01 CAD-DE/DF straight vertical; CAD-FA same physical riser; CAD-FE no unshown offsets",
+            "facts": [
+              {
+                "id": "ROUTE-R-A",
+                "measurement_kind": "route_shape",
+                "route_kind": "vertical",
+                "from_reference_id": "R-A-F1-PIPE-CL",
+                "to_reference_id": "R-A-F2-PIPE-CL",
+                "system": "SUP",
+                "level": "confirmed"
+              }
+            ]
+          }
+        ],
+        "datum_transforms": [],
+        "route": {
+          "route_id": "ROUTE-R-A",
+          "kind": "vertical",
+          "source_ids": [
+            "SRC-RA-ROUTE"
+          ],
+          "basis": "CAD-DE/DF explicitly straight vertical between indicated pipe CLs; same riser by note 3.",
+          "level": "confirmed"
+        }
+      }
+    }
+  ],
+  "scope_notes": {
+    "quantity_basis": "continuous pipe centerline, inclusive through inline fittings; no fittings allowances; from S-IN to U-OUT only",
+    "excluded": [
+      "DRN",
+      "system schematic drawn lengths",
+      "legend geometry",
+      "architectural/dimension lines",
+      "symbols as lengths",
+      "supports",
+      "insulation",
+      "price",
+      "waste"
+    ],
+    "source_sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+  },
+  "source_catalog": {
+    "SRC-P01": {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+      "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+    },
+    "cad_facts": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/observed_raw_facts.json"
+  },
+  "input_revision": {
+    "previous_input": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.input.json",
+    "reason": "First native invocation rejected missing required dn_match_policy.thresholds. This revision supplies the real explicit-binding mode; no objects, DN values, geometry, elevations, or evidence maturity are changed."
+  }
+}

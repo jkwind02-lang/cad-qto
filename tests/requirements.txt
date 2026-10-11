@@ -1,4 +1,6 @@
 ezdxf==1.4.4
+Pillow==12.3.0
+PyMuPDF==1.26.6
 shapely>=2.0,<3
 jsonschema>=4.23,<5
 pytest>=8,<10

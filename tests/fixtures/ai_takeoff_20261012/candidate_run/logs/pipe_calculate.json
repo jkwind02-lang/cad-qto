@@ -1,0 +1,22 @@
+{
+  "argv": [
+    "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+    "-B",
+    "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-candidate/skills/qto-pipe-networks/scripts/infer_pipe_network.py",
+    "--input",
+    "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_input.json",
+    "--output",
+    "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json"
+  ],
+  "cwd": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run",
+  "started_at_utc": "2026-10-11T16:29:55.388223+00:00",
+  "ended_at_utc": "2026-10-11T16:29:55.514664+00:00",
+  "duration_seconds": 0.1264415520017792,
+  "exit_code": 0,
+  "stdout": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_calculate.stdout.txt",
+  "stderr": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_calculate.stderr.txt",
+  "environment_overrides": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "MPLCONFIGDIR": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/mplconfig"
+  }
+}

@@ -22,7 +22,7 @@ LEVEL_ALIASES = {**{key: key for key in LEVELS},
                  "确认量": "confirmed", "规则推算量": "inferred", "方案暂估量": "scenario"}
 ROLES = {"geometric", "project_rule", "procurement_reference"}
 DISPOSITIONS = {"included", "excluded", "evidence", "container", "unresolved"}
-IDENTITY_FIELDS = {"id", "physical_id", "成果编号", "item_id", "object_id", "subject_id", "target_id", "构件编号"}
+IDENTITY_FIELDS = {"id", "physical_id", "成果编号", "成果项编号", "item_id", "object_id", "subject_id", "target_id", "构件编号"}
 SEMANTIC_FIELDS = ("scope_id", "physical_id", "extent_id", "quantity_kind",
                    "measurement_basis_id", "scenario_id", "quantity_role", "layer_id", "side")
 TOTAL_FIELDS = ("scope_id", "owner_skill", "unit", "quantity_kind", "measurement_basis_id",

@@ -26,7 +26,7 @@ NO_INDIRECT_TOOLS = frozenset({
 })
 INDIRECT_TOOLS = frozenset({
     "concrete_formwork", "rebar", "structural_steel", "surfaces_envelope",
-    "earthwork_terrain", "cad_index", "cad_scope", "pipe_prepare",
+    "earthwork_terrain", "cad_index", "cad_view", "cad_scope", "pipe_prepare",
     "correspondence", "instance_requirements", "review_html", "review_feedback",
 })
 SUPPORTED_TOOLS = NO_INDIRECT_TOOLS | INDIRECT_TOOLS
@@ -194,7 +194,7 @@ class _Dependencies:
     def inspect_tool(self, tool_id, args):
         if tool_id in NO_INDIRECT_TOOLS:
             return
-        if tool_id == "cad_index":
+        if tool_id in {"cad_index", "cad_view"}:
             aid = args.get("source")
             if aid not in self.paths or self.artifact(aid, "source") is None:
                 return

@@ -1,0 +1,684 @@
+{
+  "schema_version": "ai-autonomy-first-candidate-freeze/1.0",
+  "frozen_at_utc": "2026-10-11T16:35:46.739801+00:00",
+  "elapsed_from_first_observed_utc_seconds": 689.739801,
+  "plugin_path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-candidate",
+  "plugin_git_commit": "8b0722bba6e88f699267bc8e50ee250ae41bb4fe",
+  "plugin_git_status_porcelain": "",
+  "candidate_json_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/candidate.json",
+  "candidate_json_sha256": "4a32aa331c13a9be0951a49e7662f660e51ab3eb94e3e1aaa7f51f5b7d0455b6",
+  "native_input_output_hashes": [
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_input.json",
+      "relative_path": "pipe/native_input.json",
+      "sha256": "2dd7af02c69c3881670817a43a855891052fdf5e42a4b56205c93eae65203f24",
+      "bytes": 13028
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+      "relative_path": "pipe/native_result.json",
+      "sha256": "34fd66f4e57bab93b5d2af22233b43f31ecd8d3a7727ea0e3c26ed25aceaceaf",
+      "bytes": 30492
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/object_audit_input.json",
+      "relative_path": "pipe/object_audit_input.json",
+      "sha256": "607156898ee7c8b5f2181582748f9adb0f41a66ea26316d5f7f4fcda000c2ad1",
+      "bytes": 8080
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/object_audit_result.json",
+      "relative_path": "pipe/object_audit_result.json",
+      "sha256": "3ea793ebd3794c120f882450b8152a22bb7981507d78d62a76fe577a4f619edb",
+      "bytes": 4167
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/hatch_regions.json",
+      "relative_path": "surfaces/hatch_regions.json",
+      "sha256": "af4f4d1af94aaf6e8de0960488a51ac76e05b4e393d7f41f4818bd32844b8dd1",
+      "bytes": 1614
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/hatch_regions_selected.json",
+      "relative_path": "surfaces/hatch_regions_selected.json",
+      "sha256": "c0a829a351f8591188b1b0cab5241df0a6ec67dd03e865508b03172c00acc3cf",
+      "bytes": 4917
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_manifest.json",
+      "relative_path": "surfaces/native_manifest.json",
+      "sha256": "1b33db2d7164311a7c19c021ee1702aa9c6fdd84193e954555a25c27c411e706",
+      "bytes": 14867
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_result.json",
+      "relative_path": "surfaces/native_result.json",
+      "sha256": "6a056db379e9159d1b9baf00d55a358efea1f237801275b13780943d16058a3c",
+      "bytes": 22791
+    }
+  ],
+  "all_candidate_artifact_hashes": [
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/README.md",
+      "relative_path": "README.md",
+      "sha256": "5e500dec39881633b016af9e445a6fa68c59a6e7ea4fd47da116a00ab75ed0e1",
+      "bytes": 10033
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/build_deliverables.py",
+      "relative_path": "build_deliverables.py",
+      "sha256": "c5c5ef7fa70169a065af10645a490091b3edb9535602670fbe893bed03c3893e",
+      "bytes": 29156
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/candidate.json",
+      "relative_path": "candidate.json",
+      "sha256": "4a32aa331c13a9be0951a49e7662f660e51ab3eb94e3e1aaa7f51f5b7d0455b6",
+      "bytes": 10605
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/finalize_pipe_input.py",
+      "relative_path": "finalize_pipe_input.py",
+      "sha256": "c3aab1a0c4cafabd5f2f64ab53cf3fd74215d75851e226a2945738c5b139bad6",
+      "bytes": 3147
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/freeze_candidate.py",
+      "relative_path": "freeze_candidate.py",
+      "sha256": "a50e3eb01751abaebc0c39692d49b7ce8c7db37ca103ed028f7006c9017cd210",
+      "bytes": 2655
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/build_deliverables.json",
+      "relative_path": "logs/build_deliverables.json",
+      "sha256": "8190a81bd3cf02cbe1fa475a3beca1086d969b78e47babe38542d1183d8212a9",
+      "bytes": 904
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/build_deliverables.stderr.txt",
+      "relative_path": "logs/build_deliverables.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/build_deliverables.stdout.txt",
+      "relative_path": "logs/build_deliverables.stdout.txt",
+      "sha256": "ad7a5e66eed6387f132b78261d5ec5ca798669d401b7e49fad953c71a1930cbd",
+      "bytes": 116
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/finalize_pipe.json",
+      "relative_path": "logs/finalize_pipe.json",
+      "sha256": "b1a2d81e56d51c87131ae42546e12a87400251a8949df8b22a513634b1401e71",
+      "bytes": 896
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/finalize_pipe.stderr.txt",
+      "relative_path": "logs/finalize_pipe.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/finalize_pipe.stdout.txt",
+      "relative_path": "logs/finalize_pipe.stdout.txt",
+      "sha256": "e26b616f868a26fc6b77b007ae739331503d0892d7445d9fb5b5245d3c71c161",
+      "bytes": 98
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/generate_review_html.json",
+      "relative_path": "logs/generate_review_html.json",
+      "sha256": "28b8dcd801f95db0e152551bb028e6c4ed86656a9f24272acda06ce09d22756b",
+      "bytes": 1304
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/generate_review_html.stderr.txt",
+      "relative_path": "logs/generate_review_html.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/generate_review_html.stdout.txt",
+      "relative_path": "logs/generate_review_html.stdout.txt",
+      "sha256": "ce4c8bb337e3e1fae596674334f40c7e1b8a4a12ca1dacdfd1cff6578e503c5e",
+      "bytes": 565
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_audit.json",
+      "relative_path": "logs/pipe_audit.json",
+      "sha256": "8efefae1d9a58ea9eaa5fac5c0e60efe1f86618b906f70a78652c7a25b3c1224",
+      "bytes": 1166
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_audit.stderr.txt",
+      "relative_path": "logs/pipe_audit.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_audit.stdout.txt",
+      "relative_path": "logs/pipe_audit.stdout.txt",
+      "sha256": "d87be6562e6fc59ffa6c9cf05baf70593895724f9fd54d9fec5eefd615c2690c",
+      "bytes": 229
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_calculate.json",
+      "relative_path": "logs/pipe_calculate.json",
+      "sha256": "44f8e4e4ce00d7577c3ded4e8c2bb0cc016c4d298e43956085f4699b9ffa81e9",
+      "bytes": 1152
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_calculate.stderr.txt",
+      "relative_path": "logs/pipe_calculate.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_calculate.stdout.txt",
+      "relative_path": "logs/pipe_calculate.stdout.txt",
+      "sha256": "38b2f119cf9c0fb910ce18cf86fb8235b0aebe481777a27318fd10c2b302d223",
+      "bytes": 439
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_extract.json",
+      "relative_path": "logs/pipe_extract.json",
+      "sha256": "5d145e9dc4316ee49d7b909bcd946709485ba8571d25b22bc50d96dfe24119d1",
+      "bytes": 1137
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_extract.stderr.txt",
+      "relative_path": "logs/pipe_extract.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_extract.stdout.txt",
+      "relative_path": "logs/pipe_extract.stdout.txt",
+      "sha256": "ff3373e3c99ebd6dbc916b62332b67767a0153a1b0026ca7ef4535e86787e767",
+      "bytes": 207
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_final_summary.json",
+      "relative_path": "logs/pipe_validate_final_summary.json",
+      "sha256": "7cd72e6ee468dda541ac11d78b3bb446a0f8fde8ed8faf0e8f62becc69c6c9ae",
+      "bytes": 1179
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_final_summary.stderr.txt",
+      "relative_path": "logs/pipe_validate_final_summary.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_final_summary.stdout.txt",
+      "relative_path": "logs/pipe_validate_final_summary.stdout.txt",
+      "sha256": "f666444f524cd4e84693088f559b9593dbb1760c88cf722ee1c483167c45fc1c",
+      "bytes": 426
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_minimum.json",
+      "relative_path": "logs/pipe_validate_minimum.json",
+      "sha256": "5e8a94ce7941886e89d1d66c6bb56d24ee4155f04d2e26b04e4bcd9590c1286c",
+      "bytes": 1039
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_minimum.stderr.txt",
+      "relative_path": "logs/pipe_validate_minimum.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_minimum.stdout.txt",
+      "relative_path": "logs/pipe_validate_minimum.stdout.txt",
+      "sha256": "17c6c1b149909c32378197d7ea5c62d7c0a921d8f1d2d44a49635cf0dd8d18a2",
+      "bytes": 359
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_professional.json",
+      "relative_path": "logs/pipe_validate_professional.json",
+      "sha256": "092d3b3afeeefeaf65fe0cce38eacebac1233438ae95cce8d5aaf7e5874ab519",
+      "bytes": 1188
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_professional.stderr.txt",
+      "relative_path": "logs/pipe_validate_professional.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_professional.stdout.txt",
+      "relative_path": "logs/pipe_validate_professional.stdout.txt",
+      "sha256": "53b5806113543030749c59655a0b5e83dd038c38aa7ca096b9becaa65c79ac60",
+      "bytes": 447
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_user_summary.json",
+      "relative_path": "logs/pipe_validate_user_summary.json",
+      "sha256": "e0834591d30db072bf0af4e5f28f02464e0acd6750d964546c3b827a4c0e9acb",
+      "bytes": 1177
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_user_summary.stderr.txt",
+      "relative_path": "logs/pipe_validate_user_summary.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_user_summary.stdout.txt",
+      "relative_path": "logs/pipe_validate_user_summary.stdout.txt",
+      "sha256": "f666444f524cd4e84693088f559b9593dbb1760c88cf722ee1c483167c45fc1c",
+      "bytes": 426
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/prepare_inputs.json",
+      "relative_path": "logs/prepare_inputs.json",
+      "sha256": "ab145940defa68eb2149caa23c36fef1aa4be01f5506cad0a22e01f373956f2d",
+      "bytes": 893
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/prepare_inputs.stderr.txt",
+      "relative_path": "logs/prepare_inputs.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/prepare_inputs.stdout.txt",
+      "relative_path": "logs/prepare_inputs.stdout.txt",
+      "sha256": "4ab9a679d11210644c9ab7490dbf188b246a595f0983fc2f88844d61bb6a3735",
+      "bytes": 174
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/record_final_review.json",
+      "relative_path": "logs/record_final_review.json",
+      "sha256": "f632577101799ac1fac6064f3303440a5605ececeb8c369028426b75049e8475",
+      "bytes": 913
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/record_final_review.stderr.txt",
+      "relative_path": "logs/record_final_review.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/record_final_review.stdout.txt",
+      "relative_path": "logs/record_final_review.stdout.txt",
+      "sha256": "f10317e4a73ac0975275163571789a33def74dc702016aae64f4875f6312ff53",
+      "bytes": 120
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_calculate.json",
+      "relative_path": "logs/surfaces_calculate.json",
+      "sha256": "34c1c948e8f421b9c459b2f85ccb2eb5737c74d886c21b8b3c0e7a9cb9095293",
+      "bytes": 1187
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_calculate.stderr.txt",
+      "relative_path": "logs/surfaces_calculate.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_calculate.stdout.txt",
+      "relative_path": "logs/surfaces_calculate.stdout.txt",
+      "sha256": "c5d40ec081f786ed98b15414a9ba98aaf2b276a24e3e3fcd8c62ebfcaf790b2d",
+      "bytes": 155
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_extract.json",
+      "relative_path": "logs/surfaces_extract.json",
+      "sha256": "c821ef26bc38a54cc1a20a7f7edb07116e5379c5d784797b006fbb632bd67fb3",
+      "bytes": 1154
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_extract.stderr.txt",
+      "relative_path": "logs/surfaces_extract.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_extract.stdout.txt",
+      "relative_path": "logs/surfaces_extract.stdout.txt",
+      "sha256": "1a272c6653bf6c7b070b33257c138a2a3e07d4e716c487876287eeaea46edfb2",
+      "bytes": 211
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_regions.json",
+      "relative_path": "logs/surfaces_regions.json",
+      "sha256": "eb8b2b108b8b53442615b8e5e00c1831d7573379f5388f8e317d39cc7c39d643",
+      "bytes": 1320
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_regions.stderr.txt",
+      "relative_path": "logs/surfaces_regions.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_regions.stdout.txt",
+      "relative_path": "logs/surfaces_regions.stdout.txt",
+      "sha256": "5012e7000de21291780d5715c835fad06bfade949b1b044f0774bbc8fdef8fd3",
+      "bytes": 222
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_regions_regex_fix.json",
+      "relative_path": "logs/surfaces_regions_regex_fix.json",
+      "sha256": "553737708cc2664245b66bfdc04dceb704b420743db0c4459837cff1731d0a57",
+      "bytes": 1345
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_regions_regex_fix.stderr.txt",
+      "relative_path": "logs/surfaces_regions_regex_fix.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_regions_regex_fix.stdout.txt",
+      "relative_path": "logs/surfaces_regions_regex_fix.stdout.txt",
+      "sha256": "a28a54500f47f76b173b30736916b1a8f64fd37d3cdc773234ee90257dca3667",
+      "bytes": 231
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_validate_binding.json",
+      "relative_path": "logs/surfaces_validate_binding.json",
+      "sha256": "6872aecc77596af5eb61c31c0bc123ddc3de28db94140577aaf55fa57c4128ca",
+      "bytes": 1356
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_validate_binding.stderr.txt",
+      "relative_path": "logs/surfaces_validate_binding.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_validate_binding.stdout.txt",
+      "relative_path": "logs/surfaces_validate_binding.stdout.txt",
+      "sha256": "071221968445b74a535e3b20a643daf63d1249a0008cae214ef139340f8a7562",
+      "bytes": 584
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_validate_minimum.json",
+      "relative_path": "logs/surfaces_validate_minimum.json",
+      "sha256": "68e6c0b8402abc83ae11a08e2d5ce6f78f0b1f72c3f755dd19162fa4c94e297f",
+      "bytes": 1048
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_validate_minimum.stderr.txt",
+      "relative_path": "logs/surfaces_validate_minimum.stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_validate_minimum.stdout.txt",
+      "relative_path": "logs/surfaces_validate_minimum.stdout.txt",
+      "sha256": "b7a5361ad47608cf1a4a9852fa7d0eb12afe904c6e73fd69905e06eb01aa78c3",
+      "bytes": 359
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_input.json",
+      "relative_path": "pipe/native_input.json",
+      "sha256": "2dd7af02c69c3881670817a43a855891052fdf5e42a4b56205c93eae65203f24",
+      "bytes": 13028
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_input_pre_audit.json",
+      "relative_path": "pipe/native_input_pre_audit.json",
+      "sha256": "92e33d5c32e85754757cb54d59a9fd3f6029a52a668a63300966df042fec202a",
+      "bytes": 8462
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+      "relative_path": "pipe/native_result.json",
+      "sha256": "34fd66f4e57bab93b5d2af22233b43f31ecd8d3a7727ea0e3c26ed25aceaceaf",
+      "bytes": 30492
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result_7c05744de0_复核摘要.md",
+      "relative_path": "pipe/native_result_7c05744de0_复核摘要.md",
+      "sha256": "7c05744de0efed54bed0a4484e11eb1c32d08744e9394d6979b98fb3e32692ec",
+      "bytes": 1116
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/neutral/CAD中性取证清单.json",
+      "relative_path": "pipe/neutral/CAD中性取证清单.json",
+      "sha256": "f83b72c8760f97f1d56ea6f28cfc9c302eed0b08ba0fd7a4607e7f4b349200f9",
+      "bytes": 4939
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/neutral/CAD提取失败对象.json",
+      "relative_path": "pipe/neutral/CAD提取失败对象.json",
+      "sha256": "dcd5dccf085b74fc3d53b19b1483c7dfb52809cb1a34719c9ddced1e25dea35f",
+      "bytes": 524
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/neutral/CAD读取覆盖与待补读.json",
+      "relative_path": "pipe/neutral/CAD读取覆盖与待补读.json",
+      "sha256": "3776df48d7d28cde5e6b2af916560a27ab4284e953b9dd1383acdcc9412febe7",
+      "bytes": 1720
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/neutral/中性块定义图元.ndjson",
+      "relative_path": "pipe/neutral/中性块定义图元.ndjson",
+      "sha256": "917298ff84356fbc2ff5db192c75f7623e2912987081d8f8ef9c0a228ef1ebbd",
+      "bytes": 4570
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/neutral/中性布局图元.ndjson",
+      "relative_path": "pipe/neutral/中性布局图元.ndjson",
+      "sha256": "7e8d6ad979ac240a5e31672c4eaf0d5cc4ea27f6c22ccb0d20df0808bbeea56c",
+      "bytes": 142412
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/normalized_result.json",
+      "relative_path": "pipe/normalized_result.json",
+      "sha256": "ffd67d7e02603e19a45b6c72e75e1359ff5d474097c90ec23019390462a30ff2",
+      "bytes": 23789
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/object_audit_input.json",
+      "relative_path": "pipe/object_audit_input.json",
+      "sha256": "607156898ee7c8b5f2181582748f9adb0f41a66ea26316d5f7f4fcda000c2ad1",
+      "bytes": 8080
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/object_audit_result.json",
+      "relative_path": "pipe/object_audit_result.json",
+      "sha256": "3ea793ebd3794c120f882450b8152a22bb7981507d78d62a76fe577a4f619edb",
+      "bytes": 4167
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/quantity_details.csv",
+      "relative_path": "pipe/quantity_details.csv",
+      "sha256": "5fa7952101cc1d17ab59209815314a1be48c93eec15f3b6ed5a27fb11d2db624",
+      "bytes": 840
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/recognition_ledger.json",
+      "relative_path": "pipe/recognition_ledger.json",
+      "sha256": "910272ef5138047b0b04f7f9d8ba2c267e06b2e1788fded4c1dd3a79bfb6b6cc",
+      "bytes": 4312
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/review_overlay.png",
+      "relative_path": "pipe/review_overlay.png",
+      "sha256": "e0a446a4032648ff72cb7e16e6b3fdab5187183b05bd0af6b9d2d79b6541f5e3",
+      "bytes": 263692
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/source_bound_details.json",
+      "relative_path": "pipe/source_bound_details.json",
+      "sha256": "0ad663bf3760746da298b871946f35859f63a1beab5195e326da84b6362002f1",
+      "bytes": 7829
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/working_recognition_ledger_v1.json",
+      "relative_path": "pipe/working_recognition_ledger_v1.json",
+      "sha256": "54c8d74ee6848aca60f1131206d2e4b75c77edee23c40d0f9221ea9e09a26792",
+      "bytes": 16768
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/prepare_inputs.py",
+      "relative_path": "prepare_inputs.py",
+      "sha256": "a7810fa16934fb56bcafa8f75d2afb9c1b67155742464fb05296ee04f4dec49b",
+      "bytes": 21590
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/record_review_and_check.py",
+      "relative_path": "record_review_and_check.py",
+      "sha256": "9c84b0a4c1f3b10a54c803c7d6c79932daf987168dad35d786a9de7c46fdc152",
+      "bytes": 5277
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/return_review.json",
+      "relative_path": "return_review.json",
+      "sha256": "6fd90910ee2b7d27409bc4e8017919976410cd50a54a143a4606b16705a76b31",
+      "bytes": 2964
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/review.html",
+      "relative_path": "review.html",
+      "sha256": "6901a49d67748ed8ebf0d8b01357341474386b0111c046898fb7f8bdd811f93f",
+      "bytes": 766543
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/review_alignment.json",
+      "relative_path": "review_alignment.json",
+      "sha256": "fc51271691da242704cf5468b82a23c0fdeccc43dc865f9a54d5fcd62882d3d4",
+      "bytes": 1079
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/review_generation_report.json",
+      "relative_path": "review_generation_report.json",
+      "sha256": "61d099226e3383bda5d03e6acd898ab3c1724cef69637c28ae135d5325b5c9cc",
+      "bytes": 564
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/review_view.json",
+      "relative_path": "review_view.json",
+      "sha256": "311009f5748b7ea0f6c0150ea60b8e2f03ddab7ecdc3f5ba8f7af6f577ee5a04",
+      "bytes": 32222
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/run_native.py",
+      "relative_path": "run_native.py",
+      "sha256": "42584971f457fc555f9680895ea0d862e5a3c18ccf243d9e89c2db25b61bd4d4",
+      "bytes": 1508
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/coverage.json",
+      "relative_path": "surfaces/coverage.json",
+      "sha256": "4687b5bb3d1a2c9f742dd7b1ed0be11cf739ff6aa42fd244a5f7282e5b702558",
+      "bytes": 1837
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/hatch_regions.json",
+      "relative_path": "surfaces/hatch_regions.json",
+      "sha256": "af4f4d1af94aaf6e8de0960488a51ac76e05b4e393d7f41f4818bd32844b8dd1",
+      "bytes": 1614
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/hatch_regions_selected.json",
+      "relative_path": "surfaces/hatch_regions_selected.json",
+      "sha256": "c0a829a351f8591188b1b0cab5241df0a6ec67dd03e865508b03172c00acc3cf",
+      "bytes": 4917
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_manifest.json",
+      "relative_path": "surfaces/native_manifest.json",
+      "sha256": "1b33db2d7164311a7c19c021ee1702aa9c6fdd84193e954555a25c27c411e706",
+      "bytes": 14867
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_result.json",
+      "relative_path": "surfaces/native_result.json",
+      "sha256": "6a056db379e9159d1b9baf00d55a358efea1f237801275b13780943d16058a3c",
+      "bytes": 22791
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/neutral/CAD中性取证清单.json",
+      "relative_path": "surfaces/neutral/CAD中性取证清单.json",
+      "sha256": "676abc12dffbe08ef478fcbb41f9f7e6d3ca35c6315cc384705d71c8e97709e9",
+      "bytes": 5036
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/neutral/CAD提取失败对象.json",
+      "relative_path": "surfaces/neutral/CAD提取失败对象.json",
+      "sha256": "dcd5dccf085b74fc3d53b19b1483c7dfb52809cb1a34719c9ddced1e25dea35f",
+      "bytes": 524
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/neutral/CAD读取覆盖与待补读.json",
+      "relative_path": "surfaces/neutral/CAD读取覆盖与待补读.json",
+      "sha256": "654c36ebe3cd54d252ec112941a91766502a0dba2b21d8b37fb875837a9417c3",
+      "bytes": 2694
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/neutral/中性块定义图元.ndjson",
+      "relative_path": "surfaces/neutral/中性块定义图元.ndjson",
+      "sha256": "4a142c4c3e487617570fef5518a5b58bc1250e7c5322bae931e082f3a1243cfc",
+      "bytes": 4570
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/neutral/中性布局图元.ndjson",
+      "relative_path": "surfaces/neutral/中性布局图元.ndjson",
+      "sha256": "3f532125c60c9381e68e782352822bedc9868c7a1d81e270c11014535e296511",
+      "bytes": 135537
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/quantity_details.csv",
+      "relative_path": "surfaces/quantity_details.csv",
+      "sha256": "336bfbc8b10bb7cbffa8fd895ffd4cc0cd9361b90b4d246207ca474b027e12bc",
+      "bytes": 364
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/review_overlay.png",
+      "relative_path": "surfaces/review_overlay.png",
+      "sha256": "386e45724c00bc2e2c2bf023116854e358983ed96b1b90800a3ea000e781aa74",
+      "bytes": 256477
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/source_bound_geometry.json",
+      "relative_path": "surfaces/source_bound_geometry.json",
+      "sha256": "d6cf6bc78b468bab9bced7186957a018d067b8b31c5a2e6770527ed680e5c18a",
+      "bytes": 3486
+    }
+  ],
+  "source_files": [
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+      "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "bytes": 73083,
+      "role": "authoritative original drawing"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.png",
+      "sha256": "3deafabc20af8672d107c0bd55cb73ffb2d1f4df89dd973a6bdd4d0d1a67ddc8",
+      "bytes": 285097,
+      "role": "viewed unmarked drawing image"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/task.md",
+      "sha256": "21cb0da0aaa3948040f0737bcea2e525540693cb760ef66bc344328d922aff16",
+      "bytes": 1006,
+      "role": "user task"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+      "sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.png",
+      "sha256": "dda222b97695aec8d6b5e22d5a866f6acf93487d0b05dbc429090fc582f2b690"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/task.md",
+      "sha256": "a70ab7e9796f837207ff8a2377bf2a1a94086f28a5b796129816e3c63d57a9ce"
+    }
+  ],
+  "actual_freeze_command": [
+    "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+    "-B",
+    "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/freeze_candidate.py"
+  ],
+  "freeze_policy": "No first-candidate artifact modifications after this freeze. No reference files or other run outputs were read. Any later evaluation or correction must use a separate destination.",
+  "human_review_performed": false,
+  "formal_adoption_allowed": false
+}

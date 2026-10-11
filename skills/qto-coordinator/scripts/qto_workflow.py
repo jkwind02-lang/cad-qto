@@ -294,10 +294,10 @@ def starter(project_id, task_id, title, scope, source_paths, skills, root, mode=
                       {"id": prepared_id, "kind": "input", "path": f"work/{wp}/input.json"}]
         tasks.append({"id": read_id, "work_package_id": wp, "title": "读图确认范围、说明及相关视图", "stage": "read", "actor": "model",
                       "depends_on": [], "input_ids": source_ids, "output_ids": [evidence_id],
-                      "instruction": "按当前范围定位说明、图例和必要平面/系统/剖详图，保存实际读过的定位、所获事实、未读范围及补读问题；按实际索引建立观察账和应计量项。"})
+                      "instruction": "运用图文理解和工程知识，选择能解决当前问题的总览、说明、图例或局部视图；需要看图样时可用 cad_view，需要精确实体时用索引/查询。保存已获事实、定位和未读范围，按新证据调整任务，不把目录或 actor=model 标签当成已识图。"})
         tasks.append({"id": prepare_id, "work_package_id": wp, "title": "完整识别一个代表范围并准备专业输入", "stage": "recognize", "actor": "model",
                       "depends_on": [read_id], "input_ids": [*source_ids, evidence_id], "output_ids": [prepared_id],
-                      "instruction": f"读取 {skill}/SKILL.md 及专业执行路径，沿工程关系识别对象；先完成代表范围，保留同族例外和字段证据，准备原生计算器输入，不能仅填总量。"})
+                      "instruction": f"读取 {skill}/SKILL.md，按问题选择专业策略，自主解释对象、关系、适用构造和尺寸。根数、净长等是从图纸求解的目标，不要求用户预填；用工具取得或推导数值并编制原生输入。可从代表范围、表格或节点切入，保留例外；发现新问题可调整任务和回到取证。"})
         key = DEFAULT_TOOLS[skill]
         tool = tool_engine.TOOLS[key]
         arguments = {tool["inputs"][0]: prepared_id}
@@ -315,7 +315,7 @@ def starter(project_id, task_id, title, scope, source_paths, skills, root, mode=
         artifacts.append({"id": review_id, "kind": "evidence", "path": f"work/{wp}/backcheck.json"})
         tasks.append({"id": check_id, "work_package_id": wp, "title": "沿系统回图查漏、查重与异常复核", "stage": "reconcile", "actor": "model",
                       "depends_on": [calc_id], "input_ids": [*source_ids, prepared_id, *output_ids], "output_ids": [review_id],
-                      "instruction": "按另一条检查顺序核对未读范围、观察处置、应计量项、接口及分支守恒；登记真实结果 JSON Pointer，并保留尚未处理的问题。"})
+                      "instruction": "选择能发现输入误判或遗漏的独立检查，例如从末端反查支路、从节点反查构件或对比尺寸链；依据异常主动补看图纸、修改解释并重算。核对实际覆盖和原生结果，保留未决；不以重复同一算术或生成复核页代替看图检查。"})
     return {"schema_version": SCHEMA, "project_id": project_id, "task_id": task_id,
             "revision_id": "1", "task_mode": mode, "title": title,
             "artifacts": artifacts, "scopes": [{"id": "scope-1", "title": scope,
@@ -323,7 +323,7 @@ def starter(project_id, task_id, title, scope, source_paths, skills, root, mode=
                                                  "required_task_ids": [t["id"] for t in tasks]}],
             "work_packages": packages, "tasks": tasks, "objects": [], "observation_dispositions": [],
             "quantity_targets": [], "quantity_claims": [], "issues": [], "review_bindings": [],
-            "note": "这是按已选专业建立的执行骨架。模型依据当前原图补范围索引、对象、量项、交接与任务；模板不证明任何构造存在。"}
+            "note": "这是可修改的文件执行骨架，不是模型的固定推理流程。模型可按新证据调整任务、方法和顺序；模板不证明任何构造存在或模型已完成识图。"}
 
 
 def amend(document, patch, current_hash):

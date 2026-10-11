@@ -42,6 +42,7 @@ TOOLS = {
     "piles_reference": spec("qto-piles-groundwork", "calculate_pile_groups_reference.py", ["input"], ["output"], positional=["input"], stdout="output"),
     "roads_reference": spec("qto-roads-siteworks", "calculate_road_layers_reference.py", ["input"], ["output"], positional=["input"], stdout="output"),
     "cad_index": spec("_qto-shared-evidence", "qto_recognition_workbench.py", ["source"], ["output"], prefix=["index"], values={"layout": "text", "bounds": "bounds"}),
+    "cad_view": spec("_qto-shared-evidence", "render_cad_view.py", ["source", "query"], ["svg", "png", "output"], values={"pixels": "positive_integer"}),
     "cad_scope": spec("_qto-shared-evidence", "read_cad_scope.py", ["index", "query"], ["output"], values={"cursor": "text", "mode": "mode", "max-objects": "positive_integer", "max-bytes": "positive_integer"}),
     "pipe_prepare": spec("_qto-shared-evidence", "qto_recognition_workbench.py", ["index", "operations", "ledger"], ["output"], prefix=["apply"]),
     "correspondence": spec("_qto-shared-evidence", "qto_object_correspondence.py", ["input"], ["output"]),
@@ -182,7 +183,7 @@ def execute(task, artifacts, root, *, before_publish=None, protected_paths=(), t
                 continue
             if field in tool["inputs"]:
                 value = str(artifacts[args[field]]["path"])
-                if key == "cad_index" and field == "source" and Path(value).suffix.lower() == ".dxf":
+                if key in {"cad_index", "cad_view"} and field == "source" and Path(value).suffix.lower() == ".dxf":
                     binding = folder / "source-binding.json"
                     binding.write_text(json.dumps({"path": value, "sha256": artifacts[args[field]]["sha256"]}, ensure_ascii=False), encoding="utf-8")
                     value = str(binding)

@@ -1,0 +1,561 @@
+{
+  "captured_utc": "2026-10-11T16:13:54.678219+00:00",
+  "plugin_path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline",
+  "files": [
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_recognition_workbench.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_recognition_workbench.py",
+      "sha256": "490bb7ae13bc0c4e0c152110c82cea4e0c579bd630c23440345a924442c911c3"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_instance_requirements.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_instance_requirements.py",
+      "sha256": "f65d9866f65671bfc677bd1caf42e6c9c2b9b21be3fa92f6db6c2ccfc914d971"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/read_cad_scope.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/read_cad_scope.py",
+      "sha256": "3c4c97f4687da3da28ed5544914ba2c941307fc6ea288bba80b33c71385059e2"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_cad_geometry.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_cad_geometry.py",
+      "sha256": "8d67baff0e5dc8f7cdf08138f197ff0dcb7e5a5e6f6b2e4a11658965d7b75009"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_spatial.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_spatial.py",
+      "sha256": "d228ad667878b54244414844df23562feb9ca6471b183d1f4302124e83a84a25"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/migrate_cad_review_view.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/migrate_cad_review_view.py",
+      "sha256": "413687f4fd99fc9006ad22e076424d5ba3e1052458f6eb5bf086d6a68fa41e75"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_cad_source_contract.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_cad_source_contract.py",
+      "sha256": "27896acd4e407c3a5fa23824bd06e71ff29e201b022ca786b657ab986bc579cb"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/read_qto_review_feedback.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/read_qto_review_feedback.py",
+      "sha256": "b9a5cc060cd80c388b3bc9017ec556a1528c665e2917ce559b37914a8a02da17"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_workflow_review.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_workflow_review.py",
+      "sha256": "97f0907879d31d8efe67e3b58731e80c7bd323250721fd71e43bdbc5aa4ac12e"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/extract_cad_neutral.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/extract_cad_neutral.py",
+      "sha256": "755f3d4fb05d12b57df32b86c02880775b565697fff0af9314c7f8bcf4220c47"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_workflow_state.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_workflow_state.py",
+      "sha256": "f9ff4d50f304bf40885c192ef2075f5ef00b95edd9ec6f8ec0ddf9a8e1c89fa5"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_workflow_dependencies.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_workflow_dependencies.py",
+      "sha256": "b9eaa9501aea910c7dc4a25b008b1f48e78dfb1688cf48c3f445212022f773d6"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_pipe_quantity_contract.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_pipe_quantity_contract.py",
+      "sha256": "5b51840dc12e04d55fe1cd8f699af32b35a2c33122a2968b076fc19d752dfcec"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_review_revision.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_review_revision.py",
+      "sha256": "f0e4644726a356a3dd53b69b22dd0a160de958772e7e5f48d6015405b819427a"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/recompute_qto_dependencies.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/recompute_qto_dependencies.py",
+      "sha256": "13f4427b8d37538aa9bdb8c71537429c7ba1d883f6d64f9ca03c2ec588208b4d"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/validate_shared_evidence.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/validate_shared_evidence.py",
+      "sha256": "a5a8622eee71ff7f13ce868f1bbda83fda2fce9e0fed7d4f48538ff44e749576"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_workflow_tools.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_workflow_tools.py",
+      "sha256": "37c37ae75130745fd11f57b84c59c10b801771147671b3d1e5d90557e2928d29"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/model_recognition_basis.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/model_recognition_basis.py",
+      "sha256": "6f6cd8f4b427859bd091996788fbedacd01e09d313088ecb2de7bf7611d8e98f"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_object_correspondence.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_object_correspondence.py",
+      "sha256": "140d700a0820b790132943332af77e2bfe74f3f02c671d9555f76cdb2c1ed26c"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_elevation_facts.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_elevation_facts.py",
+      "sha256": "783a955729e4f63408de0d2bce4e3158ef135e0c1ec9e4490ecc0a92175803a8"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/build_qto_review_html.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/build_qto_review_html.py",
+      "sha256": "43cf2c33d6f707282ea8147df652acb64149d094bdd0a32e10aa703de39df554"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/validate_minimum_result.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/validate_minimum_result.py",
+      "sha256": "3e8f313a6dfa65c7546642fcc0bc4f28e917107f0f9bda540f9cddb53c96f779"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_pipe_topology.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_pipe_topology.py",
+      "sha256": "85486613260b1fbceb3567d935ed6a9b6230547be6fe0a134bea9993a5074021"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_pipe_scope_quantity.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_pipe_scope_quantity.py",
+      "sha256": "963255ceddf9a9ee86a3c41c6faab54f61b355f15561809a618a39354851aac4"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_workflow_quantities.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_workflow_quantities.py",
+      "sha256": "6b176dec49dd07e3a54c2991b08c2bd9ae591072be0d14485c14224550fbe10e"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_review_contract.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_review_contract.py",
+      "sha256": "9ac79b0c17adc96012fc3088cd673f1b14f7752769127ac0af04f8237a3e100a"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/qto_dimension_semantics.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/scripts/qto_dimension_semantics.py",
+      "sha256": "e3148758d84355e80d4322011eb0fd6b1f76778d6ae71dece3d40b046286627f"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/assets/模型工作识别记录模板.json",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/assets/模型工作识别记录模板.json",
+      "sha256": "700a0edf7b506da1e5cc0944e025dedfcf3f6dcc19a4b3211ca4bf11a87ce83f"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/跨图对象候选对应.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/跨图对象候选对应.md",
+      "sha256": "d8410c2e83c4fb49862decbd00faad43465a113a5f6860680e78f08a1cfa0ceb"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/读取覆盖与补读.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/读取覆盖与补读.md",
+      "sha256": "900e1db123085d350a6bda66cec666f25ef208fcff0f3b4ca50822879a040c38"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/图纸与资料范围筛选.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/图纸与资料范围筛选.md",
+      "sha256": "0da2d338c0191c7b6d8805881929e6058da942b2d19716d9b737859ef93a9cff"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/CAD中性事实提取.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/CAD中性事实提取.md",
+      "sha256": "27dc0158312e2343494e534b3bd66257ab1741bd7787a4b6d4cda7b0465b9254"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/人工思路识图与算量流程.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/人工思路识图与算量流程.md",
+      "sha256": "8e5da85ff71ccf282cb8bfa6fd55505aee21a4d19f17dffc121fefa0a236bf5a"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/原图独立算量实测.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/原图独立算量实测.md",
+      "sha256": "e1c590e41105c64233b89b75c7791655f8575d3c2ad4e07bef0ef1905219ab02"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/现行规则来源选择门.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/现行规则来源选择门.md",
+      "sha256": "c937a35378b3de5cf45724f0f14fbda211cdd2c22d835e3b4d0df5bb8cf666c2"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/通用成果字段与状态.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/通用成果字段与状态.md",
+      "sha256": "dcde8910617951ae611de10a92e2f7375ddc03592359d9701fb68d4614585771"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/按人工算量顺序执行与重算.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/按人工算量顺序执行与重算.md",
+      "sha256": "12cc586177d04b5ee0d797d77587812baa4265e604e5123445ef8f45a83eb80a"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/模型工作识别记录格式.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/模型工作识别记录格式.md",
+      "sha256": "f78162acbf6a0e171aac47e232a0051267a229a1f082c9d295e35834ff275ebf"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/逐实例构造要求与附属量.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/逐实例构造要求与附属量.md",
+      "sha256": "8e0be84ffbd5f185f297b06acec47543199ccd66251f5e28836bf0457b49506c"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/按任务阶段读取.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/按任务阶段读取.md",
+      "sha256": "5c8377436e2b6a06127c33a008274ff094181244b51a7bb093670380deb58b02"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/公共资源调用与停止条件.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/公共资源调用与停止条件.md",
+      "sha256": "d15406ae51fb1ab485e7f4269b687189156cc3e0879b3974ce4f6250a5507ea9"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/推算假定与发布分层协议.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/推算假定与发布分层协议.md",
+      "sha256": "fc31dbd27ec93e78db5153205ff6d7dea46fa9cfe4220ac7ef308ca6dc7bf896"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/项目作业台账与持续执行.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/项目作业台账与持续执行.md",
+      "sha256": "4d8bff246d28b102b3e03301bc1da31d7c44ebe407f99488262e19cb38f62afe"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/项目文档条款提取.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/项目文档条款提取.md",
+      "sha256": "c8fd7ca2fd0487f8a0df7b0d99ec99907159ffb6bef0be3bb7092ab86ba0aaef"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/PDF图片与表格提取.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/PDF图片与表格提取.md",
+      "sha256": "e3139f4999c2cfd74a24fcf833433b010cee77a0d862317fa73bb895f793d85a"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/HTML交互复核与批注.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/HTML交互复核与批注.md",
+      "sha256": "178c533df3360610554377458d1f9a5e63b2ab93dd681a9d68c9519afbe4c3f6"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/工程量成果最小字段.schema.json",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/工程量成果最小字段.schema.json",
+      "sha256": "31df37f3976271ca50eea8245eaa1cf85c2d85fb1cac5e4a4b64f34c52a58213"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/缓存身份与复用条件.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/缓存身份与复用条件.md",
+      "sha256": "452eed38b93a20f1053e2fe3a25e07694e1c9dbe21bbbd3d7f3ebfe4ac661b98"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/跨图接口与标高换算.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/跨图接口与标高换算.md",
+      "sha256": "d3d9e09b91c1b66558658207fc85d6a6083a1ccd4b4fd53dcaa85d05109cf611"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/尺寸指向与尺寸链复核.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/尺寸指向与尺寸链复核.md",
+      "sha256": "436b2436ed09b1a7a924e9b9e313922cc820838ebe4d7c183c85bbb1d37b8e51"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/局部识图与对象操作.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/局部识图与对象操作.md",
+      "sha256": "a755b5f26d8bcb0556145c4b7bbb0189f19a2f4777f8ca5eaa8a33738cf244ce"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/各专业持续算量执行路径.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/各专业持续算量执行路径.md",
+      "sha256": "e8f0d27e27797aa2ed57510e567219e5ff654d0c327ea987f497da063a6a3afc"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/references/证据引用要求.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/references/证据引用要求.md",
+      "sha256": "d4d419870040b281fd65d45fbec195089c7993cce90ca3a59e84ea3e2e9d273c"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/assets/review/feedback-endpoints.json",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/_qto-shared-evidence/assets/review/feedback-endpoints.json",
+      "sha256": "aef642745c631255492a13b3c14c0ffe3be4b2e2fba39a2be2c8a7c2ec88580e"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/capability.json",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/capability.json",
+      "sha256": "2238fbf7a00c48fb2ce8cd0ebd167a390e404f32e9d6faa8034988f83eb3cdbc"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/SKILL.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/SKILL.md",
+      "sha256": "744bba1012f53018abc098a42620f3c0fd9d579a1af9a5ba2e8c6b2e677eb3b0"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/measure_pipe_detail_routes.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/scripts/measure_pipe_detail_routes.py",
+      "sha256": "945e53dce442af6c9c126771893f955282b87389fc225a088cb09fba6acc4e01"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/merge_pipe_instance_requirements.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/scripts/merge_pipe_instance_requirements.py",
+      "sha256": "1af14d04bbeefd5da3731e5200ca9e7ff9ad92e254d539a979661a735b0045c4"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/partition_pipe_detail_specs.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/scripts/partition_pipe_detail_specs.py",
+      "sha256": "afef6abe6408aa1e46f3cf0e095af2255eee1c6248828a02ddb6094626d260b5"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/infer_pipe_network.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/scripts/infer_pipe_network.py",
+      "sha256": "46bc3bcfc2f041291935388098165fdad7221f94366134d146037ec22b087293"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/measure_pipe_centerlines.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/scripts/measure_pipe_centerlines.py",
+      "sha256": "018ede42cfe89080cbf929477c8ec6c647635a35a00fd91a6c1948f28030ffb5"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/build_pipe_inference_input.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/scripts/build_pipe_inference_input.py",
+      "sha256": "77aa9a12bfc6e2882ccd9b4b03a29583d3b00dd76484303fef62643ed1e7acd0"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_user_summary.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/scripts/validate_pipe_user_summary.py",
+      "sha256": "5dd2e4d5d65e41f9657304e59bf638bd950ecc978aa953b74cf9bb4fff50f963"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/bind_pipe_callouts.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/scripts/bind_pipe_callouts.py",
+      "sha256": "55802bb45117c41308c986c96655b649749e411bd031a32e626618494afdbf15"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/merge_pipe_elevation_segments.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/scripts/merge_pipe_elevation_segments.py",
+      "sha256": "cfc1502854910533187ce1643077c8bc880efa46b23936aca320a42c167e52ad"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/audit_pipe_correspondence.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/scripts/audit_pipe_correspondence.py",
+      "sha256": "111bbf6671ed4323faef4e9b95cace060065f9413892eabc685320401a9b2878"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/validate_pipe_result.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/scripts/validate_pipe_result.py",
+      "sha256": "6624c87193b46f7fd1e6b003b92025c27ed5c6579630cb590a498908d50f8be9"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/audit_pipe_object_selection.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/scripts/audit_pipe_object_selection.py",
+      "sha256": "9c80ede5b87bb1818b97d7aac735aadb0c742e8e54e85c6259a53c73fcc03bd4"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/assets/末端类型DN候选规则.json",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/assets/末端类型DN候选规则.json",
+      "sha256": "476b36391c97a5478aa2eb62d0071155aefdb320d8f752014b3f13d212969bd9"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/assets/项目裁决台账模板.json",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/assets/项目裁决台账模板.json",
+      "sha256": "8244a83c9d8af2042b59b5277b99c0e53d5f98994cc49934953d7b0cb04dfb4e"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/assets/阀门类型候选规则.json",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/assets/阀门类型候选规则.json",
+      "sha256": "aec519b28d2aa776ccbcb95dd0911471358f864dc33407609af95f245554ca8c"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/assets/管网识别配置模板.json",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/assets/管网识别配置模板.json",
+      "sha256": "be36399210176801e24eda553f4d173882c425369da5b2583880c3e68e1b5c9e"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/管网拓扑与规格推算流程.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/管网拓扑与规格推算流程.md",
+      "sha256": "eada502258ae06f1a0db85f4d16d72773440d70f815f81876c654efe9ef20ea8"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/阀组详图轴线路径计算.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/阀组详图轴线路径计算.md",
+      "sha256": "240c1783d50905fc0e20728c68fce0bbc009874d8bc9150e2b33d24e8ee7c9b0"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/管网推算输入格式.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/管网推算输入格式.md",
+      "sha256": "249587c61afaedfea2d1ddacc12a41e257aff3ebf726b50196af283a9d3467ae"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/中心线计算清单格式.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/中心线计算清单格式.md",
+      "sha256": "5476f8c3758a3d48c6547d1892af615cca8d3f9fe77708c40d1752af71c1d5ab"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/实例规格与逐台接管.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/实例规格与逐台接管.md",
+      "sha256": "8bb4035fd7d24be9797c8f4a6ac3e56e4d0a7d51a36bbe14ae22da5776309dff"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/工艺与室外管网规则.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/工艺与室外管网规则.md",
+      "sha256": "26b8a25f9f95d8bae2fc34c0ebda707ab26b7b8d6863f849c654a4c718e40b55"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/消防水管道规则.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/消防水管道规则.md",
+      "sha256": "25576bd4e1132896537b4a0a60e3fad04e861b544ec1f39d0fe5771f58630c10"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/高程竖段与原管网合并.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/高程竖段与原管网合并.md",
+      "sha256": "4c8930bed28a57d12c0655083651a7dfed8a65464cbb8c7cf831c8154807e374"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/规则清单与成熟状态.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/规则清单与成熟状态.md",
+      "sha256": "4860832d2c34d6a6880959bcc350cc909135f06d0284b147389fc151ce9876c6"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/排水管道规则.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/排水管道规则.md",
+      "sha256": "03eb215d935139e7a2631fc44ba9bfe282b25b0f04dd647aff4f5553a5fcdf6b"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/阀组接管与人工底稿对应.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/阀组接管与人工底稿对应.md",
+      "sha256": "aa3141546d83a9d3accc9b0db2c990ffb2734e53c69dc8d5a05cc307eccfc9a9"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/计算与证据流程.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/计算与证据流程.md",
+      "sha256": "4bdd5e8b71f917ebaec8335228c1cae19c9805269967c53611f6eb825074e6b6"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/现行计量标准摘要.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/现行计量标准摘要.md",
+      "sha256": "5d9bef5200a7578334b025f068f4c7180f5f7e30430b8a57e939b2066fd7f4b7"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/结果检查与输出.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/结果检查与输出.md",
+      "sha256": "5b21876e425c925cb3c5baa07964fa3f67d077c9757a8553712445c8c53ee21e"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/对象范围与相邻边界.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/对象范围与相邻边界.md",
+      "sha256": "e2cd68ffa70e3134909f3a0cbe63e58153528a0524fd2ca39a114ea797e6bc9f"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/暖通水与制冷剂管道规则.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/暖通水与制冷剂管道规则.md",
+      "sha256": "95987deb0da4fbf1bba21cf9195600225b088c96b66f26f99d92ba3f2a498976"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/references/给水管道规则.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-pipe-networks/references/给水管道规则.md",
+      "sha256": "b10ab037fbc66c53eaef448fc3774b0b0b8e8df50a70c5d969675824057822d1"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/capability.json",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/capability.json",
+      "sha256": "cb01f0c13fd1c4ca07519b2458c36650578e2e35296932d216f4ea9480d823e6"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/SKILL.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/SKILL.md",
+      "sha256": "d900bcb2eb41281a6892da9cc836f0bef12cab39e9188541e7836979d11236f7"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/scripts/extract_surface_regions.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/scripts/extract_surface_regions.py",
+      "sha256": "429a9d23cffa3577b1908ab967790b4e8279c39125f5bd11b52537bcfcd0e91b"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/scripts/extract_surface_linework.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/scripts/extract_surface_linework.py",
+      "sha256": "89616f5b19a446ecdb8fdbcd31d83ee248eea74a29125ab0ba3c2d134ee65953"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/scripts/material_rectangle_partition.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/scripts/material_rectangle_partition.py",
+      "sha256": "c43e27d02f98658805987aaac20adc36fbb00f6d5aca91a7f71b7073a06e54d2"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/scripts/validate_surfaces_envelope_result.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/scripts/validate_surfaces_envelope_result.py",
+      "sha256": "c7a102dcbb9becce93b11ee8b6c172d5b29f61dfed66322f42f5f133cc1aa7ff"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/scripts/calculate_surfaces_envelope.py",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/scripts/calculate_surfaces_envelope.py",
+      "sha256": "1fd4950e6458dd19da6de3d71a006e270f52b77b4e394f32234d71d17d20fdff"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/屋面防水保温规则.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/屋面防水保温规则.md",
+      "sha256": "97d461dbb6c9d0c50a8b4b85e00b0f430a05397edf3de67b8371400087b1eef8"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/规则清单与成熟状态.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/规则清单与成熟状态.md",
+      "sha256": "7849a544d31e6709654d34a61140f461461376bfe392cc95ca97bc2cf15318c3"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/填充面域识别与去重.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/填充面域识别与去重.md",
+      "sha256": "ce719bd6e1ab26dfc4bae366f6afed5d37fb2e7954824f01ec870c5589472bb3"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/普通线网面域与房间对应.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/普通线网面域与房间对应.md",
+      "sha256": "acd4c1be83914ce35ef3d7d7c7bbcd59d9fe86a83d129d8915e67b76c7b8c3b9"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/楼地面墙面天棚规则.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/楼地面墙面天棚规则.md",
+      "sha256": "fefb85bf2f28e65095335fff2eed48cc1f12670f6836633c0236e313c50a410b"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/旧资产复核与真实案例结论.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/旧资产复核与真实案例结论.md",
+      "sha256": "cbbc2b299723a9eacafdee1842b30678b1324453fea05267b668d79eb3bc750c"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/计算与证据流程.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/计算与证据流程.md",
+      "sha256": "27bb0fa830ed0aa95d6e2145bf911d88fd569b13e9599354403756c38ddd7b53"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/现行计量标准摘要.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/现行计量标准摘要.md",
+      "sha256": "a0874818507980a33275507739035c1dbd28d74e36e6fed0db37563c0669999d"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/围护板与幕墙面板规则.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/围护板与幕墙面板规则.md",
+      "sha256": "62bb77daa424b47db64119ee34b651dd0d7cc2a02f0c0327621aae7cbcf0d0a8"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/结果检查与输出.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/结果检查与输出.md",
+      "sha256": "7d762b2b75b40cb8d4882daae2e0d833e29062844a7e0c06c8e178d730de6144"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/对象范围与相邻边界.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/对象范围与相邻边界.md",
+      "sha256": "2bfa70f0f6423b19a56ff6377e6029f76507ba11872d6c5f7a137ac158163b90"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/案例成熟度与建设门槛.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/案例成熟度与建设门槛.md",
+      "sha256": "7cd730a86bbf216201e9a28dbea189692cc9fa3811ed96ab86391201e553df82"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/材料基层矩形分区.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/材料基层矩形分区.md",
+      "sha256": "3501d7c18275ab162fa6153f9989ffb0b745d4f0b2a209a4365baf74399a441f"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/洞口扣减与面域边界.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/洞口扣减与面域边界.md",
+      "sha256": "ef7ae95c9b811ce53a0c6edabf5fe9915c1fc9914f86bd5a706e261eb162da28"
+    },
+    {
+      "path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/references/表面与构造层清单格式.md",
+      "snapshot": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/source_snapshot/skills/qto-surfaces-envelope/references/表面与构造层清单格式.md",
+      "sha256": "dc55372b430950fc81e7c70fb380a8ab937f0d49ed8431cc7f15a7553acc5e55"
+    }
+  ]
+}

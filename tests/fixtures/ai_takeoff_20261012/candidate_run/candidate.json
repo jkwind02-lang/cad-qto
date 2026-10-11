@@ -1,0 +1,203 @@
+{
+  "schema_version": "ai-autonomy-candidate/1.0",
+  "candidate_id": "ai-candidate-first-independent-v1",
+  "plugin_path": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-candidate",
+  "plugin_commit": "8b0722bba6e88f699267bc8e50ee250ae41bb4fe",
+  "first_observed_session_time_utc": "2026-10-11T16:24:17+00:00",
+  "created_at_utc": "2026-10-11T16:34:10.612621+00:00",
+  "model": "ChatGPT / GPT-6 Astra Pro; /root/ai_candidate_takeoff",
+  "method": "Actual model viewing of provided original PNGs, exact source DXF fact extraction, model-authored source-bound professional inputs, native plugin calculators, source-object return review.",
+  "human_interventions": [],
+  "remote_writes": false,
+  "read_scope": "Specified candidate plugin snapshot, task inputs, and candidate_run only; runtime Python/dependencies used as instructed. No reference answers, generator code, alternative plugin or other run outputs read.",
+  "review_status": "model working result; no human sign-off",
+  "formal_adoption_allowed": false,
+  "tasks": {
+    "pipe": {
+      "task_status": "calculated_complete_in_requested_scope",
+      "sources": [
+        {
+          "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+          "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+          "bytes": 73083,
+          "role": "authoritative original drawing"
+        },
+        {
+          "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.png",
+          "sha256": "3deafabc20af8672d107c0bd55cb73ffb2d1f4df89dd973a6bdd4d0d1a67ddc8",
+          "bytes": 285097,
+          "role": "viewed unmarked drawing image"
+        },
+        {
+          "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/task.md",
+          "sha256": "21cb0da0aaa3948040f0737bcea2e525540693cb760ef66bc344328d922aff16",
+          "bytes": 1006,
+          "role": "user task"
+        }
+      ],
+      "quantities": [
+        {
+          "system": "SUP",
+          "specification": "DN32",
+          "value": 4.3,
+          "unit": "m",
+          "quantity_role": "centreline_length",
+          "evidence_level": "规则推算量 / model working",
+          "native_result_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+          "native_result_json_pointer": "/length_summary/SUP/规则推算量/DN32"
+        },
+        {
+          "system": "SUP",
+          "specification": "DN50",
+          "value": 13.0,
+          "unit": "m",
+          "quantity_role": "centreline_length",
+          "evidence_level": "规则推算量 / model working",
+          "native_result_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+          "native_result_json_pointer": "/length_summary/SUP/规则推算量/DN50"
+        }
+      ],
+      "total": {
+        "value": 17.3,
+        "unit": "m",
+        "native_result_json_pointer": "/metrics/layered_length"
+      },
+      "native_inputs": [
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_input.json",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/object_audit_input.json"
+      ],
+      "native_outputs": [
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/native_result.json",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/object_audit_result.json"
+      ],
+      "object_details": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/source_bound_details.json",
+      "review_overlay": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/review_overlay.png",
+      "unresolved_items": [],
+      "calculation_coverage": {
+        "physical_quantity_objects": 6,
+        "horizontal_source_entities": 5,
+        "source_derived_vertical_segments": 1,
+        "source_piping_lines_reviewed": 12,
+        "source_piping_lines_excluded_from_raw_length": 7,
+        "unknown_dn_segments": 0,
+        "virtual_bridges": 0
+      },
+      "native_diagnostics_not_additional_requested_quantities": [
+        {
+          "system": "SUP",
+          "type": "变径候选",
+          "quantity_level": "规则推算量",
+          "dn_combination": "DN32×DN50",
+          "candidate_count": 1
+        },
+        {
+          "system": "SUP",
+          "type": "弯头候选",
+          "quantity_level": "规则推算量",
+          "dn_combination": "DN32×DN32",
+          "candidate_count": 1
+        },
+        {
+          "system": "SUP",
+          "type": "弯头候选",
+          "quantity_level": "规则推算量",
+          "dn_combination": "DN50×DN50",
+          "candidate_count": 3
+        }
+      ],
+      "basis_report": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/README.md"
+    },
+    "surfaces": {
+      "task_status": "calculated_complete_in_requested_scope",
+      "sources": [
+        {
+          "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+          "sha256": "17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4"
+        },
+        {
+          "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.png",
+          "sha256": "dda222b97695aec8d6b5e22d5a866f6acf93487d0b05dbc429090fc582f2b690"
+        },
+        {
+          "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/task.md",
+          "sha256": "a70ab7e9796f837207ff8a2377bf2a1a94086f28a5b796129816e3c63d57a9ce"
+        }
+      ],
+      "quantities": [
+        {
+          "material": "CL-11",
+          "specification": "LAYER-CL-11",
+          "value": 17.41,
+          "unit": "m²",
+          "quantity_role": "horizontal_net_ceiling_finish_area",
+          "evidence_level": "candidate reference / model working",
+          "native_result_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_result.json",
+          "native_result_json_pointer": "/工程量结果/0/结果/数值",
+          "gross_m2": 18.04,
+          "opening_union_m2": 0.6299999999999999
+        },
+        {
+          "material": "CL-24",
+          "specification": "LAYER-CL-24",
+          "value": 9.84,
+          "unit": "m²",
+          "quantity_role": "horizontal_net_ceiling_finish_area",
+          "evidence_level": "candidate reference / model working",
+          "native_result_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_result.json",
+          "native_result_json_pointer": "/工程量结果/1/结果/数值",
+          "gross_m2": 9.839999999999998,
+          "opening_union_m2": 0.0
+        }
+      ],
+      "total": {
+        "value": 27.25,
+        "unit": "m²",
+        "derivation": "Sum of two disjoint material-zone native net results; same ceiling finish scope"
+      },
+      "native_inputs": [
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_manifest.json"
+      ],
+      "native_outputs": [
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/native_result.json",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/hatch_regions_selected.json",
+        "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/hatch_regions.json"
+      ],
+      "object_details": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/source_bound_geometry.json",
+      "coverage": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/coverage.json",
+      "review_overlay": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/surfaces/review_overlay.png",
+      "unresolved_items": [],
+      "basis_report": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/README.md"
+    }
+  },
+  "common_artifacts": {
+    "report": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/README.md",
+    "review_input": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/review_view.json",
+    "review_html": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/review.html",
+    "logs": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs",
+    "freeze_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/freeze.json"
+  },
+  "errors_and_interventions": [
+    {
+      "kind": "native_warning",
+      "details": "Both neutral extractions PARTIAL, unsupported uninstantiated default SOLID block CAD-7B; preserved and excluded from quantity scope."
+    },
+    {
+      "kind": "operator_input_error",
+      "details": "First HATCH layer regex used comma-separated string, matched zero. Corrected to FILL-[AB], preserving both runs. No quantity result had used the empty extraction."
+    },
+    {
+      "kind": "adapter_schema_completion",
+      "details": "Working recognition draft expanded to full native ledger and actually validated before final pipe input."
+    }
+  ],
+  "return_review_file": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/return_review.json",
+  "validation_logs": {
+    "pipe_validate_minimum": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_minimum.stdout.txt",
+    "pipe_validate_professional": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_professional.stdout.txt",
+    "pipe_validate_user_summary": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/pipe_validate_user_summary.stdout.txt",
+    "surfaces_validate_minimum": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_validate_minimum.stdout.txt",
+    "surfaces_validate_binding": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/surfaces_validate_binding.stdout.txt",
+    "generate_review_html": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/logs/generate_review_html.stdout.txt"
+  },
+  "final_candidate_ready_at_utc": "2026-10-11T16:35:38.752424+00:00"
+}

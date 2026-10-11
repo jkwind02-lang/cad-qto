@@ -1,0 +1,135 @@
+{
+  "schema_version": "qto-authored-synthetic-oracle/1.0",
+  "case_id": "pipe",
+  "authored_at": "2026-10-11T16:10:28.494907+00:00",
+  "source": {
+    "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+    "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+  },
+  "parameters": {
+    "lower_plan": [
+      [
+        0,
+        0
+      ],
+      [
+        3600,
+        0
+      ],
+      [
+        3600,
+        2400
+      ]
+    ],
+    "upper_plan": [
+      [
+        3600,
+        2400
+      ],
+      [
+        5900,
+        2400
+      ],
+      [
+        8300,
+        2400
+      ],
+      [
+        8300,
+        4300
+      ]
+    ],
+    "lower_pipe_cl_m": "3.15",
+    "upper_pipe_cl_m": "7.85",
+    "lower_floor_m": "0.00",
+    "upper_floor_m": "4.60",
+    "upstream_dn": "DN50",
+    "downstream_dn": "DN32"
+  },
+  "origin": "Original design parameters and independent Decimal hand formulas; no production QTO result was consulted.",
+  "scope_complete": true,
+  "records": [
+    {
+      "record_id": "SUP/F1/S-IN-to-R-A",
+      "physical_object_key": "SUP/F1/S-IN-to-R-A",
+      "quantity_kind": "pipe_centerline_length",
+      "classification": "pipe",
+      "specification": "DN50",
+      "quantity": 6.0,
+      "unit": "m",
+      "measurement_basis": "continuous_centerline_including_inline_fittings",
+      "status": "determined",
+      "evidence_status": "supported",
+      "evidence_refs": [
+        "P-01 F1 plan; full-size centreline and dimensions"
+      ],
+      "relations": {}
+    },
+    {
+      "record_id": "SUP/R-A/F1-to-F2",
+      "physical_object_key": "SUP/R-A/F1-to-F2",
+      "quantity_kind": "pipe_centerline_length",
+      "classification": "pipe",
+      "specification": "DN50",
+      "quantity": 4.7,
+      "unit": "m",
+      "measurement_basis": "continuous_centerline_including_inline_fittings",
+      "status": "determined",
+      "evidence_status": "supported",
+      "evidence_refs": [
+        "P-01 system diagram; pipe CL difference, straight vertical R-A, same physical riser in plans"
+      ],
+      "relations": {}
+    },
+    {
+      "record_id": "SUP/F2/R-A-to-RED-A",
+      "physical_object_key": "SUP/F2/R-A-to-RED-A",
+      "quantity_kind": "pipe_centerline_length",
+      "classification": "pipe",
+      "specification": "DN50",
+      "quantity": 2.3,
+      "unit": "m",
+      "measurement_basis": "continuous_centerline_including_inline_fittings",
+      "status": "determined",
+      "evidence_status": "supported",
+      "evidence_refs": [
+        "P-01 F2 plan upstream of RED-A"
+      ],
+      "relations": {}
+    },
+    {
+      "record_id": "SUP/F2/RED-A-to-U-OUT",
+      "physical_object_key": "SUP/F2/RED-A-to-U-OUT",
+      "quantity_kind": "pipe_centerline_length",
+      "classification": "pipe",
+      "specification": "DN32",
+      "quantity": 4.3,
+      "unit": "m",
+      "measurement_basis": "continuous_centerline_including_inline_fittings",
+      "status": "determined",
+      "evidence_status": "supported",
+      "evidence_refs": [
+        "P-01 F2 plan downstream of RED-A including elbow"
+      ],
+      "relations": {}
+    }
+  ],
+  "arithmetic": {
+    "lower_plan": "(3600+2400)/1000",
+    "vertical": "abs(7.85-3.15)",
+    "upper_before_reducer": "(5900-3600)/1000",
+    "upper_after_reducer": "((8300-5900)+(4300-2400))/1000"
+  },
+  "summary_by_dn_m": {
+    "DN50": 13.0,
+    "DN32": 4.3
+  },
+  "required_semantic_decisions": [
+    "Map R-A between plans and diagram without counting it more than once.",
+    "Use pipe CL elevations, not floor-to-floor elevation or schematic page distance.",
+    "Exclude DRN and architectural context and the legend; do not connect the unmarked crossing.",
+    "Keep the physical DN boundary at RED-A and do not propagate DN50 through it.",
+    "Do not add elbow/reducer take-up lengths to the requested continuous centreline quantity."
+  ],
+  "matching_policy": "Candidate may split or merge geometric primitives. Align by physical path spans and DN after candidate freeze; never require candidate to predict private IDs. Assess complete physical coverage and duplicate quantities separately."
+}

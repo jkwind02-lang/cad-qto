@@ -1,0 +1,1162 @@
+{
+  "evidence_version": "qto-pipe-network-inference-evidence/1.2",
+  "network_id": "P01-WEST-SERVICE-SUPPLY",
+  "status": "CALCULATED",
+  "business_result_status": "CANDIDATE_READY_FOR_REVIEW",
+  "stop_calculation": false,
+  "business_adoption_allowed": false,
+  "recognition_basis": {
+    "schema_version": "qto-model-recognition-ledger/1.0",
+    "ledger_path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/candidate_run/pipe/working_recognition_ledger_v1.json",
+    "ledger_sha256": "54c8d74ee6848aca60f1131206d2e4b75c77edee23c40d0f9221ea9e09a26792",
+    "decision_origin": "model",
+    "recognized_by": [
+      "ChatGPT / GPT-6 Astra Pro; execution agent /root/ai_candidate_takeoff"
+    ],
+    "adoption_scope": "working",
+    "review_status": "unreviewed",
+    "formal_adoption_allowed": false,
+    "meaning": "模型依据本轮图纸作工作识别；未取得人工复核或正式采用资格"
+  },
+  "meaning": "确认基线、规则推算和多方案暂估分列；虚拟桥方案不替代项目专业复核或正式量",
+  "unit": "m",
+  "parameters": {
+    "snap_tolerance": 1e-06,
+    "gap_max": 0.001,
+    "direction_tolerance_deg": 20.0,
+    "terminal_attach_max": 1e-06,
+    "valve_attach_max": 0.001,
+    "fitting_angle_tolerance_deg": 10.0,
+    "main_min_downstream_terminals": 3
+  },
+  "object_selection": {
+    "audit_id": "AUDIT-PIPE-01",
+    "status": "READY",
+    "candidate_count": 13,
+    "included_count": 6,
+    "excluded_count": 7,
+    "unresolved_count": 0,
+    "included_segment_ids": [
+      "PIPE-A0",
+      "PIPE-A1",
+      "PIPE-A2",
+      "PIPE-A3",
+      "PIPE-A4",
+      "PIPE-RA-V"
+    ],
+    "source_ids": [
+      "LEDGER-PIPE-01",
+      "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+    ],
+    "anomaly_groups": []
+  },
+  "endpoint_handoff": {
+    "handoff_id": "PIPE-SOURCE-ENDPORT",
+    "required": false,
+    "source_instance_count": 1,
+    "source_physical_instance_count": 1,
+    "source_endpoint_port_count": 1,
+    "delivered_count": 1,
+    "not_applicable_count": 0,
+    "unresolved_count": 0,
+    "complete": true,
+    "source_workpackage_complete": true,
+    "recognition_basis": null,
+    "source_id": "CAD-AB/AC/100",
+    "reason": "No point-object workpackage; the single U-OUT end port is source-derived solely to close this pipe measurement route."
+  },
+  "dn_match_policy": {
+    "policy_id": "EXPLICIT-SOURCE-BINDINGS",
+    "detected_candidate_count": 6,
+    "source_ids": [
+      "LEDGER-PIPE-01"
+    ],
+    "thresholds": {
+      "method": "explicit model-bound source labels; no nearest-distance classification"
+    },
+    "sensitivity_scenarios": []
+  },
+  "dn_match_candidates": [
+    {
+      "candidate_id": "DN-A0",
+      "segment_id": "PIPE-A0",
+      "dn": "DN50",
+      "source_id": "CAD-AD",
+      "disposition": "seed",
+      "threshold_sensitive": false,
+      "reason": "Explicit adjacent plan label and continuous segment bounded by elbows/reducer; cross-checked against system labels.",
+      "diagnostics": {},
+      "assumption_id": "A-MODEL-PIPE",
+      "evidence_level": "inferred"
+    },
+    {
+      "candidate_id": "DN-A1",
+      "segment_id": "PIPE-A1",
+      "dn": "DN50",
+      "source_id": "CAD-AE",
+      "disposition": "seed",
+      "threshold_sensitive": false,
+      "reason": "Explicit adjacent plan label and continuous segment bounded by elbows/reducer; cross-checked against system labels.",
+      "diagnostics": {},
+      "assumption_id": "A-MODEL-PIPE",
+      "evidence_level": "inferred"
+    },
+    {
+      "candidate_id": "DN-A2",
+      "segment_id": "PIPE-A2",
+      "dn": "DN50",
+      "source_id": "CAD-AF",
+      "disposition": "seed",
+      "threshold_sensitive": false,
+      "reason": "Explicit adjacent plan label and continuous segment bounded by elbows/reducer; cross-checked against system labels.",
+      "diagnostics": {},
+      "assumption_id": "A-MODEL-PIPE",
+      "evidence_level": "inferred"
+    },
+    {
+      "candidate_id": "DN-A3",
+      "segment_id": "PIPE-A3",
+      "dn": "DN32",
+      "source_id": "CAD-B0",
+      "disposition": "seed",
+      "threshold_sensitive": false,
+      "reason": "Explicit adjacent plan label and continuous segment bounded by elbows/reducer; cross-checked against system labels.",
+      "diagnostics": {},
+      "assumption_id": "A-MODEL-PIPE",
+      "evidence_level": "inferred"
+    },
+    {
+      "candidate_id": "DN-A4",
+      "segment_id": "PIPE-A4",
+      "dn": "DN32",
+      "source_id": "CAD-B1",
+      "disposition": "seed",
+      "threshold_sensitive": false,
+      "reason": "Explicit adjacent plan label and continuous segment bounded by elbows/reducer; cross-checked against system labels.",
+      "diagnostics": {},
+      "assumption_id": "A-MODEL-PIPE",
+      "evidence_level": "inferred"
+    },
+    {
+      "candidate_id": "DN-RA-V",
+      "segment_id": "PIPE-RA-V",
+      "dn": "DN50",
+      "source_id": "CAD-DD",
+      "disposition": "seed",
+      "threshold_sensitive": false,
+      "reason": "R-A links both plans and the straight vertical between pipe CL elevations.",
+      "diagnostics": {},
+      "assumption_id": "A-MODEL-PIPE",
+      "evidence_level": "inferred"
+    }
+  ],
+  "dn_seed_rejections": [],
+  "workflow_readiness": {
+    "status": "READY",
+    "checks": {
+      "object_selection_audited": true,
+      "object_selection_resolved": true,
+      "endpoint_handoff_reconciled": true,
+      "gap_candidates_classified": true,
+      "dn_match_candidates_accounted": true,
+      "root_candidates_available": true,
+      "network_roles_materialized": true,
+      "terminal_port_dn_covered": true,
+      "valve_type_candidates_covered": true
+    },
+    "business_correctness_proven": false,
+    "meaning": "只判断本次声明的整套推算依赖是否齐全；某端口规格缺失只影响相应派生量，不阻断已有直接标注管段的工作算量，也不代表人工核准"
+  },
+  "metrics": {
+    "segment_count": 6,
+    "raw_length": 17.299999999999997,
+    "layered_length": 17.3,
+    "length_conservation_delta": 3.552713678800501e-15,
+    "node_count": 7,
+    "topology_bridge_count": 0,
+    "virtual_bridge_length": 0,
+    "virtual_bridge_quantity_included": 0,
+    "classified_bridge_scenario_length": 0,
+    "all_unique_bridge_scenario_total_length": 17.299999999999997,
+    "ambiguous_gap_endpoint_count": 0,
+    "classified_gap_count": 0,
+    "automatic_gap_classification_count": 0,
+    "object_selection_unresolved_count": 0,
+    "terminal_handoff_delivered_count": 1,
+    "terminal_handoff_unresolved_count": 0,
+    "dn_match_candidate_count": 6,
+    "dn_match_seed_count": 6,
+    "dn_match_scenario_count": 0,
+    "dn_match_excluded_count": 0,
+    "run_count": 2,
+    "dn_assigned_segment_count": 6,
+    "dn_unresolved_segment_count": 0,
+    "role_rule_assignment_count": 0,
+    "dn_scenario_count": 0,
+    "valve_count": 0,
+    "unclassified_valve_count": 0,
+    "valve_dn_assigned_count": 0,
+    "fitting_candidate_count": 5,
+    "outside_scope_fitting_candidate_count": 0,
+    "decision_count": 0,
+    "source_route_count": 6,
+    "source_route_length": 17.299999999999997,
+    "split_length_conservation_delta": 0.0,
+    "cross_view_link_count": 0,
+    "vertical_unresolved_count": 0,
+    "route_issue_count": 0
+  },
+  "topology_bridges": [],
+  "bridge_scenarios": [
+    {
+      "scenario_id": "SC-GAP-BASE",
+      "name": "平面已绘中心线基线",
+      "bridge_ids": [],
+      "incremental_length": 0.0,
+      "scenario_total_length": 17.299999999999997,
+      "unit": "m",
+      "quantity_level": "规则推算量",
+      "selected": true,
+      "meaning": "已绘中心线按实际最低证据层级汇总，不因作为基线而升级确认量"
+    },
+    {
+      "scenario_id": "SC-GAP-ALL-UNIQUE",
+      "name": "全部唯一虚拟桥补齐上界方案",
+      "bridge_ids": [],
+      "incremental_length": 0,
+      "scenario_total_length": 17.299999999999997,
+      "unit": "m",
+      "quantity_level": "方案暂估量",
+      "selected": false,
+      "assumption_ids": [],
+      "meaning": "用于暴露全部唯一断口的数量影响，不自动进入确认量或正式量"
+    }
+  ],
+  "bridge_quantity_items": [],
+  "reconstructed_length_summary": {
+    "SUP": {
+      "规则推算量": {
+        "DN50": 13.0,
+        "DN32": 4.3
+      }
+    }
+  },
+  "reconstructed_length": 17.299999999999997,
+  "restored_omission_length": 0,
+  "change_nodes": [
+    {
+      "change_id": "RED-A",
+      "node_id": "N-00005",
+      "system": "SUP",
+      "evidence_level": "inferred",
+      "source_id": "CAD-B2/B3/FE"
+    }
+  ],
+  "scope_boundary_nodes": [],
+  "roots": [
+    {
+      "root_id": "S-IN",
+      "system": "SUP",
+      "node_id": "N-00001",
+      "source_id": "CAD-A9/AA/F8/100",
+      "evidence_level": "inferred",
+      "root_role": "network_root",
+      "assumption_id": null
+    }
+  ],
+  "terminals": [
+    {
+      "terminal_id": "U-OUT",
+      "system": "SUP",
+      "node_id": "N-00007",
+      "terminal_type": "measurement end port",
+      "port_dn": "DN32",
+      "evidence_level": "inferred",
+      "source_id": "CAD-AB/AC/B1/100",
+      "assumption_id": null,
+      "port_evidence_level": "inferred",
+      "port_source_id": "CAD-AB/AC/B1/100",
+      "port_method": "direct_terminal_port",
+      "propagation_scope": "interface_only"
+    }
+  ],
+  "runs": [
+    {
+      "run_id": "RUN-0001",
+      "segments": [
+        "PIPE-A0",
+        "PIPE-A1",
+        "PIPE-A2",
+        "PIPE-RA-V"
+      ],
+      "seed_dns": [
+        "DN50"
+      ],
+      "status": "assigned"
+    },
+    {
+      "run_id": "RUN-0002",
+      "segments": [
+        "PIPE-A3",
+        "PIPE-A4"
+      ],
+      "seed_dns": [
+        "DN32"
+      ],
+      "status": "assigned"
+    }
+  ],
+  "segments": [
+    {
+      "segment_id": "PIPE-A0",
+      "system": "SUP",
+      "length": 3.6000000000000005,
+      "unit": "m",
+      "role": "支管",
+      "downstream_terminal_count": 1,
+      "dn": "DN50",
+      "evidence_level": "inferred",
+      "quantity_level": "规则推算量",
+      "method": "direct_or_bound_seed",
+      "run_id": "RUN-0001",
+      "source_ids": [
+        "CAD-AD",
+        "CAD-AE",
+        "CAD-AF",
+        "CAD-DD"
+      ],
+      "assumption_ids": [
+        "A-MODEL-PIPE"
+      ],
+      "alternatives": [],
+      "parent_segment_id": "PIPE-A0",
+      "space_id": "P01-SUP-3D",
+      "start": [
+        1.8,
+        6.7,
+        3.15
+      ],
+      "end": [
+        5.4,
+        6.7,
+        3.15
+      ],
+      "geometry": {
+        "schema": "qto-cad-geometry/1.2",
+        "coordinate_system": "WCS",
+        "parts": [
+          {
+            "kind": "line",
+            "start": [
+              1.8,
+              6.7,
+              3.15
+            ],
+            "end": [
+              5.4,
+              6.7,
+              3.15
+            ]
+          }
+        ],
+        "closed": false
+      },
+      "physical_id": "PIPE-A0",
+      "extent_id": "centreline"
+    },
+    {
+      "segment_id": "PIPE-A1",
+      "system": "SUP",
+      "length": 2.3999999999999995,
+      "unit": "m",
+      "role": "支管",
+      "downstream_terminal_count": 1,
+      "dn": "DN50",
+      "evidence_level": "inferred",
+      "quantity_level": "规则推算量",
+      "method": "direct_or_bound_seed",
+      "run_id": "RUN-0001",
+      "source_ids": [
+        "CAD-AD",
+        "CAD-AE",
+        "CAD-AF",
+        "CAD-DD"
+      ],
+      "assumption_ids": [
+        "A-MODEL-PIPE"
+      ],
+      "alternatives": [],
+      "parent_segment_id": "PIPE-A1",
+      "space_id": "P01-SUP-3D",
+      "start": [
+        5.4,
+        6.7,
+        3.15
+      ],
+      "end": [
+        5.4,
+        9.1,
+        3.15
+      ],
+      "geometry": {
+        "schema": "qto-cad-geometry/1.2",
+        "coordinate_system": "WCS",
+        "parts": [
+          {
+            "kind": "line",
+            "start": [
+              5.4,
+              6.7,
+              3.15
+            ],
+            "end": [
+              5.4,
+              9.1,
+              3.15
+            ]
+          }
+        ],
+        "closed": false
+      },
+      "physical_id": "PIPE-A1",
+      "extent_id": "centreline"
+    },
+    {
+      "segment_id": "PIPE-A2",
+      "system": "SUP",
+      "length": 2.3,
+      "unit": "m",
+      "role": "支管",
+      "downstream_terminal_count": 1,
+      "dn": "DN50",
+      "evidence_level": "inferred",
+      "quantity_level": "规则推算量",
+      "method": "direct_or_bound_seed",
+      "run_id": "RUN-0001",
+      "source_ids": [
+        "CAD-AD",
+        "CAD-AE",
+        "CAD-AF",
+        "CAD-DD"
+      ],
+      "assumption_ids": [
+        "A-MODEL-PIPE"
+      ],
+      "alternatives": [],
+      "parent_segment_id": "PIPE-A2",
+      "space_id": "P01-SUP-3D",
+      "start": [
+        5.4,
+        9.1,
+        7.85
+      ],
+      "end": [
+        7.7,
+        9.1,
+        7.85
+      ],
+      "geometry": {
+        "schema": "qto-cad-geometry/1.2",
+        "coordinate_system": "WCS",
+        "parts": [
+          {
+            "kind": "line",
+            "start": [
+              5.4,
+              9.1,
+              7.85
+            ],
+            "end": [
+              7.7,
+              9.1,
+              7.85
+            ]
+          }
+        ],
+        "closed": false
+      },
+      "physical_id": "PIPE-A2",
+      "extent_id": "centreline"
+    },
+    {
+      "segment_id": "PIPE-A3",
+      "system": "SUP",
+      "length": 2.3999999999999995,
+      "unit": "m",
+      "role": "支管",
+      "downstream_terminal_count": 1,
+      "dn": "DN32",
+      "evidence_level": "inferred",
+      "quantity_level": "规则推算量",
+      "method": "direct_or_bound_seed",
+      "run_id": "RUN-0002",
+      "source_ids": [
+        "CAD-B0",
+        "CAD-B1"
+      ],
+      "assumption_ids": [
+        "A-MODEL-PIPE"
+      ],
+      "alternatives": [],
+      "parent_segment_id": "PIPE-A3",
+      "space_id": "P01-SUP-3D",
+      "start": [
+        7.7,
+        9.1,
+        7.85
+      ],
+      "end": [
+        10.1,
+        9.1,
+        7.85
+      ],
+      "geometry": {
+        "schema": "qto-cad-geometry/1.2",
+        "coordinate_system": "WCS",
+        "parts": [
+          {
+            "kind": "line",
+            "start": [
+              7.7,
+              9.1,
+              7.85
+            ],
+            "end": [
+              10.1,
+              9.1,
+              7.85
+            ]
+          }
+        ],
+        "closed": false
+      },
+      "physical_id": "PIPE-A3",
+      "extent_id": "centreline"
+    },
+    {
+      "segment_id": "PIPE-A4",
+      "system": "SUP",
+      "length": 1.9000000000000004,
+      "unit": "m",
+      "role": "末端连接",
+      "downstream_terminal_count": 1,
+      "dn": "DN32",
+      "evidence_level": "inferred",
+      "quantity_level": "规则推算量",
+      "method": "direct_or_bound_seed",
+      "run_id": "RUN-0002",
+      "source_ids": [
+        "CAD-B0",
+        "CAD-B1"
+      ],
+      "assumption_ids": [
+        "A-MODEL-PIPE"
+      ],
+      "alternatives": [],
+      "parent_segment_id": "PIPE-A4",
+      "space_id": "P01-SUP-3D",
+      "start": [
+        10.1,
+        9.1,
+        7.85
+      ],
+      "end": [
+        10.1,
+        11.0,
+        7.85
+      ],
+      "geometry": {
+        "schema": "qto-cad-geometry/1.2",
+        "coordinate_system": "WCS",
+        "parts": [
+          {
+            "kind": "line",
+            "start": [
+              10.1,
+              9.1,
+              7.85
+            ],
+            "end": [
+              10.1,
+              11.0,
+              7.85
+            ]
+          }
+        ],
+        "closed": false
+      },
+      "physical_id": "PIPE-A4",
+      "extent_id": "centreline"
+    },
+    {
+      "segment_id": "PIPE-RA-V",
+      "system": "SUP",
+      "length": 4.699999999999999,
+      "unit": "m",
+      "role": "支管",
+      "downstream_terminal_count": 1,
+      "dn": "DN50",
+      "evidence_level": "inferred",
+      "quantity_level": "规则推算量",
+      "method": "direct_or_bound_seed",
+      "run_id": "RUN-0001",
+      "source_ids": [
+        "CAD-AD",
+        "CAD-AE",
+        "CAD-AF",
+        "CAD-DD"
+      ],
+      "assumption_ids": [
+        "A-MODEL-PIPE"
+      ],
+      "alternatives": [],
+      "parent_segment_id": "PIPE-RA-V",
+      "space_id": "P01-SUP-3D",
+      "start": [
+        5.4,
+        9.1,
+        3.15
+      ],
+      "end": [
+        5.4,
+        9.1,
+        7.85
+      ],
+      "geometry": {
+        "schema": "qto-cad-geometry/1.2",
+        "coordinate_system": "WCS",
+        "parts": [
+          {
+            "kind": "line",
+            "start": [
+              5.4,
+              9.1,
+              3.15
+            ],
+            "end": [
+              5.4,
+              9.1,
+              7.85
+            ]
+          }
+        ],
+        "closed": false
+      },
+      "physical_id": "R-A",
+      "extent_id": "F1-CL-to-F2-CL"
+    }
+  ],
+  "dn_scenarios": [],
+  "valves": [],
+  "valve_summary": [],
+  "valve_family_summary": [],
+  "fitting_candidates": [
+    {
+      "fitting_id": "FIT-0001",
+      "node_id": "N-00002",
+      "system": "SUP",
+      "type": "弯头候选",
+      "candidate_types": [],
+      "degree": 2,
+      "angle_deg": 90.0,
+      "segment_ids": [
+        "PIPE-A0",
+        "PIPE-A1"
+      ],
+      "dn_candidates": [
+        "DN50"
+      ],
+      "ports": [
+        {
+          "port_id": "PIPE-A0@end",
+          "segment_id": "PIPE-A0",
+          "dn": "DN50",
+          "direction": [
+            -3.6000000000000005,
+            -0.0,
+            -0.0
+          ],
+          "quantity_scope": "measured"
+        },
+        {
+          "port_id": "PIPE-A1@start",
+          "segment_id": "PIPE-A1",
+          "dn": "DN50",
+          "direction": [
+            0.0,
+            2.3999999999999995,
+            0.0
+          ],
+          "quantity_scope": "measured"
+        }
+      ],
+      "dn_combination": "DN50×DN50",
+      "port_angles": [
+        {
+          "a": "PIPE-A0@end",
+          "b": "PIPE-A1@start",
+          "angle_deg": 90.0
+        }
+      ],
+      "branch_angle_deg": null,
+      "quantity_level": "规则推算量",
+      "formal_release_blocked": true,
+      "method": "exact_endpoint_topology",
+      "connection_complete": null,
+      "measured_degree": 2,
+      "external_port_ids": [],
+      "quantity_owner": "in_scope",
+      "boundary_ids": []
+    },
+    {
+      "fitting_id": "FIT-0002",
+      "node_id": "N-00003",
+      "system": "SUP",
+      "type": "弯头候选",
+      "candidate_types": [],
+      "degree": 2,
+      "angle_deg": 90.0,
+      "segment_ids": [
+        "PIPE-A1",
+        "PIPE-RA-V"
+      ],
+      "dn_candidates": [
+        "DN50"
+      ],
+      "ports": [
+        {
+          "port_id": "PIPE-A1@end",
+          "segment_id": "PIPE-A1",
+          "dn": "DN50",
+          "direction": [
+            -0.0,
+            -2.3999999999999995,
+            -0.0
+          ],
+          "quantity_scope": "measured"
+        },
+        {
+          "port_id": "PIPE-RA-V@start",
+          "segment_id": "PIPE-RA-V",
+          "dn": "DN50",
+          "direction": [
+            0.0,
+            0.0,
+            4.699999999999999
+          ],
+          "quantity_scope": "measured"
+        }
+      ],
+      "dn_combination": "DN50×DN50",
+      "port_angles": [
+        {
+          "a": "PIPE-A1@end",
+          "b": "PIPE-RA-V@start",
+          "angle_deg": 90.0
+        }
+      ],
+      "branch_angle_deg": null,
+      "quantity_level": "规则推算量",
+      "formal_release_blocked": true,
+      "method": "exact_endpoint_topology",
+      "connection_complete": null,
+      "measured_degree": 2,
+      "external_port_ids": [],
+      "quantity_owner": "in_scope",
+      "boundary_ids": []
+    },
+    {
+      "fitting_id": "FIT-0003",
+      "node_id": "N-00004",
+      "system": "SUP",
+      "type": "弯头候选",
+      "candidate_types": [],
+      "degree": 2,
+      "angle_deg": 90.0,
+      "segment_ids": [
+        "PIPE-A2",
+        "PIPE-RA-V"
+      ],
+      "dn_candidates": [
+        "DN50"
+      ],
+      "ports": [
+        {
+          "port_id": "PIPE-A2@start",
+          "segment_id": "PIPE-A2",
+          "dn": "DN50",
+          "direction": [
+            2.3,
+            0.0,
+            0.0
+          ],
+          "quantity_scope": "measured"
+        },
+        {
+          "port_id": "PIPE-RA-V@end",
+          "segment_id": "PIPE-RA-V",
+          "dn": "DN50",
+          "direction": [
+            -0.0,
+            -0.0,
+            -4.699999999999999
+          ],
+          "quantity_scope": "measured"
+        }
+      ],
+      "dn_combination": "DN50×DN50",
+      "port_angles": [
+        {
+          "a": "PIPE-A2@start",
+          "b": "PIPE-RA-V@end",
+          "angle_deg": 90.0
+        }
+      ],
+      "branch_angle_deg": null,
+      "quantity_level": "规则推算量",
+      "formal_release_blocked": true,
+      "method": "exact_endpoint_topology",
+      "connection_complete": null,
+      "measured_degree": 2,
+      "external_port_ids": [],
+      "quantity_owner": "in_scope",
+      "boundary_ids": []
+    },
+    {
+      "fitting_id": "FIT-0004",
+      "node_id": "N-00005",
+      "system": "SUP",
+      "type": "变径候选",
+      "candidate_types": [],
+      "degree": 2,
+      "angle_deg": 180.0,
+      "segment_ids": [
+        "PIPE-A2",
+        "PIPE-A3"
+      ],
+      "dn_candidates": [
+        "DN32",
+        "DN50"
+      ],
+      "ports": [
+        {
+          "port_id": "PIPE-A2@end",
+          "segment_id": "PIPE-A2",
+          "dn": "DN50",
+          "direction": [
+            -2.3,
+            -0.0,
+            -0.0
+          ],
+          "quantity_scope": "measured"
+        },
+        {
+          "port_id": "PIPE-A3@start",
+          "segment_id": "PIPE-A3",
+          "dn": "DN32",
+          "direction": [
+            2.3999999999999995,
+            0.0,
+            0.0
+          ],
+          "quantity_scope": "measured"
+        }
+      ],
+      "dn_combination": "DN32×DN50",
+      "port_angles": [
+        {
+          "a": "PIPE-A2@end",
+          "b": "PIPE-A3@start",
+          "angle_deg": 180.0
+        }
+      ],
+      "branch_angle_deg": null,
+      "quantity_level": "规则推算量",
+      "formal_release_blocked": true,
+      "method": "exact_endpoint_topology",
+      "connection_complete": null,
+      "measured_degree": 2,
+      "external_port_ids": [],
+      "quantity_owner": "in_scope",
+      "boundary_ids": []
+    },
+    {
+      "fitting_id": "FIT-0005",
+      "node_id": "N-00006",
+      "system": "SUP",
+      "type": "弯头候选",
+      "candidate_types": [],
+      "degree": 2,
+      "angle_deg": 90.0,
+      "segment_ids": [
+        "PIPE-A3",
+        "PIPE-A4"
+      ],
+      "dn_candidates": [
+        "DN32"
+      ],
+      "ports": [
+        {
+          "port_id": "PIPE-A3@end",
+          "segment_id": "PIPE-A3",
+          "dn": "DN32",
+          "direction": [
+            -2.3999999999999995,
+            -0.0,
+            -0.0
+          ],
+          "quantity_scope": "measured"
+        },
+        {
+          "port_id": "PIPE-A4@start",
+          "segment_id": "PIPE-A4",
+          "dn": "DN32",
+          "direction": [
+            0.0,
+            1.9000000000000004,
+            0.0
+          ],
+          "quantity_scope": "measured"
+        }
+      ],
+      "dn_combination": "DN32×DN32",
+      "port_angles": [
+        {
+          "a": "PIPE-A3@end",
+          "b": "PIPE-A4@start",
+          "angle_deg": 90.0
+        }
+      ],
+      "branch_angle_deg": null,
+      "quantity_level": "规则推算量",
+      "formal_release_blocked": true,
+      "method": "exact_endpoint_topology",
+      "connection_complete": null,
+      "measured_degree": 2,
+      "external_port_ids": [],
+      "quantity_owner": "in_scope",
+      "boundary_ids": []
+    }
+  ],
+  "fitting_summary": [
+    {
+      "system": "SUP",
+      "type": "变径候选",
+      "quantity_level": "规则推算量",
+      "dn_combination": "DN32×DN50",
+      "candidate_count": 1
+    },
+    {
+      "system": "SUP",
+      "type": "弯头候选",
+      "quantity_level": "规则推算量",
+      "dn_combination": "DN32×DN32",
+      "candidate_count": 1
+    },
+    {
+      "system": "SUP",
+      "type": "弯头候选",
+      "quantity_level": "规则推算量",
+      "dn_combination": "DN50×DN50",
+      "candidate_count": 3
+    }
+  ],
+  "length_summary": {
+    "SUP": {
+      "规则推算量": {
+        "DN32": 4.3,
+        "DN50": 13.0
+      }
+    }
+  },
+  "decision_queue": [],
+  "route_preparation": {
+    "schema": "qto-pipe-route-preparation/1.0",
+    "source_segment_ids": [
+      "PIPE-A0",
+      "PIPE-A1",
+      "PIPE-A2",
+      "PIPE-A3",
+      "PIPE-A4",
+      "PIPE-RA-V"
+    ],
+    "parent_map": {
+      "PIPE-A0": [
+        "PIPE-A0"
+      ],
+      "PIPE-A1": [
+        "PIPE-A1"
+      ],
+      "PIPE-A2": [
+        "PIPE-A2"
+      ],
+      "PIPE-A3": [
+        "PIPE-A3"
+      ],
+      "PIPE-A4": [
+        "PIPE-A4"
+      ],
+      "PIPE-RA-V": [
+        "PIPE-RA-V"
+      ]
+    },
+    "source_object_selection": {
+      "schema_version": "qto-pipe-object-selection-audit/1.0",
+      "audit_id": "AUDIT-PIPE-01",
+      "unit": "m",
+      "status": "READY",
+      "meaning": "未决异常对象不进入确认中心线，但其他已筛选对象可继续计算",
+      "candidate_count": 13,
+      "included_count": 6,
+      "excluded_count": 7,
+      "unresolved_count": 0,
+      "included_segment_ids": [
+        "PIPE-A0",
+        "PIPE-A1",
+        "PIPE-A2",
+        "PIPE-A3",
+        "PIPE-A4",
+        "PIPE-RA-V"
+      ],
+      "excluded_object_ids": [
+        "EXCLUDE-D3",
+        "EXCLUDE-D6",
+        "EXCLUDE-D7",
+        "EXCLUDE-D8",
+        "EXCLUDE-D9",
+        "EXCLUDE-EC",
+        "EXCLUDE-EE"
+      ],
+      "unresolved_object_ids": [],
+      "source_ids": [
+        "LEDGER-PIPE-01",
+        "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7"
+      ],
+      "parameters": {
+        "connection_tolerance": 1e-06,
+        "repeat_min_count": 3,
+        "signature_precision": 6
+      },
+      "anomaly_groups": [],
+      "decisions": [
+        {
+          "object_id": "EXCLUDE-D3",
+          "decision": "exclude",
+          "basis": "Existing DRN DN80; separate system and unmarked crossing is not a connection (D4,D5,FF).",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 0
+        },
+        {
+          "object_id": "EXCLUDE-D6",
+          "decision": "exclude",
+          "basis": "NTS system view of F1 plan route; correspondence only (FC).",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 1
+        },
+        {
+          "object_id": "EXCLUDE-D7",
+          "decision": "exclude",
+          "basis": "NTS system riser graphic; real vertical separately derived from E0,E1,DE,DF.",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 2
+        },
+        {
+          "object_id": "EXCLUDE-D8",
+          "decision": "exclude",
+          "basis": "NTS system view before reducer; F2 source A2 owns quantity.",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 2
+        },
+        {
+          "object_id": "EXCLUDE-D9",
+          "decision": "exclude",
+          "basis": "NTS system view after reducer; F2 sources A3,A4 own quantity.",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 1
+        },
+        {
+          "object_id": "EXCLUDE-EC",
+          "decision": "exclude",
+          "basis": "Legend SUP example only (EB,101).",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 0
+        },
+        {
+          "object_id": "EXCLUDE-EE",
+          "decision": "exclude",
+          "basis": "Legend DRN example only (EB,101).",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 0
+        },
+        {
+          "object_id": "PIPE-A0",
+          "decision": "include",
+          "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 1
+        },
+        {
+          "object_id": "PIPE-A1",
+          "decision": "include",
+          "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 2
+        },
+        {
+          "object_id": "PIPE-A2",
+          "decision": "include",
+          "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 2
+        },
+        {
+          "object_id": "PIPE-A3",
+          "decision": "include",
+          "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 2
+        },
+        {
+          "object_id": "PIPE-A4",
+          "decision": "include",
+          "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 1
+        },
+        {
+          "object_id": "PIPE-RA-V",
+          "decision": "include",
+          "basis": "Model recognition of new SUP scope; source-bound observed route / pipe-CL vertical, no human sign-off.",
+          "source_id": "LEDGER-PIPE-01",
+          "connected_endpoint_match_count": 2
+        }
+      ]
+    },
+    "issues": [],
+    "junctions": [],
+    "interfaces": [],
+    "vertical_quantities": [],
+    "source_lengths": {
+      "PIPE-A0": 3.6000000000000005,
+      "PIPE-A1": 2.3999999999999995,
+      "PIPE-A2": 2.3,
+      "PIPE-A3": 2.3999999999999995,
+      "PIPE-A4": 1.9000000000000004,
+      "PIPE-RA-V": 4.699999999999999
+    },
+    "source_length": 17.299999999999997,
+    "derived_length": 17.299999999999997,
+    "length_delta": 0.0,
+    "endpoint_receipt": {
+      "provided": 1,
+      "bound": 1,
+      "unbound": 0
+    }
+  },
+  "spatial_diagnostics": {
+    "distance_checks": 22,
+    "rejected_transitive_pairs": []
+  },
+  "vertical_quantities": [],
+  "review_summary_scope": "已绘路径量、跨图竖向量和未决分别列示；不是未经复核的完整系统总量"
+}

@@ -1,0 +1,99 @@
+{
+  "schema": "qto-elevation-link/1.0",
+  "calculation_id": "CALC-RA-CL",
+  "system": "SUP",
+  "from": {
+    "value": 3.15,
+    "unit": "m",
+    "datum_id": "P01-PROJECT-DATUM",
+    "reference_id": "R-A-F1-PIPE-CL",
+    "measurement_kind": "pipe_center",
+    "system": "SUP",
+    "level": "confirmed",
+    "fact_id": "FACT-E0",
+    "source_ids": [
+      "SRC-E0"
+    ],
+    "basis": "Direct original PIPE CL label; project datum explicitly defined at CAD-FB. No FFL substitution."
+  },
+  "to": {
+    "value": 7.85,
+    "unit": "m",
+    "datum_id": "P01-PROJECT-DATUM",
+    "reference_id": "R-A-F2-PIPE-CL",
+    "measurement_kind": "pipe_center",
+    "system": "SUP",
+    "level": "confirmed",
+    "fact_id": "FACT-E1",
+    "source_ids": [
+      "SRC-E1"
+    ],
+    "basis": "Direct original PIPE CL label; project datum explicitly defined at CAD-FB. No FFL substitution."
+  },
+  "target_datum": "P01-PROJECT-DATUM",
+  "sources": [
+    {
+      "id": "SRC-E0",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+      "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "locator": "P-01 Model CAD-E0 bbox=[30600.0, 6150.0, 30600.0, 6150.0]; note CAD-FB; F1 PIPE CL +3.15 m",
+      "facts": [
+        {
+          "id": "FACT-E0",
+          "value": 3.15,
+          "unit": "m",
+          "datum_id": "P01-PROJECT-DATUM",
+          "reference_id": "R-A-F1-PIPE-CL",
+          "measurement_kind": "pipe_center",
+          "system": "SUP",
+          "level": "confirmed"
+        }
+      ]
+    },
+    {
+      "id": "SRC-E1",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+      "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "locator": "P-01 Model CAD-E1 bbox=[30600.0, 11530.0, 30600.0, 11530.0]; note CAD-FB; F2 PIPE CL +7.85 m",
+      "facts": [
+        {
+          "id": "FACT-E1",
+          "value": 7.85,
+          "unit": "m",
+          "datum_id": "P01-PROJECT-DATUM",
+          "reference_id": "R-A-F2-PIPE-CL",
+          "measurement_kind": "pipe_center",
+          "system": "SUP",
+          "level": "confirmed"
+        }
+      ]
+    },
+    {
+      "id": "SRC-RA-ROUTE",
+      "path": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/pipe/drawing.dxf",
+      "sha256": "ecb5a1a5608bc1d9974a1b506436ca7884a97c67d58ada7aaa63f50e740978a7",
+      "locator": "P-01 CAD-DE/DF straight vertical; CAD-FA same physical riser; CAD-FE no unshown offsets",
+      "facts": [
+        {
+          "id": "ROUTE-R-A",
+          "measurement_kind": "route_shape",
+          "route_kind": "vertical",
+          "from_reference_id": "R-A-F1-PIPE-CL",
+          "to_reference_id": "R-A-F2-PIPE-CL",
+          "system": "SUP",
+          "level": "confirmed"
+        }
+      ]
+    }
+  ],
+  "datum_transforms": [],
+  "route": {
+    "route_id": "ROUTE-R-A",
+    "kind": "vertical",
+    "source_ids": [
+      "SRC-RA-ROUTE"
+    ],
+    "basis": "CAD-DE/DF explicitly straight vertical between indicated pipe CLs; same riser by note 3.",
+    "level": "confirmed"
+  }
+}

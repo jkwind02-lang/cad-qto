@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+    "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/validate_minimum_result.py",
+    "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/result_binding.json"
+  ],
+  "start_utc": "2026-10-11T16:21:12.218482+00:00",
+  "end_utc": "2026-10-11T16:21:12.477071+00:00",
+  "exit_code": 1,
+  "script_sha256": {
+    "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/_qto-shared-evidence/scripts/validate_minimum_result.py": "3e8f313a6dfa65c7546642fcc0bc4f28e917107f0f9bda540f9cddb53c96f779"
+  }
+}

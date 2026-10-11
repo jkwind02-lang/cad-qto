@@ -1,0 +1,124 @@
+{
+  "schema_version": "qto-pipe-object-selection-audit/1.0",
+  "audit_id": "AUDIT-P01",
+  "unit": "m",
+  "status": "READY",
+  "meaning": "未决异常对象不进入确认中心线，但其他已筛选对象可继续计算",
+  "candidate_count": 12,
+  "included_count": 5,
+  "excluded_count": 7,
+  "unresolved_count": 0,
+  "included_segment_ids": [
+    "SEG-CAD-A0",
+    "SEG-CAD-A1",
+    "SEG-CAD-A2",
+    "SEG-CAD-A3",
+    "SEG-CAD-A4"
+  ],
+  "excluded_object_ids": [
+    "SEG-CAD-D3",
+    "SEG-CAD-D6",
+    "SEG-CAD-D7",
+    "SEG-CAD-D8",
+    "SEG-CAD-D9",
+    "SEG-CAD-EC",
+    "SEG-CAD-EE"
+  ],
+  "unresolved_object_ids": [],
+  "source_ids": [
+    "SRC-P01",
+    "MODEL-PIPE-P01"
+  ],
+  "parameters": {
+    "connection_tolerance": 0.001,
+    "repeat_min_count": 3,
+    "signature_precision": 9
+  },
+  "anomaly_groups": [],
+  "decisions": [
+    {
+      "object_id": "SEG-CAD-A0",
+      "decision": "include",
+      "basis": "P-01 plan F1 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "source_id": "SRC-P01",
+      "connected_endpoint_match_count": 1
+    },
+    {
+      "object_id": "SEG-CAD-A1",
+      "decision": "include",
+      "basis": "P-01 plan F1 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "source_id": "SRC-P01",
+      "connected_endpoint_match_count": 1
+    },
+    {
+      "object_id": "SEG-CAD-A2",
+      "decision": "include",
+      "basis": "P-01 plan F2 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "source_id": "SRC-P01",
+      "connected_endpoint_match_count": 1
+    },
+    {
+      "object_id": "SEG-CAD-A3",
+      "decision": "include",
+      "basis": "P-01 plan F2 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "source_id": "SRC-P01",
+      "connected_endpoint_match_count": 2
+    },
+    {
+      "object_id": "SEG-CAD-A4",
+      "decision": "include",
+      "basis": "P-01 plan F2 new SUP centerline: direct SUP callout, continuous route from named end/riser, plan geometry and dimensions agree; actual model visual inspection.",
+      "source_id": "SRC-P01",
+      "connected_endpoint_match_count": 1
+    },
+    {
+      "object_id": "SEG-CAD-D3",
+      "decision": "exclude",
+      "basis": "Existing DRN DN80 at unmarked crossing. CAD-D4, CAD-D5 and note CAD-FF explicitly exclude DRN from SUP.",
+      "source_id": "SRC-P01",
+      "connected_endpoint_match_count": 0
+    },
+    {
+      "object_id": "SEG-CAD-D6",
+      "decision": "exclude",
+      "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+      "source_id": "SRC-P01",
+      "connected_endpoint_match_count": 1
+    },
+    {
+      "object_id": "SEG-CAD-D7",
+      "decision": "exclude",
+      "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+      "source_id": "SRC-P01",
+      "connected_endpoint_match_count": 2
+    },
+    {
+      "object_id": "SEG-CAD-D8",
+      "decision": "exclude",
+      "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+      "source_id": "SRC-P01",
+      "connected_endpoint_match_count": 2
+    },
+    {
+      "object_id": "SEG-CAD-D9",
+      "decision": "exclude",
+      "basis": "System diagram NOT TO SCALE CAD-99/CAD-FC; same S-IN/R-A/RED-A/U-OUT route. Use topology and CL labels, never add schematic drawn lengths.",
+      "source_id": "SRC-P01",
+      "connected_endpoint_match_count": 1
+    },
+    {
+      "object_id": "SEG-CAD-EC",
+      "decision": "exclude",
+      "basis": "Legend examples only CAD-EB and note CAD-101; no installed physical centerline.",
+      "source_id": "SRC-P01",
+      "connected_endpoint_match_count": 0
+    },
+    {
+      "object_id": "SEG-CAD-EE",
+      "decision": "exclude",
+      "basis": "Legend examples only CAD-EB and note CAD-101; no installed physical centerline.",
+      "source_id": "SRC-P01",
+      "connected_endpoint_match_count": 0
+    }
+  ]
+}

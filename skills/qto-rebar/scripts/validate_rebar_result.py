@@ -143,14 +143,54 @@ def main() -> int:
             related = group_results.get(group_id, [])
             if not related:
                 fail(f"钢筋组 {group_id} 没有成果项")
+            deferred_dimensions = calc.get("deferred_dimensions", []) if calc.get("method") == "count_only" else []
+            if (not isinstance(deferred_dimensions, list)
+                    or any(not isinstance(dimension, str) or dimension not in {"length", "weight"}
+                           for dimension in deferred_dimensions)
+                    or len(set(deferred_dimensions)) != len(deferred_dimensions)):
+                fail(f"count_only 钢筋组 {group_id} 的未决维度不合法")
+            if deferred_dimensions:
+                expected_levels = {"count": calc.get("quantity_level"),
+                                   **{dimension: "unresolved" for dimension in deferred_dimensions}}
+                if (calc.get("status") != "partial" or calc.get("count_unit") != "根"
+                        or not isinstance(calc.get("deferred_reason"), str) or not calc["deferred_reason"].strip()
+                        or calc.get("dimension_quantity_levels") != expected_levels):
+                    fail(f"count_only 钢筋组 {group_id} 的分维度未决证据不完整")
+            if any(item.get("quantity_level") != ("unresolved" if item.get("范围", {}).get("输出维度") in deferred_dimensions
+                                                   else calc.get("quantity_level")) for item in related):
+                fail(f"钢筋组 {group_id} 的原生数量层级与计算证据不一致")
+            if calc.get("adoption_role") == "reference":
+                if calc.get("quantity_level") not in {"inferred", "scenario", "unresolved", "not_applicable"}:
+                    fail(f"参考钢筋组 {group_id} 不得作为确认量")
+                for item in related:
+                    layer = item.get("成果分层", {})
+                    if (item.get("采用角色") != "reference" or item.get("结果用途") != "reference_only"
+                            or item.get("formal_adoption") is not False
+                            or layer.get("进入正式量") is True or layer.get("发布状态") == "正式"):
+                        fail(f"参考钢筋组 {group_id} 被提升为正式采用量")
             if calc.get("method") == "deferred":
                 for item in related:
                     if item.get("结果", {}).get("数值") is not None:
                         fail(f"deferred 钢筋组 {group_id} 仍有数值")
                 continue
             if calc.get("method") == "count_only":
-                if len(related) != 1 or related[0].get("单位") not in {"个", "套", "根", "片", "处"}:
+                by_dimension = {item.get("范围", {}).get("输出维度"): item for item in related}
+                if len(related) != len(by_dimension) or set(by_dimension) != {"count", *deferred_dimensions}:
                     fail(f"count_only 钢筋组 {group_id} 的输出不合法")
+                count_item = by_dimension["count"]
+                count = calc.get("count")
+                if (not isinstance(count, int) or isinstance(count, bool) or count < 0
+                        or count_item.get("单位") not in {"个", "套", "根", "片", "处"}
+                        or count_item.get("单位") != calc.get("count_unit")
+                        or count_item.get("结果", {}).get("数值") != count):
+                    fail(f"count_only 钢筋组 {group_id} 的计数成果与证据不一致")
+                for dimension in deferred_dimensions:
+                    item = by_dimension[dimension]
+                    if (item.get("结果", {}).get("数值") is not None
+                            or item.get("单位") != {"length": "m", "weight": "kg"}[dimension]
+                            or item.get("结果", {}).get("数值状态") != "未确定"
+                            or item.get("状态") != "证据不足"):
+                        fail(f"count_only 钢筋组 {group_id} 的未决 {dimension} 被填数或错标")
                 continue
 
             count = calc.get("count")
@@ -197,7 +237,7 @@ def main() -> int:
                 "独立回放逐字节一致",
                 "公共最小成果验证通过",
                 "根数-长度-单位质量-重量守恒",
-                "候选规则和测试证据门通过",
+                "工作推算与采用量分离、候选规则和测试证据门通过",
             ],
         }, ensure_ascii=False, indent=2))
         return 0

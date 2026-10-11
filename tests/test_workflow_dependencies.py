@@ -109,24 +109,32 @@ def test_concrete_does_not_strip_path_whitespace_that_its_cli_preserves(tmp_path
     assert_inputs(validate_dependencies(task, artifacts, tmp_path), "manifest", "source")
 
 
-def test_raw_cad_index_tracks_optional_export_record_when_it_appears(tmp_path):
-    task, artifacts = setup(tmp_path, "cad_index", {"source": ("drawing.dxf", b"DXF")})
-    assert_inputs(validate_dependencies(task, artifacts, tmp_path), "source")
+@pytest.mark.parametrize("tool_id", ["cad_index", "cad_view"])
+def test_raw_cad_tools_track_optional_export_record_when_it_appears(tmp_path, tool_id):
+    documents = {"source": ("drawing.dxf", b"DXF")}
+    if tool_id == "cad_view":
+        documents["query"] = ("query.json", {"question": "查看当前图样"})
+    task, artifacts = setup(tmp_path, tool_id, documents)
+    assert_inputs(validate_dependencies(task, artifacts, tmp_path), *documents)
     receipt = write(tmp_path / "drawing.dxf.export.json", {"output_sha256": "new receipt"})
     report = validate_dependencies(task, artifacts, tmp_path)
     assert len(report["errors"]) == 1 and str(receipt) in report["errors"][0]
     include(task, artifacts, "export", receipt, data=None)
-    assert_inputs(validate_dependencies(task, artifacts, tmp_path), "source", "export")
+    assert_inputs(validate_dependencies(task, artifacts, tmp_path), *documents, "export")
 
 
-def test_cad_descriptor_reads_cwd_drawing_authoritative_source_and_sidecar(tmp_path):
+@pytest.mark.parametrize("tool_id", ["cad_index", "cad_view"])
+def test_cad_descriptor_reads_cwd_drawing_authoritative_source_and_sidecar(tmp_path, tool_id):
     payload = {"path": "drawing.dxf", "authoritative_source": {"path": "drawing.dwg"},
                "export_evidence": {"path": "historical-descriptive-field.json"}}
-    task, artifacts = setup(tmp_path, "cad_index", {"source": ("descriptors/source.json", payload)})
+    documents = {"source": ("descriptors/source.json", payload)}
+    if tool_id == "cad_view":
+        documents["query"] = ("query.json", {"question": "查看当前图样"})
+    task, artifacts = setup(tmp_path, tool_id, documents)
     include(task, artifacts, "dxf", tmp_path / "drawing.dxf")
     include(task, artifacts, "dwg", tmp_path / "drawing.dwg")
     include(task, artifacts, "export", tmp_path / "drawing.dxf.export.json")
-    assert_inputs(validate_dependencies(task, artifacts, tmp_path), "source", "dxf", "dwg", "export")
+    assert_inputs(validate_dependencies(task, artifacts, tmp_path), *documents, "dxf", "dwg", "export")
 
 
 def test_descriptor_sidecar_is_relative_to_symlink_name_used_by_actual_cli(tmp_path):

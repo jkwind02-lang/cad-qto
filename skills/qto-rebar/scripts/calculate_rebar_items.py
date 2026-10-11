@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Deterministically recalculate already-resolved reinforcement groups.
+"""Deterministically calculate explicit reinforcement groups and working hypotheses.
 
 This calculator validates source identities and explicit inputs.  It does not
-interpret drawings, infer bar counts from spacing, or select anchorage/detailing
-rules.
+interpret drawings or select anchorage/detailing rules.  A model may supply a
+sourced working interpretation, including an explicitly bounded bar layout.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import hashlib
 import json
 import math
 import sys
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +39,7 @@ EVIDENCE_CLASSES = {
     "coverage_complete", "requirement", "third_party_reference",
 }
 FACT_STATUSES = {"verified", "reference", "candidate", "test_only"}
-RULE_DECISIONS = {"adopted", "not_applicable", "insufficient"}
+RULE_DECISIONS = {"adopted", "trial", "not_applicable", "insufficient"}
 RULE_MATURITY = {"candidate", "trial", "formal", "disabled"}
 GROUP_STATUSES = {"complete", "partial", "unresolved", "not_applicable"}
 ADOPTION_ROLES = {"adopted", "reference"}
@@ -63,7 +64,7 @@ VALUE_STATUS_CN = {
     "unresolved": "未确定", "not_applicable": "不适用",
 }
 RULE_DECISION_CN = {
-    "adopted": "采用", "not_applicable": "不适用", "insufficient": "证据不足",
+    "adopted": "采用", "trial": "试用", "not_applicable": "不适用", "insufficient": "证据不足",
 }
 RULE_MATURITY_CN = {
     "candidate": "候选", "trial": "试运行",
@@ -126,6 +127,108 @@ def require_count(obj: dict[str, Any], key: str, where: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         fail(f"{where}.{key} 必须是非负整数")
     return value
+
+
+def derive_count(group: dict[str, Any]) -> tuple[int, dict[str, Any] | None]:
+    """Count explicit centres; never select end offsets, spacing rules or rounding."""
+    group_id = group["group_id"]
+    if "count_derivation" not in group:
+        return require_count(group, "count", group_id), None
+    derivation = group["count_derivation"]
+    where = f"{group_id}.count_derivation"
+    if not isinstance(derivation, dict):
+        fail(f"{where} 必须是对象")
+    if derivation.get("unit") != "m":
+        fail(f"{where}.unit 必须为 m；中心位置与间距须显式换算为米")
+    basis = require_text(derivation, "basis", where)
+    refs = require_list(derivation, "evidence_ids", where)
+    if not refs or any(ref not in group["evidence_ids"] for ref in refs):
+        fail(f"{where}.evidence_ids 必须引用本组证据")
+    method = derivation.get("method")
+    checks: dict[str, Any] = {"method": method, "unit": "m", "basis": basis, "evidence_ids": refs}
+    if method == "uniform_centres":
+        # Decimal strings are interpreted exactly: 0.1..0.7 @0.2 has four
+        # centres.  Non-integral spans are not rounded into a different layout.
+        first = require_number(derivation, "first_centre", where)
+        last = require_number(derivation, "last_centre", where)
+        spacing = require_number(derivation, "spacing", where, positive=True)
+        first_q, last_q, spacing_q = (Fraction(str(derivation[key]))
+                                     for key in ("first_centre", "last_centre", "spacing"))
+        if last_q < first_q:
+            fail(f"{where} 末根中心不得小于首根中心")
+        intervals = (last_q - first_q) / spacing_q
+        if intervals.denominator != 1:
+            fail(f"{where} 首末根中心与等间距不一致；不得 round/ceil，须回图解释末段或列出实际中心")
+        count = intervals.numerator + 1
+        checks.update(first_centre=first, last_centre=last, spacing=spacing,
+                      interval_count=intervals.numerator,
+                      formula="(last_centre - first_centre) / spacing + 1；两端均为实际钢筋中心")
+    elif method == "explicit_centres":
+        positions = require_list(derivation, "centres", where)
+        if not positions:
+            fail(f"{where}.centres 必须列出至少一个实际中心；无对象须走独立零值证据")
+        actual = [require_number({"centre": value}, "centre", where) for value in positions]
+        if len(set(Fraction(str(value)) for value in positions)) != len(positions):
+            fail(f"{where}.centres 存在重复位置；须核对同组重复或拆明不同层/肢，不能自动增加根数")
+        count = len(positions)
+        checks.update(centres=actual, formula="count = 已解释的不同钢筋中心位置数")
+    else:
+        fail(f"{where}.method 只支持 uniform_centres 或 explicit_centres")
+    if "count" in group and require_count(group, "count", group_id) != count:
+        fail(f"{group_id}.count 与 count_derivation 不一致")
+    checks["count"] = count
+    return count, checks
+
+
+def quantity_context(
+    group: dict[str, Any], evidence_map: dict[str, dict[str, Any]],
+    rule_map: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Preserve working interpretations without declaring professional adoption."""
+    numeric = group["status"] in {"complete", "partial"}
+    reference = group["adoption_role"] == "reference"
+    weak_evidence = [key for key in group["evidence_ids"]
+                     if evidence_map[key].get("fact_status") in {"candidate", "reference"}]
+    trial_rules = [key for key in group["rule_ids"] if rule_map[key].get("decision") == "trial"]
+    context: dict[str, Any] = {
+        "quantity_level": ("inferred" if reference else "confirmed") if numeric else group["status"],
+        "trial_result": bool(group.get("trial_result", False)) or any(
+            rule_map[key].get("maturity") in {"candidate", "trial"} for key in group["rule_ids"]),
+    }
+    working = group.get("working_basis")
+    if numeric and reference and (weak_evidence or trial_rules) and working is None:
+        fail(f"{group['group_id']} 候选证据或试用规则的参考计算必须提供 working_basis")
+    if "working_basis" not in group:
+        return context
+    where = f"{group['group_id']}.working_basis"
+    if not reference or not isinstance(working, dict):
+        fail(f"{where} 仅用于 reference，且必须是对象；不能替代 adopted 证据门")
+    level = working.get("quantity_level")
+    if level not in {"inferred", "scenario"}:
+        fail(f"{where}.quantity_level 必须为 inferred 或 scenario，不得升级为 confirmed")
+    reason = require_text(working, "reason", where)
+    refs = require_list(working, "evidence_ids", where)
+    rules = require_list(working, "rule_ids", where)
+    if not refs or any(ref not in group["evidence_ids"] for ref in refs) or any(ref not in refs for ref in weak_evidence):
+        fail(f"{where}.evidence_ids 必须引用本组证据并覆盖本组候选/参考事实")
+    if not rules or any(ref not in group["rule_ids"] for ref in rules) or any(ref not in rules for ref in trial_rules):
+        fail(f"{where}.rule_ids 必须引用本组规则并覆盖本组试用规则")
+    alternatives = working.get("alternatives", [])
+    if not isinstance(alternatives, list) or any(not isinstance(value, str) or not value.strip() for value in alternatives):
+        fail(f"{where}.alternatives 必须是非空文本组成的数组")
+    confidence = working.get("confidence", "中")
+    if confidence not in {"高", "中", "低"}:
+        fail(f"{where}.confidence 必须为 高/中/低")
+    recalculation = working.get("recalculation_scope", f"钢筋组 {group['group_id']} 的根数、长度和重量")
+    if not isinstance(recalculation, str) or not recalculation.strip():
+        fail(f"{where}.recalculation_scope 不得为空")
+    if numeric:
+        context["quantity_level"] = level
+    context["working_basis"] = dict(quantity_level=level, reason=reason, evidence_ids=list(refs),
+                                    rule_ids=list(rules), alternatives=list(alternatives),
+                                    confidence=confidence, recalculation_scope=recalculation)
+    context["assumption_id"] = "A-REBAR-" + hashlib.sha256(group["group_id"].encode("utf-8")).hexdigest()[:20]
+    return context
 
 
 def unique_index(items: Any, key: str, where: str) -> dict[str, dict[str, Any]]:
@@ -338,9 +441,10 @@ def make_result_item(
     unit: str,
     formula: str,
     precision: str,
+    context: dict[str, Any],
 ) -> dict[str, Any]:
     status = group["status"]
-    return {
+    result = {
         "成果项编号": item_id,
         "范围": result_scope(scope, group, dimension),
         "结果": {
@@ -355,7 +459,7 @@ def make_result_item(
         "规则": list(group["rule_ids"]),
         "状态": STATUS_CN[status],
         "未决事项": list(group["unresolved_ids"]),
-        "试运行结果": bool(group.get("trial_result", False)),
+        "试运行结果": context["trial_result"],
         "零值复核": zero_review(group) if value == 0 else None,
         "钢筋组编号": group["group_id"],
         "构件编号": group["member_id"],
@@ -364,7 +468,28 @@ def make_result_item(
         "计量基准": group["quantity_basis"],
         "采用角色": group["adoption_role"],
         "结果用途": "reference_only" if group["adoption_role"] == "reference" else "adopted",
+        "quantity_level": context["quantity_level"],
     }
+    if group["adoption_role"] == "reference":
+        result.update(release_status="working", review_status="unreviewed", formal_adoption=False)
+    if "working_basis" in context:
+        working = context["working_basis"]
+        numeric = status in {"complete", "partial"}
+        result["成果分层"] = {
+            "数量层级": {"confirmed": "确认量", "inferred": "规则推算量", "scenario": "方案暂估量",
+                         "unresolved": "未决量", "not_applicable": "不适用"}[context["quantity_level"]],
+            "计算完整性": {"complete": "完整", "partial": "部分"}.get(status, "无法形成"),
+            "置信等级": working["confidence"],
+            "确认状态": "待确认",
+            "发布状态": "内部工作",
+            "假定编号": [context["assumption_id"]],
+            "替代方案": working["alternatives"],
+            "依赖成果项": [],
+            "进入工作量": numeric,
+            "进入正式量": False,
+            "重算范围": working["recalculation_scope"],
+        }
+    return result
 
 
 def calculate_group(
@@ -421,29 +546,39 @@ def calculate_group(
         fail(f"{group_id} 为 unresolved 时必须关联未决事项")
 
     numeric = status in {"complete", "partial"}
+    reference = group["adoption_role"] == "reference"
     if numeric:
         if not evidence_ids or not rule_ids:
             fail(f"{group_id} 数值结果必须有证据和规则")
         for evidence_id in evidence_ids:
             fact_status = evidence_map[evidence_id].get("fact_status")
-            if fact_status not in {"verified", "test_only"}:
-                fail(f"{group_id} 数值结果引用了非采用证据 {evidence_id}: {fact_status}")
-            if fact_status == "test_only" and (not test_mode or group["adoption_role"] != "reference"):
+            if fact_status not in FACT_STATUSES:
+                fail(f"{group_id} 引用了非法事实状态 {evidence_id}: {fact_status}")
+            if not reference and fact_status != "verified":
+                fail(f"{group_id} adopted 数值结果引用了非采用证据 {evidence_id}: {fact_status}")
+            if fact_status == "test_only" and (not test_mode or not reference):
                 fail(f"{group_id} 仅在 test_mode + reference 下可使用测试证据")
         for rule_id in rule_ids:
             rule = rule_map[rule_id]
-            if rule.get("decision") != "adopted" or rule.get("maturity") not in {"trial", "formal"}:
-                fail(f"{group_id} 数值结果引用了未采用或候选规则 {rule_id}")
-        if group["quantity_basis"] == "procurement_reference" and group["adoption_role"] != "reference":
+            decision, maturity = rule.get("decision"), rule.get("maturity")
+            usable = ((decision == "adopted" and maturity in {"trial", "formal"})
+                      or (reference and decision == "trial" and maturity in {"candidate", "trial", "formal"}))
+            if not usable:
+                fail(f"{group_id} 数值结果引用了不可用规则 {rule_id}；候选/试用规则只可形成 reference")
+        if group["quantity_basis"] == "procurement_reference" and not reference:
             fail(f"{group_id} 采购参考量不得作为 adopted")
 
+    context = quantity_context(group, evidence_map, rule_map)
     group_calc: dict[str, Any] = {
         "group_id": group_id,
         "method": method,
         "status": status,
         "adoption_role": group["adoption_role"],
         "quantity_basis": group["quantity_basis"],
+        **context,
     }
+    if reference:
+        group_calc.update(release_status="working", review_status="unreviewed", formal_adoption=False)
     results: list[dict[str, Any]] = []
 
     if method == "deferred":
@@ -459,23 +594,62 @@ def calculate_group(
             results.append(make_result_item(
                 scope, group, require_text(outputs, dimension, f"{group_id}.outputs"),
                 dimension, name_map[dimension], None, unit_map[dimension], reason,
-                "未计算；待决定性输入闭合",
+                "未计算；待决定性输入闭合", context,
             ))
         group_calc["deferred_reason"] = reason
         return results, group_calc
 
-    count = require_count(group, "count", group_id)
+    count, count_derivation = derive_count(group)
+    if count_derivation is not None:
+        group_calc["count_derivation"] = count_derivation
+    count_formula = (f"count = {count}" if count_derivation is None
+                     else f"{count_derivation['formula']} = {count}（{count_derivation['basis']}）")
     if count == 0 and not isinstance(group.get("zero_evidence"), dict):
         fail(f"{group_id} 根数为 0 时必须提供 zero_evidence")
 
     if method == "count_only":
-        if set(outputs) != {"count"}:
-            fail(f"{group_id} count_only 只能提供 count 输出")
+        # Connectors may have no bar specification, but a supplied one uses the
+        # same types as ordinary rebar; text "8.0" is not a second identity.
+        if "grade" in group:
+            require_text(group, "grade", group_id)
+        if "diameter_mm" in group:
+            require_number(group, "diameter_mm", group_id, positive=True)
+        deferred_dimensions = group.get("deferred_dimensions", [])
+        if (not isinstance(deferred_dimensions, list)
+                or any(not isinstance(dimension, str) or dimension not in {"length", "weight"}
+                       for dimension in deferred_dimensions)
+                or len(set(deferred_dimensions)) != len(deferred_dimensions)):
+            fail(f"{group_id} count_only.deferred_dimensions 只能是不重复的 length/weight 数组")
+        if set(outputs) != {"count", *deferred_dimensions}:
+            fail(f"{group_id} count_only 只能提供 count 和明确列出的未决维度输出")
         unit = require_text(group, "count_unit", group_id)
+        if deferred_dimensions:
+            if status != "partial" or unit != "根":
+                fail(f"{group_id} count_only 的未决长度/重量要求 status=partial 且 count_unit=根")
+            reason = require_text(group, "deferred_reason", group_id)
+            # A missing node must not be supplied as a fabricated length which
+            # this counting path would otherwise silently ignore.
+            length_fields = {"developed_length_each_m", "base_length_each_m", "additions_each_m",
+                             "total_length_m", "weight_kg"}
+            if any(key in group for key in length_fields):
+                fail(f"{group_id} count_only 未决长度/重量不得同时填写展开长度或汇总长度/重量数值")
+            group_calc.update(deferred_dimensions=deferred_dimensions, deferred_reason=reason,
+                              dimension_quantity_levels={"count": context["quantity_level"],
+                                  **{dimension: "unresolved" for dimension in deferred_dimensions}})
         results.append(make_result_item(
             scope, group, require_text(outputs, "count", f"{group_id}.outputs"),
-            "count", "连接或成品数量", count, unit, f"count = {count}", "整数",
+            "count", "钢筋根数" if unit == "根" else "连接或成品数量", count, unit, count_formula, "整数", context,
         ))
+        if deferred_dimensions:
+            unresolved_group = {**group, "status": "unresolved"}
+            unresolved_context = {**context, "quantity_level": "unresolved"}
+            for dimension in deferred_dimensions:
+                results.append(make_result_item(
+                    scope, unresolved_group, require_text(outputs, dimension, f"{group_id}.outputs"),
+                    dimension, {"length": "钢筋中心线展开长度", "weight": "钢筋理论重量"}[dimension],
+                    None, {"length": "m", "weight": "kg"}[dimension], reason,
+                    "未计算；待决定性输入闭合", unresolved_context,
+                ))
         group_calc.update({"count": count, "count_unit": unit})
         return results, group_calc
 
@@ -529,18 +703,18 @@ def calculate_group(
     results.extend([
         make_result_item(
             scope, group, require_text(outputs, "count", f"{group_id}.outputs"),
-            "count", "钢筋根数", count_value, "根", f"count = {count}", "整数",
+            "count", "钢筋根数", count_value, "根", count_formula, "整数", context,
         ),
         make_result_item(
             scope, group, require_text(outputs, "length", f"{group_id}.outputs"),
             "length", "钢筋中心线展开长度", length_value, "m", length_formula,
-            "计算保留 0.000001 m；展示精度另行约定",
+            "计算保留 0.000001 m；展示精度另行约定", context,
         ),
         make_result_item(
             scope, group, require_text(outputs, "weight", f"{group_id}.outputs"),
             "weight", "钢筋理论重量", weight_value, "kg",
             f"W = {total_length:.12g} × {unit_mass:.12g}；单位质量={unit_formula}",
-            "计算保留 0.000001 kg；展示精度另行约定",
+            "计算保留 0.000001 kg；展示精度另行约定", context,
         ),
     ])
     group_calc.update({
@@ -658,6 +832,8 @@ def main() -> int:
                 fail(f"{rule_id}.maturity 非法")
             if decision == "adopted" and maturity in {"candidate", "disabled"}:
                 fail(f"{rule_id} 为 {maturity} 规则，不得 adopted")
+            if decision == "trial" and maturity == "disabled":
+                fail(f"{rule_id} 为 disabled 规则，不得 trial")
             for key in ("name", "source", "execution", "locator"):
                 require_text(rule, key, rule_id)
 
@@ -671,15 +847,24 @@ def main() -> int:
         results: list[dict[str, Any]] = []
         calculations: list[dict[str, Any]] = []
         detail_rows: list[dict[str, Any]] = []
+        working_assumptions: list[dict[str, Any]] = []
         output_ids: set[str] = set()
         physical_signatures: set[tuple[str, str, str, str, str]] = set()
         for group_id, group in groups.items():
+            diameter = group.get("diameter_mm")
+            # JSON 8 and 8.0 denote the same diameter.  Canonicalise their exact
+            # decimal values, without a tolerance that would merge real sizes.
+            if ((isinstance(diameter, int) and not isinstance(diameter, bool))
+                    or (isinstance(diameter, float) and math.isfinite(diameter))):
+                diameter_signature = str(Fraction(str(diameter)))
+            else:
+                diameter_signature = str(diameter)
             signature = (
                 require_text(group, "physical_object_id", group_id),
                 require_text(group, "member_id", group_id),
                 require_text(group, "position", group_id),
-                str(group.get("grade")),
-                str(group.get("diameter_mm")),
+                str(group.get("grade")).strip(),
+                diameter_signature,
             )
             if signature in physical_signatures:
                 fail(f"钢筋组物理身份重复，不能靠改 group_id 重复计算: {group_id}")
@@ -692,6 +877,23 @@ def main() -> int:
                 output_ids.add(item_id)
                 results.append(item)
             calculations.append(calc)
+            if "working_basis" in calc:
+                working = calc["working_basis"]
+                working_assumptions.append({
+                    "假定编号": calc["assumption_id"],
+                    "类型": "方案参数" if working["quantity_level"] == "scenario" else "事实推定",
+                    "假定内容": working["reason"],
+                    "依据": working["evidence_ids"],
+                    "使用规则": working["rule_ids"],
+                    "推荐方案": "按所述模型解释计算本组工作参考量，继续核对其适用依据。",
+                    "替代方案": working["alternatives"],
+                    "影响成果项": [item["成果项编号"] for item in group_results],
+                    "影响说明": "数量仅在本条解释或方案成立时有效，不进入正式采用量。",
+                    "置信等级": working["confidence"],
+                    "状态": "待确认",
+                    "所需确认方": "模型继续回图核对；正式采用由项目专业复核确定",
+                    "重算范围": working["recalculation_scope"],
+                })
             detail_rows.append({
                 "group_id": group_id,
                 "member_id": group["member_id"],
@@ -704,6 +906,7 @@ def main() -> int:
                 "status": calc["status"],
                 "adoption_role": calc["adoption_role"],
                 "quantity_basis": calc["quantity_basis"],
+                "quantity_level": calc["quantity_level"],
                 "count": calc.get("count", ""),
                 "developed_length_each_m": calc.get("developed_length_each_m", ""),
                 "total_length_m": calc.get("total_length_m", ""),
@@ -808,6 +1011,8 @@ def main() -> int:
                 "计算器": str(Path(__file__).resolve()),
             },
         }
+        if working_assumptions:
+            result_doc.update({"推算协议版本": "qto-inference/1.0", "假定与裁决清单": working_assumptions})
         evidence_doc = {
             "schema_version": EVIDENCE_VERSION,
             "case_id": case_id,

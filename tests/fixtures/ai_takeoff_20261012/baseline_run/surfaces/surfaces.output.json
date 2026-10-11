@@ -1,0 +1,571 @@
+{
+  "契约版本": "qto-result-minimum/1.0",
+  "任务范围": {
+    "业务专业": "建筑吊顶饰面",
+    "主要物理对象": "工作室吊顶下表面单层饰面",
+    "系统": "Studio suspended ceiling",
+    "楼栋": "图示工作室",
+    "楼层或区域": "RCP-01 CL-11 与 CL-24",
+    "图纸类型": "反射平面、做法表、说明、S-2详图",
+    "图纸版本": "A-01 REV A",
+    "输出维度": "按材料的水平净饰面面积"
+  },
+  "资料选择": [
+    {
+      "资料编号": "SRC-A01",
+      "路径": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/inputs/surfaces/drawing.dxf",
+      "资料类型": "本轮原图证据",
+      "文件角色": "dxf",
+      "语义角色": "project_drawing",
+      "版本身份": "SHA256:17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4",
+      "选择结论": "已选择",
+      "原因": "本任务指定原图或由本轮读取直接形成的证据",
+      "拟提取中性事实": "原图边界、材料标签、说明、详图、尺寸与单位",
+      "未使用影响": "不使用将失去相应对象定位或范围依据"
+    },
+    {
+      "资料编号": "SRC-GEO",
+      "路径": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/bound_geometry.json",
+      "资料类型": "本轮原图证据",
+      "文件角色": "json",
+      "语义角色": "calculation_evidence",
+      "版本身份": "SHA256:b2d5a6c5eb774c7d5af6fc459e7b4611d3e9625f92d3b1fbe1891436107bdd45",
+      "选择结论": "已选择",
+      "原因": "本任务指定原图或由本轮读取直接形成的证据",
+      "拟提取中性事实": "源边及本次模型解释的局部坐标系，保留原实体和哈希",
+      "未使用影响": "不使用将失去相应对象定位或范围依据"
+    },
+    {
+      "资料编号": "SRC-COVERAGE",
+      "路径": "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/surfaces/coverage.json",
+      "资料类型": "本轮原图证据",
+      "文件角色": "json",
+      "语义角色": "coverage_report",
+      "版本身份": "SHA256:503e3dcf5a79d49c1f247ecb12426d9bdf197912f98dbeb6e19f9d78e3e6d4ca",
+      "选择结论": "已选择",
+      "原因": "本任务指定原图或由本轮读取直接形成的证据",
+      "拟提取中性事实": "本轮模型沿图核对的纳入、扣减、保留与排除范围",
+      "未使用影响": "不使用将失去相应对象定位或范围依据"
+    }
+  ],
+  "证据目录": [
+    {
+      "证据编号": "EV-ID",
+      "资料编号": "SRC-A01",
+      "来源类型": "本轮原图证据",
+      "中性事实": "A-01 | STUDIO SUSPENDED CEILING | REV A | SYNTHETIC DESIGN; Native CAD: millimetres. Plan boundaries are full-size. Detail S-2 is schematic.",
+      "定位": "A-01 Model CAD-95/96",
+      "来源身份": "SHA256:17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4; object_keys=A01",
+      "提取方式": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "质量状态": "reference/本轮模型工作识别；未人工复核",
+      "限制": "可复核工作证据；不宣称工程正式采用或真实工程准确率",
+      "证据类别": "source_identity",
+      "事实状态": "reference"
+    },
+    {
+      "证据编号": "EV-GEO-CL-11",
+      "资料编号": "SRC-GEO",
+      "来源类型": "本轮原图证据",
+      "中性事实": "Boundary from outer 9A and full-height material division 9B, located on RCP-01 internal finish boundary.",
+      "定位": "/surface_frames/CL-11; /edges/EDGE-RCP-SOUTH; CAD-9A/9B; dimensions C6/CC/D8",
+      "来源身份": "SHA256:b2d5a6c5eb774c7d5af6fc459e7b4611d3e9625f92d3b1fbe1891436107bdd45; object_keys=SURF-CL-11,EDGE-RCP-SOUTH",
+      "提取方式": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "质量状态": "reference/本轮模型工作识别；未人工复核",
+      "限制": "可复核工作证据；不宣称工程正式采用或真实工程准确率",
+      "证据类别": "surface_geometry",
+      "事实状态": "reference"
+    },
+    {
+      "证据编号": "EV-LAYER-CL-11",
+      "资料编号": "SRC-A01",
+      "来源类型": "本轮原图证据",
+      "中性事实": "CL-11 = acoustic ceiling panel / 吸声吊顶板; divider is solid finish line, not P-1 projection.",
+      "定位": "RCP-01 CAD-9C; finish schedule CAD-E7/E8",
+      "来源身份": "SHA256:17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4; object_keys=SURF-CL-11,LAYER-CL-11",
+      "提取方式": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "质量状态": "reference/本轮模型工作识别；未人工复核",
+      "限制": "可复核工作证据；不宣称工程正式采用或真实工程准确率",
+      "证据类别": "layer_assignment",
+      "事实状态": "reference"
+    },
+    {
+      "证据编号": "EV-COVER-CL-11",
+      "资料编号": "SRC-COVERAGE",
+      "来源类型": "本轮原图证据",
+      "中性事实": "Requested one underside finish layer by horizontal net material area; source notes explicitly close excluded accessory scope.",
+      "定位": "coverage.json /included; /exclusions; A-01 RCP-01 and S-2",
+      "来源身份": "SHA256:503e3dcf5a79d49c1f247ecb12426d9bdf197912f98dbeb6e19f9d78e3e6d4ca; object_keys=SURF-CL-11",
+      "提取方式": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "质量状态": "reference/本轮模型工作识别；未人工复核",
+      "限制": "可复核工作证据；不宣称工程正式采用或真实工程准确率",
+      "证据类别": "coverage_complete",
+      "事实状态": "reference"
+    },
+    {
+      "证据编号": "EV-OPEN-SH1",
+      "资料编号": "SRC-GEO",
+      "来源类型": "本轮原图证据",
+      "中性事实": "The only deductive shaft SH-1 has a closed rectangle inside CL-11; exact footprint deducted once; crossing diagonals are symbol only.",
+      "定位": "raw_entities/9E; A-01 CAD-A1, CAD-E9, dimensions CAD-A7/AD",
+      "来源身份": "SHA256:b2d5a6c5eb774c7d5af6fc459e7b4611d3e9625f92d3b1fbe1891436107bdd45; object_keys=SURF-CL-11,SH-1",
+      "提取方式": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "质量状态": "reference/本轮模型工作识别；未人工复核",
+      "限制": "可复核工作证据；不宣称工程正式采用或真实工程准确率",
+      "证据类别": "opening_union",
+      "事实状态": "reference"
+    },
+    {
+      "证据编号": "EV-GEO-CL-24",
+      "资料编号": "SRC-GEO",
+      "来源类型": "本轮原图证据",
+      "中性事实": "Boundary from outer 9A and full-height material division 9B, located on RCP-01 internal finish boundary.",
+      "定位": "/surface_frames/CL-24; /edges/EDGE-RCP-SOUTH; CAD-9A/9B; dimensions C6/CC/D8",
+      "来源身份": "SHA256:b2d5a6c5eb774c7d5af6fc459e7b4611d3e9625f92d3b1fbe1891436107bdd45; object_keys=SURF-CL-24,EDGE-RCP-SOUTH",
+      "提取方式": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "质量状态": "reference/本轮模型工作识别；未人工复核",
+      "限制": "可复核工作证据；不宣称工程正式采用或真实工程准确率",
+      "证据类别": "surface_geometry",
+      "事实状态": "reference"
+    },
+    {
+      "证据编号": "EV-LAYER-CL-24",
+      "资料编号": "SRC-A01",
+      "来源类型": "本轮原图证据",
+      "中性事实": "CL-24 = painted gypsum-board ceiling finish / 涂饰石膏板吊顶饰面; divider is solid finish line, not P-1 projection.",
+      "定位": "RCP-01 CAD-9D; finish schedule CAD-E7/E8",
+      "来源身份": "SHA256:17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4; object_keys=SURF-CL-24,LAYER-CL-24",
+      "提取方式": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "质量状态": "reference/本轮模型工作识别；未人工复核",
+      "限制": "可复核工作证据；不宣称工程正式采用或真实工程准确率",
+      "证据类别": "layer_assignment",
+      "事实状态": "reference"
+    },
+    {
+      "证据编号": "EV-COVER-CL-24",
+      "资料编号": "SRC-COVERAGE",
+      "来源类型": "本轮原图证据",
+      "中性事实": "Requested one underside finish layer by horizontal net material area; source notes explicitly close excluded accessory scope.",
+      "定位": "coverage.json /included; /exclusions; A-01 RCP-01 and S-2",
+      "来源身份": "SHA256:503e3dcf5a79d49c1f247ecb12426d9bdf197912f98dbeb6e19f9d78e3e6d4ca; object_keys=SURF-CL-24",
+      "提取方式": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "质量状态": "reference/本轮模型工作识别；未人工复核",
+      "限制": "可复核工作证据；不宣称工程正式采用或真实工程准确率",
+      "证据类别": "coverage_complete",
+      "事实状态": "reference"
+    },
+    {
+      "证据编号": "EV-RETAIN-AP1",
+      "资料编号": "SRC-A01",
+      "来源类型": "本轮原图证据",
+      "中性事实": "AP-1 flush removable panel carries the same finish as CL-24 and is explicitly retained in this material area.",
+      "定位": "CAD-AE/B1 and CAD-EA/EB; S-2 CAD-E3/E5",
+      "来源身份": "SHA256:17043ff9787093ed9a726b6620462aa87f5788639a8a64933fe2212ede38d0e4; object_keys=SURF-CL-24,AP-1,LAYER-CL-24",
+      "提取方式": "Host image visual review plus native CAD extraction and source-bound coordinate conversion",
+      "质量状态": "reference/本轮模型工作识别；未人工复核",
+      "限制": "可复核工作证据；不宣称工程正式采用或真实工程准确率",
+      "证据类别": "requirement",
+      "事实状态": "reference"
+    }
+  ],
+  "本次规则清单": [
+    {
+      "规则编号": "R-SE-001",
+      "规则名称": "表面/层/侧别/口径唯一",
+      "规则来源": "当前qto-surfaces-envelope规则及A-01说明",
+      "本次判定": "试用",
+      "成熟状态": "试运行",
+      "执行结果": "按本图明确设计物理口径形成参考工作量",
+      "证据位置": "CAD-E7/E8/ED"
+    },
+    {
+      "规则编号": "R-SE-002",
+      "规则名称": "毛面扣实际洞口并集",
+      "规则来源": "当前qto-surfaces-envelope规则及A-01说明",
+      "本次判定": "试用",
+      "成熟状态": "试运行",
+      "执行结果": "按本图明确设计物理口径形成参考工作量",
+      "证据位置": "CAD-9E/E9；AP-1按EA/EB保留"
+    },
+    {
+      "规则编号": "R-SE-003",
+      "规则名称": "天棚水平净饰面面积",
+      "规则来源": "当前qto-surfaces-envelope规则及A-01说明",
+      "本次判定": "试用",
+      "成熟状态": "候选",
+      "执行结果": "按本图明确设计物理口径形成参考工作量",
+      "证据位置": "CAD-ED/EE/EF/F0；S-2的E0/E1/E2"
+    },
+    {
+      "规则编号": "R-SE-008",
+      "规则名称": "范围闭合核对",
+      "规则来源": "当前qto-surfaces-envelope规则及A-01说明",
+      "本次判定": "试用",
+      "成熟状态": "试运行",
+      "执行结果": "按本图明确设计物理口径形成参考工作量",
+      "证据位置": "coverage.json"
+    }
+  ],
+  "工程量结果": [
+    {
+      "成果项编号": "QTY-CL-11",
+      "范围": {
+        "业务专业": "建筑吊顶饰面",
+        "主要对象": "CL-11 acoustic ceiling panel / 吸声吊顶板净面积",
+        "系统": "Studio suspended ceiling",
+        "楼栋": "图示工作室",
+        "楼层或区域": "RCP-01 CL-11 与 CL-24",
+        "规格": "LAYER-CL-11",
+        "输出维度": "按材料的水平净饰面面积"
+      },
+      "结果": {
+        "名称": "CL-11 acoustic ceiling panel / 吸声吊顶板净面积",
+        "数值": 17.41,
+        "数值状态": "已计算",
+        "计算式或说明": "4.400000×4.100000×1-0.630000-0.000000+0.000000",
+        "精度": "0.001 m²"
+      },
+      "单位": "m²",
+      "来源": [
+        "EV-ID",
+        "EV-GEO-CL-11",
+        "EV-LAYER-CL-11",
+        "EV-COVER-CL-11",
+        "EV-OPEN-SH1"
+      ],
+      "规则": [
+        "R-SE-001",
+        "R-SE-002",
+        "R-SE-003",
+        "R-SE-008"
+      ],
+      "状态": "已计算",
+      "未决事项": [],
+      "试运行结果": true,
+      "零值复核": null,
+      "专业检查": {
+        "对象类别": "ceiling_finish",
+        "物理表面编号": "SURF-CL-11",
+        "构造层编号": "LAYER-CL-11",
+        "侧别范围": "下表面饰面",
+        "计量基准": "horizontal_projection",
+        "计算方法": "rectangle_openings_net",
+        "范围完整性": "complete",
+        "采用角色": "reference",
+        "数量角色": "physical_area",
+        "规则成熟状态": [
+          "候选",
+          "试运行"
+        ],
+        "结果用途": "本合成原图限定范围内的模型工作计算，候选规则试用；未人工复核，不进入正式采用量",
+        "对象身份签名": "142523b59149d1c5ad8e24663a9dd2ef22dcf0a9ae06da1f3b50805d9bbd81f4",
+        "输入审计": {
+          "gross_area_m2": 18.04,
+          "opening_union_area_m2": 0.6300000000000004,
+          "other_deductions_area_m2": 0.0,
+          "additions_area_m2": 0.0,
+          "opening_intersections": [
+            {
+              "opening_id": "SH-1",
+              "rectangle_m": [
+                0.7999999999999998,
+                2.2,
+                1.5,
+                3.1000000000000005
+              ],
+              "clipped_rectangle_m": [
+                0.7999999999999998,
+                2.2,
+                1.5,
+                3.1000000000000005
+              ],
+              "clipped_area_m2": 0.6300000000000004
+            }
+          ],
+          "opening_union_computed": true,
+          "frame_validation": {
+            "status": "bound_consistent",
+            "frame_source_binding": {
+              "evidence_ref": "EV-GEO-CL-11",
+              "source_id": "SRC-GEO",
+              "source_sha256": "b2d5a6c5eb774c7d5af6fc459e7b4611d3e9625f92d3b1fbe1891436107bdd45",
+              "source_pointer": "/surface_frames/CL-11"
+            },
+            "edge_source_binding": {
+              "evidence_ref": "EV-GEO-CL-11",
+              "source_id": "SRC-GEO",
+              "source_sha256": "b2d5a6c5eb774c7d5af6fc459e7b4611d3e9625f92d3b1fbe1891436107bdd45",
+              "source_pointer": "/edges/EDGE-RCP-SOUTH"
+            },
+            "local_coordinate_frame": {
+              "coordinate_system_id": "A01-MODEL-PROJECTION",
+              "source_edge_id": "EDGE-RCP-SOUTH",
+              "source_edge_direction": "same",
+              "origin_m": [
+                1.6,
+                6.1000000000000005,
+                0.0
+              ],
+              "x_axis": [
+                1.0,
+                0.0,
+                0.0
+              ],
+              "up_axis": [
+                0.0,
+                1.0,
+                0.0
+              ],
+              "source_edge_interval_m": [
+                0.0,
+                4.4
+              ],
+              "vertical_range_m": [
+                0.0,
+                4.1
+              ],
+              "vertical_origin_m": 0.0
+            },
+            "source_edge_start_m": [
+              1.6,
+              6.1000000000000005,
+              0.0
+            ],
+            "source_edge_end_m": [
+              8.4,
+              6.1000000000000005,
+              0.0
+            ],
+            "source_edge_length_m": 6.800000000000001,
+            "surface_origin_m": [
+              1.6,
+              6.1000000000000005,
+              0.0
+            ],
+            "rectangle_corners_m": [
+              [
+                1.6,
+                6.1000000000000005,
+                0.0
+              ],
+              [
+                6.0,
+                6.1000000000000005,
+                0.0
+              ],
+              [
+                6.0,
+                10.2,
+                0.0
+              ],
+              [
+                1.6,
+                10.2,
+                0.0
+              ]
+            ],
+            "bound_length_m": 4.4,
+            "bound_height_m": 4.1,
+            "unchecked_annotation_fields": [],
+            "note": "仅核已声明事实的坐标、区间及矩形尺寸一致性；不证明设计适用性、洞口三维定位或完整工程范围"
+          }
+        },
+        "进入采用小计": false
+      }
+    },
+    {
+      "成果项编号": "QTY-CL-24",
+      "范围": {
+        "业务专业": "建筑吊顶饰面",
+        "主要对象": "CL-24 painted gypsum-board ceiling finish / 涂饰石膏板吊顶饰面净面积",
+        "系统": "Studio suspended ceiling",
+        "楼栋": "图示工作室",
+        "楼层或区域": "RCP-01 CL-11 与 CL-24",
+        "规格": "LAYER-CL-24",
+        "输出维度": "按材料的水平净饰面面积"
+      },
+      "结果": {
+        "名称": "CL-24 painted gypsum-board ceiling finish / 涂饰石膏板吊顶饰面净面积",
+        "数值": 9.84,
+        "数值状态": "已计算",
+        "计算式或说明": "2.400000×4.100000×1-0.000000-0.000000+0.000000",
+        "精度": "0.001 m²"
+      },
+      "单位": "m²",
+      "来源": [
+        "EV-ID",
+        "EV-GEO-CL-24",
+        "EV-LAYER-CL-24",
+        "EV-COVER-CL-24",
+        "EV-RETAIN-AP1"
+      ],
+      "规则": [
+        "R-SE-001",
+        "R-SE-002",
+        "R-SE-003",
+        "R-SE-008"
+      ],
+      "状态": "已计算",
+      "未决事项": [],
+      "试运行结果": true,
+      "零值复核": null,
+      "专业检查": {
+        "对象类别": "ceiling_finish",
+        "物理表面编号": "SURF-CL-24",
+        "构造层编号": "LAYER-CL-24",
+        "侧别范围": "下表面饰面",
+        "计量基准": "horizontal_projection",
+        "计算方法": "rectangle_openings_net",
+        "范围完整性": "complete",
+        "采用角色": "reference",
+        "数量角色": "physical_area",
+        "规则成熟状态": [
+          "候选",
+          "试运行"
+        ],
+        "结果用途": "本合成原图限定范围内的模型工作计算，候选规则试用；未人工复核，不进入正式采用量",
+        "对象身份签名": "5ab735c00ed0c233edd50a6d9143a0b20e11770e9a48d0da3924cf4258dd7452",
+        "输入审计": {
+          "gross_area_m2": 9.839999999999998,
+          "opening_union_area_m2": 0.0,
+          "other_deductions_area_m2": 0.0,
+          "additions_area_m2": 0.0,
+          "opening_intersections": [],
+          "opening_union_computed": true,
+          "frame_validation": {
+            "status": "bound_consistent",
+            "frame_source_binding": {
+              "evidence_ref": "EV-GEO-CL-24",
+              "source_id": "SRC-GEO",
+              "source_sha256": "b2d5a6c5eb774c7d5af6fc459e7b4611d3e9625f92d3b1fbe1891436107bdd45",
+              "source_pointer": "/surface_frames/CL-24"
+            },
+            "edge_source_binding": {
+              "evidence_ref": "EV-GEO-CL-24",
+              "source_id": "SRC-GEO",
+              "source_sha256": "b2d5a6c5eb774c7d5af6fc459e7b4611d3e9625f92d3b1fbe1891436107bdd45",
+              "source_pointer": "/edges/EDGE-RCP-SOUTH"
+            },
+            "local_coordinate_frame": {
+              "coordinate_system_id": "A01-MODEL-PROJECTION",
+              "source_edge_id": "EDGE-RCP-SOUTH",
+              "source_edge_direction": "same",
+              "origin_m": [
+                6.0,
+                6.1000000000000005,
+                0.0
+              ],
+              "x_axis": [
+                1.0,
+                0.0,
+                0.0
+              ],
+              "up_axis": [
+                0.0,
+                1.0,
+                0.0
+              ],
+              "source_edge_interval_m": [
+                4.4,
+                6.8
+              ],
+              "vertical_range_m": [
+                0.0,
+                4.1
+              ],
+              "vertical_origin_m": 0.0
+            },
+            "source_edge_start_m": [
+              1.6,
+              6.1000000000000005,
+              0.0
+            ],
+            "source_edge_end_m": [
+              8.4,
+              6.1000000000000005,
+              0.0
+            ],
+            "source_edge_length_m": 6.800000000000001,
+            "surface_origin_m": [
+              6.0,
+              6.1000000000000005,
+              0.0
+            ],
+            "rectangle_corners_m": [
+              [
+                6.0,
+                6.1000000000000005,
+                0.0
+              ],
+              [
+                8.399999999999999,
+                6.1000000000000005,
+                0.0
+              ],
+              [
+                8.399999999999999,
+                10.2,
+                0.0
+              ],
+              [
+                6.0,
+                10.2,
+                0.0
+              ]
+            ],
+            "bound_length_m": 2.3999999999999995,
+            "bound_height_m": 4.1,
+            "unchecked_annotation_fields": [],
+            "note": "仅核已声明事实的坐标、区间及矩形尺寸一致性；不证明设计适用性、洞口三维定位或完整工程范围"
+          }
+        },
+        "进入采用小计": false
+      }
+    }
+  ],
+  "工程量小计": [
+    {
+      "对象类别": "ceiling_finish",
+      "构造层编号": "LAYER-CL-11",
+      "计量基准": "horizontal_projection",
+      "采用角色": "reference",
+      "单位": "m²",
+      "范围完整性": "complete",
+      "数量角色": "physical_area",
+      "数值": 17.41,
+      "来源成果项": [
+        "QTY-CL-11"
+      ],
+      "小计编号": "ST-001"
+    },
+    {
+      "对象类别": "ceiling_finish",
+      "构造层编号": "LAYER-CL-24",
+      "计量基准": "horizontal_projection",
+      "采用角色": "reference",
+      "单位": "m²",
+      "范围完整性": "complete",
+      "数量角色": "physical_area",
+      "数值": 9.84,
+      "来源成果项": [
+        "QTY-CL-24"
+      ],
+      "小计编号": "ST-002"
+    }
+  ],
+  "整体未决事项": [],
+  "专业验算": {
+    "来源身份通过": true,
+    "中性实体流逐行守恒": true,
+    "构造层分账": true,
+    "洞口采用并集证据": true,
+    "轴线与设计表面口径分离": true,
+    "参考量未进入采用小计": true,
+    "旧运行时依赖": false
+  },
+  "绑定验证": {
+    "运行清单SHA256": "82c460ed654fae3355ac11ca0a3bcc4abb2c32d539c812df90cafb2c2d56c59e",
+    "生成器SHA256": "1fd4950e6458dd19da6de3d71a006e270f52b77b4e394f32234d71d17d20fdff",
+    "清单语义SHA256": "8939c285aae3770a18117e9d9673f0c1e76d83254a1eab29f28fe09954f6f98f",
+    "生成器": "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-surfaces-envelope/scripts/calculate_surfaces_envelope.py"
+  }
+}

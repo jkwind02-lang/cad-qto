@@ -1,0 +1,16 @@
+{
+  "argv": [
+    "/workspace/scratch/f95ce6ecc4b5/repair_validation_env/bin/python",
+    "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/infer_pipe_network.py",
+    "--input",
+    "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.input.json",
+    "--output",
+    "/workspace/scratch/f95ce6ecc4b5/evaluation/ai_autonomy_blind_v1/baseline_run/pipe/network.output.json"
+  ],
+  "start_utc": "2026-10-11T16:16:54.841349+00:00",
+  "end_utc": "2026-10-11T16:16:55.012375+00:00",
+  "exit_code": 2,
+  "script_sha256": {
+    "/workspace/scratch/f95ce6ecc4b5/cad-qto-ai-baseline/skills/qto-pipe-networks/scripts/infer_pipe_network.py": "46bc3bcfc2f041291935388098165fdad7221f94366134d146037ec22b087293"
+  }
+}
