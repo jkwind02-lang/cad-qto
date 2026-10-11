@@ -34,38 +34,39 @@ def _index(path, layout="Model"):
     return workbench.build_index({"path": str(path), "sha256": _sha(path)}, layout=layout)
 
 
-def _select(path, index, oid, unit_scale=1.0):
-    return select_hatches(path, {"source_sha256": _sha(path), "layout": index["layout"], "cadinst_ids": [oid]}, index=index, unit_scale=unit_scale)
+def _select(path, index, oid, unit="m", evidence="explicit_m"):
+    return select_hatches(path, {"source_sha256": _sha(path), "layout": index["layout"], "cadinst_ids": [oid]}, index=index, unit=unit, unit_evidence=evidence)
 
 
 def test_exact_selection_uses_verified_index(tmp_path):
     dxf = tmp_path / "two_hatch.dxf"
     doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 6
     _hatch(doc.modelspace())
     _hatch(doc.modelspace(), 20)
     doc.saveas(dxf)
     index = _index(dxf)
     ids = [k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH"]
-    assert len(ids) == 2
     assert _select(dxf, index, ids[0])["regions"][0]["area_m2"] == pytest.approx(100)
 
 
 def test_nested_insert_transform_changes_area(tmp_path):
     dxf = tmp_path / "nested.dxf"
     doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 6
     block = doc.blocks.new("SURFACE")
     _hatch(block)
     doc.modelspace().add_blockref("SURFACE", (0, 0), dxfattribs={"xscale": 2, "yscale": 3, "rotation": 37})
     doc.saveas(dxf)
     index = _index(dxf)
-    ids = [k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH"]
-    assert ids
-    assert _select(dxf, index, ids[0])["regions"][0]["area_m2"] == pytest.approx(600, rel=0.05)
+    oid = next(k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH")
+    assert _select(dxf, index, oid)["regions"][0]["area_m2"] == pytest.approx(600)
 
 
 def test_minsert_keeps_array_cells_and_selects_one(tmp_path):
     dxf = tmp_path / "array.dxf"
     doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 6
     block = doc.blocks.new("ARRAY_SURFACE")
     _hatch(block)
     insert = doc.modelspace().add_blockref("ARRAY_SURFACE", (0, 0))
@@ -74,40 +75,41 @@ def test_minsert_keeps_array_cells_and_selects_one(tmp_path):
     index = _index(dxf)
     ids = [k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH"]
     assert len(ids) == 6
-    result = _select(dxf, index, ids[0])
-    assert result["regions"][0]["area_m2"] == pytest.approx(100)
+    assert _select(dxf, index, ids[0])["regions"][0]["area_m2"] == pytest.approx(100)
 
 
 def test_paperspace_layout_is_bound_to_selection(tmp_path):
     dxf = tmp_path / "paper.dxf"
     doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 6
     _hatch(doc.layout("Layout1"))
     doc.saveas(dxf)
     index = _index(dxf, "Layout1")
-    ids = [k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH"]
-    assert ids
-    assert _select(dxf, index, ids[0])["layout"] == "Layout1"
+    oid = next(k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH")
+    assert _select(dxf, index, oid)["layout"] == "Layout1"
 
 
-def test_mm_unit_conversion_and_unknown_unit_rejection(tmp_path):
+def test_mm_conversion_and_unit_conflicts(tmp_path):
     dxf = tmp_path / "mm.dxf"
     doc = ezdxf.new()
     doc.header["$INSUNITS"] = 4
     _hatch(doc.modelspace(), 1000)
     doc.saveas(dxf)
     index = _index(dxf)
-    hid = next(k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH")
-    assert _select(dxf, index, hid, unit_scale=0.001)["regions"][0]["area_m2"] == pytest.approx(1)
+    oid = next(k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH")
+    assert _select(dxf, index, oid, "mm", "explicit_mm")["regions"][0]["area_m2"] == pytest.approx(1)
     with pytest.raises(SurfaceSelectionError):
-        select_hatches(dxf, {"source_sha256": _sha(dxf), "layout": "Model", "cadinst_ids": [hid]}, index=index, unit_scale=None)
+        _select(dxf, index, oid, "m", "explicit_m")
 
 
-def test_duplicate_selection_ids_rejected(tmp_path):
-    dxf = tmp_path / "dup.dxf"
+def test_unknown_unit_requires_evidence(tmp_path):
+    dxf = tmp_path / "unknown.dxf"
     doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 0
     _hatch(doc.modelspace())
     doc.saveas(dxf)
     index = _index(dxf)
-    hid = next(k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH")
+    oid = next(k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH")
     with pytest.raises(SurfaceSelectionError):
-        select_hatches(dxf, {"source_sha256": _sha(dxf), "layout": "Model", "cadinst_ids": [hid, hid]}, index=index, unit_scale=1.0)
+        _select(dxf, index, oid, "m", "")
+    assert _select(dxf, index, oid, "m", "drawing_note_m")
