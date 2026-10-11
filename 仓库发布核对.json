@@ -195,7 +195,7 @@
     "ci_run": false,
     "record": "docs/钢结构真实案例改进_20260929.md"
   },
-  "current_runtime_files": 263,
+  "current_runtime_files": 265,
   "local_pipe_benchmark_update_20260929": {
     "version": "0.2.0+codex.20260929154857",
     "runtime_files": 225,
@@ -419,7 +419,7 @@
     "project_drawings_or_workpapers_included": false,
     "prepared_at": "2026-10-11T20:06:57.651473+08:00"
   },
-  "current_repository_version": "0.2.0+codex.20261011.6",
+  "current_repository_version": "0.2.0+codex.20261012.1",
   "repository_accuracy_repair_20261011": {
     "version": "0.2.0+codex.20261011.5",
     "base_commit": "3ae0b154031317249a3ca5ef363f82d1d3674f02",
@@ -552,5 +552,18 @@
     "coverage_boundary": "模型解释为明确标注的合成工作输入；范围对账不证明未提供图纸/未发现构造完整；不同单位/口径/方案/数量角色与层级分别汇总",
     "performance_boundary": "局部读取预算控制模型响应；当前仍读取和验证完整JSON索引，尚非磁盘流式大图索引",
     "project_sources_or_user_feedback_included": false
+  },
+  "repository_ai_autonomy_20261012": {
+    "version": "0.2.0+codex.20261012.1",
+    "base_commit": "41d915a29f931faf50580de90fadcbd53d2c7b3a",
+    "branch": "feat/ai-takeoff-reasoning-20261012",
+    "record": "docs/AI自主算量改进_20261012.md",
+    "runtime_files": 265,
+    "runtime_manifest_sha256": "a2f02dd393f52f2ae7fa167c63f18c3bdd2e05b01d16751bf9952f8248bcc72f",
+    "status": "candidate_under_validation",
+    "maintainer_machine_installation_updated": false,
+    "real_dwg_autocad_tested": false,
+    "real_project_recognition_accuracy_verified": false,
+    "professional_maturity_changed": false
   }
 }

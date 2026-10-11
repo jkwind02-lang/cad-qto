@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 263,
+  "runtime_file_count": 265,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -36,8 +36,13 @@
     },
     {
       "path": "_qto-shared-evidence/references/CAD中性事实提取.md",
-      "sha256": "27dc0158312e2343494e534b3bd66257ab1741bd7787a4b6d4cda7b0465b9254",
-      "bytes": 6917
+      "sha256": "2037880c3a7a0e5938f4ade1b03c1e07f7b705b480a313a48bb98ad158f5faa4",
+      "bytes": 7497
+    },
+    {
+      "path": "_qto-shared-evidence/references/CAD图样观察与模型识图.md",
+      "sha256": "35470e5d9520401270e854e7e798fc99113ddb5c13e6f7a6500c4046c9df0a69",
+      "bytes": 6849
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
@@ -51,13 +56,13 @@
     },
     {
       "path": "_qto-shared-evidence/references/人工思路识图与算量流程.md",
-      "sha256": "8e5da85ff71ccf282cb8bfa6fd55505aee21a4d19f17dffc121fefa0a236bf5a",
-      "bytes": 9397
+      "sha256": "413dcd1becddcedfc7ee1cd5de2800602f08d39b47c07e6d8943acb116d3fd29",
+      "bytes": 15250
     },
     {
       "path": "_qto-shared-evidence/references/公共资源调用与停止条件.md",
-      "sha256": "d15406ae51fb1ab485e7f4269b687189156cc3e0879b3974ce4f6250a5507ea9",
-      "bytes": 3268
+      "sha256": "611f7f3b451b2af3b45df80bc69b7afbeb8b0ed4c68c0a992687f4dfa4a6e51c",
+      "bytes": 3461
     },
     {
       "path": "_qto-shared-evidence/references/原图独立算量实测.md",
@@ -66,13 +71,13 @@
     },
     {
       "path": "_qto-shared-evidence/references/各专业持续算量执行路径.md",
-      "sha256": "e8f0d27e27797aa2ed57510e567219e5ff654d0c327ea987f497da063a6a3afc",
-      "bytes": 21109
+      "sha256": "5d40b5c3ed1a4473272dc6ab8996a02dd86d60d6746fb5ef3abfab6c59549cf6",
+      "bytes": 21927
     },
     {
       "path": "_qto-shared-evidence/references/图纸与资料范围筛选.md",
-      "sha256": "0da2d338c0191c7b6d8805881929e6058da942b2d19716d9b737859ef93a9cff",
-      "bytes": 3153
+      "sha256": "b53166a0d7cb9fa7dca4507d24a099ff6d7de808f4b895e202ab1a0197bbd04b",
+      "bytes": 3693
     },
     {
       "path": "_qto-shared-evidence/references/尺寸指向与尺寸链复核.md",
@@ -96,13 +101,13 @@
     },
     {
       "path": "_qto-shared-evidence/references/按任务阶段读取.md",
-      "sha256": "5c8377436e2b6a06127c33a008274ff094181244b51a7bb093670380deb58b02",
-      "bytes": 4000
+      "sha256": "00fedd8e075ed1979ba044b6d8a9473f54e0a078091b922d9d2a82e07ab1a96b",
+      "bytes": 4135
     },
     {
       "path": "_qto-shared-evidence/references/推算假定与发布分层协议.md",
-      "sha256": "fc31dbd27ec93e78db5153205ff6d7dea46fa9cfe4220ac7ef308ca6dc7bf896",
-      "bytes": 6217
+      "sha256": "69dc01060165bac3c37ec4087f484cbf32cfd476f8e27d15005af323249f9cae",
+      "bytes": 6859
     },
     {
       "path": "_qto-shared-evidence/references/模型工作识别记录格式.md",
@@ -151,8 +156,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/项目作业台账与持续执行.md",
-      "sha256": "4d8bff246d28b102b3e03301bc1da31d7c44ebe407f99488262e19cb38f62afe",
-      "bytes": 14883
+      "sha256": "705dcaab0b8709875b4ddda1d9ff1f0ed2042188873e8b2731245856e2b71692",
+      "bytes": 15380
     },
     {
       "path": "_qto-shared-evidence/references/项目文档条款提取.md",
@@ -251,13 +256,13 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_workflow_dependencies.py",
-      "sha256": "b9eaa9501aea910c7dc4a25b008b1f48e78dfb1688cf48c3f445212022f773d6",
-      "bytes": 14476
+      "sha256": "a61f9bcbf5097c865263558a7a1d87b7bbf975cc1fe2cf444b8cb3b1ecd3a4de",
+      "bytes": 14502
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_workflow_quantities.py",
-      "sha256": "6b176dec49dd07e3a54c2991b08c2bd9ae591072be0d14485c14224550fbe10e",
-      "bytes": 55199
+      "sha256": "a50448fe96738e8b8cc3bb94d44384bc4c041fe4c36502f8e441b574baa77b69",
+      "bytes": 55218
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_workflow_review.py",
@@ -271,8 +276,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_workflow_tools.py",
-      "sha256": "37c37ae75130745fd11f57b84c59c10b801771147671b3d1e5d90557e2928d29",
-      "bytes": 15290
+      "sha256": "bdfb5f76cdaab9d2a7a07fd037282ab90694a74557e69893c0f4a82a122dd85c",
+      "bytes": 15458
     },
     {
       "path": "_qto-shared-evidence/scripts/read_cad_scope.py",
@@ -290,6 +295,11 @@
       "bytes": 15337
     },
     {
+      "path": "_qto-shared-evidence/scripts/render_cad_view.py",
+      "sha256": "73231a74d20e35261f23301eee52d74974ea060a0d6fa56d38b27a8fc9a6b371",
+      "bytes": 25603
+    },
+    {
       "path": "_qto-shared-evidence/scripts/validate_minimum_result.py",
       "sha256": "3e8f313a6dfa65c7546642fcc0bc4f28e917107f0f9bda540f9cddb53c96f779",
       "bytes": 29449
@@ -301,8 +311,8 @@
     },
     {
       "path": "qto-components-points/SKILL.md",
-      "sha256": "9655f163fff9c512334a47573f9ca2528fd7b036e66d083b4805d182d33c0709",
-      "bytes": 7396
+      "sha256": "ebea7b311545b124dcc11d54c5288bd43bce6a8d3d44236ea0982a90889b6b0c",
+      "bytes": 7525
     },
     {
       "path": "qto-components-points/agents/openai.yaml",
@@ -376,8 +386,8 @@
     },
     {
       "path": "qto-concrete-formwork/SKILL.md",
-      "sha256": "ed60d729aa95d0333b3c0b82101e97c37d77b9d73dd9489c6854923d140ea8dc",
-      "bytes": 10405
+      "sha256": "a6952358611e59399baccc9039807b74afd5c65bdd69ffa9c97f149f8417cd9e",
+      "bytes": 10534
     },
     {
       "path": "qto-concrete-formwork/agents/openai.yaml",
@@ -456,8 +466,8 @@
     },
     {
       "path": "qto-coordinator/SKILL.md",
-      "sha256": "2969ff469d491e2c374538995684f207c2f62cacbdd7cdc4bacbf74fb1497669",
-      "bytes": 9155
+      "sha256": "24db11d00a58301da29cc7598e4ff121630cd09b809d3f3c9d5d23fb24f756a1",
+      "bytes": 9736
     },
     {
       "path": "qto-coordinator/agents/openai.yaml",
@@ -491,13 +501,13 @@
     },
     {
       "path": "qto-coordinator/scripts/qto_workflow.py",
-      "sha256": "067bd9603fdf9f636ca9fe9045707f2e0482b3a406c31303307f1ed5702f1e70",
-      "bytes": 34286
+      "sha256": "dd751a3c1bd5bc337ea40e872b8b07f1b0b20afad125363325f4617fe3266688",
+      "bytes": 34716
     },
     {
       "path": "qto-duct-air-systems/SKILL.md",
-      "sha256": "99a5a4a683a623b14ae70579663cf2edb3a20304b5a9aa6b9c2794d5825c77f6",
-      "bytes": 5974
+      "sha256": "7d3af4d39b6be0c4b6787c0e54f50d58a580e19a805183db57720da0b73f93e7",
+      "bytes": 6103
     },
     {
       "path": "qto-duct-air-systems/agents/openai.yaml",
@@ -546,8 +556,8 @@
     },
     {
       "path": "qto-earthwork-terrain/SKILL.md",
-      "sha256": "0020f04fe19e7df08f739c70fdc46d120a4940a8d34f5d35467fc2406a02ef7e",
-      "bytes": 11169
+      "sha256": "e3c1d1ed1b32c6a39f8349a9784702cacceba07bb1033554b5519937483cd62e",
+      "bytes": 11298
     },
     {
       "path": "qto-earthwork-terrain/agents/openai.yaml",
@@ -626,8 +636,8 @@
     },
     {
       "path": "qto-electrical-routes/SKILL.md",
-      "sha256": "b7ad9cbb63450f3af22fc2a9be7cec72f19e577f68cd448b2292cf9d36709af5",
-      "bytes": 6574
+      "sha256": "1cbc95100b91423ffa7b130798e691e00af145a046164133240623ba6ca12d71",
+      "bytes": 6703
     },
     {
       "path": "qto-electrical-routes/agents/openai.yaml",
@@ -681,8 +691,8 @@
     },
     {
       "path": "qto-framing-supports/SKILL.md",
-      "sha256": "9bdad3a047a27cff2a44aac0ae523569a25a5912f1aab56fbe128fb07669d547",
-      "bytes": 6022
+      "sha256": "61826bd084f9e5d3ae207ef42292c396396f0b420e6c4b615141d74065ca2402",
+      "bytes": 6151
     },
     {
       "path": "qto-framing-supports/agents/openai.yaml",
@@ -731,8 +741,8 @@
     },
     {
       "path": "qto-masonry-secondary/SKILL.md",
-      "sha256": "2147f8651c5abcf1309af9ffc369283ea67d765fe88df00086bbfca92caffcec",
-      "bytes": 6431
+      "sha256": "32007f58847b879aed7f6bbfc2399a0e90a51e91ab5c8eb6b78e70fef4c119df",
+      "bytes": 6560
     },
     {
       "path": "qto-masonry-secondary/agents/openai.yaml",
@@ -781,8 +791,8 @@
     },
     {
       "path": "qto-piles-groundwork/SKILL.md",
-      "sha256": "f0f25c1e7042368130150d43b54cb1844601cdd60f41857a7c0d7f045244bf5c",
-      "bytes": 5792
+      "sha256": "118315197ec63a1bd5d0e8e7de2964d0a3166448fd2d18917c82b3b5a20217f0",
+      "bytes": 5921
     },
     {
       "path": "qto-piles-groundwork/agents/openai.yaml",
@@ -831,8 +841,8 @@
     },
     {
       "path": "qto-pipe-networks/SKILL.md",
-      "sha256": "744bba1012f53018abc098a42620f3c0fd9d579a1af9a5ba2e8c6b2e677eb3b0",
-      "bytes": 15875
+      "sha256": "9fa4f458e644d0edec40f27c699ff2de65d8ba2a02387fca3c0387cdf7553d6f",
+      "bytes": 16004
     },
     {
       "path": "qto-pipe-networks/agents/openai.yaml",
@@ -1011,8 +1021,8 @@
     },
     {
       "path": "qto-rebar/SKILL.md",
-      "sha256": "24cecd329b20d9e3966f9cd09bf027d71961eeb147fa8347dca226c2110b38d8",
-      "bytes": 12286
+      "sha256": "d16b6fcc7187398fcd571ae665e55fc1c09b974f854bf9188346f1f8e360008e",
+      "bytes": 13787
     },
     {
       "path": "qto-rebar/agents/openai.yaml",
@@ -1021,8 +1031,8 @@
     },
     {
       "path": "qto-rebar/capability.json",
-      "sha256": "17450df0f4103215da37ee90e8445d6bf54f1123fa0e69cc4f90f4395937acdb",
-      "bytes": 1218
+      "sha256": "4b910604b07bda4153008d0f0a5532711e88c88456c99622d2c1da160accaa24",
+      "bytes": 2175
     },
     {
       "path": "qto-rebar/references/对象范围与相邻边界.md",
@@ -1031,13 +1041,13 @@
     },
     {
       "path": "qto-rebar/references/展开长度锚固搭接与节点规则.md",
-      "sha256": "0aac56fcee076b2f0aa2c4ae6ca3c4bc1698044f21c4627c28c364be33cdc1bd",
-      "bytes": 2020
+      "sha256": "473319883d720a1c0c20790ea877aa2024d2c5cda3c1f676eca946d547fcb034",
+      "bytes": 2766
     },
     {
       "path": "qto-rebar/references/根数理论重量连接与措施规则.md",
-      "sha256": "5dc505ee0051d8daad11845e36d8e4668290483f2267f0332a3678ffc1efc959",
-      "bytes": 1790
+      "sha256": "bbda2eb42003a41c7ce7d8e3a4455b719727be9ff15213a64494e45189fa2bb0",
+      "bytes": 2343
     },
     {
       "path": "qto-rebar/references/现行标准与计量口径摘要.md",
@@ -1046,43 +1056,43 @@
     },
     {
       "path": "qto-rebar/references/结果检查与输出.md",
-      "sha256": "218ab34bb9cc0b886b1452cdc8d2e2d8bd99d3ac079306d4f458cad50c1077ed",
-      "bytes": 1863
+      "sha256": "9dcc7bd2ceb581a21f6755f4584b60789b3e9af018066279545a5d07140971b8",
+      "bytes": 2329
     },
     {
       "path": "qto-rebar/references/规则清单与成熟状态.md",
-      "sha256": "6228044a171fc7315fe7b4a9cd35719ca61d4aac83fabfb157a1ce7c8897b89e",
-      "bytes": 2371
+      "sha256": "f13fcc07cc19941d2f222c8d42ed4f95af16caf2cd542718ac78cd3247058cfa",
+      "bytes": 2740
     },
     {
       "path": "qto-rebar/references/计算与证据流程.md",
-      "sha256": "fd64c5e36c1d9c917fe01dbafb495d56863f967d1a91f5ad7a482136da18a27a",
-      "bytes": 2282
+      "sha256": "f00754fb908e0ba6efd4e9c631bb62881a2bc5e392a5bd496a31c698d21099f5",
+      "bytes": 2932
     },
     {
       "path": "qto-rebar/references/钢筋计算清单格式.md",
-      "sha256": "6b72b043448bea2157f8d795304f92f1f84ad94939144735fefd606c15747a5a",
-      "bytes": 3720
+      "sha256": "f3915eff48455fe10595961abc3ac6544aba009967ccbb0dbce0d9b2f12403f4",
+      "bytes": 10462
     },
     {
       "path": "qto-rebar/references/钢筋识别与构件配筋规则.md",
-      "sha256": "f9ff58ba22fc84d4e788f03727be33ce5ea3ee78be4d796cebcd9f5f70784ee1",
-      "bytes": 2242
+      "sha256": "9bb71743145a5e669aee8814a9578c4c08d95218d150c314ee2b134b44ca9521",
+      "bytes": 4417
     },
     {
       "path": "qto-rebar/scripts/calculate_rebar_items.py",
-      "sha256": "2a22866cc40659465c7aebf27bc9746c05a114dcd53372c0d9d5716ac9e2292e",
-      "bytes": 39081
+      "sha256": "e9fdc5020599a21e4c655339fbd76a884159ffea835aaffa3555c6940aed8adb",
+      "bytes": 49216
     },
     {
       "path": "qto-rebar/scripts/validate_rebar_result.py",
-      "sha256": "6e38074859e095a2a1a72533a1aa6c198adf5c4348d28a596cbff59d1c1f93f0",
-      "bytes": 9371
+      "sha256": "6bfc3a689885c05d1aa59f358fd081149fdaacb392599c5924cf637e3b9b0b5c",
+      "bytes": 10317
     },
     {
       "path": "qto-roads-siteworks/SKILL.md",
-      "sha256": "7ce43baa6d7c2fe6c3eb19600197ed8209c5594641ae775d0b73b8ccfd7354c3",
-      "bytes": 5908
+      "sha256": "3e86efd427f1aaa21f3a4670edc4829e84a4af0bbfcff11cd55d7d705ee76bdd",
+      "bytes": 6037
     },
     {
       "path": "qto-roads-siteworks/agents/openai.yaml",
@@ -1131,8 +1141,8 @@
     },
     {
       "path": "qto-structural-steel/SKILL.md",
-      "sha256": "76143d011ef66e7d82447de8c574117908772e0b3308850d3c51f10c25b469ca",
-      "bytes": 12604
+      "sha256": "0f5ad40c4f0e2b66256d69a0bfc10ffc5dc2e04a278c5e4f85cc04755a450f54",
+      "bytes": 12733
     },
     {
       "path": "qto-structural-steel/agents/openai.yaml",
@@ -1206,8 +1216,8 @@
     },
     {
       "path": "qto-surfaces-envelope/SKILL.md",
-      "sha256": "d900bcb2eb41281a6892da9cc836f0bef12cab39e9188541e7836979d11236f7",
-      "bytes": 12431
+      "sha256": "4794167eb873fd1a524d47b295edbc81673b09fa4913948ca29c98bc06c3fd03",
+      "bytes": 12560
     },
     {
       "path": "qto-surfaces-envelope/agents/openai.yaml",

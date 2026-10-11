@@ -143,6 +143,17 @@ def main() -> int:
             related = group_results.get(group_id, [])
             if not related:
                 fail(f"钢筋组 {group_id} 没有成果项")
+            if any(item.get("quantity_level") != calc.get("quantity_level") for item in related):
+                fail(f"钢筋组 {group_id} 的原生数量层级与计算证据不一致")
+            if calc.get("adoption_role") == "reference":
+                if calc.get("quantity_level") not in {"inferred", "scenario", "unresolved", "not_applicable"}:
+                    fail(f"参考钢筋组 {group_id} 不得作为确认量")
+                for item in related:
+                    layer = item.get("成果分层", {})
+                    if (item.get("采用角色") != "reference" or item.get("结果用途") != "reference_only"
+                            or item.get("formal_adoption") is not False
+                            or layer.get("进入正式量") is True or layer.get("发布状态") == "正式"):
+                        fail(f"参考钢筋组 {group_id} 被提升为正式采用量")
             if calc.get("method") == "deferred":
                 for item in related:
                     if item.get("结果", {}).get("数值") is not None:
@@ -197,7 +208,7 @@ def main() -> int:
                 "独立回放逐字节一致",
                 "公共最小成果验证通过",
                 "根数-长度-单位质量-重量守恒",
-                "候选规则和测试证据门通过",
+                "工作推算与采用量分离、候选规则和测试证据门通过",
             ],
         }, ensure_ascii=False, indent=2))
         return 0
