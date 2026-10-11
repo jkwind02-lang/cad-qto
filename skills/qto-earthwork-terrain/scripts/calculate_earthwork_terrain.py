@@ -202,6 +202,35 @@ def rectangle_union_area(rectangles: list[tuple[float, float, float, float]]) ->
     return area
 
 
+def rectangular_prismoid(bl: float, bw: float, tl: float, tw: float, depth: float,
+                         label: str) -> tuple[float, dict[str, Any]]:
+    """Exact volume for parallel rectangles whose lengths vary linearly with height.
+
+    The corresponding edges have the same orientation. The faces may have
+    different slopes or asymmetric offsets; the two rectangles need not be
+    similar. Stepped, curved or rotating sections are not this geometry model.
+    Input lengths are the manifest's evidence-locked metre dimensions.
+    """
+    # Halving before addition avoids overflow when the finite endpoints are
+    # large. Dividing the section weights before summing likewise avoids the
+    # unnecessary overflow in 4*A_mid or A_bottom*A_top.
+    ml = number_value(bl / 2 + tl / 2, f"{label}.mid_length", positive=True)
+    mw = number_value(bw / 2 + tw / 2, f"{label}.mid_width", positive=True)
+    ab = number_value(bl * bw, f"{label}.bottom_area", positive=True)
+    am = number_value(ml * mw, f"{label}.mid_area", positive=True)
+    at = number_value(tl * tw, f"{label}.top_area", positive=True)
+    try:
+        mean_area = math.fsum((ab / 6, am * (2 / 3), at / 6))
+    except OverflowError as exc:
+        raise CalculationError(f"{label}矩形棱柱体的截面积积分超出有限数值范围") from exc
+    value = number_value(depth * mean_area, f"{label}.volume", positive=True)
+    return value, {
+        "bottom_area": ab, "mid_length": ml, "mid_width": mw,
+        "mid_area": am, "top_area": at,
+        "section_model": "parallel_rectangles_linear_dimensions",
+    }
+
+
 def pit_union(inputs: dict[str, Any], label: str) -> tuple[float, dict[str, Any]]:
     pits_raw = inputs.get("pits")
     if not isinstance(pits_raw, list) or not pits_raw:
@@ -224,9 +253,11 @@ def pit_union(inputs: dict[str, Any], label: str) -> tuple[float, dict[str, Any]
         }
         top_l = pit["bottom_length"] + 2 * pit["slope_x"] * pit["depth"]
         top_w = pit["bottom_width"] + 2 * pit["slope_y"] * pit["depth"]
-        bottom_area = pit["bottom_length"] * pit["bottom_width"]
-        top_area = top_l * top_w
-        standalone += pit["depth"] / 3 * (bottom_area + top_area + math.sqrt(bottom_area * top_area))
+        pit_volume, _ = rectangular_prismoid(
+            pit["bottom_length"], pit["bottom_width"], top_l, top_w, pit["depth"],
+            f"{label}.pits[{index}]",
+        )
+        standalone = number_value(standalone + pit_volume, f"{label}.standalone_sum", positive=True)
         max_depth = max(max_depth, pit["depth"])
         pits.append(pit)
     slice_count = math.ceil(max_depth / step)
@@ -251,6 +282,8 @@ def pit_union(inputs: dict[str, Any], label: str) -> tuple[float, dict[str, Any]
     return volume, {
         "pit_count": len(pits), "slice_step": step, "slice_count": slice_count,
         "standalone_sum": standalone, "overlap_reduction": standalone - volume,
+        "standalone_formula": "H/6×(A底+4×A中+A顶)",
+        "integration_is_approximate": True,
     }
 
 
@@ -272,9 +305,8 @@ def calculate_method(method: str, inputs: dict[str, Any], label: str,
         tl = number_value(inputs.get("top_length"), f"{label}.inputs.top_length", positive=True)
         tw = number_value(inputs.get("top_width"), f"{label}.inputs.top_width", positive=True)
         depth = number_value(inputs.get("depth"), f"{label}.inputs.depth", positive=True)
-        ab, at = bl * bw, tl * tw
-        value = depth / 3 * (ab + at + math.sqrt(ab * at))
-        return value, "H/3×(A底+A顶+√(A底×A顶))", {"bottom_area": ab, "top_area": at}
+        value, checks = rectangular_prismoid(bl, bw, tl, tw, depth, label)
+        return value, "H/6×(A底+4×A中+A顶)，长、宽随高度线性变化", checks
     if method == "orthogonal_offset_frustum":
         bl = number_value(inputs.get("bottom_length"), f"{label}.inputs.bottom_length", positive=True)
         bw = number_value(inputs.get("bottom_width"), f"{label}.inputs.bottom_width", positive=True)
@@ -284,9 +316,9 @@ def calculate_method(method: str, inputs: dict[str, Any], label: str,
         front = number_value(inputs.get("offset_front"), f"{label}.inputs.offset_front")
         back = number_value(inputs.get("offset_back"), f"{label}.inputs.offset_back")
         tl, tw = bl + left + right, bw + front + back
-        ab, at = bl * bw, tl * tw
-        value = depth / 3 * (ab + at + math.sqrt(ab * at))
-        return value, "按四侧水平外扩形成矩形截头体", {"top_length": tl, "top_width": tw}
+        value, checks = rectangular_prismoid(bl, bw, tl, tw, depth, label)
+        checks.update(top_length=tl, top_width=tw)
+        return value, "按四侧水平外扩、侧边随高度线性变化：H/6×(A底+4×A中+A顶)", checks
     if method == "pit_union_slices":
         value, checks = pit_union(inputs, label)
         return value, f"{checks['pit_count']}个矩形坑按{checks['slice_step']}m中点切片求平面并集并积分", checks
