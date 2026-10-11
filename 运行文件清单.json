@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 265,
+  "runtime_file_count": 267,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -1216,8 +1216,8 @@
     },
     {
       "path": "qto-surfaces-envelope/SKILL.md",
-      "sha256": "4794167eb873fd1a524d47b295edbc81673b09fa4913948ca29c98bc06c3fd03",
-      "bytes": 12560
+      "sha256": "89c1884bb37b7c571f46f61721a2b7e4cc808056b8b31b5cbfa3c7370be08d47",
+      "bytes": 13020
     },
     {
       "path": "qto-surfaces-envelope/agents/openai.yaml",
@@ -1323,6 +1323,16 @@
       "path": "qto-surfaces-envelope/scripts/material_rectangle_partition.py",
       "sha256": "c43e27d02f98658805987aaac20adc36fbb00f6d5aca91a7f71b7073a06e54d2",
       "bytes": 15135
+    },
+    {
+      "path": "qto-surfaces-envelope/scripts/select_surface_regions.py",
+      "sha256": "b87a81363d45596467b0f24cc4bd7c450607c677588ffa2303aca4eb91fcef6d",
+      "bytes": 8814
+    },
+    {
+      "path": "qto-surfaces-envelope/scripts/surface_selection_contract.py",
+      "sha256": "27fdef94d17ee0a070a3afce54b127635aa1ea7dd9b5c96474c046f7072bd055",
+      "bytes": 2814
     },
     {
       "path": "qto-surfaces-envelope/scripts/validate_surfaces_envelope_result.py",
