@@ -322,4 +322,3 @@ def test_cli_relative_source_svg_and_png(tmp_path):
     report = json.loads((tmp_path / "view.json").read_text())
     assert report["renderer"]["png_pixels"] == [800, 800]
     assert report["input_file_hashes"][str(tmp_path / "source.dxf")] == src["sha256"]
-
