@@ -1,6 +1,6 @@
 {
   "name": "cad-qto",
-  "version": "0.2.0+codex.20260920",
+  "version": "0.2.0+codex.20261011.4",
   "description": "CAD全专业工程量计算与明细复核，按物理对象调用13个专业Skill，跨专业使用协调入口，共用取证、证据和校验资源。",
   "author": {
     "name": "Local developer"

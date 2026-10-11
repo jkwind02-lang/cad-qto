@@ -16,9 +16,9 @@ from typing import Any
 OBJECT_TYPES = {
     "floor_finish", "wall_finish", "ceiling_finish", "roof_covering",
     "waterproofing", "insulation", "facade_panel", "curtain_wall_panel",
-    "other_surface",
+    "other_surface", "skirting_finish",
 }
-METHODS = {"area_direct", "horizontal_net", "rectangle_net", "sloped_from_projection", "deferred"}
+METHODS = {"area_direct", "horizontal_net", "rectangle_net", "rectangle_openings_net", "sloped_from_projection", "boundary_intervals_net", "material_partition_net", "deferred"}
 LEGACY_FRAGMENTS = (
     "\\skills-disabled\\", "\\旧skill只读归档\\", "\\阶段1_归档与停用\\",
     "construction-qto-legacy", "construction-qto-preexisting-backup",
@@ -98,9 +98,11 @@ def validate_document(data: Any) -> list[str]:
     unresolved = unique_map(data.get("整体未决事项"), "事项编号", "整体未决事项", errors)
     results = unique_map(data.get("工程量结果"), "成果项编号", "工程量结果", errors)
     identities: set[str] = set()
+    partition_groups = {}
     for item_id, item in results.items():
-        if item.get("单位") != "m²":
-            errors.append(f"{item_id}单位必须为m²")
+        unit = item.get('单位')
+        if unit not in {'m²','m'}:
+            errors.append(f"{item_id}单位必须为m²或踢脚长度m")
         value_block = item.get("结果")
         check = item.get("专业检查")
         if not isinstance(value_block, dict) or not isinstance(check, dict):
@@ -110,6 +112,11 @@ def validate_document(data: Any) -> list[str]:
         value_state = value_block.get("数值状态")
         method = check.get("计算方法")
         object_type = check.get("对象类别")
+        quantity_role = check.get('数量角色')
+        if unit == 'm' and (object_type!='skirting_finish' or method not in {'boundary_intervals_net','deferred'} or quantity_role not in {'physical_length','bill_quantity_candidate'}):
+            errors.append(f'{item_id}长度单位、对象、方法或数量角色不一致')
+        if unit == 'm²' and (method=='boundary_intervals_net' or quantity_role=='physical_length'):
+            errors.append(f'{item_id}长度不能作为面积输出')
         adoption = check.get("采用角色")
         scope = check.get("范围完整性")
         signature = check.get("对象身份签名")
@@ -134,6 +141,102 @@ def validate_document(data: Any) -> list[str]:
         for ref in refs:
             if ref not in evidence:
                 errors.append(f"{item_id}引用不存在的证据: {ref}")
+        audit = check.get('输入审计', {})
+        frame = audit.get('frame_validation') if isinstance(audit, dict) else None
+        if method in {'rectangle_net', 'rectangle_openings_net', 'material_partition_net'} or frame is not None:
+            if not isinstance(frame, dict) or frame.get('status') not in {'bound_consistent', 'unbound', 'not_provided'}:
+                errors.append(f'{item_id}缺少明确的局部坐标绑定核验状态')
+            elif frame['status'] == 'bound_consistent':
+                if method not in {'rectangle_net', 'rectangle_openings_net', 'material_partition_net'}:
+                    errors.append(f'{item_id}非矩形方法不得声称矩形定位绑定通过')
+                for key in ('frame_source_binding', 'edge_source_binding'):
+                    bound = frame.get(key)
+                    if not isinstance(bound, dict) or bound.get('evidence_ref') not in refs or any(
+                            not nonempty(bound.get(k)) for k in ('source_id', 'source_sha256', 'source_pointer')):
+                        errors.append(f'{item_id}缺少完整的框架或源边来源绑定: {key}')
+                for key in ('bound_length_m', 'bound_height_m', 'source_edge_length_m'):
+                    if not numeric(frame.get(key)) or frame[key] <= 0:
+                        errors.append(f'{item_id}绑定矩形尺寸或源边长度非法: {key}')
+                for key in ('surface_origin_m', 'source_edge_start_m', 'source_edge_end_m'):
+                    point = frame.get(key)
+                    if not isinstance(point, list) or len(point) != 3 or not all(numeric(v) for v in point):
+                        errors.append(f'{item_id}绑定定位坐标非法: {key}')
+                corners = frame.get('rectangle_corners_m')
+                if not isinstance(corners, list) or len(corners) != 4 or any(
+                        not isinstance(p, list) or len(p) != 3 or not all(numeric(v) for v in p) for p in corners):
+                    errors.append(f'{item_id}绑定矩形须导出四个有限三维顶点')
+                if not isinstance(frame.get('local_coordinate_frame'), dict):
+                    errors.append(f'{item_id}绑定矩形缺少规范源框架')
+            elif any(key in frame for key in ('frame_source_binding', 'edge_source_binding', 'rectangle_corners_m')):
+                errors.append(f'{item_id}未绑定定位不得带已核绑定的审计字段')
+        if method == 'material_partition_net':
+            partition = audit.get('material_partition') if isinstance(audit,dict) else None
+            selection = audit.get('partition_selection') if isinstance(audit,dict) else None
+            if not isinstance(frame,dict) or frame.get('status') != 'bound_consistent':
+                errors.append(f'{item_id}材料分区必须绑定母面框架')
+            if unit != 'm²' or quantity_role != 'physical_area':
+                errors.append(f'{item_id}材料分区只允许物理面积')
+            if not isinstance(partition,dict) or not isinstance(selection,dict):
+                errors.append(f'{item_id}缺少材料分区及输出选择审计')
+            else:
+                scenario=partition.get('scenario',{})
+                mats=partition.get('material_regions')
+                unknown=partition.get('unknown_region',{}).get('area_m2')
+                outside=partition.get('outside_selected_scope',{}).get('area_m2',0.)
+                net=partition.get('net_face_area_m2')
+                coverage=partition.get('coverage',{'mode':'full_surface'})
+                source=partition.get('partition_source_binding',{})
+                if not isinstance(scenario,dict) or scenario.get('status') not in {'determined','conditional'} or not nonempty(scenario.get('scenario_id')):
+                    errors.append(f'{item_id}材料分区缺少明确方案身份和状态')
+                    scenario={}
+                if scenario.get('status')=='conditional' and adoption!='reference':
+                    errors.append(f'{item_id}条件材料分区不得作为采用量')
+                if not isinstance(coverage,dict) or coverage.get('mode') not in {'full_surface','selected_regions'}:
+                    errors.append(f'{item_id}分区计量范围模式非法')
+                    coverage={}
+                if coverage.get('mode')=='selected_regions':
+                    if partition.get('full_surface_coverage') is not False or partition.get('base_material_complement') is not None:
+                        errors.append(f'{item_id}仅选定区域不能补满母面或声称全母面已覆盖')
+                    if not isinstance(coverage.get('source_binding'),dict) or not nonempty(coverage.get('basis')):
+                        errors.append(f'{item_id}仅选定区域范围缺少来源绑定')
+                elif outside!=0:
+                    errors.append(f'{item_id}完整母面分区不得把未分配面积排除范围')
+                if not numeric(unknown) or unknown<0 or not numeric(net) or net<0 or not numeric(outside) or outside<0 or not isinstance(mats,list):
+                    errors.append(f'{item_id}材料与未知分区面积非法')
+                else:
+                    quantities={}; expected=set()
+                    for mat in mats:
+                        mid=mat.get('material_id') if isinstance(mat,dict) else None
+                        amount=mat.get('effective_known_geometry',{}).get('area_m2') if isinstance(mat,dict) else None
+                        if not nonempty(mid) or mid in quantities or not numeric(amount) or amount<0:
+                            errors.append(f'{item_id}材料身份或面积非法')
+                            continue
+                        quantities[mid]=amount
+                        if amount>0:expected.add(('material',mid))
+                    if unknown>0:
+                        expected.add(('unknown',None))
+                        if scope!='partial' or not item.get('未决事项'):
+                            errors.append(f'{item_id}未知或冲突区域必须保留partial及未决')
+                    if not math.isclose(math.fsum(quantities.values())+unknown+outside,net,rel_tol=1e-12,abs_tol=1e-8):
+                        errors.append(f'{item_id}材料及未知区域与净母面不守恒')
+                    kind=selection.get('output_kind');mid=selection.get('material_id')
+                    selected=unknown if kind=='unknown' else quantities.get(mid)
+                    if kind not in {'material','unknown'} or not numeric(selected) or not numeric(value) or not math.isclose(selected,value,rel_tol=1e-12,abs_tol=1e-8):
+                        errors.append(f'{item_id}分项数值与选定材料/未知面积不符')
+                    if kind=='unknown' and adoption!='reference':
+                        errors.append(f'{item_id}未知材料区域必须作为参考范围')
+                    key=(partition.get('parent_surface_id'),partition.get('layer_scope_id'),scenario.get('scenario_id'))
+                    fingerprint=(partition.get('partition_id'),source.get('source_sha256'),source.get('source_pointer'))
+                    if any(not nonempty(k) for k in key+fingerprint):
+                        errors.append(f'{item_id}材料分区缺少母面、层范围或来源定位')
+                    else:
+                        group=partition_groups.setdefault(key,{'fingerprint':fingerprint,'expected':expected,'actual':set()})
+                        if group['fingerprint']!=fingerprint or group['expected']!=expected:
+                            errors.append(f'{item_id}同一母面层范围场景混入不同分区')
+                        selection_key=(kind,mid)
+                        if selection_key in group['actual']:
+                            errors.append(f'{item_id}材料分区有重复数量出口')
+                        group['actual'].add(selection_key)
         for ref in item.get("规则", []):
             if ref not in rules:
                 errors.append(f"{item_id}引用不存在的规则: {ref}")
@@ -145,13 +248,17 @@ def validate_document(data: Any) -> list[str]:
         if value_state == "已计算" and not numeric(value):
             errors.append(f"{item_id}已计算值必须为有限数值")
         if numeric(value) and value < 0:
-            errors.append(f"{item_id}面积不得为负")
+            errors.append(f"{item_id}数量不得为负")
         if numeric(value) and value == 0 and not isinstance(item.get("零值复核"), dict):
             errors.append(f"{item_id}零值缺少覆盖复核")
         if method == "deferred" and value is not None:
             errors.append(f"{item_id}deferred项不得有数值")
         if adoption == "reference" and check.get("进入采用小计") is not False:
             errors.append(f"{item_id}参考量不得进入采用小计")
+
+    for key,group in partition_groups.items():
+        if group['expected']-group['actual']:
+            errors.append(f'材料分区{key}缺少正面积材料或未知区域单列出口')
 
     subtotals = data.get("工程量小计")
     if not isinstance(subtotals, list):
@@ -165,6 +272,8 @@ def validate_document(data: Any) -> list[str]:
         if not isinstance(refs, list) or not refs:
             errors.append(f"{subtotal.get('小计编号')}缺少来源成果项")
             continue
+        if len(refs) != len(set(refs)):
+            errors.append(f"{subtotal.get('小计编号')}重复引用来源成果项")
         expected = 0.0
         for ref in refs:
             if ref not in results:
@@ -177,6 +286,14 @@ def validate_document(data: Any) -> list[str]:
                 errors.append(f"{subtotal.get('小计编号')}混合采用与参考口径")
             if check.get("构造层编号") != subtotal.get("构造层编号"):
                 errors.append(f"{subtotal.get('小计编号')}混合构造层")
+            if item.get('单位') != subtotal.get('单位'):
+                errors.append(f"{subtotal.get('小计编号')}混合长度与面积或不同单位")
+            for field in ("对象类别", "计量基准", "范围完整性", "数量角色"):
+                if check.get(field) != subtotal.get(field):
+                    errors.append(f"{subtotal.get('小计编号')}混合{field}")
+            for field in ('材料分区母面','材料分区层范围','材料分区场景','材料分区输出','材料编号'):
+                if check.get(field,'') != subtotal.get(field,''):
+                    errors.append(f"{subtotal.get('小计编号')}混合{field}")
             if numeric(value):
                 expected += value
         if not numeric(subtotal.get("数值")) or not math.isclose(float(subtotal["数值"]), expected, abs_tol=1e-8):

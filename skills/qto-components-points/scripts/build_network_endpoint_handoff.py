@@ -145,6 +145,17 @@ def main() -> int:
                         not_applicable_count += 1
                     else:
                         unresolved_count += 1
+                for key in ("port_dn", "port_role", "port_source_id"):
+                    value = port.get(key, raw.get(key))
+                    if value is not None:
+                        text(value, f"{physical_id}.{port_id}.{key}")
+                for key in ("evidence_level", "port_evidence_level"):
+                    value = port.get(key, raw.get(key))
+                    if value is not None and value not in ("confirmed", "inferred", "scenario"):
+                        fail(f"{physical_id}.{port_id}.{key} 无效")
+                known_point = port.get("point", raw.get("point"))
+                if known_point is not None:
+                    point(known_point, f"{physical_id}.{port_id}.point")
                 dispositions.append(
                     {
                         "physical_id": physical_id,
@@ -154,6 +165,14 @@ def main() -> int:
                         "network_disposition": disposition,
                         "reason": reason,
                         "evidence": evidence,
+                        # A missing location does not erase known size or role.
+                        "known_facts": {
+                            key: port.get(key, raw.get(key))
+                            for key in ("port_dn", "port_role", "port_source_id", "port_evidence_level",
+                                        "evidence_level", "propagation_scope", "space_id", "coordinate_unit",
+                                        "point", "source_segment_id", "assumption_id")
+                            if port.get(key, raw.get(key)) is not None
+                        },
                     }
                 )
 

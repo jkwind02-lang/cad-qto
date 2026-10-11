@@ -24,10 +24,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-eviden
 from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_entries, applies_to, recognition_basis, validate_working_basis
 
 import qto_cad_geometry as cad_geometry
+from qto_cad_source_contract import check_unit_factor, verify_source_file
 
 from qto_pipe_topology import RouteIndex, route_distance, project_route, geometry_parts, scale_route_geometry
 
-VERSION = "qto-pipe-neutral-adapter/1.5.0"
+VERSION = "qto-pipe-neutral-adapter/1.6.0"
 PROFILE_SCHEMA = "qto-pipe-recognition-profile/1.1"
 LEDGER_SCHEMA = "qto-project-adjudication-ledger/1.0"
 LINE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "SPLINE"}
@@ -225,6 +226,82 @@ def choose_layer_rule(layer: str, rules: list[dict[str, Any]], object_id: str | 
     return best[0], []
 
 
+def apply_insert_quantity_ownership(insert_rows, block_rules, root_consumed_ids,
+                                    object_dispositions, candidates, candidate_meta,
+                                    explicit_dispositions, derived_roots, factor,
+                                    context_insert_rows):
+    """A resolved symbol instance owns its descendants, before length auditing.
+
+    A layer rule may offer curve candidates but cannot reverse a parent block's
+    exclusion, or count symbol outlines in addition to an adopted accessory.
+    Unresolved/unmatched containers do not claim their engineering contents.
+    """
+    owners = []
+    for row in context_insert_rows:
+        oid = str(row.get("record_id") or "")
+        outside_scope = oid not in object_dispositions
+        disposition = object_dispositions.get(oid, {})
+        if oid not in root_consumed_ids:
+            matches = [rule for rule in block_rules
+                       if rule["layer_re"].search(str(row.get("layer") or ""))
+                       and rule["block_re"].search(str(row.get("block_name") or ""))
+                       and applies_to(rule, oid)]
+            if not matches:
+                continue
+            priority = max(rule["priority"] for rule in matches)
+            best = sorted((rule for rule in matches if rule["priority"] == priority),
+                          key=lambda rule: rule["rule_id"])
+            if len({(rule.get("decision", "unresolved"), rule.get("system")) for rule in best}) > 1:
+                continue
+            rule = best[0]
+            decision = rule.get("decision", "unresolved")
+            if decision not in {"include", "exclude"}:
+                continue
+            # An exclusion remains valid for in-scope children when the
+            # INSERT anchor lies outside the window. Do not adopt an outside
+            # accessory or invent its quantity from this contextual record.
+            if outside_scope and decision != "exclude":
+                continue
+            if decision == "include" and not row_point(row, factor):
+                continue
+            disposition.update(disposition="adopted" if decision == "include" else "excluded",
+                               basis=str(rule.get("basis") or f"冻结识别规则 {rule['rule_id']}"),
+                               rule_ids=[rule["rule_id"]], adjudication_id=rule.get("adjudication_id"))
+        if disposition["disposition"] not in {"adopted", "excluded"}:
+            continue
+        # Expanded INSERT record IDs have a CADINST- prefix; instance_path
+        # itself uses the canonical root/block/child path without that prefix.
+        key = oid[len("CADINST-"):] if oid.startswith("CADINST-") else oid
+        owners.append((key, oid, disposition.copy()))
+    owner_by_path = {value[0]: value for value in owners}
+    suppressed = set()
+    for oid, item in object_dispositions.items():
+        path = str(item.get("instance_path") or "")
+        owner = None
+        prefix = ""
+        for part in path.split("/"):
+            prefix = prefix + "/" + part if prefix else part
+            owner = owner_by_path.get(prefix)
+            if owner is not None:
+                break
+        if owner is None:
+            continue
+        _, parent_id, parent = owner
+        suppressed.add(oid)
+        item.update(disposition="excluded" if parent["disposition"] == "excluded" else "not_applicable",
+                    basis="已处置父块实例控制其后代；符号图元不另形成管长或附件数量",
+                    rule_ids=parent["rule_ids"], adjudication_id=parent.get("adjudication_id"),
+                    quantity_owner_object_id=parent_id)
+    removed = {sid for sid, meta in candidate_meta.items()
+               if str(meta["row"].get("record_id") or "") in suppressed}
+    for sid in removed:
+        candidates.pop(sid, None)
+        candidate_meta.pop(sid, None)
+    explicit_dispositions[:] = [item for item in explicit_dispositions if item["object_id"] not in removed]
+    derived_roots[:] = [item for item in derived_roots if item["root_id"][len("ROOT-"):] not in suppressed]
+    return [row for row in insert_rows if row["record_id"] not in suppressed]
+
+
 def save_pending_recognition(output, dispositions, scope, working_basis, reason):
     """A not-yet-recognized work area is a checkpoint, not zero pipe quantity."""
     path = output / "管网中性对象处置清单.jsonl"
@@ -247,6 +324,12 @@ def source_from_manifest(manifest_path: Path) -> tuple[Path, Path, dict[str, Any
         fail("cad-manifest schema_version 必须为 qto-cad-neutral-evidence/1.0")
     if manifest.get("geometry_schema_version") != cad_geometry.GEOMETRY_SCHEMA:
         fail("CAD旧缓存缺少完整WCS几何，请用新版中性提取器重新生成；不得继承旧曲线测长")
+    if manifest.get("source_identity_issues"):
+        fail("CAD源实体身份存在冲突，不能按句柄认定管网对象；先核验原图并重新取证")
+    verify_source_file(manifest.get("authoritative_source"), "权威原图")
+    verify_source_file(manifest.get("exchange_dxf"), "DXF交换副本")
+    if manifest.get('exchange_conversion'):
+        verify_source_file(manifest['exchange_conversion'], '转换记录')
     artifact = (manifest.get("artifacts") or {}).get("layout_entities")
     if not isinstance(artifact, dict):
         fail("CAD清单缺少 artifacts.layout_entities")
@@ -407,6 +490,15 @@ def main() -> int:
             fail("unit.factor_to_output 必须大于0")
         output_unit = text(unit.get("output_unit"), "unit.output_unit")
         unit_source_id = text(unit.get("source_id"), "unit.source_id")
+        source_raw_unit = (cad_manifest.get("drawing_unit") or {}).get("raw_unit") if cad_manifest else unit.get("raw_unit")
+        if source_raw_unit is not None:
+            check_unit_factor(source_raw_unit, output_unit, factor, unit.get("raw_unit"))
+        boundary_policy = scope.get("boundary_policy", "contained")
+        if boundary_policy not in {"contained", "whole_objects"}:
+            fail("scope.boundary_policy 必须为 contained 或 whole_objects")
+        if boundary_policy == "whole_objects":
+            text(scope.get("boundary_source_id"), "scope.boundary_source_id")
+        boundary_objects = []
 
         layer_rules = normalized_rules(profile.get("layer_rules"), "layer_rules")
         for item in layer_rules:
@@ -457,13 +549,20 @@ def main() -> int:
         insert_rows: list[dict[str, Any]] = []
         derived_roots: list[dict[str, Any]] = []
         root_consumed_ids: set[str] = set()
+        context_insert_rows: list[dict[str, Any]] = []
         for row in rows:
             total_rows += 1
-            if row.get("row_type") != "entity" or row.get("layout") != layout or not bbox_intersects(row, bounds):
+            if row.get("row_type") != "entity" or row.get("layout") != layout:
+                continue
+            if row.get("entity_type") == "INSERT":
+                context_insert_rows.append(row)
+            if not bbox_intersects(row, bounds):
                 continue
             scoped_rows += 1
             entity_type = str(row.get("entity_type") or "").upper()
             source_record_id = text(row.get("record_id"), "record_id")
+            if entity_type in LINE_TYPES:
+                check_unit_factor(row.get("raw_unit"), output_unit, factor, source_raw_unit)
             if source_record_id in object_dispositions:
                 fail(f"范围内中性对象ID重复: {source_record_id}")
             review_required = entity_type in LINE_TYPES or entity_type in {"CIRCLE", "INSERT"}
@@ -559,6 +658,17 @@ def main() -> int:
             if decision not in {"include", "exclude", "unresolved"}:
                 fail(f"{rule['rule_id']}.decision 无效")
             system = text(rule.get("system"), f"{rule['rule_id']}.system")
+            if decision == "include" and bounds is not None:
+                box = row.get("bbox")
+                contained = (isinstance(box, list) and len(box) >= 4
+                    and bounds['xmin'] <= box[0] <= box[2] < bounds['xmax_exclusive']
+                    and bounds['ymin'] <= box[1] <= box[3] < bounds['ymax_exclusive'])
+                if not contained:
+                    boundary_objects.append(source_record_id)
+                    if boundary_policy == "contained":
+                        recognition_unresolved.append({"object_id": source_record_id, "kind": "scope_boundary_crossing", "bbox": box})
+                        object_dispositions[source_record_id].update(disposition="unresolved", basis="对象跨越计量边界；不得把整对象长度当作窗内量。须分段，或有依据地明确选择整对象")
+                        continue
             candidate = {
                 "object_id": object_id,
                 "system": system,
@@ -583,6 +693,10 @@ def main() -> int:
                     "basis": str(rule.get("basis") or rule.get("authority", {}).get("basis") or f"冻结识别规则 {rule['rule_id']}"),
                     "source_id": str(rule.get("authority", {}).get("source_id") or rule.get("source_id") or rule["rule_id"]),
                 })
+        insert_rows = apply_insert_quantity_ownership(
+            insert_rows, block_rules, root_consumed_ids, object_dispositions,
+            candidates, candidate_meta, explicit_dispositions, derived_roots, factor,
+            context_insert_rows)
         if not candidates:
             save_pending_recognition(output, object_dispositions, scope, working_basis, "当前识别配置尚未形成可计算管段")
             fail("冻结范围和识别配置没有产生可审计管段候选")
@@ -657,24 +771,25 @@ def main() -> int:
                 if not digits:
                     continue
                 system = text(rule.get("system"), f"{rule['rule_id']}.system")
-                ranked = dn_route_index.nearest(anchor, system, rule.get("space_id") or scope.get("space_id") or layout, 2)
-                if not ranked:
+                target_space = rule.get("space_id") or scope.get("space_id") or layout
+                ranked = dn_route_index.nearest(anchor, system, target_space, 2)
+                explicit_target = rule.get("segment_bindings", {}).get(source_record_id)
+                if explicit_target:
+                    target = next((item for item in segments if item["segment_id"] == explicit_target), None)
+                    if target is None or target["system"] != system or target.get("space_id") != target_space:
+                        fail(f"{rule['rule_id']} 显式DN绑定目标不可用或跨系统/空间: {explicit_target}")
+                if not ranked and not explicit_target:
+                    recognition_unresolved.append({"object_id": source_record_id, "kind": "dn_target_unavailable", "system": system, "space_id": target_space})
                     continue
                 max_distance = finite(rule.get("max_distance"), f"{rule['rule_id']}.max_distance")
                 min_margin = finite(rule.get("min_second_candidate_margin", 0.0), f"{rule['rule_id']}.min_second_candidate_margin")
                 first_distance, segment_id = ranked[0]
-                explicit_target = rule.get("segment_bindings", {}).get(source_record_id)
                 if explicit_target:
-                    target = next((item for item in segments if item["segment_id"] == explicit_target and item["system"] == system), None)
-                    if target is None:
-                        recognition_unresolved.append({"object_id": source_record_id, "kind": "bound_segment_unavailable", "segment_id": explicit_target})
-                        continue
                     segment_id = explicit_target
                     first_distance = route_distance(anchor, target)
-                second_distance = ranked[1][0] if len(ranked) > 1 else math.inf
+                second_distance = next((dist for dist, sid in ranked if sid != segment_id), math.inf)
                 margin = second_distance - first_distance
                 sensitive = first_distance > max_distance * 0.8 or margin < min_margin
-                threshold_sensitive = threshold_sensitive or sensitive
                 if explicit_target:
                     disposition = str(rule.get("disposition", "scenario"))
                     reason = None
@@ -693,6 +808,7 @@ def main() -> int:
                     if disposition not in {"seed", "scenario"}:
                         fail(f"{rule['rule_id']}.disposition 必须是 seed 或 scenario")
                     reason = None
+                threshold_sensitive = threshold_sensitive or sensitive
                 candidate = {
                     "candidate_id": f"DNC-{len(dn_candidates) + 1:05d}",
                     "segment_id": segment_id,
@@ -784,10 +900,12 @@ def main() -> int:
                 "point": anchor,
                 "instance_level": str(rule.get("instance_level", "scenario")),
                 "valve_type": rule.get("valve_type"),
+                "type_source_ids": list(rule.get("type_source_ids", [])),
                 "block_family": str(rule.get("block_family") or block_name),
                 "candidate_types": list(rule.get("candidate_types", [])),
                 "assumption_id": rule.get("assumption_id"),
                 "source_id": f"EV-CAD-{row.get('record_id')}",
+                "source_object_id": text(row.get("record_id"), "valve source_object_id"),
             })
             object_dispositions[source_record_id].update({
                 "disposition": "adopted",
@@ -924,6 +1042,7 @@ def main() -> int:
             "junctions": profile.get("junctions", []),
             "cross_view_links": profile.get("cross_view_links", []),
             "change_nodes": profile.get("change_nodes", []),
+            "scope_boundary_nodes": profile.get("scope_boundary_nodes", []),
             "valves": valves,
         }
         if working_basis:
@@ -958,6 +1077,9 @@ def main() -> int:
             if item["disposition"] == "unresolved"
         ]
         unresolved = recognition_unresolved + accessory_unresolved + block_expansion_failures + unresolved_dispositions
+        conversion = cad_manifest.get('exchange_conversion') if cad_manifest else None
+        if conversion and conversion.get('geometry_review_required'):
+            unresolved.append({'kind': 'exchange_copy_audited', 'basis': '修复转换副本仍需核对受影响对象', 'source_id': conversion['path']})
         model_object_ids = {oid for entry in ledger_entries.values() if entry.get("decision_origin") == "model" for oid in entry["object_ids"]}
         missing_model_objects = sorted(model_object_ids - set(object_dispositions))
         unresolved.extend({"object_id": oid, "kind": "model_recognition_object_not_in_scope"} for oid in missing_model_objects)
@@ -969,7 +1091,8 @@ def main() -> int:
             "adjudication_ledger": {"path": str(ledger_path), "sha256": ledger_sha, "ledger_id": ledger["ledger_id"], "ledger_version": ledger["ledger_version"]},
             "neutral_source": {"path": str(stream_path), "sha256": sha256(stream_path), "cad_manifest": str(args.cad_manifest.resolve()) if args.cad_manifest else None},
             "scope": scope,
-            "unit": {"factor_to_output": factor, "output_unit": output_unit, "source_id": unit_source_id},
+            "unit": {"raw_unit": source_raw_unit, "factor_to_output": factor, "output_unit": output_unit, "source_id": unit_source_id},
+            "scope_boundary_objects": boundary_objects,
             "counts": {
                 "total_neutral_rows": total_rows,
                 "scoped_rows": scoped_rows,

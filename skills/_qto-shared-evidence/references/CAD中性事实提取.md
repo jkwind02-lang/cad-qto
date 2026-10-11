@@ -70,7 +70,13 @@
 
 ## 运行入口与输出边界
 
+读取结果按[读取覆盖与补读](读取覆盖与补读.md)区分可测几何、标注或定位证据、专业适配器待办、未支持对象及读取失败。`supported` 不等于已经取得工程数量；同时查看能力字段与 `CAD读取覆盖与待补读.json`，逐对象处理与本次范围有关的待办。面域适配器待办导致的 `PARTIAL` 与底层读取异常分别报告，不能把未读数量填为零。
+
 原生 DWG 先运行 `scripts/export_dwg_exchange_dxf.ps1`：脚本只把临时工作副本交给 AutoCAD，并在结束时核对源图哈希、大小和修改时间。COM 忙时自动改走隐藏的 Core Console；需直接使用后备路径可加 `-ExportBackend coreconsole`。已有可追溯 DXF 时跳过。再运行：
+
+转换器退出码为0或DXF非空不能证明转换完成。发布交换文件前检查ASCII组码对、SECTION/ENDSEC闭合及EOF；失败不发布目标DXF，保留排障日志。每次成功转换同时保存`<文件名>.dxf.export.json`，绑定原图和交换副本哈希。
+
+已有ODAFileConverter时可显式选择`-ExportBackend oda`。发现损坏对象后，只有在任务工作副本上可选择`oda-audit`修复转换；该选项不修原始DWG，并标记`exchange_geometry_review_required=true`。中性提取器读取并核对相邻转换记录，将修复影响继续列入PARTIAL和专业识别报告；文件结构完整不代表工程对象无损。不得删除转换记录来升级状态。原图已变、转换记录不匹配或关键对象缺失时重新取证，受影响量不得按零处理。
 
 ~~~text
 python scripts/extract_cad_neutral.py --source-dxf <交换副本.dxf> --source-dwg <来源.dwg> --output-dir <中性取证包>

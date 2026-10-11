@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-MANIFEST_VERSION = "qto-concrete-formwork-manifest/1.0"
+MANIFEST_VERSION = "qto-concrete-formwork-manifest/2.0"
 RESULT_VERSION = "qto-result-minimum/1.0"
 SUPPORTED_CALCULATION = "orthogonal_notched_raft_with_blinding"
 
@@ -210,6 +210,8 @@ def _polygon_metrics(points: list[list[float]], tolerance_mm: float = 0.1) -> tu
     pts = [(float(point[0]), float(point[1])) for point in points]
     if pts[0] != pts[-1]:
         pts.append(pts[0])
+    origin = pts[0]
+    pts = [(x-origin[0], y-origin[1]) for x,y in pts]
     twice_area = 0.0
     perimeter = 0.0
     orthogonal = True
@@ -394,7 +396,7 @@ def _quantity(
 
 def calculate(manifest: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
     if manifest.get("manifest_version") != MANIFEST_VERSION:
-        raise CalculationError(f"manifest_version必须为{MANIFEST_VERSION}")
+        raise CalculationError(f"manifest_version必须为{MANIFEST_VERSION}；1.0案例输入须迁移object和逐面条件，不能沿用旧项目假定")
     case_id = manifest.get("case_id")
     if not isinstance(case_id, str) or not case_id:
         raise CalculationError("case_id不能为空")
@@ -529,221 +531,125 @@ def calculate(manifest: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, 
     blinding_gross_m3 = blinding_area_m2 * blinding_thickness_m
     blinding_side_candidate_m2 = blinding_perimeter_m * blinding_thickness_m
 
-    conditions = calculation.get("template_conditions", {})
-    expected_conditions = {
-        "raft_exterior_side": "unresolved_requires_construction_input",
-        "raft_bottom": "unresolved_local_bottom_topology",
-        "raft_top": "confirmed_open_no_ordinary_formwork",
-        "blinding_side": "unresolved_requires_construction_input",
-    }
-    if conditions != expected_conditions:
-        raise CalculationError("template_conditions未按限定面闭合或错误补定")
+    obj = manifest.get('object', {})
+    if any(not isinstance(obj.get(k), str) or not obj[k].strip() for k in ('id', 'name', 'blinding_id', 'blinding_name')):
+        raise CalculationError('object须提供id/name/blinding_id/blinding_name')
+    if obj['id'] == obj['blinding_id']:
+        raise CalculationError('主体与垫层物理编号不得重复')
+    # The supported shape is a single corner-notched rectangle, not an arbitrary
+    # polygon with the same area/perimeter. Verify topology before offset formula.
+    from shapely.geometry import Polygon, box
+    polygon = Polygon([(float(p[0])/1000, float(p[1])/1000) for p in points])
+    if not polygon.is_valid or polygon.is_empty:
+        raise CalculationError('轮廓无效或自交')
+    x0, y0, x1, y1 = polygon.bounds
+    matched = False
+    for length, width, nl, nw in ((total_length_m, total_width_m, notch_length_m, notch_width_m),
+                                 (total_width_m, total_length_m, notch_width_m, notch_length_m)):
+        if abs(x1-x0-length) > perimeter_cross_tolerance or abs(y1-y0-width) > perimeter_cross_tolerance:
+            continue
+        for left, bottom in ((True, True), (True, False), (False, True), (False, False)):
+            xa, xb = (x0, x0+nl) if left else (x1-nl, x1)
+            ya, yb = (y0, y0+nw) if bottom else (y1-nw, y1)
+            expected = box(x0, y0, x1, y1).difference(box(xa, ya, xb, yb))
+            if polygon.symmetric_difference(expected).area <= area_cross_tolerance:
+                matched = True
+    if not matched:
+        raise CalculationError('轮廓不是尺寸链对应的单角缺口矩形')
 
-    unresolved = manifest.get("unresolved")
-    if not isinstance(unresolved, list) or not unresolved:
-        raise CalculationError("真实案例必须列出未决事项")
-    unresolved_map = {item.get("id"): item for item in unresolved if isinstance(item, dict)}
-    required_unresolved = {
-        "U-LOCAL-GEOMETRY",
-        "U-CONCRETE-GRADE",
-        "U-BLINDING-GRADE",
-        "U-FORMWORK-TYPE",
-        "U-BOTTOM-FORM-COVERAGE",
-        "U-BLINDING-SIDE-FORM",
-        "U-RULE-GATE",
-    }
-    if not required_unresolved.issubset(unresolved_map):
-        raise CalculationError("未决事项没有覆盖局部几何、材料、模板条件和规则适用门")
-
-    gate = manifest.get("project_rule_gate")
-    if not isinstance(gate, dict) or gate.get("status") != "INPUT_REQUIRED":
-        raise CalculationError("青海试运行的project_rule_gate必须保持INPUT_REQUIRED")
-    geometry_signature = canonical_hash(
-        {
-            "outline": {
-                "handle": outline_handle,
-                "physical_id": outline.get("candidate_physical_id"),
-                "points": points,
-            },
-            "dimensions_mm": dimensions_mm,
-            "text_values_mm": text_values_mm,
-            "calculation_type": SUPPORTED_CALCULATION,
-        }
-    )
-
-    calculations = {
-        "geometry_signature": geometry_signature,
-        "annotated": {
-            "total_length_m": total_length_m,
-            "total_width_m": total_width_m,
-            "notch_length_m": notch_length_m,
-            "notch_width_m": notch_width_m,
-            "raft_area_m2": annotated_area_m2,
-            "perimeter_segments_m": perimeter_segments_m,
-            "raft_perimeter_m": annotated_perimeter_m,
-        },
-        "coordinate_crosscheck": {
-            "area_m2": coordinate_area_m2,
-            "perimeter_m": coordinate_perimeter_m,
-            "area_difference_m2": area_difference_m2,
-            "perimeter_difference_m": perimeter_difference_m,
-            "adoption": "采用图示标注尺寸；原生坐标只作质量交叉检查",
-        },
-        "results": {
-            "raft_gross_m3": raft_gross_m3,
-            "raft_exterior_contact_condition_candidate_m2": raft_exterior_form_m2,
-            "raft_exterior_formwork_m2": None,
-            "raft_bottom_ordinary_formwork_m2": None,
-            "blinding_area_m2": blinding_area_m2,
-            "blinding_perimeter_m": blinding_perimeter_m,
-            "blinding_gross_m3": blinding_gross_m3,
-            "blinding_side_condition_candidate_m2": blinding_side_candidate_m2,
-            "boq_raft_m3": None,
-            "boq_formwork_m2": None,
-        },
-    }
-
-    evidence = {
-        "evidence_version": "qto-concrete-formwork-evidence/1.0",
-        "case_id": case_id,
-        "source_identity": {
-            "dwg_path": str(dwg_path),
-            "dwg_sha256": dwg_hash,
-            "entity_stream_path": str(stream_path),
-            "entity_stream_sha256": stream_hash,
-            "metadata_path": str(metadata_path),
-            "metadata_sha256": metadata_hash,
-            "source_unit": expected_unit,
-            "row_count": row_count,
-            "entity_count": entity_count,
-            "excluded_drifted_files": excluded_audit,
-        },
-        "evidence_entities": audited_entities,
-        "calculations": calculations,
-        "project_rule_gate": gate,
-        "unresolved": unresolved,
-        "old_runtime_used": False,
-    }
-
-    details = [
-        {"对象编号": "CF-RAFT-001", "计算项": "筏板平面名义毛面积", "计算式": "L×W-缺口长×缺口宽", "数值": annotated_area_m2, "单位": "m²", "状态": "已计算", "证据": "569D;57EE;5711;5A4F;5AEB;5AB5;5B1C;57AD;57C7"},
-        {"对象编号": "CF-RAFT-001", "计算项": "筏板名义毛体积", "计算式": "A×0.500", "数值": raft_gross_m3, "单位": "m³", "状态": "部分计算", "证据": "CF-RAFT-001;819D"},
-        {"对象编号": "CF-RAFT-001", "计算项": "筏板外侧若支模接触几何候选值", "计算式": "P×0.500", "数值": raft_exterior_form_m2, "单位": "m²", "状态": "条件值不采用", "证据": "CF-RAFT-001;819D;U-FORMWORK-TYPE"},
-        {"对象编号": "CF-RAFT-001-FACE-BOTTOM", "计算项": "筏板底面普通模板待确认量", "计算式": "局部底面拓扑及基层关系未闭合", "数值": None, "单位": "m²", "状态": "证据不足", "证据": "819D;U-BOTTOM-FORM-COVERAGE"},
-        {"对象编号": "CF-BLINDING-001", "计算项": "垫层外扩后名义面积", "计算式": "A+P×d+4d²", "数值": blinding_area_m2, "单位": "m²", "状态": "已计算", "证据": "CF-RAFT-001;819D"},
-        {"对象编号": "CF-BLINDING-001", "计算项": "垫层名义毛体积", "计算式": "A'×0.100", "数值": blinding_gross_m3, "单位": "m³", "状态": "部分计算", "证据": "CF-RAFT-001;819D"},
-        {"对象编号": "CF-BLINDING-001-FACE-SIDE", "计算项": "垫层侧模若支模条件值", "计算式": "P'×0.100", "数值": blinding_side_candidate_m2, "单位": "m²", "状态": "条件值不采用", "证据": "CF-BLINDING-001;U-BLINDING-SIDE-FORM"},
-    ]
-
-    source_id = "SRC-QH-PUMP-DWG"
-    sources = [
-        {
-            "资料编号": source_id,
-            "路径": str(dwg_path),
-            "资料类型": "冻结DWG",
-            "版本身份": f"SHA-256 {dwg_hash.upper()}",
-            "选择结论": "已选择",
-            "原因": "与原生实体流行内来源哈希和缓存元数据闭合",
-            "拟提取中性事实": "筏板轮廓、图名、标注尺寸、厚度和垫层说明",
-            "未使用影响": "局部下沉、沟槽、集水井和吸水槽净拓扑尚未闭合",
-        },
-        {
-            "资料编号": "SRC-QH-PUMP-STREAM",
-            "路径": str(stream_path),
-            "资料类型": "AutoCAD原生实体流",
-            "版本身份": f"SHA-256 {stream_hash.upper()}；来源 {dwg_hash.upper()}",
-            "选择结论": "已选择",
-            "原因": "原生图元、标注和文字可对象级定位",
-            "拟提取中性事实": "11,033个Model实体中的指定唯一handle",
-            "未使用影响": "只使用清单明确列出的中性实体，不继承任何旧专业结论",
-        },
-        {
-            "资料编号": "SRC-QH-PUMP-METADATA",
-            "路径": str(metadata_path),
-            "资料类型": "CAD缓存元数据",
-            "版本身份": f"SHA-256 {metadata_hash.upper()}",
-            "选择结论": "已选择",
-            "原因": "确认适配器、来源哈希、实体流哈希、单位和守恒",
-            "拟提取中性事实": "source_unit=Millimeters、source_sha256、entity_stream_sha256、行数",
-            "未使用影响": "unit_status为人工尺寸复核覆盖，正式成熟仍需更多来源验证",
-        },
-    ]
-    for idx, excluded in enumerate(excluded_audit, 1):
-        sources.append(
-            {
-                "资料编号": f"SRC-QH-PUMP-DRIFT-{idx}",
-                "路径": excluded["path"],
-                "资料类型": "同名漂移DWG",
-                "版本身份": f"当前SHA-256 {excluded['sha256'].upper()}",
-                "选择结论": "已排除",
-                "原因": excluded["reason"],
-                "拟提取中性事实": "无；仅保存排除身份",
-                "未使用影响": "不影响冻结来源毛量；不得用其替换当前缓存来源",
-            }
-        )
-
-    evidence_catalog = [
-        {"证据编号": "EV-CF-SOURCE-IDENTITY", "来源类型": "文件与缓存身份", "资料编号": source_id, "中性事实": f"冻结DWG、元数据和实体流闭合；Model实体{entity_count}个", "定位": f"{dwg_path}；{metadata_path}；{stream_path}", "来源身份": f"DWG {dwg_hash.upper()}；实体流 {stream_hash.upper()}", "提取方式": "本次重新计算文件哈希并逐行核对source_sha256", "质量状态": "身份通过，漂移同名DWG已排除", "限制": "缓存单位为经尺寸复核的人工覆盖", "缓存编号": "CACHE-QH-PUMP-NATIVE"},
-        {"证据编号": "EV-CF-RAFT-OUTLINE", "来源类型": "CAD原生闭合轮廓", "资料编号": "SRC-QH-PUMP-STREAM", "中性事实": f"handle {outline_handle}为唯一目标正交闭合轮廓，physical_id={outline.get('candidate_physical_id')}", "定位": f"Model；handle {outline_handle}；record {outline.get('record_id')}", "来源身份": f"实体流 {stream_hash.upper()}", "提取方式": "读取原生LWPOLYLINE并计算鞋带面积/周长交叉值", "质量状态": "对象和几何通过", "限制": "坐标量距只作交叉检查，采用图示标注尺寸", "缓存编号": "CACHE-QH-PUMP-NATIVE"},
-        {"证据编号": "EV-CF-RAFT-DIMS", "来源类型": "CAD标注尺寸与通用注释", "资料编号": "SRC-QH-PUMP-STREAM", "中性事实": "主体长53700mm、主体宽6800mm、两侧750mm、上下600mm、角缺口2700×1000mm；图纸要求不得量图并以标注尺寸为准，除标高外尺寸单位为mm", "定位": "Model；尺寸handles 57EE、5711、5A4F、5AEB、5AB5、5B1C、57AD、57C7；通用注释19A49；单位说明13772", "来源身份": f"实体流 {stream_hash.upper()}", "提取方式": "原生DIMENSION和TEXT/MTEXT逐项核验；750mm按显示精度采用且在0.1mm容差内", "质量状态": "尺寸链、采用优先级和单位闭合", "限制": "只适用于筏板名义外轮廓", "缓存编号": "CACHE-QH-PUMP-NATIVE"},
-        {"证据编号": "EV-CF-RAFT-NOTE", "来源类型": "CAD直接文字", "资料编号": "SRC-QH-PUMP-STREAM", "中性事实": "筏板厚500mm；垫层厚100mm并超出基础外边100mm", "定位": "Model；handle 819D", "来源身份": f"实体流 {stream_hash.upper()}", "提取方式": "原生TEXT并用受控表达式提取数值", "质量状态": "厚度和外扩闭合", "限制": "文字给C20但局部详图存在C15范围冲突", "缓存编号": "CACHE-QH-PUMP-NATIVE"},
-        {"证据编号": "EV-CF-RAFT-CALC", "来源类型": "确定性计算证据", "资料编号": source_id, "中性事实": f"同一几何签名{geometry_signature.upper()}生成筏板毛体积与外侧接触面", "定位": "本次计算证据JSON calculations.annotated/results", "来源身份": f"清单{canonical_hash(manifest).upper()}", "提取方式": "标注尺寸法计算，原生坐标法交叉复核", "质量状态": "公式闭合，局部净量受未决限制", "限制": "不是筏板完整净量", "缓存编号": None},
-        {"证据编号": "EV-CF-BLINDING-CALC", "来源类型": "确定性计算证据", "资料编号": source_id, "中性事实": "正交轮廓尖角外扩100mm后计算垫层名义面积、体积和侧模条件值", "定位": "本次计算证据JSON calculations.results", "来源身份": f"几何签名 {geometry_signature.upper()}", "提取方式": "A'=A+P×d+4d²，P'=P+8d", "质量状态": "几何闭合，材料分类和侧模条件未闭合", "限制": "侧模条件值不进入采用量", "缓存编号": None},
-        {"证据编号": "EV-CF-TEMPLATE-FACES", "来源类型": "构件面关系", "资料编号": source_id, "中性事实": "筏板外侧竖面几何可算但成型方式未确认；局部底面拓扑及基层关系未闭合；顶面敞开；垫层侧面支模条件未知", "定位": "运行清单 calculation.template_conditions；图纸handles 819D、6392、7A60、771F、7724、56AB", "来源身份": f"几何签名 {geometry_signature.upper()}", "提取方式": "按面记录几何、接触对象和决定性施工条件；未知面不形成工程量", "质量状态": "外侧候选值、底面未决和垫层侧面条件值分列", "限制": "当前没有一个模板面满足正式采用条件", "缓存编号": None},
-        {"证据编号": "EV-CF-UNRESOLVED", "来源类型": "CAD局部对象、标高与材料冲突", "资料编号": "SRC-QH-PUMP-STREAM", "中性事实": "存在排水沟说明、-5.800/-6.450/-6.800非均匀标高、1200×1200闭合局部对象及C20/C15垫层标注冲突", "定位": "Model；handles 6392、7A60、771F、7724、56AB、819D、7715、6D96", "来源身份": f"实体流 {stream_hash.upper()}", "提取方式": "原生TEXT与LWPOLYLINE逐项核验，只作为停止净量和材料归类的证据", "质量状态": "未决事实已定位", "限制": "尚不能形成局部区域、侧面和材料的完整拓扑", "缓存编号": "CACHE-QH-PUMP-NATIVE"},
-        {"证据编号": "EV-CF-RULE-GATE", "来源类型": "项目计量规则适用门", "资料编号": source_id, "中性事实": "项目合同采用标准和地方补充规则未在本次证据链闭合", "定位": "运行清单 project_rule_gate", "来源身份": f"清单 {canonical_hash(manifest).upper()}", "提取方式": "核对地区、招标/合同日期和合同标准字段", "质量状态": "INPUT_REQUIRED", "限制": "不形成项目清单净量", "缓存编号": None},
-    ]
-
-    rules = [
-        {"规则编号": "R-CF-001", "规则名称": "任务范围与来源身份门", "规则来源": "重构任务书及公共缓存身份要求", "本次判定": "采用", "成熟状态": "试运行", "执行结果": "冻结DWG、元数据和原生实体流哈希闭合，排除同名漂移DWG", "证据位置": "EV-CF-SOURCE-IDENTITY"},
-        {"规则编号": "R-CF-002", "规则名称": "同一构件几何与四种口径", "规则来源": "重构任务书第4.1、13.2节；本Skill计算与证据流程", "本次判定": "采用", "成熟状态": "试运行", "执行结果": "同一几何签名同时生成混凝土与模板链", "证据位置": "EV-CF-RAFT-OUTLINE、EV-CF-RAFT-CALC、EV-CF-TEMPLATE-FACES"},
-        {"规则编号": "R-CF-003", "规则名称": "物理混凝土实体量", "规则来源": "实体体积定义；本Skill计算与证据流程", "本次判定": "采用", "成熟状态": "试运行", "执行结果": "形成筏板和垫层名义毛量；局部净量保持未决", "证据位置": "EV-CF-RAFT-CALC、EV-CF-BLINDING-CALC"},
-        {"规则编号": "R-CF-004", "规则名称": "模板实际接触面", "规则来源": "实际接触面几何定义；本Skill接触面规则；GB/T 50854-2024 E.5.1仅作现行清单候选交叉参考", "本次判定": "证据不足", "成熟状态": "候选", "执行结果": "外侧成型方式、局部底面基层关系和垫层侧面支模条件未闭合，模板工程量均停止", "证据位置": "EV-CF-TEMPLATE-FACES、EV-CF-UNRESOLVED"},
-        {"规则编号": "R-CF-FT-001", "规则名称": "筏板名义毛量", "规则来源": "闭合平面和棱柱体积定义；本Skill基础与垫层规则", "本次判定": "采用", "成熟状态": "试运行", "执行结果": "按标注尺寸形成带角缺口筏板面积、周长和名义毛体积；不形成模板采用量", "证据位置": "EV-CF-RAFT-DIMS、EV-CF-RAFT-NOTE、EV-CF-RAFT-CALC"},
-        {"规则编号": "R-CF-FT-003", "规则名称": "筏板外侧模板需成型方式证据", "规则来源": "实际接触面定义；本Skill基础与垫层规则", "本次判定": "证据不足", "成熟状态": "候选", "执行结果": "外侧竖面几何候选值63.200m²可复算，但普通模板、胎模或其他成型方式未确认，正式结果为null", "证据位置": "EV-CF-RAFT-CALC、EV-CF-TEMPLATE-FACES"},
-        {"规则编号": "R-CF-FT-002", "规则名称": "正交轮廓垫层等距外扩", "规则来源": "正交简单多边形外扩几何；本Skill基础与垫层规则", "本次判定": "采用", "成熟状态": "试运行", "执行结果": "100mm尖角外扩后形成垫层名义面积、周长和毛体积", "证据位置": "EV-CF-RAFT-OUTLINE、EV-CF-RAFT-NOTE、EV-CF-BLINDING-CALC"},
-        {"规则编号": "R-CF-ZERO-001", "规则名称": "零模板量证明", "规则来源": "公共通用成果字段与状态；实际接触面定义", "本次判定": "证据不足", "成熟状态": "候选", "执行结果": "局部底面拓扑和基层关系未完整覆盖，不形成筏板底面零值", "证据位置": "EV-CF-TEMPLATE-FACES、EV-CF-UNRESOLVED"},
-        {"规则编号": "R-CF-COND-001", "规则名称": "条件性模板不进入采用量", "规则来源": "实际接触面定义；公共未知量处理", "本次判定": "采用", "成熟状态": "试运行", "执行结果": "筏板外侧和垫层侧面只保留条件候选值，筏板底面保持未决，三个正式结果均为null", "证据位置": "EV-CF-RAFT-CALC、EV-CF-BLINDING-CALC、EV-CF-TEMPLATE-FACES"},
-        {"规则编号": "R-CF-007", "规则名称": "项目清单规则适用门", "规则来源": "GB/T 50854-2024实施公告、地方实施文件及合同优先关系", "本次判定": "证据不足", "成熟状态": "候选", "执行结果": "当前项目合同采用标准未闭合，清单量停止", "证据位置": "EV-CF-RULE-GATE"},
-    ]
-
-    common_phys_rules = ["R-CF-001", "R-CF-002", "R-CF-003", "R-CF-FT-001"]
-    q_scope = scope
-    results = [
-        _quantity("QTY-CF-RAFT-GROSS", _result_scope(q_scope, "消防泵房筏板", "混凝土强度待确认；名义厚500mm", "物理混凝土名义毛量"), "消防泵房筏板名义毛体积", raft_gross_m3, "m³", "部分计算", "[(53.7+0.75+0.75)×(6.8+0.6+0.6)-2.7×1.0]×0.500", ["EV-CF-RAFT-OUTLINE", "EV-CF-RAFT-DIMS", "EV-CF-RAFT-NOTE", "EV-CF-RAFT-CALC", "EV-CF-UNRESOLVED"], common_phys_rules, ["U-LOCAL-GEOMETRY", "U-CONCRETE-GRADE"], geometry_signature, extra_check={"对象编号": "CF-RAFT-001", "毛量": True, "净量闭合": False}),
-        _quantity("QTY-CF-RAFT-EXTERIOR-FORM", _result_scope(q_scope, "消防泵房筏板外侧面", "普通模板、胎模或其他成型方式待确认", "外侧模板接触面积"), "消防泵房筏板外侧模板接触面积待确认", None, "m²", "证据不足", "外侧竖面几何候选值=126.400×0.500=63.200m²；成型方式未确认，当前不采用", ["EV-CF-RAFT-OUTLINE", "EV-CF-RAFT-NOTE", "EV-CF-RAFT-CALC", "EV-CF-TEMPLATE-FACES"], ["R-CF-004", "R-CF-FT-003", "R-CF-COND-001"], ["U-FORMWORK-TYPE"], geometry_signature, extra_check={"对象编号": "CF-RAFT-001-FACE-EXTERIOR", "条件候选值": raft_exterior_form_m2, "条件候选单位": "m²", "进入采用量": False}),
-        _quantity("QTY-CF-RAFT-BOTTOM-FORM", _result_scope(q_scope, "消防泵房筏板底面", "局部底面和基层关系未完整闭合", "底面普通模板接触面积"), "消防泵房筏板底面普通模板量待确认", None, "m²", "证据不足", "一般筏板底面说明有垫层，但局部下沉、沟槽、井槽底面及基层关系未完整覆盖，不能证明全范围零值", ["EV-CF-RAFT-NOTE", "EV-CF-TEMPLATE-FACES", "EV-CF-UNRESOLVED"], ["R-CF-004", "R-CF-ZERO-001", "R-CF-COND-001"], ["U-BOTTOM-FORM-COVERAGE"], geometry_signature, extra_check={"对象编号": "CF-RAFT-001-FACE-BOTTOM", "进入采用量": False, "零值已确认": False}),
-        _quantity("QTY-CF-BLINDING-GROSS", _result_scope(q_scope, "消防泵房筏板垫层", "厚100mm；强度适用范围冲突", "物理混凝土名义毛量"), "消防泵房筏板垫层名义毛体积", blinding_gross_m3, "m³", "部分计算", "[438.900+126.400×0.100+4×0.100²]×0.100", ["EV-CF-RAFT-OUTLINE", "EV-CF-RAFT-NOTE", "EV-CF-BLINDING-CALC", "EV-CF-UNRESOLVED"], ["R-CF-001", "R-CF-002", "R-CF-003", "R-CF-FT-002"], ["U-LOCAL-GEOMETRY", "U-BLINDING-GRADE"], geometry_signature, extra_check={"对象编号": "CF-BLINDING-001", "毛量": True, "净量闭合": False}),
-        _quantity("QTY-CF-BLINDING-SIDE-FORM", _result_scope(q_scope, "消防泵房筏板垫层侧面", "是否支模待确认", "条件性模板面积"), "消防泵房筏板垫层侧模待确认量", None, "m²", "证据不足", "若确认支模，候选几何值=(126.400+8×0.100)×0.100=12.720m²；当前不采用", ["EV-CF-BLINDING-CALC", "EV-CF-TEMPLATE-FACES"], ["R-CF-COND-001"], ["U-BLINDING-SIDE-FORM"], geometry_signature, extra_check={"对象编号": "CF-BLINDING-001-FACE-SIDE", "条件候选值": blinding_side_candidate_m2, "条件候选单位": "m²", "进入采用量": False}),
-        _quantity("QTY-CF-BOQ-RAFT", _result_scope(q_scope, "消防泵房筏板", "项目采用标准待确认", "清单混凝土净量"), "消防泵房筏板清单工程量待确认", None, "m³", "待确认", "项目清单标准、地方规则及局部下沉扣减未闭合", ["EV-CF-RULE-GATE", "EV-CF-RAFT-CALC"], ["R-CF-007"], ["U-RULE-GATE", "U-LOCAL-GEOMETRY"], geometry_signature),
-        _quantity("QTY-CF-BOQ-FORM", _result_scope(q_scope, "消防泵房筏板及垫层模板", "项目采用标准和各面成型方式待确认", "清单模板面积"), "消防泵房筏板及垫层清单模板量待确认", None, "m²", "待确认", "项目清单标准、外侧成型方式、局部底面基层关系和垫层侧面支模条件均未闭合", ["EV-CF-RULE-GATE", "EV-CF-TEMPLATE-FACES"], ["R-CF-007"], ["U-RULE-GATE", "U-FORMWORK-TYPE", "U-BOTTOM-FORM-COVERAGE", "U-BLINDING-SIDE-FORM"], geometry_signature),
-    ]
-
-    overall_unresolved = [
-        {"事项编号": item["id"], "类型": item["type"], "关联成果项": item["related_results"], "说明": item["description"], "影响": item["impact"], "所需输入": item["required_input"], "当前处理": item["handling"]}
-        for item in unresolved
-    ]
-    result = {
-        "契约版本": RESULT_VERSION,
-        "任务范围": {
-            "业务专业": "建筑结构",
-            "主要物理对象": "消防泵房筏板及其100mm垫层",
-            "系统": "现浇混凝土与模板",
-            "楼栋": scope["building"],
-            "楼层或区域": scope["area"],
-            "图纸类型": "消防泵房结构施工图；筏板基础结构平面布置图",
-            "图纸版本": f"冻结DWG SHA-256 {dwg_hash.upper()}",
-            "输出维度": "物理名义毛体积、限定模板接触面、条件量和清单口径未决",
-            "纳入项": ["筏板名义外轮廓与500mm厚度", "筏板外侧和底面模板关系", "100mm厚、外扩100mm垫层"],
-            "排除项": ["排水沟、集水井、吸水槽及局部下沉完整净拓扑", "钢筋、土方、防水、价格和成本", "旧项目计算脚本、旧结果和旧验证"],
-        },
-        "资料选择": sources,
-        "证据目录": evidence_catalog,
-        "本次规则清单": rules,
-        "工程量结果": results,
-        "整体未决事项": overall_unresolved,
-        "说明": "本成果是qto-concrete-formwork候选Skill的青海消防泵房试运行。采用冻结DWG和原生实体流重新前算；名义毛量不等于完整净量，清单口径未确认，旧成果只允许在计算完成后后验对照。",
-    }
+    conditions = calculation.get('template_conditions', {})
+    face_areas = dict(raft_exterior_side=raft_exterior_form_m2, raft_bottom=annotated_area_m2,
+                      raft_top=annotated_area_m2, blinding_side=blinding_side_candidate_m2)
+    if set(conditions) != set(face_areas):
+        raise CalculationError('template_conditions须逐面覆盖外侧、底面、顶面、垫层侧面')
+    for face, condition in conditions.items():
+        if not isinstance(condition, dict) or condition.get('state') not in {'included', 'excluded', 'unresolved'}:
+            raise CalculationError(f'{face}模板面状态无效')
+        if not isinstance(condition.get('reason'), str) or not condition['reason'].strip():
+            raise CalculationError(f'{face}缺少条件判读依据')
+        handles = condition.get('evidence_handles')
+        if not isinstance(handles, list) or not handles or any(str(h).upper() not in rows for h in handles):
+            raise CalculationError(f'{face}必须引用当前来源证据实体')
+        if condition['state'] != 'unresolved' and condition.get('coverage') != 'complete':
+            raise CalculationError(f'{face}纳入或排除须有该面完整覆盖依据')
+    geometry_signature = canonical_hash(dict(outline=points, dimensions_mm=dimensions_mm,
+                                              text_values_mm=text_values_mm, object_id=obj['id']))
+    calculations = dict(geometry_signature=geometry_signature,
+        annotated=dict(total_length_m=total_length_m, total_width_m=total_width_m,
+                       notch_length_m=notch_length_m, notch_width_m=notch_width_m,
+                       raft_area_m2=annotated_area_m2, raft_perimeter_m=annotated_perimeter_m),
+        coordinate_crosscheck=dict(area_m2=coordinate_area_m2, perimeter_m=coordinate_perimeter_mm/1000,
+                                   area_difference_m2=area_difference_m2, perimeter_difference_m=perimeter_difference_m),
+        results=dict(raft_gross_m3=raft_gross_m3, blinding_area_m2=blinding_area_m2,
+                     blinding_perimeter_m=blinding_perimeter_m, blinding_gross_m3=blinding_gross_m3),
+        face_conditions=conditions, face_geometry_m2=face_areas)
+    evidence = dict(evidence_version='qto-concrete-formwork-evidence/2.0', case_id=case_id,
+        source_identity=dict(dwg_path=str(dwg_path), dwg_sha256=dwg_hash,
+            entity_stream_path=str(stream_path), entity_stream_sha256=stream_hash,
+            metadata_path=str(metadata_path), metadata_sha256=metadata_hash,
+            source_unit=expected_unit, row_count=row_count, entity_count=entity_count,
+            excluded_drifted_files=excluded_audit),
+        evidence_entities=audited_entities, calculations=calculations,
+        project_rule_gate=manifest.get('project_rule_gate'), old_runtime_used=False)
+    source_id, ev_id, rule_id = 'SRC-DRAWING', 'EV-GEOMETRY', 'R-PHYSICAL-GEOMETRY'
+    sources = []
+    for sid, path, digest, kind in ((source_id, dwg_path, dwg_hash, '冻结DWG'),
+                                  ('SRC-STREAM', stream_path, stream_hash, '原生实体流'),
+                                  ('SRC-METADATA', metadata_path, metadata_hash, '缓存元数据')):
+        sources.append({'资料编号': sid, '路径': str(path), '资料类型': kind,
+                        '版本身份': digest, '选择结论': '已选择', '原因': '本次来源身份核验通过',
+                        '拟提取中性事实': '输入指定的轮廓、尺寸、文字和来源元数据',
+                        '未使用影响': '缺少该来源时对应计算无法回溯'})
+    evidence_catalog = [{'证据编号': ev_id, '资料编号': source_id, '来源类型': '源实体与尺寸交叉核验',
+        '中性事实': json.dumps(dict(dimensions_mm=dimensions_mm, text_values_mm=text_values_mm), ensure_ascii=False),
+        '定位': ';'.join(str(x['handle']) for x in audited_entities), '来源身份': dwg_hash,
+        '提取方式': '重读实体流；核对轮廓、尺寸、文字和面条件', '质量状态': '工作计算',
+        '限制': '仅名义几何，不自动推导局部净量、合同计量或施工条件'}]
+    rules = [{'规则编号': rule_id, '规则名称': '同源几何体积与已识别接触面',
+              '规则来源': '几何定义及本次输入的源面条件', '本次判定': '采用',
+              '成熟状态': '试运行', '执行结果': '按输入逐项计算', '证据位置': ev_id}]
+    results, details, unresolved = [], [], []
+    for identifier, name, value, formula in (
+        (obj['id'], obj['name'], raft_gross_m3, f'({total_length_m:g}×{total_width_m:g}-{notch_length_m:g}×{notch_width_m:g})×{raft_thickness_m:g}'),
+        (obj['blinding_id'], obj['blinding_name'], blinding_gross_m3, f'({annotated_area_m2:g}+{annotated_perimeter_m:g}×{blinding_offset_m:g}+4×{blinding_offset_m:g}²)×{blinding_thickness_m:g}')):
+        results.append(_quantity('QTY-CF-'+identifier.encode('utf8').hex()+'-GROSS', _result_scope(scope, name, '名义毛量', '物理体积'),
+            name+'名义毛体积', value, 'm³', '已计算', formula, [ev_id], [rule_id], [], geometry_signature,
+            extra_check={'对象编号': identifier, '毛量': True, '净量闭合': False}))
+    for face, area in face_areas.items():
+        condition = conditions[face]
+        identifier = obj['blinding_id'] if face == 'blinding_side' else obj['id']
+        name = obj['blinding_name'] if face == 'blinding_side' else obj['name']
+        face_name = dict(raft_exterior_side='外侧面', raft_bottom='底面', raft_top='顶面', blinding_side='侧面')[face]
+        qid = 'QTY-CF-'+identifier.encode('utf8').hex()+'-'+face
+        extra = {'对象编号': identifier, '面': face, '面条件': condition}
+        issues, zero = [], None
+        if condition['state'] == 'unresolved':
+            value, status = None, '证据不足'
+            issues = ['U-'+qid]
+            extra.update({'条件候选值': area, '条件候选单位': 'm²', '进入采用量': False})
+            unresolved.append({'事项编号': issues[0], '类型': '缺资料', '说明': condition['reason'],
+                               '当前处理': '停止受影响计算', '关联成果项': [qid],
+                               '影响': name+face_name+'模板采用量未定', '所需输入': '该面接触对象与施工条件的完整证据'})
+        else:
+            value = area if condition['state'] == 'included' else 0.
+            status = '已计算'
+            if value == 0:
+                zero = {'范围覆盖': name+face_name, '来源': [ev_id], '规则': [rule_id],
+                        '复核结论': '已确认零值', '说明': condition['reason']}
+        results.append(_quantity(qid, _result_scope(scope, name+face_name, '普通模板', '接触面积'),
+            name+face_name+'普通模板', value, 'm²', status, condition['reason'], [ev_id], [rule_id],
+            issues, geometry_signature, zero_review=zero, extra_check=extra))
+    for item in results:
+        details.append({'对象编号': item['成果项编号'], '计算项': item['结果']['名称'],
+                        '计算式': item['结果']['计算式或说明'], '数值': item['结果']['数值'],
+                        '单位': item['单位'], '状态': item['状态'], '证据': ';'.join(item['来源'])})
+    result = {'契约版本': RESULT_VERSION, '任务范围': {'业务专业': '建筑结构', '主要物理对象': obj['name']+'及'+obj['blinding_name'],
+                  '系统': '现浇混凝土与模板', '楼栋': scope['building'], '楼层或区域': scope['area'],
+                  '图纸类型': '原生DWG中指定的构件轮廓与尺寸', '图纸版本': 'SHA-256 '+dwg_hash,
+                  '输出维度': '名义毛体积和逐面普通模板接触面积'},
+              '资料选择': sources, '证据目录': evidence_catalog, '本次规则清单': rules,
+              '工程量结果': results, '整体未决事项': unresolved,
+              '说明': '源图尺寸与单角缺口几何的工作计算。输出名义毛体积和输入已解释的面条件；不输出合同清单净量。'}
     return evidence, details, result
 
 

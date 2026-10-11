@@ -21,6 +21,9 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Iterable
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
+from qto_cad_source_contract import check_unit_factor
+
 
 MANIFEST_VERSION = "qto-pipe-centerline-run/1.0"
 OUTPUT_VERSION = "qto-pipe-centerline-evidence/1.0"
@@ -229,6 +232,10 @@ def main() -> int:
         conversion_factor = to_decimal(selection.get("conversion_factor"), "selection.conversion_factor")
         if conversion_factor <= 0:
             fail("selection.conversion_factor 必须大于 0")
+        try:
+            check_unit_factor(raw_unit, output_unit, float(conversion_factor))
+        except ValueError as exc:
+            fail(str(exc))
         if str(metadata.get("source_unit", "")) != raw_unit:
             fail("元数据 source_unit 与运行清单 raw_unit 不一致")
 

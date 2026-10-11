@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 222,
+  "runtime_file_count": 253,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -36,8 +36,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/CAD中性事实提取.md",
-      "sha256": "65fa6778a9b42ae3b2326986efb389919597ca58b7989f97241c93ee7e51bc21",
-      "bytes": 5398
+      "sha256": "21287782dd6bbe11ef66d63fa5199f27c23f10f3be204189e7bfc8e3bf7f820c",
+      "bytes": 6659
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
@@ -51,8 +51,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/人工思路识图与算量流程.md",
-      "sha256": "9e25ee560df2df663308113bcf41db686d323b1b94f5c3dedb1f52f6b2e0d061",
-      "bytes": 6303
+      "sha256": "8e5da85ff71ccf282cb8bfa6fd55505aee21a4d19f17dffc121fefa0a236bf5a",
+      "bytes": 9397
     },
     {
       "path": "_qto-shared-evidence/references/公共资源调用与停止条件.md",
@@ -60,9 +60,24 @@
       "bytes": 3071
     },
     {
+      "path": "_qto-shared-evidence/references/原图独立算量实测.md",
+      "sha256": "e1c590e41105c64233b89b75c7791655f8575d3c2ad4e07bef0ef1905219ab02",
+      "bytes": 4286
+    },
+    {
       "path": "_qto-shared-evidence/references/图纸与资料范围筛选.md",
       "sha256": "0da2d338c0191c7b6d8805881929e6058da942b2d19716d9b737859ef93a9cff",
       "bytes": 3153
+    },
+    {
+      "path": "_qto-shared-evidence/references/尺寸指向与尺寸链复核.md",
+      "sha256": "436b2436ed09b1a7a924e9b9e313922cc820838ebe4d7c183c85bbb1d37b8e51",
+      "bytes": 11449
+    },
+    {
+      "path": "_qto-shared-evidence/references/局部识图与对象操作.md",
+      "sha256": "88786af9b2ccd59710df2ec01f94f2ad01a7873ff43f5c7f67570c88d53e5ddc",
+      "bytes": 8747
     },
     {
       "path": "_qto-shared-evidence/references/工程量成果最小字段.schema.json",
@@ -71,13 +86,13 @@
     },
     {
       "path": "_qto-shared-evidence/references/按人工算量顺序执行与重算.md",
-      "sha256": "e4edbaef3cd813b7a5c3a687628d8817541f07a8c4b06cd54dc005696a3bc103",
-      "bytes": 7665
+      "sha256": "12cc586177d04b5ee0d797d77587812baa4265e604e5123445ef8f45a83eb80a",
+      "bytes": 9409
     },
     {
       "path": "_qto-shared-evidence/references/按任务阶段读取.md",
-      "sha256": "b51a1c3b06e5acd7f2a0e502e8ed43e628d773589db1f632bb934d90384685a0",
-      "bytes": 3273
+      "sha256": "57856f7686bc55a65e7b423d8713e74a70c71edcf2a49498cf8d9bb2721b3b83",
+      "bytes": 3597
     },
     {
       "path": "_qto-shared-evidence/references/推算假定与发布分层协议.md",
@@ -105,6 +120,26 @@
       "bytes": 2336
     },
     {
+      "path": "_qto-shared-evidence/references/读取覆盖与补读.md",
+      "sha256": "900e1db123085d350a6bda66cec666f25ef208fcff0f3b4ca50822879a040c38",
+      "bytes": 11487
+    },
+    {
+      "path": "_qto-shared-evidence/references/跨图对象候选对应.md",
+      "sha256": "d8410c2e83c4fb49862decbd00faad43465a113a5f6860680e78f08a1cfa0ceb",
+      "bytes": 6810
+    },
+    {
+      "path": "_qto-shared-evidence/references/跨图接口与标高换算.md",
+      "sha256": "d3d9e09b91c1b66558658207fc85d6a6083a1ccd4b4fd53dcaa85d05109cf611",
+      "bytes": 9744
+    },
+    {
+      "path": "_qto-shared-evidence/references/逐实例构造要求与附属量.md",
+      "sha256": "8e0be84ffbd5f185f297b06acec47543199ccd66251f5e28836bf0457b49506c",
+      "bytes": 9814
+    },
+    {
       "path": "_qto-shared-evidence/references/通用成果字段与状态.md",
       "sha256": "dcde8910617951ae611de10a92e2f7375ddc03592359d9701fb68d4614585771",
       "bytes": 10755
@@ -121,13 +156,13 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/export_dwg_exchange_dxf.ps1",
-      "sha256": "5f41f589ad1fa93bcc1dd2b70acc5bc2ad376c8f822a4d8708b22e569bd9c943",
-      "bytes": 7230
+      "sha256": "9cd0c1b71b7aabe78e016272e1da974d3b9e2d12a8225eea1a53a895bed85dec",
+      "bytes": 14117
     },
     {
       "path": "_qto-shared-evidence/scripts/extract_cad_neutral.py",
-      "sha256": "033f7bc200d72f3746d66fade9f802162c85e7a003e1ba8c4f9fd3931620ecce",
-      "bytes": 12852
+      "sha256": "49864d2b0cd0c02028242f4d7a39d0ad66f298a496fb7799d88111887aba2444",
+      "bytes": 22527
     },
     {
       "path": "_qto-shared-evidence/scripts/migrate_cad_review_view.py",
@@ -141,13 +176,48 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_cad_geometry.py",
-      "sha256": "4398508fec12c15cb623b559fcc4eb50a990cbb5ebcab655c2113c847b7a91d5",
-      "bytes": 17225
+      "sha256": "ba551903169d2e881eaa98ca5fb52ded5b22abd09832ea2bd7920c495874fad5",
+      "bytes": 50278
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_cad_source_contract.py",
+      "sha256": "27896acd4e407c3a5fa23824bd06e71ff29e201b022ca786b657ab986bc579cb",
+      "bytes": 2133
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_dimension_semantics.py",
+      "sha256": "e3148758d84355e80d4322011eb0fd6b1f76778d6ae71dece3d40b046286627f",
+      "bytes": 35637
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_elevation_facts.py",
+      "sha256": "783a955729e4f63408de0d2bce4e3158ef135e0c1ec9e4490ecc0a92175803a8",
+      "bytes": 26117
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_instance_requirements.py",
+      "sha256": "f65d9866f65671bfc677bd1caf42e6c9c2b9b21be3fa92f6db6c2ccfc914d971",
+      "bytes": 29507
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_object_correspondence.py",
+      "sha256": "140d700a0820b790132943332af77e2bfe74f3f02c671d9555f76cdb2c1ed26c",
+      "bytes": 17677
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_pipe_scope_quantity.py",
+      "sha256": "963255ceddf9a9ee86a3c41c6faab54f61b355f15561809a618a39354851aac4",
+      "bytes": 5501
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_pipe_topology.py",
-      "sha256": "b76a6a05aef63d3402e0535a0e300118be9258d587dacb01f6e54a18a3c7b4b4",
-      "bytes": 35626
+      "sha256": "f8ca408ae3d98c0fb75fc9666b5b8441535dda8f31df6e2767fd0e14b85182fc",
+      "bytes": 38689
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_recognition_workbench.py",
+      "sha256": "490bb7ae13bc0c4e0c152110c82cea4e0c579bd630c23440345a924442c911c3",
+      "bytes": 49915
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
@@ -171,8 +241,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/recompute_qto_dependencies.py",
-      "sha256": "d830767889ab43c369705843310773101bc88a1c5305f7b074c9095721fb3c2c",
-      "bytes": 14339
+      "sha256": "13f4427b8d37538aa9bdb8c71537429c7ba1d883f6d64f9ca03c2ec588208b4d",
+      "bytes": 15337
     },
     {
       "path": "_qto-shared-evidence/scripts/validate_minimum_result.py",
@@ -231,23 +301,23 @@
     },
     {
       "path": "qto-components-points/references/计算与证据流程.md",
-      "sha256": "34edc594f3a94fd2eeccecdb98cb1f7e4975afaa7f11268ab6a40838ffc2176c",
-      "bytes": 1542
+      "sha256": "919281b3786356b02069cb9f465e4864d9b6cdb1fe12cdd6031aacc73efe45c1",
+      "bytes": 2135
     },
     {
       "path": "qto-components-points/references/跨专业端点事实.md",
-      "sha256": "706141815b8f8ab69fa37e74a1839b2b3727620e42fa52af10ec6bae78a74ad6",
-      "bytes": 2631
+      "sha256": "05cd3d85aa405218cf8aaa23821097c80f06329ec68b39c90e9229f13452ee08",
+      "bytes": 3036
     },
     {
       "path": "qto-components-points/scripts/build_component_instances_from_neutral.py",
-      "sha256": "c6cfefcec43f9dbc50ff7ce20c093f0717a4ced3875233f6927654a699ab2dbb",
-      "bytes": 35749
+      "sha256": "c7aa7936369f095b773d6e86c51755e9983e7b7918a1eb676673fb26b3885b43",
+      "bytes": 36353
     },
     {
       "path": "qto-components-points/scripts/build_network_endpoint_handoff.py",
-      "sha256": "bec9ca9d9e1cf1a9d82ff33146e23f5f9eeda6db901990d5b5b669934ccf75cc",
-      "bytes": 9853
+      "sha256": "9ad45fd5b452fa06a7892b243de439a90b61c69ab9c71ea1901318ecc604ebc6",
+      "bytes": 11150
     },
     {
       "path": "qto-components-points/scripts/count_reconciled_instances.py",
@@ -256,8 +326,8 @@
     },
     {
       "path": "qto-components-points/SKILL.md",
-      "sha256": "36a10cfaea8c351b7f9c61609e2f7e5957b5f51e3b500d5f004186823c2f002d",
-      "bytes": 6200
+      "sha256": "c5c2b16a7b896c7fecce2fcd3c3fcc726d69ea8e76ea8a26476e6e1ebafdcd03",
+      "bytes": 6464
     },
     {
       "path": "qto-concrete-formwork/agents/openai.yaml",
@@ -286,8 +356,8 @@
     },
     {
       "path": "qto-concrete-formwork/references/构件计算清单格式.md",
-      "sha256": "afdc0f4e6d97b7a0307e42608a95f2481649682b77704e2a475bd2da2e9f3c25",
-      "bytes": 3921
+      "sha256": "3943396e73cbb487a39f793bfb1afbc6d8a957f308f585c7c2ec93388b0f17ea",
+      "bytes": 4774
     },
     {
       "path": "qto-concrete-formwork/references/柱墙规则.md",
@@ -326,18 +396,18 @@
     },
     {
       "path": "qto-concrete-formwork/scripts/calculate_concrete_formwork_pairs.py",
-      "sha256": "746f04098c3fa2160b7e59d650ab4b73886ecf5f645d0905a7259b9ded3d0a7c",
-      "bytes": 49464
+      "sha256": "51145e98e29852ac00d27a1112bd2a9202c1f0a3d15a8e56cad7dcbeae8c9250",
+      "bytes": 36297
     },
     {
       "path": "qto-concrete-formwork/scripts/validate_concrete_formwork_result.py",
-      "sha256": "430cf193983db999870fba60bb01b463f0bb32ebb1bd8fc3e453e7394f08410b",
-      "bytes": 45726
+      "sha256": "b1a513ad3760fc8e3d56a72fca3dcca7f80b9b96e0c184871f5a263a55447647",
+      "bytes": 40283
     },
     {
       "path": "qto-concrete-formwork/SKILL.md",
-      "sha256": "8beb10b3bb538a48a341b87b6def6827b23af8471736a795c607ba88cfeade3d",
-      "bytes": 9099
+      "sha256": "0161b2614c7253f112626ee4fd5fab1ff1b6f6b34ead522d9602a62aa08dd038",
+      "bytes": 9473
     },
     {
       "path": "qto-coordinator/agents/openai.yaml",
@@ -371,8 +441,8 @@
     },
     {
       "path": "qto-coordinator/SKILL.md",
-      "sha256": "6a6f06e487895d0586f32f5e966742b93aeceace9351efccbbb114bbb369c50e",
-      "bytes": 7703
+      "sha256": "fa17534bf2dc50d6eb88249d1456fe7f2e9b8db12e50c61a0e4299a46581fb23",
+      "bytes": 7990
     },
     {
       "path": "qto-duct-air-systems/agents/openai.yaml",
@@ -421,8 +491,8 @@
     },
     {
       "path": "qto-duct-air-systems/SKILL.md",
-      "sha256": "a872ef28fcefe1dbc54c1255755cbe8a8e79ec65281aa7e0a0408ab7ef170010",
-      "bytes": 4828
+      "sha256": "55e69308a14d3b07eb9e5569857ca4f595d446b9f98d581b506d2771fd86cac7",
+      "bytes": 5042
     },
     {
       "path": "qto-earthwork-terrain/agents/openai.yaml",
@@ -501,8 +571,8 @@
     },
     {
       "path": "qto-earthwork-terrain/SKILL.md",
-      "sha256": "d8a289e68863bf933843c8882d9695e0e67674dfbc48966409debc4c78c68e35",
-      "bytes": 10084
+      "sha256": "4155c644f3390603364e49af8bc289bce14f55a89179a1bcbcc25a9b4cab627f",
+      "bytes": 10237
     },
     {
       "path": "qto-electrical-routes/agents/openai.yaml",
@@ -556,8 +626,8 @@
     },
     {
       "path": "qto-electrical-routes/SKILL.md",
-      "sha256": "f351437eeb43700e557ee74f589df6f34df803e98af15500c8ab42c208c7866a",
-      "bytes": 5378
+      "sha256": "c2a500639b009d0e751708268d759f5b567791cd80c7684bbbb31b45f8969fe1",
+      "bytes": 5642
     },
     {
       "path": "qto-framing-supports/agents/openai.yaml",
@@ -606,8 +676,8 @@
     },
     {
       "path": "qto-framing-supports/SKILL.md",
-      "sha256": "2c6a7dd17c07fb66fcf8e7f6b218930c54eecb30018d87fde47d40efd16086e1",
-      "bytes": 4878
+      "sha256": "41b5346713c006e3aa5025e3c36313a8bc59fa834c2f5154a7a73e680fb8cfc3",
+      "bytes": 5090
     },
     {
       "path": "qto-masonry-secondary/agents/openai.yaml",
@@ -656,8 +726,8 @@
     },
     {
       "path": "qto-masonry-secondary/SKILL.md",
-      "sha256": "7954ec7299018093082f79ac85f955ed379672280d165b305e2daf2aec290eb8",
-      "bytes": 5292
+      "sha256": "fa13455af4efd52abee96b4b300f99b84e5a8079937dcfbf23957867a16abe03",
+      "bytes": 5499
     },
     {
       "path": "qto-piles-groundwork/agents/openai.yaml",
@@ -706,8 +776,8 @@
     },
     {
       "path": "qto-piles-groundwork/SKILL.md",
-      "sha256": "f3e3b07412260512c69a9f4c2b11e94cf0186de75f98924e3dc19e1ff45e8d4e",
-      "bytes": 4646
+      "sha256": "e8517ae280468553be5c608ad0824f3f19e52eb477c945a0bdaae2b901360b3d",
+      "bytes": 4860
     },
     {
       "path": "qto-pipe-networks/agents/openai.yaml",
@@ -736,13 +806,18 @@
     },
     {
       "path": "qto-pipe-networks/capability.json",
-      "sha256": "b25a68a0c39bb96965261e16b3f3c3e3e0a3893c93f3e6fe801f96f92c85adb0",
-      "bytes": 1249
+      "sha256": "2238fbf7a00c48fb2ce8cd0ebd167a390e404f32e9d6faa8034988f83eb3cdbc",
+      "bytes": 1569
     },
     {
       "path": "qto-pipe-networks/references/中心线计算清单格式.md",
-      "sha256": "af43b6779051f0f222a3b931e519756a6a70c3f43dd5908d10e3d53bc3a609c4",
-      "bytes": 2449
+      "sha256": "5476f8c3758a3d48c6547d1892af615cca8d3f9fe77708c40d1752af71c1d5ab",
+      "bytes": 2545
+    },
+    {
+      "path": "qto-pipe-networks/references/实例规格与逐台接管.md",
+      "sha256": "8bb4035fd7d24be9797c8f4a6ac3e56e4d0a7d51a36bbe14ae22da5776309dff",
+      "bytes": 6542
     },
     {
       "path": "qto-pipe-networks/references/对象范围与相邻边界.md",
@@ -761,8 +836,8 @@
     },
     {
       "path": "qto-pipe-networks/references/暖通水与制冷剂管道规则.md",
-      "sha256": "31a68486d83def7d69b67d754edb2e969ad080333bc9205c1d0b59aa4721ea50",
-      "bytes": 1267
+      "sha256": "95987deb0da4fbf1bba21cf9195600225b088c96b66f26f99d92ba3f2a498976",
+      "bytes": 2081
     },
     {
       "path": "qto-pipe-networks/references/消防水管道规则.md",
@@ -776,13 +851,13 @@
     },
     {
       "path": "qto-pipe-networks/references/管网拓扑与规格推算流程.md",
-      "sha256": "358ef23329cb35a1725c80fbda603dd47fddd7d489a9f79232de479e10aa6dab",
-      "bytes": 9429
+      "sha256": "eada502258ae06f1a0db85f4d16d72773440d70f815f81876c654efe9ef20ea8",
+      "bytes": 10775
     },
     {
       "path": "qto-pipe-networks/references/管网推算输入格式.md",
-      "sha256": "cecd939c7de19342126fdc2008ae709c321a76362742b4b3bfdf1d2f55a6f989",
-      "bytes": 4367
+      "sha256": "249587c61afaedfea2d1ddacc12a41e257aff3ebf726b50196af283a9d3467ae",
+      "bytes": 6602
     },
     {
       "path": "qto-pipe-networks/references/结果检查与输出.md",
@@ -801,8 +876,28 @@
     },
     {
       "path": "qto-pipe-networks/references/计算与证据流程.md",
-      "sha256": "91c719fa31044729187fdf7b4949574a0d1c5c0ec026ebb3b1b630b005342986",
-      "bytes": 6910
+      "sha256": "4bdd5e8b71f917ebaec8335228c1cae19c9805269967c53611f6eb825074e6b6",
+      "bytes": 7362
+    },
+    {
+      "path": "qto-pipe-networks/references/阀组接管与人工底稿对应.md",
+      "sha256": "aa3141546d83a9d3accc9b0db2c990ffb2734e53c69dc8d5a05cc307eccfc9a9",
+      "bytes": 6094
+    },
+    {
+      "path": "qto-pipe-networks/references/阀组详图轴线路径计算.md",
+      "sha256": "240c1783d50905fc0e20728c68fce0bbc009874d8bc9150e2b33d24e8ee7c9b0",
+      "bytes": 5431
+    },
+    {
+      "path": "qto-pipe-networks/references/高程竖段与原管网合并.md",
+      "sha256": "4c8930bed28a57d12c0655083651a7dfed8a65464cbb8c7cf831c8154807e374",
+      "bytes": 7357
+    },
+    {
+      "path": "qto-pipe-networks/scripts/audit_pipe_correspondence.py",
+      "sha256": "111bbf6671ed4323faef4e9b95cace060065f9413892eabc685320401a9b2878",
+      "bytes": 11163
     },
     {
       "path": "qto-pipe-networks/scripts/audit_pipe_object_selection.py",
@@ -810,19 +905,44 @@
       "bytes": 12668
     },
     {
+      "path": "qto-pipe-networks/scripts/bind_pipe_callouts.py",
+      "sha256": "55802bb45117c41308c986c96655b649749e411bd031a32e626618494afdbf15",
+      "bytes": 6966
+    },
+    {
       "path": "qto-pipe-networks/scripts/build_pipe_inference_input.py",
-      "sha256": "ae4a560b6defd70d1bd62c5cebe6b8bf1a8245554f52d495c379dcd114fcc564",
-      "bytes": 60164
+      "sha256": "77aa9a12bfc6e2882ccd9b4b03a29583d3b00dd76484303fef62643ed1e7acd0",
+      "bytes": 67861
     },
     {
       "path": "qto-pipe-networks/scripts/infer_pipe_network.py",
-      "sha256": "b31813dd61811ab1334fe96748b84c1be149d95f265e8168757e77fe179c4449",
-      "bytes": 80510
+      "sha256": "58807cc2cc37a000b7bc5ac9ed5634613e55510539e8d727f5c38d06afdbb9c1",
+      "bytes": 89532
     },
     {
       "path": "qto-pipe-networks/scripts/measure_pipe_centerlines.py",
-      "sha256": "753295a6a42619bbd2f62cec95149e37ebd175bd538e2acf6284ec50b9615230",
-      "bytes": 22808
+      "sha256": "018ede42cfe89080cbf929477c8ec6c647635a35a00fd91a6c1948f28030ffb5",
+      "bytes": 23114
+    },
+    {
+      "path": "qto-pipe-networks/scripts/measure_pipe_detail_routes.py",
+      "sha256": "9d1a5fb986032588c155885476cb772fabb5c814276d7f2fc0c2085c118676e7",
+      "bytes": 19335
+    },
+    {
+      "path": "qto-pipe-networks/scripts/merge_pipe_elevation_segments.py",
+      "sha256": "cfc1502854910533187ce1643077c8bc880efa46b23936aca320a42c167e52ad",
+      "bytes": 27849
+    },
+    {
+      "path": "qto-pipe-networks/scripts/merge_pipe_instance_requirements.py",
+      "sha256": "ecf79b4a09102775ada3e99db37ffae62103830058dce952450becfb386a4f83",
+      "bytes": 15017
+    },
+    {
+      "path": "qto-pipe-networks/scripts/partition_pipe_detail_specs.py",
+      "sha256": "afef6abe6408aa1e46f3cf0e095af2255eee1c6248828a02ddb6094626d260b5",
+      "bytes": 7396
     },
     {
       "path": "qto-pipe-networks/scripts/validate_pipe_result.py",
@@ -836,8 +956,8 @@
     },
     {
       "path": "qto-pipe-networks/SKILL.md",
-      "sha256": "506a45f984d3e8b5f1856bbce9b949350de8f029fd1828aad71b339b8df2c40a",
-      "bytes": 11606
+      "sha256": "e761fa87c61283d9110b11aae4ac72781a448aab923af9887f6ea8735b8f1abc",
+      "bytes": 14877
     },
     {
       "path": "qto-rebar/agents/openai.yaml",
@@ -906,8 +1026,8 @@
     },
     {
       "path": "qto-rebar/SKILL.md",
-      "sha256": "bd10f2ff9bf39a98111ea7cddbc60d5fe2ac1e851134813cd5773363833eabdf",
-      "bytes": 11209
+      "sha256": "d69b7c63887dba8f42b91116eb114371cde4ba96a391506a17f1a2cf4ed79c48",
+      "bytes": 11354
     },
     {
       "path": "qto-roads-siteworks/agents/openai.yaml",
@@ -956,8 +1076,8 @@
     },
     {
       "path": "qto-roads-siteworks/SKILL.md",
-      "sha256": "412e42cd2c36cf88976eedf047e5ffa3857645f0746a6fc49dbdc398d045e1b3",
-      "bytes": 4762
+      "sha256": "6979d18a5a3f9a0188e73b466d9d1f0f653abbf7910f9f439b7bd529b0569f98",
+      "bytes": 4976
     },
     {
       "path": "qto-structural-steel/agents/openai.yaml",
@@ -966,13 +1086,13 @@
     },
     {
       "path": "qto-structural-steel/capability.json",
-      "sha256": "844670f76abe1286af31c520f15a93beb6e0a9f27eeafa439ec7ef970a781be4",
-      "bytes": 1201
+      "sha256": "6f320bbcd5172876f51ae2e8f056cbf811787920f5834735df128e96be8871bd",
+      "bytes": 1503
     },
     {
       "path": "qto-structural-steel/references/主构件与截面规则.md",
-      "sha256": "014e2cd5379afc34256481a3c1bdea50478cce2b05cb41bc1a3efbc0268ef8c1",
-      "bytes": 2645
+      "sha256": "3faeab7ff9a57693cdc33f770a1765086dd3f4518cdc80bf525e180739e0c1e3",
+      "bytes": 3297
     },
     {
       "path": "qto-structural-steel/references/压型板涂装与措施规则.md",
@@ -986,8 +1106,8 @@
     },
     {
       "path": "qto-structural-steel/references/构件计算清单格式.md",
-      "sha256": "7bec53bc2e1512546da734c6dc76ea775d82231bfe6097a0e2540d66d5cc6401",
-      "bytes": 5262
+      "sha256": "53676749ade7ce1b09064e3e4f9af4eb655bd3bc5f49b083d2711665f16e35c9",
+      "bytes": 8851
     },
     {
       "path": "qto-structural-steel/references/现行计量标准摘要.md",
@@ -1001,8 +1121,8 @@
     },
     {
       "path": "qto-structural-steel/references/节点板与连接件规则.md",
-      "sha256": "b44deb9a269282e5a6759dca4dad6303e96ede2014ac751fbd120bfa8e6dea2f",
-      "bytes": 3709
+      "sha256": "30e7f720d5849a5a09b470b3abb26a23faea92fb4b4c075639ec0a63ed41735a",
+      "bytes": 4024
     },
     {
       "path": "qto-structural-steel/references/规则清单与成熟状态.md",
@@ -1011,23 +1131,28 @@
     },
     {
       "path": "qto-structural-steel/references/计算与证据流程.md",
-      "sha256": "549d4e1a1bc6eb190e2abab62c67a4e4c502a641c418d8f951ca31b4c65788a5",
-      "bytes": 5866
+      "sha256": "a6a75b4451a5a523ab3eb32680917dfc32b5be04ff97d6984c30e99ba8d6475e",
+      "bytes": 6228
     },
     {
       "path": "qto-structural-steel/scripts/calculate_structural_steel_items.py",
-      "sha256": "d60ceef696857da7dd6ee89ff42c7f351cb68217c3ad1e97b540dec464ff9c3d",
-      "bytes": 62494
+      "sha256": "e4a36e09bfd1402023ba682d8d571cd5aa6597eb684c73d502135ddfe9fab35b",
+      "bytes": 65274
+    },
+    {
+      "path": "qto-structural-steel/scripts/steel_dimension_derivation.py",
+      "sha256": "db982273a93ed6a59f6fbc245e2eb6b051659d05af5d9a7fc3dcdbbdd0ec0c4a",
+      "bytes": 10170
     },
     {
       "path": "qto-structural-steel/scripts/validate_structural_steel_result.py",
-      "sha256": "39fdc8f9200369439c6e6e987a9d8f43bf50942c646d7f3d379f3a04603c978e",
-      "bytes": 26231
+      "sha256": "b58ae10726f4851c9fe82d0ce97a2243d3ae90087d1d7d74b68145af7bd8dc11",
+      "bytes": 27752
     },
     {
       "path": "qto-structural-steel/SKILL.md",
-      "sha256": "7e0520dfc17f1c971125a3a6d642cdbc49c43ef5ad56f044da5009c983022969",
-      "bytes": 11076
+      "sha256": "577959a55a80c4ba23a838e55ab27851d17e88ffe81595136b43ed3b41747fc1",
+      "bytes": 11672
     },
     {
       "path": "qto-surfaces-envelope/agents/openai.yaml",
@@ -1036,13 +1161,18 @@
     },
     {
       "path": "qto-surfaces-envelope/capability.json",
-      "sha256": "63d4606a2ca97ad6dfec56df75ae2ccf210be5a55e1deb80d01ed44be5a70315",
-      "bytes": 1187
+      "sha256": "cb01f0c13fd1c4ca07519b2458c36650578e2e35296932d216f4ea9480d823e6",
+      "bytes": 1812
     },
     {
       "path": "qto-surfaces-envelope/references/围护板与幕墙面板规则.md",
       "sha256": "62bb77daa424b47db64119ee34b651dd0d7cc2a02f0c0327621aae7cbcf0d0a8",
       "bytes": 1819
+    },
+    {
+      "path": "qto-surfaces-envelope/references/填充面域识别与去重.md",
+      "sha256": "ce719bd6e1ab26dfc4bae366f6afed5d37fb2e7954824f01ec870c5589472bb3",
+      "bytes": 3707
     },
     {
       "path": "qto-surfaces-envelope/references/对象范围与相邻边界.md",
@@ -1060,14 +1190,24 @@
       "bytes": 1924
     },
     {
+      "path": "qto-surfaces-envelope/references/普通线网面域与房间对应.md",
+      "sha256": "acd4c1be83914ce35ef3d7d7c7bbcd59d9fe86a83d129d8915e67b76c7b8c3b9",
+      "bytes": 5648
+    },
+    {
+      "path": "qto-surfaces-envelope/references/材料基层矩形分区.md",
+      "sha256": "3501d7c18275ab162fa6153f9989ffb0b745d4f0b2a209a4365baf74399a441f",
+      "bytes": 11781
+    },
+    {
       "path": "qto-surfaces-envelope/references/案例成熟度与建设门槛.md",
-      "sha256": "4b127c6e1c5ec2724641f6c2a56cb154385bbf570424b1f88341bdffb93d4632",
-      "bytes": 3260
+      "sha256": "7cd730a86bbf216201e9a28dbea189692cc9fa3811ed96ab86391201e553df82",
+      "bytes": 4232
     },
     {
       "path": "qto-surfaces-envelope/references/楼地面墙面天棚规则.md",
-      "sha256": "de6ae9bd8a1870d005c94d7b4637f4047f1b7e992cf64007df936ec7e269a53a",
-      "bytes": 1910
+      "sha256": "fefb85bf2f28e65095335fff2eed48cc1f12670f6836633c0236e313c50a410b",
+      "bytes": 4270
     },
     {
       "path": "qto-surfaces-envelope/references/洞口扣减与面域边界.md",
@@ -1086,8 +1226,8 @@
     },
     {
       "path": "qto-surfaces-envelope/references/表面与构造层清单格式.md",
-      "sha256": "5d124591a6486faabcd4957875c55342edacf5a03171bbb6a639e959d89cec11",
-      "bytes": 2501
+      "sha256": "dc55372b430950fc81e7c70fb380a8ab937f0d49ed8431cc7f15a7553acc5e55",
+      "bytes": 15123
     },
     {
       "path": "qto-surfaces-envelope/references/规则清单与成熟状态.md",
@@ -1096,23 +1236,38 @@
     },
     {
       "path": "qto-surfaces-envelope/references/计算与证据流程.md",
-      "sha256": "52908fb4df451318434353de362e3a4439ccd18dd0d7a6d5a1743cf2e7d41696",
-      "bytes": 3103
+      "sha256": "27bb0fa830ed0aa95d6e2145bf911d88fd569b13e9599354403756c38ddd7b53",
+      "bytes": 3510
     },
     {
       "path": "qto-surfaces-envelope/scripts/calculate_surfaces_envelope.py",
-      "sha256": "5d474f71730459f212725ad7ea2d2bb446f7e76ebf4a6cdb9c2558fc916627aa",
-      "bytes": 41067
+      "sha256": "1fd4950e6458dd19da6de3d71a006e270f52b77b4e394f32234d71d17d20fdff",
+      "bytes": 79431
+    },
+    {
+      "path": "qto-surfaces-envelope/scripts/extract_surface_linework.py",
+      "sha256": "89616f5b19a446ecdb8fdbcd31d83ee248eea74a29125ab0ba3c2d134ee65953",
+      "bytes": 16421
+    },
+    {
+      "path": "qto-surfaces-envelope/scripts/extract_surface_regions.py",
+      "sha256": "d6e40bfd667e376eaa688b351f832b671b15c48822d366c7c18622d94702ae20",
+      "bytes": 17649
+    },
+    {
+      "path": "qto-surfaces-envelope/scripts/material_rectangle_partition.py",
+      "sha256": "c43e27d02f98658805987aaac20adc36fbb00f6d5aca91a7f71b7073a06e54d2",
+      "bytes": 15135
     },
     {
       "path": "qto-surfaces-envelope/scripts/validate_surfaces_envelope_result.py",
-      "sha256": "22b5c1bb04e35594da8c74406357ebae98513be3f34d04c86e474368f8d29a60",
-      "bytes": 10410
+      "sha256": "c7a102dcbb9becce93b11ee8b6c172d5b29f61dfed66322f42f5f133cc1aa7ff",
+      "bytes": 20020
     },
     {
       "path": "qto-surfaces-envelope/SKILL.md",
-      "sha256": "0395c66240eed2edf82fd19e8e33dad9bfcddf5007195577b6a8d45ebda23513",
-      "bytes": 9906
+      "sha256": "2fa3510e94d43aa9b1024e45f26f5b2950381ae5091704fbd41e3887c284af51",
+      "bytes": 11499
     }
   ]
 }

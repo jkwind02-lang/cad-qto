@@ -105,6 +105,8 @@ def source_from_manifest(path: Path) -> tuple[Path, Path, dict[str, Any]]:
         fail("cad-manifest schema_version 必须为 qto-cad-neutral-evidence/1.0")
     if manifest.get("geometry_schema_version") != cad_geometry.GEOMETRY_SCHEMA:
         fail("CAD旧缓存缺少完整WCS几何，请用新版中性提取器重新生成；不得继承旧曲线测长")
+    if manifest.get("source_identity_issues"):
+        fail("CAD源实体身份存在冲突，不能按句柄认定点位实例；先核验原图并重新取证")
     artifacts = manifest.get("artifacts")
     if not isinstance(artifacts, dict):
         fail("CAD清单缺少 artifacts")
@@ -367,13 +369,17 @@ def main() -> int:
             world_point = transform_point(local_anchor, parent_matrix)
             matrix = compose(parent_matrix, matrix_for_insert(insert, origins.get(block_name, [0.0, 0.0, 0.0])))
             local_box = definition_box(block_name)
-            world_box3d = transformed_box(local_box, matrix) if local_box else None
+            # Unsupported INSERT geometry (e.g. MINSERT) has no complete
+            # instance envelope; the first cell cannot justify scope pruning.
+            world_box3d = transformed_box(local_box, matrix) if local_box and not insert.get("geometry_issues") else None
             world_box = [world_box3d[0], world_box3d[1], world_box3d[3], world_box3d[4]] if world_box3d else None
             in_scope = bbox_intersects({"bbox": world_box}, bounds) if world_box else True
             if not in_scope:
                 return  # only complete, conservative bounds allow pruning
             if insert.get("geometry_issues"):
                 dispositions.append({"object_id": f"PT-{path}", "physical_id": f"PT-{path}", "source_record_id": source_record_id,
+                                     "block_name": block_name, "layer": effective_layer, "parent_block": parent_block or None,
+                                     "point": [value * factor for value in world_point], "coordinate_unit": coordinate_unit,
                                      "disposition": "unresolved", "basis": "; ".join(insert["geometry_issues"]), "rule_ids": [], "instance_path": path})
                 failures.append({"kind": "unsupported_insert_geometry", "instance_path": path, "issues": insert["geometry_issues"]})
                 return

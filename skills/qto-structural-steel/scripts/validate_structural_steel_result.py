@@ -212,6 +212,26 @@ def validate_document(data: Any) -> list[str]:
                         errors.append(f"{identifier}显式汇总重复同一物理对象的多个口径")
                     if len(member_signatures) != len(set(member_signatures)):
                         errors.append(f"{identifier}显式汇总重复同一对象证据身份的多个口径")
+                    if completeness == "complete" and any(m.get("专业检查", {}).get("范围完整性") != "complete" for m in member_items):
+                        errors.append(f"{identifier}完整汇总包含部分量或下限量")
+                    inherited = {ref for m in member_items for ref in m.get("未决事项", [])}
+                    if not inherited.issubset(item.get("未决事项", [])):
+                        errors.append(f"{identifier}汇总丢失成员未决事项")
+                    seen_atoms = set()
+                    for member in member_items:
+                        raw_atoms = member.get("专业检查", {}).get("对象身份原子", [])
+                        atoms = set()
+                        if not isinstance(raw_atoms, list):
+                            errors.append(f"{identifier}对象身份原子必须是数组")
+                            continue
+                        for atom in raw_atoms:
+                            if not isinstance(atom, dict) or not nonempty(atom.get("source_sha256")) or not nonempty(atom.get("object_key")):
+                                errors.append(f"{identifier}对象身份原子格式错误")
+                            else:
+                                atoms.add((atom["source_sha256"], atom["object_key"]))
+                        if seen_atoms.intersection(atoms):
+                            errors.append(f"{identifier}显式汇总存在对象身份证据重叠")
+                        seen_atoms.update(atoms)
 
         candidate = check.get("条件候选值")
         if candidate is not None:

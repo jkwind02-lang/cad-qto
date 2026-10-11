@@ -14,6 +14,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from steel_dimension_derivation import derive_dimensions
+
 
 MANIFEST_VERSION = "qto-structural-steel-manifest/1.0"
 RESULT_VERSION = "qto-result-minimum/1.0"
@@ -113,6 +116,13 @@ def sha256_file(path: Path) -> str:
 def canonical_hash(value: Any) -> str:
     payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def canonical_object_key(value: str) -> str:
+    key = value.strip()
+    if key.casefold().startswith("handle:"):
+        return "handle:" + key.split(":", 1)[1].strip().upper()
+    return key
 
 
 def require_text(value: Any, label: str) -> str:
@@ -813,6 +823,15 @@ def calculate(manifest: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, 
         item["item_id"] = item_id
         item["object_type"] = object_type
         source_refs = require_refs(item.get("evidence_ids"), evidence_records, f"{item_id}.evidence_ids")
+        prepared, dimension_audit, dimension_refs = derive_dimensions(item, evidence_records, CalculationError, manifest.get("section_catalog"))
+        dependency_refs = set(source_refs) | dimension_refs
+        for basis_key in ("density_basis", "unit_mass_basis"):
+            basis_value = item.get(basis_key)
+            if isinstance(basis_value, dict) and "evidence_id" in basis_value:
+                dependency_refs.update(require_refs([basis_value["evidence_id"]], evidence_records, f"{item_id}.{basis_key}"))
+        for rule_ref in require_refs(item.get("rule_ids"), rule_records, f"{item_id}.rule_ids"):
+            dependency_refs.update(rule_records[rule_ref]["evidence_ids"])
+        source_refs = sorted(dependency_refs)
         identity_refs = require_refs(
             item.get("identity_evidence_ids"),
             evidence_records,
@@ -828,15 +847,21 @@ def calculate(manifest: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, 
             identity_source_id = identity_evidence["source_id"]
             identity_components.append({
                 "source_sha256": source_hashes[identity_source_id],
-                "object_keys": sorted(identity_evidence["object_keys"]),
+                "object_keys": sorted({canonical_object_key(key) for key in identity_evidence["object_keys"]}),
             })
         identity_signature = canonical_hash(sorted(
             identity_components,
             key=lambda value: (value["source_sha256"], tuple(value["object_keys"])),
         ))
+        identity_atoms = sorted({(component["source_sha256"], key)
+                                 for component in identity_components for key in component["object_keys"]})
         rule_refs = require_refs(item.get("rule_ids"), rule_records, f"{item_id}.rule_ids")
         unresolved_refs = require_refs(item.get("unresolved_ids", []), unresolved_records, f"{item_id}.unresolved_ids", allow_empty=True)
-        value, formula, inputs = compute_item(item, evidence_records)
+        value, formula, inputs = compute_item(prepared, evidence_records)
+        if dimension_audit:
+            inputs["dimension_derivations"] = dimension_audit
+        if value is not None and not math.isfinite(value):
+            raise CalculationError(f"{item_id}计算结果溢出，必须是有限数值")
         method = item["method"]
         if status == "complete" and (value is None or unresolved_refs):
             raise CalculationError(f"{item_id}完整项必须有数值且无未决事项")
@@ -911,6 +936,7 @@ def calculate(manifest: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, 
                 "对象类别": object_type,
                 "物理对象编号": physical_object_id,
                 "对象身份签名": identity_signature,
+                "对象身份原子": [{"source_sha256": sha, "object_key": key} for sha, key in identity_atoms],
                 "计量基准": measurement_basis,
                 "计算方法": method,
                 "质量归属": mass_inclusion,
@@ -935,6 +961,7 @@ def calculate(manifest: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, 
             "alternative_group": alternative_group,
             "physical_object_id": physical_object_id,
             "identity_signature": identity_signature,
+            "identity_atoms": identity_atoms,
         }
         detail_rows.append({
             "成果项编号": item_id,
@@ -991,12 +1018,23 @@ def calculate(manifest: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, 
         })
         if duplicate_signatures:
             raise CalculationError(f"{summary_id}重复汇总同一对象证据身份的多个计量口径")
+        seen_atoms = set()
+        for member in members:
+            atoms = set(member["identity_atoms"])
+            if seen_atoms.intersection(atoms):
+                raise CalculationError(f"{summary_id}成员对象身份证据存在重叠，不得以附加证据或拆分别名重复计量")
+            seen_atoms.update(atoms)
         status = require_text(summary.get("scope_status"), f"{summary_id}.scope_status")
         if status not in {"complete", "partial"}:
             raise CalculationError(f"{summary_id}汇总状态只能是complete或partial")
         unresolved_refs = require_refs(summary.get("unresolved_ids", []), unresolved_records, f"{summary_id}.unresolved_ids", allow_empty=True)
         if status == "complete" and unresolved_refs:
             raise CalculationError(f"{summary_id}完整汇总不得关联未决事项")
+        if status == "complete" and any(member["result"]["专业检查"]["范围完整性"] != "complete" for member in members):
+            raise CalculationError(f"{summary_id}完整汇总不得包含部分量或下限量")
+        inherited_unresolved = {ref for member in members for ref in member["result"]["未决事项"]}
+        if not inherited_unresolved.issubset(unresolved_refs):
+            raise CalculationError(f"{summary_id}汇总必须保留成员未决事项: {', '.join(sorted(inherited_unresolved))}")
         if status == "partial" and not unresolved_refs:
             raise CalculationError(f"{summary_id}部分汇总必须关联未决事项")
         name = require_text(summary.get("name"), f"{summary_id}.name")
@@ -1016,7 +1054,12 @@ def calculate(manifest: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, 
             raise CalculationError(f"{summary_id}永久量汇总混入参考或非质量项")
         if adoption_role == "adopted" and any(member["adoption_role"] != "adopted" for member in members):
             raise CalculationError(f"{summary_id}采用量汇总混入参考项")
-        value = math.fsum(float(member["value"]) for member in members)
+        try:
+            value = math.fsum(float(member["value"]) for member in members)
+        except OverflowError as exc:
+            raise CalculationError(f"{summary_id}汇总结果溢出") from exc
+        if not math.isfinite(value):
+            raise CalculationError(f"{summary_id}汇总结果必须是有限数值")
         sources = sorted({ref for member in members for ref in member["result"]["来源"]})
         rules = sorted({ref for member in members for ref in member["result"]["规则"]})
         trial = any(member["result"]["试运行结果"] for member in members)

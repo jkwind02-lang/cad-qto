@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import gzip
 import hashlib
 import json
@@ -17,6 +18,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / '_qto-shared-evidence/scripts'))
+from qto_cad_source_contract import canonical_scale
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from material_rectangle_partition import MaterialPartitionError, partition_material_regions, rectangle as material_rectangle
+
 
 MANIFEST_VERSION = "qto-surfaces-envelope-manifest/1.0"
 RESULT_VERSION = "qto-result-minimum/1.0"
@@ -24,7 +30,10 @@ ALLOWED_METHODS = {
     "area_direct",
     "horizontal_net",
     "rectangle_net",
+    "rectangle_openings_net",
     "sloped_from_projection",
+    "boundary_intervals_net",
+    "material_partition_net",
     "deferred",
 }
 ALLOWED_OBJECT_TYPES = {
@@ -37,10 +46,11 @@ ALLOWED_OBJECT_TYPES = {
     "facade_panel",
     "curtain_wall_panel",
     "other_surface",
+    "skirting_finish",
 }
 ALLOWED_SCOPE_STATUS = {"complete", "partial", "unresolved", "not_applicable"}
 ALLOWED_ADOPTION_ROLES = {"adopted", "reference"}
-ALLOWED_QUANTITY_ROLES = {"physical_area", "bill_quantity_candidate"}
+ALLOWED_QUANTITY_ROLES = {"physical_area", "physical_length", "bill_quantity_candidate"}
 ALLOWED_FACT_STATUS = {"verified", "reference", "candidate", "test_only"}
 ALLOWED_SOURCE_ROLES = {
     "project_drawing",
@@ -70,12 +80,12 @@ ALLOWED_EVIDENCE_CLASSES = {
     "requirement",
     "visual_geometry",
 }
-ALLOWED_RULE_DECISIONS = {"采用", "不适用", "证据不足"}
+ALLOWED_RULE_DECISIONS = {"采用", "试用", "不适用", "证据不足"}
 ALLOWED_RULE_MATURITY = {"候选", "试运行", "正式", "停用"}
 ALLOWED_UNRESOLVED_TYPES = {"缺资料", "范围未定", "来源冲突", "规则冲突", "质量问题", "需用户确认"}
 ALLOWED_UNRESOLVED_ACTIONS = {"停止受影响计算", "保留已证实部分", "等待裁决"}
 SOURCE_ROLE_FILE_ROLES = {
-    "project_drawing": {"dwg", "dxf"},
+    "project_drawing": {"dwg", "dxf", "pdf"},
     "cad_entity_stream": {"gzip_ndjson"},
     "cad_metadata": {"json"},
     "project_document": {"pdf", "spreadsheet", "document", "csv", "text", "image", "json"},
@@ -432,6 +442,8 @@ def validate_rules(rule_rows: dict[str, dict[str, Any]]) -> None:
             raise CalculationError(f"{rule_id}规则判定或成熟状态非法")
         if decision == "采用" and maturity in {"候选", "停用"}:
             raise CalculationError(f"{rule_id}为{maturity}规则，不得采用")
+        if decision == "试用" and maturity == "停用":
+            raise CalculationError(f"{rule_id}为停用规则，不得试用")
         for field in ("name", "source", "execution", "evidence_locator"):
             require_text(row.get(field), f"{rule_id}.{field}")
 
@@ -454,18 +466,526 @@ def numeric_input(inputs: dict[str, Any], key: str, item_id: str, default: float
     return require_number(inputs[key], f"{item_id}.inputs.{key}")
 
 
-def calculate_item(item_id: str, row: dict[str, Any]) -> tuple[float | None, str, dict[str, float]]:
+def rectangle_opening_union(inputs: dict[str, Any], item_id: str) -> tuple[float, list[dict[str, Any]]]:
+    """Clip explicit openings to one planar face and union by an exact sweep.
+
+    Coordinates are metres in the face's local XY frame; this does not infer
+    openings, assign a wall, or convert PDF page coordinates into metres.
+    """
+    length = numeric_input(inputs, "length_m", item_id)
+    height = numeric_input(inputs, "height_m", item_id)
+    if length <= 0 or height <= 0:
+        raise CalculationError(f"{item_id}矩形表面尺寸必须大于0")
+    if inputs.get("side_factor", 1) != 1:
+        raise CalculationError(f"{item_id}几何洞口按单侧绑定；两侧须分别建表面")
+    openings = inputs.get("openings")
+    if not isinstance(openings, list):
+        raise CalculationError(f"{item_id}.inputs.openings须为显式清单，无洞口时使用空数组")
+    details = []; clipped = []; seen = set()
+    for o in openings:
+        if not isinstance(o, dict):
+            raise CalculationError(f"{item_id}洞口记录必须是对象")
+        key = require_text(o.get("opening_id"), f"{item_id}.opening_id")
+        if key in seen:
+            raise CalculationError(f"{item_id}洞口编号重复: {key}")
+        seen.add(key)
+        rect = o.get("rectangle_m")
+        if (not isinstance(rect, list) or len(rect) != 4 or
+                any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in rect)):
+            raise CalculationError(f"{item_id}洞口矩形须为4个有限米坐标")
+        x0,y0,x1,y1 = map(float, rect)
+        if x1 <= x0 or y1 <= y0:
+            raise CalculationError(f"{item_id}洞口矩形顺序或面积非法")
+        part = [max(0.,x0),max(0.,y0),min(length,x1),min(height,y1)]
+        intersects = part[2] > part[0] and part[3] > part[1]
+        if intersects: clipped.append(part)
+        details.append(dict(opening_id=key, rectangle_m=rect,
+            clipped_rectangle_m=part if intersects else None,
+            clipped_area_m2=(part[2]-part[0])*(part[3]-part[1]) if intersects else 0.))
+    xs = sorted({r[i] for r in clipped for i in (0,2)})
+    area = 0.
+    for left,right in zip(xs,xs[1:]):
+        ys = sorted((r[1],r[3]) for r in clipped if r[0] < right and r[2] > left)
+        merged = 0.; start = end = None
+        for low,high in ys:
+            if start is None: start,end = low,high
+            elif low <= end: end = max(end,high)
+            else: merged += end-start; start,end = low,high
+        if start is not None: merged += end-start
+        area += (right-left)*merged
+    if "opening_union_area_m2" in inputs and not math.isclose(
+            numeric_input(inputs,"opening_union_area_m2",item_id),area,rel_tol=0,abs_tol=1e-8):
+        raise CalculationError(f"{item_id}声明洞口面积与裁切并集复算不一致")
+    return area,details
+
+
+def json_pointer(value: Any, pointer: Any, label: str) -> Any:
+    """Read an explicit JSON source location without evaluating expressions."""
+    pointer = require_text(pointer, label)
+    if not pointer.startswith('/'):
+        raise CalculationError(f'{label}须为以/开头的JSON Pointer')
+    for token in pointer[1:].split('/'):
+        if re.search(r'~(?![01])', token):
+            raise CalculationError(f'{label}包含非法JSON Pointer转义')
+        token = token.replace('~1', '/').replace('~0', '~')
+        if isinstance(value, dict) and token in value:
+            value = value[token]
+        elif isinstance(value, list) and re.fullmatch(r'0|[1-9][0-9]*', token) and int(token) < len(value):
+            value = value[int(token)]
+        else:
+            raise CalculationError(f'{label}源字段不存在: {pointer}')
+    return value
+
+
+def resolve_rectangle_frame(item_id, row, evidence, sources):
+    """Check an explicitly bound rectangle frame without interpreting labels.
+
+    A source edge, a finite edge interval and an explicit vertical range define
+    the rectangle in one declared Cartesian coordinate system. Source facts are
+    checked for internal consistency, not certified as a design interpretation.
+    """
+    binding = row.get('frame_binding')
+    if 'frame_binding' not in row:
+        return {'status': 'unbound' if 'local_coordinate_frame' in row else 'not_provided',
+                'note': '未声明源边/坐标绑定；既有坐标描述未作定位一致性核验'}
+    if row.get('method') not in {'rectangle_net', 'rectangle_openings_net', 'material_partition_net'}:
+        raise CalculationError(f'{item_id}局部坐标绑定仅适用于矩形面积方法')
+    keys = {'frame_evidence_ref', 'source_pointer', 'edge_evidence_ref', 'edge_source_pointer'}
+    if not isinstance(binding, dict) or set(binding) != keys:
+        raise CalculationError(f'{item_id}.frame_binding须明确框架及源边的证据引用和JSON Pointer')
+
+    def read(ref_key, pointer_key):
+        ref = require_text(binding.get(ref_key), f'{item_id}.{ref_key}')
+        if ref not in row['evidence_refs'] or ref not in evidence or evidence[ref]['evidence_class'] != 'surface_geometry':
+            raise CalculationError(f'{item_id}.{ref_key}须引用本项表面几何证据')
+        e = evidence[ref]
+        if row['physical_surface_id'] not in e['object_keys']:
+            raise CalculationError(f'{item_id}框架或源边证据未绑定本物理表面')
+        source = sources[e['source_id']]
+        if source['file_role'] != 'json' or source['parsed'] is None:
+            raise CalculationError(f'{item_id}框架与源边须来自已核验哈希的JSON事实源')
+        value = json_pointer(source['parsed'], binding.get(pointer_key), f'{item_id}.{pointer_key}')
+        if not isinstance(value, dict):
+            raise CalculationError(f'{item_id}框架和源边Pointer须定位到对象')
+        return value, {'evidence_ref': ref, 'source_id': e['source_id'],
+                       'source_sha256': source['sha256'], 'source_pointer': binding[pointer_key]}
+
+    def vector(value, size, label):
+        if not isinstance(value, list) or len(value) != size or any(
+                isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in value):
+            raise CalculationError(f'{item_id}.{label}须为{size}个有限数值')
+        return [float(v) for v in value]
+
+    def close(a, b):
+        # Absolute metre tolerance with a small IEEE-754 allowance at large
+        # coordinates; never use relative tolerance on translated origins.
+        return math.isfinite(a) and math.isfinite(b) and abs(a-b) <= max(1e-8, 8*math.ulp(a), 8*math.ulp(b))
+
+    def same_vector(a, b):
+        return all(close(x, y) for x, y in zip(a, b))
+
+    def frame(value, label):
+        if not isinstance(value, dict):
+            raise CalculationError(f'{item_id}.{label}须为规范局部坐标对象')
+        result = {k: require_text(value.get(k), f'{item_id}.{label}.{k}') for k in
+                  ('coordinate_system_id', 'source_edge_id', 'source_edge_direction')}
+        if result['source_edge_direction'] not in {'same', 'reverse'}:
+            raise CalculationError(f'{item_id}.{label}源边方向须为same或reverse')
+        for key in ('origin_m', 'x_axis', 'up_axis'):
+            result[key] = vector(value.get(key), 3, f'{label}.{key}')
+        for key in ('source_edge_interval_m', 'vertical_range_m'):
+            result[key] = vector(value.get(key), 2, f'{label}.{key}')
+            if result[key][0] >= result[key][1]:
+                raise CalculationError(f'{item_id}.{label}.{key}须为单个有正长度的正向区间')
+        result['vertical_origin_m'] = vector([value.get('vertical_origin_m')], 1, f'{label}.vertical_origin_m')[0]
+        for axis in ('x_axis', 'up_axis'):
+            if not math.isclose(math.hypot(*result[axis]), 1., rel_tol=0., abs_tol=1e-9):
+                raise CalculationError(f'{item_id}.{label}.{axis}须为单位向量')
+        if abs(math.fsum(x*y for x,y in zip(result['x_axis'], result['up_axis']))) > 1e-9:
+            raise CalculationError(f'{item_id}.{label}水平轴与竖向轴必须正交')
+        if not close(result['vertical_origin_m'], result['vertical_range_m'][0]):
+            raise CalculationError(f'{item_id}.{label}竖向原点与明确竖向范围不一致')
+        return result
+
+    raw_source_frame, frame_source = read('frame_evidence_ref', 'source_pointer')
+    raw_edge, edge_source = read('edge_evidence_ref', 'edge_source_pointer')
+    source_frame = frame(raw_source_frame, 'source_frame')
+    declared_frame = frame(row.get('local_coordinate_frame'), 'local_coordinate_frame')
+    for key, value in source_frame.items():
+        candidate = declared_frame[key]
+        consistent = same_vector(value, candidate) if isinstance(value, list) else (
+            close(value, candidate) if isinstance(value, float) else value == candidate)
+        if not consistent:
+            raise CalculationError(f'{item_id}局部坐标声明与绑定源框架不一致: {key}')
+    edge_id = require_text(raw_edge.get('edge_id'), f'{item_id}.source_edge.edge_id')
+    for ref_key in ('frame_evidence_ref', 'edge_evidence_ref'):
+        if edge_id not in evidence[binding[ref_key]]['object_keys']:
+            raise CalculationError(f'{item_id}框架或源边证据未绑定指定源边')
+    if edge_id != source_frame['source_edge_id']:
+        raise CalculationError(f'{item_id}框架与源边身份不一致')
+    coordinate_system = require_text(raw_edge.get('coordinate_system_id'), f'{item_id}.source_edge.coordinate_system_id')
+    if coordinate_system != source_frame['coordinate_system_id']:
+        raise CalculationError(f'{item_id}框架与源边未声明同一坐标系')
+    try:
+        factor = canonical_scale(raw_edge.get('unit'))
+    except ValueError as exc:
+        raise CalculationError(f'{item_id}源边必须声明物理长度单位: {exc}') from exc
+    endpoints = []
+    for key in ('start', 'end'):
+        value = raw_edge.get(key)
+        if not isinstance(value, list) or len(value) not in (2, 3):
+            raise CalculationError(f'{item_id}源边起终点须为二维或三维坐标')
+        point = vector(value, len(value), f'source_edge.{key}')
+        point = [x*factor for x in point] + [0.]*(3-len(point))
+        if not all(math.isfinite(x) for x in point):
+            raise CalculationError(f'{item_id}源边单位换算溢出')
+        endpoints.append(point)
+    start, end = endpoints
+    edge_length = math.dist(start, end)
+    if not math.isfinite(edge_length) or edge_length <= 0:
+        raise CalculationError(f'{item_id}源边必须有有限正长度')
+    lo, hi = source_frame['source_edge_interval_m']
+    if lo < 0 or (hi > edge_length and not close(hi, edge_length)):
+        raise CalculationError(f'{item_id}局部框架区间超出源边')
+    hi = min(hi, edge_length)
+    if not 0 <= lo < hi <= edge_length:
+        raise CalculationError(f'{item_id}局部框架区间裁切后须位于源边内且有正长度')
+    direction = [(y-x)/edge_length for x,y in zip(start, end)]
+    reverse = source_frame['source_edge_direction'] == 'reverse'
+    expected_x = [-v for v in direction] if reverse else direction
+    station = hi if reverse else lo
+    expected_origin = [x+station*v for x,v in zip(start, direction)]
+    if not same_vector(source_frame['origin_m'], expected_origin):
+        raise CalculationError(f'{item_id}源框架原点与源边有限区间及方向不一致')
+    if not same_vector(source_frame['x_axis'], expected_x):
+        raise CalculationError(f'{item_id}源框架水平轴与源边方向不一致')
+    length = hi-lo
+    zlo, zhi = source_frame['vertical_range_m']
+    height = zhi-zlo
+    inputs = row.get('inputs')
+    declared_length = numeric_input(inputs, 'length_m', item_id) if isinstance(inputs, dict) else 0.
+    declared_height = numeric_input(inputs, 'height_m', item_id) if isinstance(inputs, dict) else 0.
+    if declared_length <= 0 or not close(declared_length, length):
+        raise CalculationError(f'{item_id}矩形长度与源边有限区间不一致')
+    if declared_height <= 0 or not close(declared_height, height):
+        raise CalculationError(f'{item_id}矩形高度与明确竖向范围不一致')
+    origin = [p+u*zlo for p,u in zip(expected_origin, source_frame['up_axis'])]
+    corners = [[p+x*dx+u*dz for p,x,u in zip(origin, expected_x, source_frame['up_axis'])]
+               for dx,dz in ((0.,0.),(length,0.),(length,height),(0.,height))]
+    if not all(math.isfinite(v) for p in corners for v in p):
+        raise CalculationError(f'{item_id}矩形定位坐标溢出')
+    return {'status': 'bound_consistent', 'frame_source_binding': frame_source,
+            'edge_source_binding': edge_source, 'local_coordinate_frame': source_frame,
+            'source_edge_start_m': start, 'source_edge_end_m': end,
+            'source_edge_length_m': edge_length, 'surface_origin_m': origin,
+            'rectangle_corners_m': corners, 'bound_length_m': length, 'bound_height_m': height,
+            'unchecked_annotation_fields': sorted(set(row['local_coordinate_frame'])-set(source_frame)),
+            'note': '仅核已声明事实的坐标、区间及矩形尺寸一致性；不证明设计适用性、洞口三维定位或完整工程范围'}
+
+
+def calculate_material_partition(item_id, row, evidence, sources):
+    inputs = row.get('inputs')
+    common = {'partition_evidence_ref', 'source_pointer', 'output_kind'}
+    if not isinstance(inputs, dict) or inputs.get('output_kind') not in {'material','unknown'}:
+        raise CalculationError(f'{item_id}材料分区须选择明确材料或未知区域出口')
+    expected = common | ({'material_id'} if inputs['output_kind'] == 'material' else set())
+    if set(inputs) != expected:
+        raise CalculationError(f'{item_id}材料分区输入只接受有源分区Pointer和输出选择，不接受预计算面积')
+    ref = require_text(inputs.get('partition_evidence_ref'), f'{item_id}.partition_evidence_ref')
+    if ref not in row['evidence_refs'] or ref not in evidence or evidence[ref]['evidence_class'] != 'surface_geometry':
+        raise CalculationError(f'{item_id}分区须引用本项surface_geometry证据')
+    source = sources[evidence[ref]['source_id']]
+    if source['file_role'] != 'json' or source['parsed'] is None:
+        raise CalculationError(f'{item_id}分区坐标须来自已核验哈希的JSON事实')
+    pointer = require_text(inputs.get('source_pointer'), f'{item_id}.source_pointer')
+    raw = json_pointer(source['parsed'], pointer, f'{item_id}.source_pointer')
+    if not isinstance(raw,dict):
+        raise CalculationError(f'{item_id}分区Pointer须定位到对象')
+    plan = copy.deepcopy(raw)
+    parent = require_text(plan.get('parent_surface_id'), f'{item_id}.parent_surface_id')
+    if not {parent,row['physical_surface_id']} <= set(evidence[ref]['object_keys']):
+        raise CalculationError(f'{item_id}分区证据未绑定母面及本数量出口')
+    plan['source_binding'] = {'evidence_ref':ref,'source_id':evidence[ref]['source_id'],
+                              'source_sha256':source['sha256'],'source_pointer':pointer}
+
+    def bind(record, suffix, expected_class):
+        if not isinstance(record,dict):
+            raise CalculationError(f'{item_id}{suffix}须为有物理身份的源事实对象')
+        e_ref=require_text(record.get('source_evidence_ref'), f'{item_id}{suffix}.source_evidence_ref')
+        physical=require_text(record.get('physical_object_id'),f'{item_id}{suffix}.physical_object_id')
+        if e_ref not in row['evidence_refs'] or e_ref not in evidence or evidence[e_ref]['evidence_class'] != expected_class:
+            raise CalculationError(f'{item_id}{suffix}未绑定本项对应类别原图证据')
+        e=evidence[e_ref]
+        if not {parent,physical,row['physical_surface_id']} <= set(e['object_keys']):
+            raise CalculationError(f'{item_id}{suffix}证据未绑定母面、物理对象及本数量出口')
+        evidence_source=sources[e['source_id']]
+        record['source_binding']={'source_id':evidence[ref]['source_id'],'source_sha256':source['sha256'],
+             'source_pointer':pointer+suffix,'evidence_ref':e_ref,'evidence_source_id':e['source_id'],
+             'evidence_source_sha256':evidence_source['sha256'],'evidence_locator':e['locator']}
+
+    bind(plan.get('face'),'/face','surface_geometry')
+    for key,cls in [('actual_openings','opening_union'),('material_regions','surface_geometry'),('unknown_regions','surface_geometry')]:
+        if not isinstance(plan.get(key),list):
+            raise CalculationError(f'{item_id}.{key}须显式声明数组')
+        for index,record in enumerate(plan[key]):
+            bind(record,f'/{key}/{index}',cls)
+    if 'base_material' not in plan:
+        raise CalculationError(f'{item_id}base_material须显式声明有源补集或null')
+    if plan['base_material'] is not None:
+        bind(plan['base_material'],'/base_material','surface_geometry')
+    if 'coverage' in plan:
+        bind(plan['coverage'],'/coverage','surface_geometry')
+    frame_binding=row.get('frame_binding')
+    if not isinstance(frame_binding,dict):
+        raise CalculationError(f'{item_id}材料分区必须绑定母面源边与局部框架')
+    frame_ref=frame_binding.get('frame_evidence_ref')
+    if frame_ref not in evidence or evidence[frame_ref]['source_id'] != evidence[ref]['source_id'] or frame_binding.get('source_pointer') != pointer+'/local_coordinate_frame':
+        raise CalculationError(f'{item_id}材料分区框架必须显式绑定本分区的local_coordinate_frame')
+    try:
+        face=material_rectangle(plan['face'],f'{item_id}.face')
+    except MaterialPartitionError as exc:
+        raise CalculationError(str(exc)) from exc
+    frame_row=dict(row,inputs={'length_m':face[2]-face[0],'height_m':face[3]-face[1]})
+    frame_audit=resolve_rectangle_frame(item_id,frame_row,evidence,sources)
+    frame=frame_audit['local_coordinate_frame']
+    target=[0.,frame['vertical_range_m'][0],frame_audit['bound_length_m'],frame['vertical_range_m'][1]]
+    if any(not math.isclose(a,b,rel_tol=0,abs_tol=1e-8) for a,b in zip(face,target)):
+        raise CalculationError(f'{item_id}母面矩形位置与绑定源边区间及竖向范围不一致')
+    try:
+        partition=partition_material_regions(plan)
+    except MaterialPartitionError as exc:
+        raise CalculationError(str(exc)) from exc
+    if partition['scenario']['status']=='conditional' and row['adoption_role']!='reference':
+        raise CalculationError(f'{item_id}条件材料分区只能作为参考方案，不得进入采用量')
+    if partition['unknown_region']['area_m2']>0 and row['scope_status']!='partial':
+        raise CalculationError(f'{item_id}分区含未定材料或冲突，所有数量出口须保留partial范围及未决')
+    if inputs['output_kind']=='unknown':
+        if row['adoption_role']!='reference':
+            raise CalculationError(f'{item_id}未知材料区域面积只能作为参考范围量')
+        value=partition['unknown_region']['area_m2']
+        selection={'output_kind':'unknown'}
+    else:
+        material=require_text(inputs.get('material_id'),f'{item_id}.material_id')
+        matching=[v for v in partition['material_regions'] if v['material_id']==material]
+        if not matching:
+            raise CalculationError(f'{item_id}选择了分区中不存在的材料')
+        value=matching[0]['effective_known_geometry']['area_m2']
+        selection={'output_kind':'material','material_id':material}
+    other=partition['net_face_area_m2']-value
+    audit={'gross_area_m2':partition['gross_face_area_m2'],
+           'opening_union_area_m2':partition['actual_opening_union']['area_m2'],
+           'other_deductions_area_m2':other,'additions_area_m2':0.,
+           'opening_union_computed':True,'material_partition':partition,'partition_selection':selection,
+           'frame_validation':frame_audit,
+           'partition_coordinate_basis':'矩形/多边形为沿x_axis与up_axis、相对基准origin_m的米值；不是偏移后的surface_origin_m'}
+    formula=f"母面{partition['gross_face_area_m2']:.6f}-真实洞口并集{partition['actual_opening_union']['area_m2']:.6f}-本出口之外区域{other:.6f}={value:.6f} m²"
+    return value,formula,audit
+
+
+def validate_material_partition_outputs(result_items):
+    """Require complete per-scope output without conflating different layers."""
+    groups={}
+    for item in result_items:
+        check=item['专业检查'];audit=check['输入审计']
+        partition=audit.get('material_partition')
+        if partition is None:
+            continue
+        key=(partition['parent_surface_id'],partition['layer_scope_id'],partition['scenario']['scenario_id'])
+        source=partition['partition_source_binding']
+        fingerprint=(partition['partition_id'],source['source_sha256'],source['source_pointer'])
+        group=groups.setdefault(key,{'fingerprint':fingerprint,'expected':set(),'actual':set()})
+        if fingerprint != group['fingerprint']:
+            raise CalculationError('同一母面、层范围和场景引用了不同分区方案，须明确拆分场景')
+        expected={('material',v['material_id']) for v in partition['material_regions'] if v['effective_known_geometry']['area_m2']>0}
+        if partition['unknown_region']['area_m2']>0:
+            expected.add(('unknown',None))
+        group['expected']=expected
+        selection=audit['partition_selection'];selected=(selection['output_kind'],selection.get('material_id'))
+        if selected in group['actual']:
+            raise CalculationError('同一母面、层范围和场景的材料/未知区域有重复数量出口')
+        group['actual'].add(selected)
+    for key,group in groups.items():
+        missing=group['expected']-group['actual']
+        if missing:
+            raise CalculationError(f'材料分区{key}缺少正面积材料或未知区域单列出口: {sorted(missing,key=str)}')
+
+
+def resolve_boundary_inputs(item_id, row, evidence, sources):
+    """Read edge coordinates and opening intervals from hashed source facts.
+
+    The manifest carries identity, selection and interpretation; no precomputed
+    perimeter or quantity can override the bound source coordinates.
+    """
+    inputs = row.get('inputs')
+    if not isinstance(inputs, dict) or set(inputs) != {'boundary_edges', 'openings'}:
+        raise CalculationError(f'{item_id}长度输入只接受boundary_edges和显式openings，不接受预计算总长')
+    if not isinstance(inputs['boundary_edges'], list) or not inputs['boundary_edges'] or not isinstance(inputs['openings'], list):
+        raise CalculationError(f'{item_id}源边须为非空数组，openings须显式给数组')
+    resolved = {'boundary_edges': [], 'openings': []}
+    surface = row['physical_surface_id']
+    def read(entry, ref_key, expected_class, object_keys):
+        ref = require_text(entry.get(ref_key), f'{item_id}.{ref_key}')
+        if ref not in row['evidence_refs'] or ref not in evidence or evidence[ref]['evidence_class'] != expected_class:
+            raise CalculationError(f'{item_id}.{ref_key}须引用本项对应类别证据')
+        e = evidence[ref]
+        if not set([surface, *object_keys]) <= set(e['object_keys']):
+            raise CalculationError(f'{item_id}边/洞口证据{ref}未绑定本物理表面及指定边或洞口')
+        source = sources[e['source_id']]
+        if source['file_role'] != 'json' or source['parsed'] is None:
+            raise CalculationError(f'{item_id}边线及区间数值须来自已核验哈希的JSON事实源')
+        value = json_pointer(source['parsed'], entry.get('source_pointer'), f'{item_id}.source_pointer')
+        if not isinstance(value, dict):
+            raise CalculationError(f'{item_id}源边线或洞口区间须定位到对象')
+        binding = {'evidence_ref':ref, 'source_id':e['source_id'], 'source_sha256':source['sha256'], 'source_pointer':entry['source_pointer']}
+        return value, binding
+    for entry in inputs['boundary_edges']:
+        if not isinstance(entry, dict) or set(entry) != {'edge_id', 'geometry_evidence_ref', 'source_pointer', 'effective_scope'}:
+            raise CalculationError(f'{item_id}源边只接受edge_id/geometry_evidence_ref/source_pointer/effective_scope')
+        edge_id = require_text(entry.get('edge_id'), f'{item_id}.edge_id')
+        value, binding = read(entry, 'geometry_evidence_ref', 'surface_geometry', [edge_id])
+        if value.get('edge_id') != edge_id:
+            raise CalculationError(f'{item_id}源边身份与选择不一致')
+        if entry['effective_scope'] not in ('whole_edge', 'source_intervals'):
+            raise CalculationError(f'{item_id}.effective_scope须为whole_edge或source_intervals')
+        edge = {k:value.get(k) for k in ('edge_id','start','end','unit')}
+        edge.update(effective_scope=entry['effective_scope'], source_binding=binding)
+        if entry['effective_scope'] == 'source_intervals':
+            edge['effective_intervals'] = value.get('effective_intervals')
+        resolved['boundary_edges'].append(edge)
+    for entry in inputs['openings']:
+        if not isinstance(entry, dict) or set(entry) != {'opening_id','edge_id','opening_evidence_ref','source_pointer'}:
+            raise CalculationError(f'{item_id}洞口只接受opening_id/edge_id/opening_evidence_ref/source_pointer')
+        opening_id = require_text(entry.get('opening_id'), f'{item_id}.opening_id')
+        edge_id = require_text(entry.get('edge_id'), f'{item_id}.edge_id')
+        value, binding = read(entry, 'opening_evidence_ref', 'opening_union', [edge_id, opening_id])
+        if value.get('opening_id') != opening_id or value.get('edge_id') != edge_id:
+            raise CalculationError(f'{item_id}源洞口或所属边身份不一致，不能跨邻边套区间')
+        opening = {k:value.get(k) for k in ('opening_id','edge_id','interval','unit')}
+        opening['source_binding'] = binding
+        resolved['openings'].append(opening)
+    return resolved
+
+
+def boundary_interval_length(inputs, item_id):
+    """Straight edge lengths minus the union of eligible opening intervals."""
+    def scale(unit):
+        try:
+            return canonical_scale(unit)
+        except ValueError as exc:
+            raise CalculationError(f'{item_id}边线/区间必须声明物理长度单位: {exc}') from exc
+    def point(value, factor):
+        if not isinstance(value, list) or len(value) not in (2,3) or any(isinstance(x,bool) or not isinstance(x,(float,int)) or not math.isfinite(x) for x in value):
+            raise CalculationError(f'{item_id}边线起终点须为有限二维或三维坐标')
+        output = [float(v)*factor for v in value]
+        if any(not math.isfinite(v) for v in output):
+            raise CalculationError(f'{item_id}边线单位换算溢出')
+        return output + [0.]*(3-len(output))
+    def interval(value, factor, label):
+        if not isinstance(value,list) or len(value)!=2 or any(isinstance(x,bool) or not isinstance(x,(int,float)) or not math.isfinite(x) for x in value):
+            raise CalculationError(f'{item_id}.{label}须为两个有限沿边距离')
+        a,b = [float(x)*factor for x in value]
+        if not math.isfinite(a) or not math.isfinite(b) or a>=b:
+            raise CalculationError(f'{item_id}.{label}区间须正向且有正长度')
+        return [a,b]
+    def union(values):
+        output=[]
+        for a,b in sorted(values):
+            if output and a<=output[-1][1]:
+                output[-1][1]=max(output[-1][1],b)
+            else:
+                output.append([a,b])
+        return output
+    def intersect(a,b):
+        return [[max(x,u),min(y,v)] for x,y in a for u,v in b if max(x,u)<min(y,v)]
+    def length(values):
+        return math.fsum(b-a for a,b in values)
+    def overlap(a,b,c,d):
+        """Positive overlap of two 3D collinear spans, including reversed edges."""
+        u=[y-x for x,y in zip(a,b)]; n=math.dist(a,b)
+        if not n:
+            return False
+        direction=[x/n for x in u]
+        along=lambda p:math.fsum((y-x)*v for x,y,v in zip(a,p,direction))
+        tc,td=along(c),along(d)
+        distance=lambda p,t:math.sqrt(math.fsum((y-x-t*v)**2 for x,y,v in zip(a,p,direction)))
+        epsilon=max(1e-9,n*1e-12,math.dist(c,d)*1e-12)
+        return distance(c,tc)<=epsilon and distance(d,td)<=epsilon and min(n,max(tc,td))-max(0,min(tc,td))>epsilon
+    edges = inputs.get('boundary_edges')
+    openings = inputs.get('openings')
+    if not isinstance(edges,list) or not edges or not isinstance(openings,list):
+        raise CalculationError(f'{item_id}缺少明确源边或洞口数组')
+    by_id={}; physical_spans=[]
+    for edge in edges:
+        key=require_text(edge.get('edge_id'),f'{item_id}.edge_id')
+        if key in by_id:
+            raise CalculationError(f'{item_id}源边编号重复: {key}')
+        factor=scale(edge.get('unit')); a,b=point(edge.get('start'),factor),point(edge.get('end'),factor)
+        edge_length=math.dist(a,b)
+        if not math.isfinite(edge_length) or edge_length<=0:
+            raise CalculationError(f'{item_id}源边必须有有限正长度')
+        if edge.get('effective_scope')=='whole_edge':
+            effective=[[0.,edge_length]]
+        elif edge.get('effective_scope')=='source_intervals' and isinstance(edge.get('effective_intervals'),list):
+            effective=[interval(v,factor,'effective_intervals') for v in edge['effective_intervals']]
+            if any(a<0 or b>edge_length+max(1e-9,edge_length*1e-12) for a,b in effective):
+                raise CalculationError(f'{item_id}有效区间越出对应源边')
+            effective=[[a,min(b,edge_length)] for a,b in effective]
+        else:
+            raise CalculationError(f'{item_id}有效范围缺失或非法')
+        merged=union(effective)
+        for lo,hi in merged:
+            start=[x+(y-x)*lo/edge_length for x,y in zip(a,b)]
+            end=[x+(y-x)*hi/edge_length for x,y in zip(a,b)]
+            if any(overlap(start,end,p,q) for p,q,_ in physical_spans):
+                raise CalculationError(f'{item_id}不同边别名覆盖同一物理有效线段，不能重复计量')
+            physical_spans.append((start,end,key))
+        by_id[key]={'edge_id':key,'start_m':a,'end_m':b,'source_length_m':edge_length,
+                    'effective_intervals_m':merged,'effective_interval_overlap_removed_m':length(effective)-length(merged),
+                    'gross_length_m':length(merged),'opening_intervals':[],'source_binding':edge.get('source_binding')}
+    seen=set()
+    for opening in openings:
+        key=require_text(opening.get('opening_id'),f'{item_id}.opening_id')
+        edge_id=require_text(opening.get('edge_id'),f'{item_id}.opening.edge_id')
+        if (key,edge_id) in seen:
+            raise CalculationError(f'{item_id}同一边的洞口编号重复: {key}/{edge_id}')
+        seen.add((key,edge_id))
+        if edge_id not in by_id:
+            raise CalculationError(f'{item_id}洞口引用未选择的边: {edge_id}')
+        edge=by_id[edge_id]
+        raw=interval(opening.get('interval'),scale(opening.get('unit')),'opening.interval')
+        clipped=intersect([raw],edge['effective_intervals_m'])
+        edge['opening_intervals'].append({'opening_id':key,'raw_interval_m':raw,'clipped_intervals_m':clipped,
+                                         'clipped_length_m':length(clipped),'source_binding':opening.get('source_binding')})
+    for edge in by_id.values():
+        pieces=[v for opening in edge['opening_intervals'] for v in opening['clipped_intervals_m']]
+        merged=union(pieces)
+        edge.update(opening_union_intervals_m=merged,opening_union_length_m=length(merged),
+                    opening_overlap_removed_m=length(pieces)-length(merged),net_length_m=edge['gross_length_m']-length(merged))
+    gross=math.fsum(e['gross_length_m'] for e in by_id.values())
+    deduction=math.fsum(e['opening_union_length_m'] for e in by_id.values())
+    net=gross-deduction
+    if not all(math.isfinite(v) for v in (gross,deduction,net)):
+        raise CalculationError(f'{item_id}长度合计溢出')
+    audit={'gross_length_m':gross,'opening_union_length_m':deduction,'net_length_m':net,'boundary_edges':list(by_id.values()),'opening_union_computed':True}
+    return net,f'逐源边有效区间并集{gross:.6f}-逐边洞口交集并集{deduction:.6f}={net:.6f} m',audit
+
+
+def calculate_item(item_id: str, row: dict[str, Any]) -> tuple[float | None, str, dict[str, Any]]:
     method = require_text(row.get("method"), f"{item_id}.method")
     if method not in ALLOWED_METHODS:
         raise CalculationError(f"{item_id}.method非法")
     inputs = row.get("inputs", {})
     if not isinstance(inputs, dict):
         raise CalculationError(f"{item_id}.inputs必须是对象")
+    if method == 'boundary_intervals_net':
+        return boundary_interval_length(inputs, item_id)
     if method == "deferred":
         if inputs:
             raise CalculationError(f"{item_id}待定项不得携带数值输入")
         return None, require_text(row.get("deferred_reason"), f"{item_id}.deferred_reason"), {}
     if method == "area_direct":
+        if set(inputs) != {"area_m2"}:
+            raise CalculationError(f"{item_id}直接面积只接受area_m2，不得静默忽略洞口或其他扣增")
         area = numeric_input(inputs, "area_m2", item_id)
         return area, f"直接设计表面积={area:.6f}", {"gross_area_m2": area, "opening_union_area_m2": 0.0}
     if method == "horizontal_net":
@@ -476,19 +996,27 @@ def calculate_item(item_id: str, row: dict[str, Any]) -> tuple[float | None, str
         value = gross - opening - other + additions
         formula = f"{gross:.6f}-{opening:.6f}-{other:.6f}+{additions:.6f}"
         return value, formula, {"gross_area_m2": gross, "opening_union_area_m2": opening, "other_deductions_area_m2": other, "additions_area_m2": additions}
-    if method == "rectangle_net":
+    if method in {"rectangle_net", "rectangle_openings_net"}:
         length = numeric_input(inputs, "length_m", item_id)
         height = numeric_input(inputs, "height_m", item_id)
         side_factor = numeric_input(inputs, "side_factor", item_id, 1.0)
         if side_factor not in {1.0, 2.0}:
             raise CalculationError(f"{item_id}.inputs.side_factor只允许1或2")
-        opening = numeric_input(inputs, "opening_union_area_m2", item_id, 0.0)
+        opening_details = None
+        if method == "rectangle_openings_net":
+            opening, opening_details = rectangle_opening_union(inputs, item_id)
+        else:
+            opening = numeric_input(inputs, "opening_union_area_m2", item_id, 0.0)
         other = numeric_input(inputs, "other_deductions_area_m2", item_id, 0.0)
         additions = numeric_input(inputs, "reveal_or_return_area_m2", item_id, 0.0)
         gross = length * height * side_factor
         value = gross - opening - other + additions
         formula = f"{length:.6f}×{height:.6f}×{side_factor:.0f}-{opening:.6f}-{other:.6f}+{additions:.6f}"
-        return value, formula, {"gross_area_m2": gross, "opening_union_area_m2": opening, "other_deductions_area_m2": other, "additions_area_m2": additions}
+        audit = {"gross_area_m2": gross, "opening_union_area_m2": opening, "other_deductions_area_m2": other, "additions_area_m2": additions}
+        if opening_details is not None:
+            audit["opening_intersections"] = opening_details
+            audit["opening_union_computed"] = True
+        return value, formula, audit
     projected = numeric_input(inputs, "projected_area_m2", item_id)
     slope = numeric_input(inputs, "slope_ratio", item_id)
     opening = numeric_input(inputs, "opening_union_area_m2", item_id, 0.0)
@@ -508,13 +1036,15 @@ def build_result_item(
     rules: dict[str, dict[str, Any]],
     unresolved: dict[str, dict[str, Any]],
     seen_identities: set[tuple[str, ...]],
+    sources: dict[str, dict[str, Any]],
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     name = require_text(row.get("name"), f"{item_id}.name")
     object_type = require_text(row.get("object_type"), f"{item_id}.object_type")
     if object_type not in ALLOWED_OBJECT_TYPES:
         raise CalculationError(f"{item_id}.object_type非法")
-    if require_text(row.get("unit"), f"{item_id}.unit") != "m²":
-        raise CalculationError(f"{item_id}当前版本只接受明确的面积单位m²")
+    unit = require_text(row.get("unit"), f"{item_id}.unit")
+    if unit not in {'m²', 'm'}:
+        raise CalculationError(f"{item_id}仅接受明确的面积m²或踢脚长度m")
     scope_status = require_text(row.get("scope_status"), f"{item_id}.scope_status")
     adoption_role = require_text(row.get("adoption_role"), f"{item_id}.adoption_role")
     quantity_role = require_text(row.get("quantity_role"), f"{item_id}.quantity_role")
@@ -532,14 +1062,19 @@ def build_result_item(
     measurement_basis = require_text(row.get("measurement_basis"), f"{item_id}.measurement_basis")
     result_use = require_text(row.get("result_use"), f"{item_id}.result_use")
     method = require_text(row.get("method"), f"{item_id}.method")
-    identity = (physical_surface_id, layer_id, side_scope, measurement_basis, adoption_role)
-    if identity in seen_identities:
-        raise CalculationError(f"{item_id}与已有项形成同一表面、同一层、同一侧和同一口径的重复数量")
-    seen_identities.add(identity)
+    if unit == 'm':
+        if object_type != 'skirting_finish' or method not in {'boundary_intervals_net', 'deferred'} or quantity_role not in {'physical_length','bill_quantity_candidate'}:
+            raise CalculationError(f'{item_id}米制仅用于源边区间踢脚长度或其未决项，数量角色须为physical_length或清单候选')
+    elif method == 'boundary_intervals_net' or quantity_role == 'physical_length':
+        raise CalculationError(f'{item_id}长度方法/角色不能输出平方米')
+    if method == 'material_partition_net' and quantity_role != 'physical_area':
+        raise CalculationError(f'{item_id}材料几何分区只输出physical_area，合同计量转换须另有明确依据')
+    identity = (physical_surface_id, layer_id, side_scope, measurement_basis, adoption_role, quantity_role, unit)
 
     evidence_refs = require_refs(row.get("evidence_refs"), evidence, f"{item_id}.evidence_refs", allow_empty=method == "deferred")
     rule_refs = require_refs(row.get("rule_refs"), rules, f"{item_id}.rule_refs")
-    inactive_rules = [ref for ref in rule_refs if rules[ref].get("decision") != "采用"]
+    allowed_decisions = {"采用", "试用"} if adoption_role == "reference" else {"采用"}
+    inactive_rules = [ref for ref in rule_refs if rules[ref].get("decision") not in allowed_decisions]
     if inactive_rules:
         raise CalculationError(f"{item_id}引用的规则未判定为采用: {', '.join(inactive_rules)}")
     unresolved_refs = require_refs(row.get("unresolved_refs", []), unresolved, f"{item_id}.unresolved_refs", allow_empty=True)
@@ -547,8 +1082,21 @@ def build_result_item(
         raise CalculationError(f"{item_id}范围非闭合时必须引用未决事项")
     if scope_status == "unresolved" and method != "deferred":
         raise CalculationError(f"{item_id}未决范围必须使用deferred")
+    if scope_status == "not_applicable" and method != "deferred":
+        raise CalculationError(f"{item_id}不适用项必须使用deferred，不得携带数值")
     if method == "deferred" and scope_status not in {"unresolved", "not_applicable"}:
         raise CalculationError(f"{item_id}deferred只允许未决或不适用")
+    if method != "deferred":
+        classes = {evidence[ref]["evidence_class"] for ref in evidence_refs}
+        if not {"source_identity", "surface_geometry", "layer_assignment"} <= classes:
+            raise CalculationError(f"{item_id}数值项必须具备来源身份、表面几何和构造层适用证据；参考量同样需要")
+        for ref in evidence_refs:
+            e = evidence[ref]
+            if e["evidence_class"] in {"surface_geometry", "opening_union", "coverage_complete", "layer_assignment", "slope_geometry"}:
+                if physical_surface_id not in e["object_keys"]:
+                    raise CalculationError(f"{item_id}证据{ref}未绑定本物理表面，不能沿用其他房间或立面")
+            if e["evidence_class"] == "layer_assignment" and layer_id not in e["object_keys"]:
+                raise CalculationError(f"{item_id}做法证据{ref}未绑定本构造层")
     if adoption_role == "adopted":
         invalid = [ref for ref in evidence_refs if evidence[ref]["fact_status"] not in {"verified", "test_only"}]
         if invalid:
@@ -561,13 +1109,40 @@ def build_result_item(
         if approval_ref not in evidence_refs or evidence[approval_ref]["evidence_class"] not in {"rule_clause", "plan_approved", "requirement"}:
             raise CalculationError(f"{item_id}轴线口径采用量缺少明确批准证据")
 
-    value, formula, audit = calculate_item(item_id, row)
+    calculation_row = row
+    if method == 'boundary_intervals_net':
+        calculation_row = dict(row, inputs=resolve_boundary_inputs(item_id,row,evidence,sources))
+    if method == 'material_partition_net':
+        value,formula,audit=calculate_material_partition(item_id,row,evidence,sources)
+    else:
+        value, formula, audit = calculate_item(item_id, calculation_row)
+    if method != 'material_partition_net' and (method in {'rectangle_net', 'rectangle_openings_net'} or 'local_coordinate_frame' in row or 'frame_binding' in row):
+        audit['frame_validation'] = resolve_rectangle_frame(item_id, row, evidence, sources)
+    partition_dimensions={}
+    if method=='material_partition_net':
+        p=audit['material_partition'];s=audit['partition_selection']
+        partition_dimensions={'材料分区母面':p['parent_surface_id'],'材料分区层范围':p['layer_scope_id'],
+                              '材料分区场景':p['scenario']['scenario_id'],'材料分区输出':s['output_kind'],
+                              '材料编号':s.get('material_id','')}
+        identity+=tuple(partition_dimensions.values())
+    if identity in seen_identities:
+        raise CalculationError(f"{item_id}与已有项形成同一表面、同一层、同一侧和同一口径的重复数量")
+    seen_identities.add(identity)
     if value is not None:
+        suffix = 'length_m' if unit == 'm' else 'area_m2'
+        gross_key = f'gross_{suffix}'
+        opening_key = f'opening_union_{suffix}'
+        other_key = f'other_deductions_{suffix}'
+        if not math.isfinite(value) or any(not math.isfinite(audit[k]) for k in
+                (gross_key, opening_key, other_key, f'additions_{suffix}') if k in audit):
+            raise CalculationError(f"{item_id}计算结果溢出或不是有限数量")
+        if audit.get(opening_key,0.) + audit.get(other_key,0.) > audit[gross_key] + 1e-9:
+            raise CalculationError(f"{item_id}扣减超过毛量；增加量不能掩盖越界或重复扣减")
         if value < -1e-9:
-            raise CalculationError(f"{item_id}扣减后出现负面积")
+            raise CalculationError(f"{item_id}扣减后出现负数量")
         if abs(value) < 1e-12:
             value = 0.0
-        opening = audit.get("opening_union_area_m2", 0.0)
+        opening = audit.get(opening_key, 0.0)
         if opening > 0:
             opening_ref = require_text(row.get("opening_union_evidence_ref"), f"{item_id}.opening_union_evidence_ref")
             if opening_ref not in evidence_refs or evidence[opening_ref]["evidence_class"] != "opening_union":
@@ -577,6 +1152,8 @@ def build_result_item(
             if coverage_ref not in evidence_refs or evidence[coverage_ref]["evidence_class"] != "coverage_complete":
                 raise CalculationError(f"{item_id}声明范围闭合但缺少完整覆盖证据")
         if value == 0:
+            if scope_status != "complete":
+                raise CalculationError(f"{item_id}零值必须在完整检查范围内成立")
             require_text(row.get("zero_meaning"), f"{item_id}.zero_meaning")
             coverage_ref = require_text(row.get("coverage_evidence_ref"), f"{item_id}.coverage_evidence_ref")
             if coverage_ref not in evidence_refs or evidence[coverage_ref]["evidence_class"] != "coverage_complete":
@@ -588,13 +1165,16 @@ def build_result_item(
     status = "待确认" if value is None else ("部分计算" if scope_status == "partial" else "已计算")
     if scope_status == "not_applicable":
         value_state, status = "不适用", "不适用"
-    precision = require_text(row.get("precision", "0.001 m²"), f"{item_id}.precision")
+    precision = require_text(row.get("precision", f"0.001 {unit}"), f"{item_id}.precision")
     identity_signature = canonical_hash({
         "physical_surface_id": physical_surface_id,
         "layer_id": layer_id,
         "side_scope": side_scope,
         "measurement_basis": measurement_basis,
         "adoption_role": adoption_role,
+        "quantity_role": quantity_role,
+        "unit": unit,
+        **partition_dimensions,
     })
     result = {
         "成果项编号": item_id,
@@ -614,7 +1194,7 @@ def build_result_item(
             "计算式或说明": formula,
             "精度": precision,
         },
-        "单位": "m²",
+        "单位": unit,
         "来源": evidence_refs,
         "规则": rule_refs,
         "状态": status,
@@ -641,10 +1221,12 @@ def build_result_item(
             "范围完整性": scope_status,
             "采用角色": adoption_role,
             "数量角色": quantity_role,
+            "规则成熟状态": sorted({rules[ref]["maturity"] for ref in rule_refs}),
             "结果用途": result_use,
             "对象身份签名": identity_signature,
             "输入审计": audit,
             "进入采用小计": adoption_role == "adopted" and value is not None,
+            **partition_dimensions,
         },
     }
     subtotal_row = None
@@ -654,10 +1236,12 @@ def build_result_item(
             "构造层编号": layer_id,
             "计量基准": measurement_basis,
             "采用角色": adoption_role,
-            "单位": "m²",
+            "数量角色": quantity_role,
+            "单位": unit,
             "数值": value,
             "来源成果项": item_id,
             "范围完整性": scope_status,
+            **partition_dimensions,
         }
     return result, subtotal_row
 
@@ -685,22 +1269,27 @@ def calculate_from_path(manifest_path: Path) -> dict[str, Any]:
     subtotal_inputs: list[dict[str, Any]] = []
     seen_identities: set[tuple[str, ...]] = set()
     for item_id, row in item_rows.items():
-        result, subtotal = build_result_item(item_id, row, task, evidence, rule_rows, unresolved_rows, seen_identities)
+        result, subtotal = build_result_item(item_id, row, task, evidence, rule_rows, unresolved_rows, seen_identities, sources)
         result_items.append(result)
         if subtotal is not None:
             subtotal_inputs.append(subtotal)
 
-    grouped: dict[tuple[str, str, str, str, str, str], dict[str, Any]] = {}
+    validate_material_partition_outputs(result_items)
+
+    grouped: dict[tuple[str, ...], dict[str, Any]] = {}
     for row in subtotal_inputs:
         key = (
             row["对象类别"], row["构造层编号"], row["计量基准"], row["采用角色"],
-            row["单位"], row["范围完整性"],
-        )
+            row["单位"], row["范围完整性"], row["数量角色"],
+        ) + tuple(row.get(field,'') for field in ('材料分区母面','材料分区层范围','材料分区场景','材料分区输出','材料编号'))
         group = grouped.setdefault(key, {
             "对象类别": key[0], "构造层编号": key[1], "计量基准": key[2],
             "采用角色": key[3], "单位": key[4], "范围完整性": key[5],
+            "数量角色": key[6],
             "数值": 0.0, "来源成果项": [],
         })
+        if any(key[7:]):
+            group.update(zip(('材料分区母面','材料分区层范围','材料分区场景','材料分区输出','材料编号'),key[7:]))
         group["数值"] += row["数值"]
         group["来源成果项"].append(row["来源成果项"])
     subtotals = []
@@ -807,7 +1396,7 @@ def calculate_from_path(manifest_path: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="按证据锁定清单复算面层与建筑围护面积")
+    parser = argparse.ArgumentParser(description="按证据锁定清单复算面层面积与踢脚长度")
     parser.add_argument("--manifest", required=True, type=Path, help="运行清单JSON")
     parser.add_argument("--output", type=Path, help="成果JSON；省略则输出到标准输出")
     args = parser.parse_args()

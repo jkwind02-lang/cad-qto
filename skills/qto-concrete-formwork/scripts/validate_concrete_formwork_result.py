@@ -24,15 +24,7 @@ VALID_RULE_DECISIONS = {"采用", "不适用", "证据不足"}
 VALID_RULE_MATURITY = {"候选", "试运行", "正式", "停用"}
 VALID_UNRESOLVED_TYPES = {"缺资料", "范围未定", "来源冲突", "规则冲突", "质量问题", "需用户确认"}
 VALID_UNRESOLVED_ACTIONS = {"停止受影响计算", "保留已证实部分", "等待裁决"}
-QH_PUMP_RESULT_IDS = {
-    "QTY-CF-RAFT-GROSS",
-    "QTY-CF-RAFT-EXTERIOR-FORM",
-    "QTY-CF-RAFT-BOTTOM-FORM",
-    "QTY-CF-BLINDING-GROSS",
-    "QTY-CF-BLINDING-SIDE-FORM",
-    "QTY-CF-BOQ-RAFT",
-    "QTY-CF-BOQ-FORM",
-}
+
 
 
 def _load_calculator():
@@ -141,7 +133,7 @@ def run_self_tests() -> list[dict[str, Any]]:
         "整体未决事项": [],
     }
     generic_errors, _ = validate_result(generic_fixture, None, None, None)
-    check("generic_validator_accepts_column", not generic_errors, f"通用校验器接受非青海筏板的合法柱成果；errors={generic_errors}")
+    check("generic_validator_accepts_column", not generic_errors, f"通用校验器接受合法柱成果；errors={generic_errors}")
     missing_source = copy.deepcopy(generic_fixture)
     missing_source["工程量结果"][0]["来源"] = []
     missing_source_errors, _ = validate_result(missing_source, None, None, None)
@@ -299,12 +291,10 @@ def run_source_negative_tests(manifest_path: Path) -> list[dict[str, Any]]:
     expect_rejected("wrong_stream_hash", lambda item: item["source"].__setitem__("entity_stream_sha256", "0" * 64), "原生实体流哈希不符")
     expect_rejected("wrong_cache_adapter", lambda item: item["source"].__setitem__("expected_adapter", "unverified-adapter"), "缓存元数据adapter")
     expect_rejected("missing_decisive_dimension", lambda item: item["evidence_entities"].__setitem__(slice(None), [row for row in item["evidence_entities"] if row.get("role") != "notch_width"]), "尺寸role不完整")
-    expect_rejected("silent_template_condition", lambda item: item["calculation"]["template_conditions"].__setitem__("blinding_side", "confirmed_formwork"), "template_conditions")
-    expect_rejected("silent_project_rule_gate", lambda item: item["project_rule_gate"].__setitem__("status", "CONFIRMED"), "project_rule_gate")
+    expect_rejected("silent_template_condition", lambda item: item["calculation"]["template_conditions"].__setitem__("blinding_side", "confirmed_formwork"), "模板面状态")
 
     def legacy_path(item: dict[str, Any]) -> None:
-        original = Path(item["source"]["dwg_path"])
-        qto_root = next(parent for parent in original.parents if parent.name == ".qto")
+        qto_root = manifest_path.parent / ".qto"
         item["source"]["dwg_path"] = str(qto_root / "methods" / "update_concrete_formwork_artifacts.py")
 
     expect_rejected("legacy_runtime_dependency", legacy_path, "不得引用旧运行时")
@@ -354,105 +344,6 @@ def _case_check(checks: list[dict[str, Any]], errors: list[str], name: str, cond
     checks.append({"name": name, "status": "PASS" if condition else "FAIL", "detail": detail})
     if not condition:
         errors.append(f"{name}: {detail}")
-
-
-def _validate_qh_pump_case(
-    quantities: dict[str, dict[str, Any]],
-    evidence: dict[str, Any],
-    detail_rows: list[dict[str, str]] | None,
-    manifest_path: Path | None,
-    errors: list[str],
-    checks: list[dict[str, Any]],
-) -> None:
-    _case_check(checks, errors, "qh_result_set", set(quantities) == QH_PUMP_RESULT_IDS, "青海案例应有7个限定成果项")
-    calc_results = evidence.get("calculations", {}).get("results", {})
-
-    def value(identifier: str) -> Any:
-        return quantities.get(identifier, {}).get("结果", {}).get("数值")
-
-    _case_check(checks, errors, "qh_raft_gross", _close(value("QTY-CF-RAFT-GROSS"), calc_results.get("raft_gross_m3")) and _close(value("QTY-CF-RAFT-GROSS"), 219.45), "筏板名义毛体积应为219.450m³并与证据一致")
-    _case_check(checks, errors, "qh_blinding_gross", _close(value("QTY-CF-BLINDING-GROSS"), calc_results.get("blinding_gross_m3")) and _close(value("QTY-CF-BLINDING-GROSS"), 45.158), "垫层名义毛体积应为45.158m³并与证据一致")
-
-    exterior = quantities.get("QTY-CF-RAFT-EXTERIOR-FORM", {})
-    exterior_ok = (
-        value("QTY-CF-RAFT-EXTERIOR-FORM") is None
-        and exterior.get("状态") == "证据不足"
-        and _close(exterior.get("专业检查", {}).get("条件候选值"), calc_results.get("raft_exterior_contact_condition_candidate_m2"))
-        and _close(exterior.get("专业检查", {}).get("条件候选值"), 63.2)
-        and exterior.get("专业检查", {}).get("进入采用量") is False
-    )
-    _case_check(checks, errors, "qh_exterior_formwork_unresolved", exterior_ok, "筏板外侧63.200m²只能是条件候选，正式结果必须为null")
-
-    bottom = quantities.get("QTY-CF-RAFT-BOTTOM-FORM", {})
-    bottom_ok = (
-        value("QTY-CF-RAFT-BOTTOM-FORM") is None
-        and bottom.get("状态") == "证据不足"
-        and bottom.get("零值复核") is None
-        and "U-BOTTOM-FORM-COVERAGE" in bottom.get("未决事项", [])
-    )
-    _case_check(checks, errors, "qh_bottom_not_false_zero", bottom_ok, "局部底面未闭合时普通模板必须为null，不得形成真零")
-
-    blinding_side = quantities.get("QTY-CF-BLINDING-SIDE-FORM", {})
-    blinding_side_ok = (
-        value("QTY-CF-BLINDING-SIDE-FORM") is None
-        and _close(blinding_side.get("专业检查", {}).get("条件候选值"), 12.72)
-        and blinding_side.get("专业检查", {}).get("进入采用量") is False
-    )
-    _case_check(checks, errors, "qh_blinding_side_conditional", blinding_side_ok, "垫层侧模12.720m²为条件候选且不得进入采用量")
-
-    boq_ok = all(value(identifier) is None and "U-RULE-GATE" in quantities.get(identifier, {}).get("未决事项", []) for identifier in ("QTY-CF-BOQ-RAFT", "QTY-CF-BOQ-FORM"))
-    _case_check(checks, errors, "qh_boq_gate", boq_ok and evidence.get("project_rule_gate", {}).get("status") == "INPUT_REQUIRED", "项目规则门未闭合时清单混凝土和模板必须为null")
-
-    source_identity = evidence.get("source_identity", {})
-    identity_ok = source_identity.get("entity_count") == 11033 and source_identity.get("row_count") == 11776 and evidence.get("old_runtime_used") is False
-    _case_check(checks, errors, "qh_source_identity", identity_ok, "冻结来源、11,033个实体、11,776行及旧运行时隔离必须闭合")
-    annotated = evidence.get("calculations", {}).get("annotated", {})
-    cross = evidence.get("calculations", {}).get("coordinate_crosscheck", {})
-    cross_ok = (
-        _close(annotated.get("raft_area_m2"), 438.9)
-        and _close(annotated.get("raft_perimeter_m"), 126.4)
-        and abs(float(cross.get("area_difference_m2", 999))) <= 0.01
-        and abs(float(cross.get("perimeter_difference_m", 999))) <= 0.001
-        and cross.get("adoption") == "采用图示标注尺寸；原生坐标只作质量交叉检查"
-    )
-    _case_check(checks, errors, "qh_dimension_crosscheck", cross_ok, "标注面积/周长与原生坐标交叉差异必须在双重容差内")
-
-    if manifest_path is None:
-        _case_check(checks, errors, "qh_manifest_link", False, "青海案例验证必须显式提供--manifest以核对证据链")
-    else:
-        actual_manifest_hash = _file_hash(manifest_path)
-        generator_path = Path(__file__).with_name("calculate_concrete_formwork_pairs.py").resolve()
-        generator = evidence.get("generator", {})
-        link_ok = (
-            evidence.get("manifest_sha256") == actual_manifest_hash
-            and Path(str(evidence.get("manifest_path", ""))).resolve() == manifest_path.resolve()
-            and generator.get("sha256") == _file_hash(generator_path)
-            and Path(str(generator.get("path", ""))).resolve() == generator_path
-        )
-        _case_check(checks, errors, "qh_manifest_link", link_ok, "计算证据必须匹配当前运行清单和当前生成器哈希")
-
-    if detail_rows is None:
-        _case_check(checks, errors, "qh_detail_rows", False, "青海案例验证必须提供构件明细CSV")
-    else:
-        detail_map = {row.get("计算项"): row for row in detail_rows}
-        numeric_expected = {
-            "筏板平面名义毛面积": (438.9, "m²"),
-            "筏板名义毛体积": (219.45, "m³"),
-            "筏板外侧若支模接触几何候选值": (63.2, "m²"),
-            "垫层外扩后名义面积": (451.58, "m²"),
-            "垫层名义毛体积": (45.158, "m³"),
-            "垫层侧模若支模条件值": (12.72, "m²"),
-        }
-        detail_ok = len(detail_rows) == 7
-        for name, (expected_value, unit) in numeric_expected.items():
-            row = detail_map.get(name)
-            try:
-                detail_ok = detail_ok and row is not None and _close(float(row["数值"]), expected_value) and row.get("单位") == unit
-            except (KeyError, TypeError, ValueError):
-                detail_ok = False
-        bottom_row = detail_map.get("筏板底面普通模板待确认量")
-        detail_ok = detail_ok and bottom_row is not None and bottom_row.get("数值", "") == "" and bottom_row.get("状态") == "证据不足"
-        _case_check(checks, errors, "qh_detail_rows", detail_ok, "7行明细必须包含6个可复算数值和1个底面null")
 
 
 def validate_result(
@@ -639,10 +530,26 @@ def validate_result(
             errors.append(f"同一构件几何编号{geometry_id}出现多个几何签名")
     checks.append({"name": "generic_quantity_invariants", "status": "PASS" if len(errors) == quantity_before else "FAIL", "detail": "检查数值/null、单位、规则状态、条件量、真零和同一几何不变量"})
 
-    if evidence is not None and evidence.get("case_id") == "QH-PUMP-RAFT-20260825":
-        _validate_qh_pump_case(quantities, evidence, detail_rows, manifest_path, errors, checks)
-    elif manifest_path is not None:
-        errors.append("仅在有对应案例证据时提供manifest")
+    if evidence is not None or detail_rows is not None or manifest_path is not None:
+        if evidence is None or manifest_path is None:
+            errors.append("源链复算须同时提供evidence和manifest")
+        else:
+            try:
+                expected_evidence, expected_details, expected_result = _load_calculator().calculate(_load_json(manifest_path))
+                _case_check(checks, errors, 'manifest_recalculation', data == expected_result,
+                            '成果须与当前源清单重算一致，不以项目固定答案校验')
+                _case_check(checks, errors, 'evidence_recalculation',
+                            all(evidence.get(k) == v for k, v in expected_evidence.items()),
+                            '来源、几何、面条件和结果证据须与重算一致')
+                _case_check(checks, errors, 'manifest_link',
+                            evidence.get('manifest_sha256') == _file_hash(manifest_path),
+                            '证据须绑定当前清单哈希')
+                if detail_rows is not None:
+                    normalize = lambda rows: [{k: '' if v is None else str(v) for k, v in row.items()} for row in rows]
+                    _case_check(checks, errors, 'detail_recalculation', normalize(detail_rows) == normalize(expected_details),
+                                '明细须与当前源清单重算一致')
+            except (RuntimeError, ValueError, KeyError, TypeError, OSError) as exc:
+                errors.append(f'源链复算失败: {exc}')
     return errors, checks
 
 

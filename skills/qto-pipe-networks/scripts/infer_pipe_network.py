@@ -24,6 +24,7 @@ INPUT_VERSIONS = {
 }
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from model_recognition_basis import validate_working_basis
+from qto_pipe_scope_quantity import boundary_context, restore_omissions
 from qto_pipe_topology import (prepare_network, make_endpoint_nodes, gap_pairs, add_interfaces,
     NodeLocator, RouteIndex, ambiguous_role_nodes, finalize_network, review_markdown)
 OUTPUT_VERSION = "qto-pipe-network-inference-evidence/1.2"
@@ -442,11 +443,19 @@ def main() -> int:
             scenario_include = raw.get("scenario_include", False)
             if not isinstance(scenario_include, bool):
                 fail(f"gap_classifications[{index}].scenario_include 必须是布尔值")
+            action = raw.get("quantity_action", "scenario")
+            if action not in {"scenario", "exclude", "restore_omission"}:
+                fail("quantity_action无效")
+            if action == "restore_omission":
+                text(raw.get("source_id"), "omission source_id")
+                seed_level(raw.get("quantity_evidence_level"), "omission evidence_level")
             gap_classifications[pair] = {
                 "classification": text(raw.get("classification", "未分类断口候选"), "classification"),
                 "quantity_decision": text(raw.get("quantity_decision", "待确认"), "quantity_decision"),
                 "scenario_include": scenario_include,
                 "source_id": raw.get("source_id"),
+                "quantity_action": action,
+                "quantity_evidence_level": raw.get("quantity_evidence_level"),
             }
 
         open_endpoints = [
@@ -516,6 +525,8 @@ def main() -> int:
                     "node_b": endpoint_node[right],
                     "virtual_length": gap,
                     "quantity_included": False,
+                    "quantity_action": gap_classification.get("quantity_action", "scenario"),
+                    "quantity_evidence_level": gap_classification.get("quantity_evidence_level"),
                     "quantity_decision": gap_classification.get(
                         "quantity_decision", "自动几何候选暂估补长"
                     ),
@@ -548,6 +559,50 @@ def main() -> int:
 
         change_nodes: set[str] = set()
         change_records = []
+        boundary_records = []
+        boundary_nodes: set[str] = set()
+        complete_boundary_nodes = set()
+        context_by_node = {}
+        raw_boundaries = data.get("scope_boundary_nodes", [])
+        if not isinstance(raw_boundaries, list):
+            fail("scope_boundary_nodes 必须是数组")
+        # Existing scope-interface roots already declare an incomplete network.
+        raw_boundaries = list(raw_boundaries) + [
+            {**r, "boundary_id": "ROOT-" + str(r.get("root_id", ""))}
+            for r in data.get("roots", []) if r.get("root_role") == "scope_interface"
+        ]
+        boundary_ids = set()
+        for index, raw in enumerate(raw_boundaries):
+            if not isinstance(raw, dict):
+                fail(f"scope_boundary_nodes[{index}] 必须是对象")
+            bid = text(raw.get("boundary_id"), "boundary_id")
+            if bid in boundary_ids:
+                fail("boundary_id 重复: " + bid)
+            boundary_ids.add(bid)
+            system = text(raw.get("system"), "boundary system")
+            source_id = text(raw.get("source_id"), "boundary source_id")
+            level = seed_level(raw.get("evidence_level"), "boundary evidence_level")
+            node = nearest_node(point(raw.get("point"), "boundary point"), system, snap, raw)
+            boundary_records.append({"boundary_id": bid, "node_id": node, "system": system,
+                                     "source_id": source_id, "evidence_level": level,
+                                     "status": "INCOMPLETE" if node else "UNBOUND"})
+            if node is None:
+                uncertain_change_systems.add(system)
+                route_preparation["issues"].append({"type": "范围边界未绑定，受影响系统停止规格传播", "object": raw})
+            else:
+                boundary_nodes.add(node)
+                change_nodes.add(node)
+                context = boundary_context({"coordinate_unit": unit, **raw}, node_points[node], segments, snap)
+                if node in context_by_node and context_by_node[node] != context:
+                    fail("同一边界节点存在不一致外接声明")
+                context_by_node[node] = context
+                boundary_records[-1].update(context)
+                if context["connections_complete"]:
+                    complete_boundary_nodes.add(node)
+                    boundary_records[-1]["status"] = "CONTEXT_RESOLVED"
+                else:
+                    route_preparation["issues"].append({"type": "范围边界外接关系未完整，管件类型待核实",
+                                                        "boundary_id": bid, "node_id": node, "source_id": source_id})
         for index, raw in enumerate(data.get("change_nodes", [])):
             if not isinstance(raw, dict):
                 fail(f"change_nodes[{index}] 必须是对象")
@@ -1123,21 +1178,40 @@ def main() -> int:
         for node_id, incident_set in sorted(node_segments.items()):
             incident = sorted(incident_set)
             degree = len(incident)
-            if degree < 2:
+            is_boundary = node_id in boundary_nodes
+            resolved_context = node_id in complete_boundary_nodes
+            if degree < 2 and not is_boundary:
                 continue
             systems = {segments[segment_id]["system"] for segment_id in incident}
             if len(systems) != 1:
                 continue
             directions = []
+            fitting_ports = []
             for segment_id in incident:
                 left, right = segment_nodes[segment_id]
                 target = segments[segment_id]["end"] if left == node_id else segments[segment_id]["start"]
                 directions.append(tuple(segments[segment_id]["tangent_start"]) if left == node_id else tuple(-x for x in segments[segment_id]["tangent_end"]))
+                fitting_ports.append({"port_id": segment_id + ("@start" if left == node_id else "@end"),
+                                      "segment_id": segment_id, "dn": assignments[segment_id]["dn"],
+                                      "direction": list(directions[-1]), "quantity_scope": "measured"})
             dns = sorted({assignments[segment_id]["dn"] for segment_id in incident if assignments[segment_id]["dn"]})
+            measured_degree = degree
+            context = context_by_node.get(node_id, {})
+            if resolved_context:
+                directions.extend(tuple(p["direction"]) for p in context["external_ports"])
+                fitting_ports.extend({"port_id": p["port_id"], "segment_id": p["segment_id"],
+                                      "dn": p.get("dn"), "direction": p["direction"], "quantity_scope": "context"}
+                                     for p in context["external_ports"])
+                if any(angle_deg(a,b) < 1e-5 for i,a in enumerate(directions) for b in directions[i+1:]):
+                    fail("范围外接方向与已有端口重叠，不能重复作为独立管口")
+                degree = len(directions)
+                dns = sorted(set(dns) | {p["dn"] for p in context["external_ports"] if p.get("dn")})
             fitting_type = None
             candidate_types = []
             angle = None
-            if degree == 2:
+            if is_boundary and not resolved_context:
+                fitting_type = "边界管件未决"
+            elif degree == 2:
                 angle = angle_deg(directions[0], directions[1])
                 straight = abs(180.0 - angle) <= fitting_angle_tolerance
                 if len(dns) > 1 and straight:
@@ -1155,12 +1229,21 @@ def main() -> int:
                 fitting_type = "多通节点候选"
             if fitting_type is None:
                 continue
+            port_angles = [{"a": fitting_ports[i]["port_id"], "b": fitting_ports[j]["port_id"],
+                            "angle_deg": angle_deg(directions[i], directions[j])}
+                           for i in range(degree) for j in range(i + 1, degree)]
+            branch_angle = None
+            if degree == 3 and any(abs(p['angle_deg'] - 180) <= fitting_angle_tolerance for p in port_angles):
+                branch_angle = min(p['angle_deg'] for p in port_angles)
+            dn_combination = "×".join(sorted((p['dn'] or 'DN待定' for p in fitting_ports), key=lambda d:(len(d), d)))
             incident_levels = [
                 assignments[segment_id]["evidence_level"]
                 for segment_id in incident
                 if assignments[segment_id]["evidence_level"]
             ]
             level = "scenario" if "scenario" in incident_levels else "inferred"
+            if resolved_context and any(p['evidence_level'] == 'scenario' for p in context['external_ports']):
+                level = 'scenario'
             fitting_records.append(
                 {
                     "fitting_id": f"FIT-{len(fitting_records) + 1:04d}",
@@ -1172,11 +1255,25 @@ def main() -> int:
                     "angle_deg": angle,
                     "segment_ids": incident,
                     "dn_candidates": dns,
-                    "quantity_level": LEVEL_ZH[level],
+                    "ports": fitting_ports,
+                    "dn_combination": dn_combination,
+                    "port_angles": port_angles,
+                    "branch_angle_deg": branch_angle,
+                    "quantity_level": "未决量" if is_boundary and not resolved_context else LEVEL_ZH[level],
                     "formal_release_blocked": True,
-                    "method": "exact_endpoint_topology",
+                    "method": "scope_context_endpoint_topology" if resolved_context else ("incomplete_scope_boundary" if is_boundary else "exact_endpoint_topology"),
+                    "connection_complete": resolved_context if is_boundary else None,
+                    "measured_degree": measured_degree,
+                    "external_port_ids": [p["port_id"] for p in context.get("external_ports", [])],
+                    "quantity_owner": context.get("fitting_quantity_owner", "in_scope"),
+                    "boundary_ids": [r["boundary_id"] for r in boundary_records if r["node_id"] == node_id],
                 }
             )
+            if is_boundary and not resolved_context:
+                decision_queue.append({"type": "范围边界管件待核实", "node_id": node_id,
+                                       "fitting_id": fitting_records[-1]["fitting_id"],
+                                       "segment_ids": incident, "quantity": None,
+                                       "reason": "范围外连接未纳入当前网络，不用裁剪后度数认定管件，也不增加管长"})
 
         valve_route_index = RouteIndex(list(segments.values()))
         valve_records = []
@@ -1283,6 +1380,7 @@ def main() -> int:
                     "valve_type": valve_type if isinstance(valve_type, str) and valve_type.strip() else "未分类",
                     "candidate_types": sorted(set(candidate_types)),
                     "candidate_type_source_id": raw.get("candidate_type_source_id"),
+                    "type_source_ids": raw.get("type_source_ids", []),
                     "candidate_type_assumption_ids": raw.get("candidate_type_assumption_ids", []),
                     "block_family": raw.get("block_family"),
                     "dn": dn,
@@ -1291,6 +1389,8 @@ def main() -> int:
                     "dn_method": dn_method,
                     "assumption_id": raw.get("assumption_id"),
                     "source_id": text(raw.get("source_id"), f"{valve_id}.source_id"),
+                    "source_object_id": (text(raw["source_object_id"], f"{valve_id}.source_object_id")
+                                         if raw.get("source_object_id") is not None else None),
                     "point": list(valve_point),
                 }
             )
@@ -1371,6 +1471,19 @@ def main() -> int:
             fail("分层长度与原始长度不守恒")
 
         classified_bridges = [bridge for bridge in bridges if bridge["scenario_include"]]
+        bridge_items, restored, restoration_issues = restore_omissions(bridges, assignments, valve_records, node_points, snap, point_segment_distance)
+        route_preparation["issues"].extend(restoration_issues)
+        restored_summary = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+        for system, levels in length_summary.items():
+            for level, values in levels.items():
+                for dn, value in values.items():restored_summary[system][level][dn] += value
+        for (system, level, dn), value in restored.items():restored_summary[system][level][dn] += value
+        used_pairs = {frozenset({(b['a']['segment_id'], b['a']['end']), (b['b']['segment_id'], b['b']['end'])}) for b in bridges}
+        for pair, classification in gap_classifications.items():
+            if pair not in used_pairs:
+                route_preparation["issues"].append({"type": "断口分类未匹配实际拓扑桥", "endpoints": sorted(pair), "classification": classification})
+        base_levels = {a['quantity_level'] for a in assignments.values()}
+        base_level = next((v for v in ('未决量','方案暂估量','规则推算量','确认量') if v in base_levels), '未决量')
         classified_length = sum(bridge["virtual_length"] for bridge in classified_bridges)
         bridge_scenarios = [
             {
@@ -1380,9 +1493,9 @@ def main() -> int:
                 "incremental_length": 0.0,
                 "scenario_total_length": raw_length,
                 "unit": unit,
-                "quantity_level": "确认量",
+                "quantity_level": base_level,
                 "selected": True,
-                "meaning": "不把任何虚拟桥加入确认中心线",
+                "meaning": "已绘中心线按实际最低证据层级汇总，不因作为基线而升级确认量",
             },
             {
                 "scenario_id": "SC-GAP-ALL-UNIQUE",
@@ -1413,9 +1526,11 @@ def main() -> int:
                 }
             )
 
-        fitting_summary: dict[tuple[str, str, str], int] = defaultdict(int)
+        fitting_summary: dict[tuple[str, str, str, str], int] = defaultdict(int)
         for item in fitting_records:
-            fitting_summary[(item["system"], item["type"], item["quantity_level"])] += 1
+            if item.get("quantity_owner") == "outside_scope":
+                continue
+            fitting_summary[(item["system"], item["type"], item["quantity_level"], item["dn_combination"])] += 1
 
         readiness_checks = {
             "object_selection_audited": object_selection["status"] in ("READY", "REVIEW_REQUIRED"),
@@ -1518,11 +1633,17 @@ def main() -> int:
                 "unclassified_valve_count": sum(1 for item in valve_records if item["valve_type"] == "未分类"),
                 "valve_dn_assigned_count": sum(1 for item in valve_records if item["dn"]),
                 "fitting_candidate_count": len(fitting_records),
+                "outside_scope_fitting_candidate_count": sum(f.get('quantity_owner') == 'outside_scope' for f in fitting_records),
                 "decision_count": len(decision_queue),
             },
             "topology_bridges": bridges,
             "bridge_scenarios": bridge_scenarios,
+            "bridge_quantity_items": bridge_items,
+            "reconstructed_length_summary": restored_summary,
+            "reconstructed_length": raw_length + sum(restored.values()),
+            "restored_omission_length": sum(restored.values()),
             "change_nodes": change_records,
+            "scope_boundary_nodes": boundary_records,
             "roots": root_records,
             "terminals": terminal_records,
             "runs": runs,
@@ -1553,6 +1674,7 @@ def main() -> int:
                     "system": key[0],
                     "type": key[1],
                     "quantity_level": key[2],
+                    "dn_combination": key[3],
                     "candidate_count": count,
                 }
                 for key, count in sorted(fitting_summary.items())

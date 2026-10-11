@@ -14,6 +14,7 @@ import math
 from collections import defaultdict, deque
 
 from qto_cad_geometry import GEOMETRY_SCHEMA, conic_point, measure_part, summarize
+from qto_elevation_facts import evaluate_elevation_link
 from qto_spatial import BoundsIndex, PointIndex, nearby_pairs, point
 
 SCHEMA = 'qto-pipe-route-preparation/1.0'
@@ -156,7 +157,7 @@ class RouteIndex:
 def prepare_network(raw):
     """Normalize a 1.x input, preserving source selection and parent quantities."""
     data=copy.deepcopy(raw);source=data.get('segments')
-    for field in ('roots','terminals','valves','change_nodes'):
+    for field in ('roots','terminals','valves','change_nodes','scope_boundary_nodes'):
         for item in data.get(field,[]):
             if item.get('coordinate_unit') is not None and item['coordinate_unit']!=data.get('unit'):
                 raise ValueError('端口/节点坐标与网络单位不同，须先显式换算')
@@ -246,8 +247,11 @@ def prepare_network(raw):
     for m in data.get('change_nodes',[]):
         if m.get('segment_id') in originals:
             s,i,t=locate(m);cuts[s][i].add(t)
+    for m in data.get('scope_boundary_nodes',[]):
+        if m.get('segment_id') in originals:
+            s,i,t=locate(m);cuts[s][i].add(t)
 
-    interface_defs=[];link_ids=set();physical_links=set()
+    interface_defs=[];link_ids=set();physical_links=set();interface_endpoint_pairs=set()
     for link in data.get('cross_view_links',[]):
         lid=text(link.get('link_id'),'link_id');pid=text(link.get('physical_id'),lid+'.physical_id');evidence(link,lid)
         if lid in link_ids or pid in physical_links:raise ValueError('跨图接口或竖向实物重复')
@@ -255,7 +259,13 @@ def prepare_network(raw):
         if link.get('dn_continuity') is True and not link.get('dn_continuity_source_id'):
             raise ValueError('跨图规格连续性缺少独立依据')
         a,b=locate(link['a']),locate(link['b'])
+        endpoint_pair=tuple(sorted((vertex_key(*a),vertex_key(*b))))
+        if endpoint_pair in interface_endpoint_pairs:
+            raise ValueError('同一跨图端口对被重复关联，不能通过换link_id或physical_id重复计量')
+        interface_endpoint_pairs.add(endpoint_pair)
         if originals[a[0]]['system']!=originals[b[0]]['system']:raise ValueError('跨图接口不能串接不同系统')
+        if link.get('system') is not None and link['system']!=originals[a[0]]['system']:
+            raise ValueError('跨图接口声明系统与端口系统不同')
         if originals[a[0]]['space_id']==originals[b[0]]['space_id']:raise ValueError('同图局部连接应使用junctions')
         for s,i,t in (a,b):cuts[s][i].add(t)
         interface_defs.append((link,a,b))
@@ -348,7 +358,7 @@ def prepare_network(raw):
                     targets.extend(nearby)
                 else:targets.extend(keys)
             m['connected_segment_ids']=list(dict.fromkeys(targets))
-    for field in ('roots','terminals','change_nodes'):
+    for field in ('roots','terminals','change_nodes','scope_boundary_nodes'):
         for m in data.get(field,[]):
             if m.get('segment_id') in originals:
                 sid=m['segment_id'];m.setdefault('space_id',originals[sid]['space_id'])
@@ -364,13 +374,26 @@ def prepare_network(raw):
         report['interfaces'].append(item)
         qty={'physical_id':link['physical_id'],'link_id':link['link_id'],'system':item['system'],'value':None,'unit':data.get('unit'),
              'quantity_level':'未决量','source_ids':link['source_ids'],'method':'仅跨图对应，不用图面坐标补管长','counted_elsewhere':False}
+        typed = None
+        if 'elevation_facts' in link:
+            typed = evaluate_elevation_link(link['elevation_facts'], output_unit=data.get('unit'), expected_system=item['system'])
+            qty['elevation_calculation'] = typed
+            qty['source_ids'] = list(dict.fromkeys(link['source_ids'] + typed['source_ids']))
         owner=link.get('quantity_owner_segment_id')
         if owner is not None:
             if owner not in originals or originals[owner].get('physical_id')!=link['physical_id']:
                 raise ValueError('跨图接口既有计量出口的实物身份不一致')
+            if originals[owner]['system']!=item['system']:
+                raise ValueError('跨图接口既有计量出口属于不同系统')
             qty.update(counted_elsewhere=True,quantity_owner_segment_id=owner)
         elif link['physical_id'] in physical:
             raise ValueError('竖向实物已经有计量出口，须显式引用，不得重复计算')
+        elif typed is not None:
+            qty.update(value=typed['value'],quantity_level=typed['quantity_level'],method=typed['method'],dn=link.get('dn'),
+                       vertical_projection=typed['vertical_projection'],route_kind=typed['route_kind'])
+            if typed['value'] is None:
+                report['issues'].append({'type':'跨图接口标高或路线待核实','link_id':link['link_id'],
+                                         'physical_id':link['physical_id'],'details':copy.deepcopy(typed['issues'])})
         elif link.get('route_is_vertical') is True and 'from_elevation' in link and 'to_elevation' in link:
             if not link.get('height_source_ids'):raise ValueError('竖向高度缺少证据')
             if link.get('elevation_unit')!=data.get('unit'):raise ValueError('标高与长度单位须先显式统一')
@@ -535,6 +558,18 @@ def review_markdown(output):
     for system,levels in output.get('length_summary',{}).items():
         for level,dns in levels.items():
             for dn,value in dns.items():lines.append('| '+' | '.join(esc(x) for x in (system,level,dn,format(value,'.12g'),output['unit']))+' |')
+    if output.get('restored_omission_length', 0):
+        lines+=['','## 图示省略段恢复后的分规格工作量','','本表已包含上表已绘量；两个表不可相加。只恢复有图面依据的省略段，不自动加入阀门占位或竖向量。',
+                '','| 系统 | 层级 | 规格 | 长度 | 单位 |','|---|---|---|---:|---|']
+        for system,levels in output['reconstructed_length_summary'].items():
+            for level,dns in levels.items():
+                for dn,value in dns.items():lines.append('| '+' | '.join(esc(x) for x in (system,level,dn,format(value,'.12g'),output['unit']))+' |')
+        lines+=['','恢复增量：'+format(output['restored_omission_length'],'.12g')+' '+output['unit']+'。每处断口分类、DN、来源与处理结果见bridge_quantity_items。']
+    if output.get('fitting_summary'):
+        lines+=['','## 范围内管件候选','','| 系统 | 类型 | 管口规格组合 | 层级 | 候选数 |','|---|---|---|---|---:|']
+        for f in output['fitting_summary']:
+            lines.append('| '+' | '.join(esc(f.get(k, '待核对')) for k in ('system','type','dn_combination','quantity_level','candidate_count'))+' |')
+        lines+=['','外接管口只补充连接事实，不增加计量管长；归属范围外的管件不进入本表。']
     lines+=['','## 跨图竖向及接口量','','| 实物编号 | 系统 | 数量 | 单位 | 层级 | 计算/归属说明 |','|---|---|---:|---|---|---|']
     for q in output.get('vertical_quantities',[]):
         value='已由 '+q['quantity_owner_segment_id']+' 计量' if q['counted_elsewhere'] else '待确定' if q['value'] is None else format(q['value'],'.12g')

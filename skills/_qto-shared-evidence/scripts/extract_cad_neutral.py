@@ -23,9 +23,9 @@ except ImportError as exc:  # pragma: no cover - exercised by deployment checks
     raise SystemExit("缺少 ezdxf；请使用工作区 Python 运行时或安装 ezdxf>=1.4") from exc
 
 
-from qto_cad_geometry import GEOMETRY_SCHEMA, entity_geometry as extract_geometry_facts
+from qto_cad_geometry import GEOMETRY_SCHEMA, entity_geometry as extract_geometry_facts, read_dxf_with_diagnostics, resolve_underlay_dependency
 
-VERSION = "qto-cad-neutral-extractor/1.1.0"
+VERSION = "qto-cad-neutral-extractor/1.3.0"
 CURVE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "CIRCLE", "ELLIPSE", "SPLINE"}
 UNIT_NAMES = {
     0: "Unitless",
@@ -122,7 +122,7 @@ def entity_geometry(entity: Any) -> dict[str, Any]:
     return extract_geometry_facts(entity)
 
 
-def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: str, raw_unit: str, sequence: int) -> dict[str, Any]:
+def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: str, raw_unit: str, sequence: int, dependency_context: dict | None = None) -> dict[str, Any]:
     kind = entity.dxftype()
     handle = str(get_dxf(entity, "handle") or f"NOHANDLE-{sequence}")
     geometry = entity_geometry(entity)
@@ -168,14 +168,67 @@ def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: 
         "raw_geometry": geometry["raw_geometry"],
         "geometry_status": geometry["geometry_status"],
         "geometry_issues": geometry["geometry_issues"],
+        "geometry_capability": geometry["geometry_capability"],
+        "geometry_issue_codes": geometry["geometry_issue_codes"],
+        "recommended_actions": geometry["recommended_actions"],
         "bbox3d": geometry["bbox3d"],
         "extrusion": geometry["extrusion"],
         "insert_matrix_wcs": geometry["insert_matrix_wcs"],
         "length_error_estimate": geometry["length_error_estimate"],
+        "external_reference": resolve_underlay_dependency(geometry["external_reference"], dependency_context) if geometry.get("external_reference") else None,
     }
 
 
-def write_stream(path: Path, groups: Iterable[tuple[str, str | None, Iterable[Any]]], source_hash: str, raw_unit: str) -> tuple[int, Counter[str], list[dict[str, Any]]]:
+def failed_record(entity, layout, parent_block, source_hash, raw_unit, sequence, error):
+    """Retain a locatable identity even when entity conversion/serialization fails."""
+    handle = str(get_dxf(entity, "handle") or f"NOHANDLE-{sequence}")
+    kind = entity.dxftype()
+    record = dict(row_type="entity", layout=layout, parent_block=parent_block,
+                  record_id=f"CAD-{handle}", entity_handle=handle,
+                  candidate_physical_id=f"CAD-{handle}", entity_type=kind,
+                  object_name=kind, layer=str(get_dxf(entity, "layer", "")),
+                  outcome="read_failed_identity_retained", measurement_shape="not_applicable",
+                  geometry_method="dxf_ezdxf_type_specific", confidence="unresolved",
+                  raw_unit=raw_unit, source_sha256=source_hash,
+                  geometry_status="read_failed", geometry_capability="read_failed",
+                  geometry_issues=[error], geometry_issue_codes=["entity_read_failed"],
+                  recommended_actions=["native_geometry_read_required"],
+                  raw_geometry={"entity_type": kind}, closed=None,
+                  block_name=str(get_dxf(entity, "name", "")) if kind == "INSERT" else None)
+    for key in ("x", "y", "z", "bbox", "bbox3d", "start", "end", "raw_length", "text",
+                "rotation", "scale_factors", "attributes", "geometry_signature", "geometry",
+                "extrusion", "insert_matrix_wcs", "length_error_estimate"):
+        record[key] = None
+    return record
+
+
+def new_coverage():
+    return {"schema_version": "qto-cad-read-coverage/1.0", "entity_count": 0,
+            "capability_counts": {}, "status_counts": {}, "entity_type_counts": {},
+            "pending_objects": [], "external_references": [], "read_failed_count": 0,
+            "professional_scope_evaluated": False, "quantity_coverage_proven": False,
+            "counting_basis": "layout entities and unique definition entities; not expanded physical instances"}
+
+
+def record_coverage(coverage, record):
+    coverage["entity_count"] += 1
+    for field, value in (("capability_counts", record["geometry_capability"]),
+                         ("status_counts", record["geometry_status"]),
+                         ("entity_type_counts", record["entity_type"])):
+        coverage[field][value] = coverage[field].get(value, 0) + 1
+    if record["geometry_status"] == "read_failed":
+        coverage["read_failed_count"] += 1
+    if record.get("external_reference"):
+        reference = {key: record[key] for key in
+            ("record_id", "entity_handle", "entity_type", "layout", "parent_block", "layer", "external_reference")}
+        coverage["external_references"].append(reference)
+    if record["geometry_issues"] or record["geometry_status"] == "requires_adapter":
+        coverage["pending_objects"].append({key: record[key] for key in
+            ("record_id", "entity_handle", "entity_type", "layout", "parent_block", "layer",
+             "geometry_status", "geometry_capability", "geometry_issue_codes", "geometry_issues", "recommended_actions")})
+
+
+def write_stream(path: Path, groups: Iterable[tuple[str, str | None, Iterable[Any]]], source_hash: str, raw_unit: str, *, coverage: dict | None = None, dependency_context: dict | None = None) -> tuple[int, Counter[str], list[dict[str, Any]]]:
     count = 0
     types: Counter[str] = Counter()
     failures: list[dict[str, Any]] = []
@@ -184,22 +237,24 @@ def write_stream(path: Path, groups: Iterable[tuple[str, str | None, Iterable[An
             ordered = sorted(entities, key=lambda entity: str(get_dxf(entity, "handle", "")))
             for sequence, entity in enumerate(ordered, 1):
                 try:
-                    record = convert(entity, layout=layout, parent_block=parent_block, source_hash=source_hash, raw_unit=raw_unit, sequence=sequence)
-                    target.write(json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n")
-                    count += 1
-                    types[record["entity_type"]] += 1
-                    if record.get("geometry_issues"):
-                        failures.append({"layout": layout, "parent_block": parent_block,
-                                         "entity_handle": record["entity_handle"], "entity_type": record["entity_type"],
-                                         "error": "; ".join(record["geometry_issues"]), "record_retained": True})
+                    record = convert(entity, layout=layout, parent_block=parent_block, source_hash=source_hash, raw_unit=raw_unit, sequence=sequence, dependency_context=dependency_context)
+                    encoded = json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
                 except Exception as exc:  # retain evidence instead of silently skipping
-                    failures.append({
-                        "layout": layout,
-                        "parent_block": parent_block,
-                        "entity_handle": str(get_dxf(entity, "handle", "")),
-                        "entity_type": entity.dxftype(),
-                        "error": f"{type(exc).__name__}: {exc}",
-                    })
+                    record = failed_record(entity, layout, parent_block, source_hash, raw_unit, sequence, f"{type(exc).__name__}: {exc}")
+                    encoded = json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+                target.write(encoded + "\n")
+                count += 1
+                types[record["entity_type"]] += 1
+                if record.get("geometry_issues"):
+                    failures.append({"layout": layout, "parent_block": parent_block,
+                                     "record_id": record["record_id"],
+                                     "entity_handle": record["entity_handle"], "entity_type": record["entity_type"],
+                                     "geometry_status": record["geometry_status"],
+                                     "issue_codes": record["geometry_issue_codes"],
+                                     "recommended_actions": record["recommended_actions"],
+                                     "error": "; ".join(record["geometry_issues"]), "record_retained": True})
+                if coverage is not None:
+                    record_coverage(coverage, record)
     return count, types, failures
 
 
@@ -221,14 +276,38 @@ def main() -> int:
         if dxf_path == output or (dwg_path and dwg_path == output):
             raise ExtractionError("输出目录不能覆盖输入文件")
 
-        document = ezdxf.readfile(dxf_path)
+        document, source_diagnostics = read_dxf_with_diagnostics(dxf_path)
         unit_code = int(document.header.get("$INSUNITS", 0) or 0)
         raw_unit = UNIT_NAMES.get(unit_code, f"INSUNITS-{unit_code}")
         primary_path = dwg_path or dxf_path
         primary_hash = sha256(primary_path)
+        receipt_path = dxf_path.with_name(dxf_path.name + '.export.json')
+        conversion, dependency_context = None, None
+        if dwg_path:
+            dependency_context = {"original_cad_directory": str(dwg_path.parent),
+                "original_cad_path": str(dwg_path), "original_cad_sha256": primary_hash,
+                "basis": "explicit_source_dwg"}
+        if receipt_path.is_file():
+            receipt = json.loads(receipt_path.read_text(encoding='utf-8-sig'))
+            if (receipt.get('output_sha256') != sha256(dxf_path)
+                    or (dwg_path is not None and receipt.get('source_sha256') != primary_hash)):
+                raise ExtractionError('转换记录与当前原图或DXF不一致，须重新转换')
+            if not isinstance(receipt.get('exchange_geometry_review_required'), bool):
+                raise ExtractionError('转换记录缺少几何复核状态')
+            conversion = {'path': str(receipt_path), 'sha256': sha256(receipt_path),
+                'backend': receipt.get('backend'), 'geometry_review_required': receipt['exchange_geometry_review_required']}
+            if not dependency_context and receipt.get('source'):
+                origin = Path(receipt['source'])
+                if (origin.is_absolute() and not str(origin).startswith(('\\\\', '//'))
+                        and origin.is_file() and receipt.get('source_sha256') == sha256(origin)):
+                    dependency_context = {"original_cad_directory": str(origin.parent),
+                        "original_cad_path": str(origin), "original_cad_sha256": receipt['source_sha256'],
+                        "basis": "verified_export_receipt", "receipt_path": str(receipt_path),
+                        "receipt_sha256": sha256(receipt_path)}
         layout_path = output / "中性布局图元.ndjson"
         block_path = output / "中性块定义图元.ndjson"
         failure_path = output / "CAD提取失败对象.json"
+        coverage_path = output / "CAD读取覆盖与待补读.json"
         manifest_path = output / "CAD中性取证清单.json"
 
         layout_groups = [(layout.name, None, layout) for layout in document.layouts]
@@ -237,9 +316,17 @@ def main() -> int:
             for block in document.blocks
             if not block.is_any_layout
         ]
-        layout_count, layout_types, layout_failures = write_stream(layout_path, layout_groups, primary_hash, raw_unit)
-        block_count, block_types, block_failures = write_stream(block_path, block_groups, primary_hash, raw_unit)
+        coverage = new_coverage()
+        layout_count, layout_types, layout_failures = write_stream(layout_path, layout_groups, primary_hash, raw_unit, coverage=coverage, dependency_context=dependency_context)
+        block_count, block_types, block_failures = write_stream(block_path, block_groups, primary_hash, raw_unit, coverage=coverage, dependency_context=dependency_context)
         failures = layout_failures + block_failures
+        for warning in source_diagnostics['source_read_warnings']:
+            if warning.get('blocks_identity_binding') is False:
+                continue  # Proven identical resource declarations remain advisories.
+            failures.append({'kind': 'source_read_warning', 'error': warning['message'],
+                             'source_path': str(dxf_path), 'source_entity_preservation_proven': False})
+        if conversion and conversion['geometry_review_required']:
+            failures.append({'kind': 'exchange_copy_audited', 'error': '交换副本经过修复转换；须核对受影响对象，不能据文件完整自动认定原图几何完整', 'conversion_receipt': conversion['path']})
         failure_path.write_text(json.dumps({"failures": failures}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
         block_rows = []
@@ -248,20 +335,43 @@ def main() -> int:
                 "block_name": block.name,
                 "origin": point(block.block.dxf.base_point) or [0.0, 0.0, 0.0],
                 "direct_entity_count": len(block),
+                "is_xref": bool(block.block.is_xref or block.block.is_xref_overlay),
+                "xref_path": block.block.dxf.get("xref_path", "") if block.block.is_xref or block.block.is_xref_overlay else None,
             })
+        coverage.update(source_sha256=primary_hash, pending_object_count=len(coverage["pending_objects"]),
+                        external_reference_count=len(coverage["external_references"]),
+                        external_dependency_context=dependency_context,
+                        status="PARTIAL" if failures or coverage["pending_objects"] else "PASS",
+                        source_identity_issues=source_diagnostics['source_identity_issues'],
+                        source_identity_advisories=source_diagnostics['source_identity_advisories'],
+                        source_read_warnings=source_diagnostics['source_read_warnings'],
+                        source_identity_status=source_diagnostics['source_identity_status'],
+                        source_identity_issue_count=len(source_diagnostics['source_identity_issues']),
+                        source_identity_advisory_count=len(source_diagnostics['source_identity_advisories']),
+                        source_read_warning_count=len(source_diagnostics['source_read_warnings']),
+                        exchange_geometry_review_required=bool(conversion and conversion["geometry_review_required"]))
+        coverage_path.write_text(json.dumps(coverage, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         manifest = {
             "schema_version": "qto-cad-neutral-evidence/1.0",
             "extractor_version": VERSION,
             "geometry_schema_version": GEOMETRY_SCHEMA,
-            "status": "PASS" if not failures else "PARTIAL",
+            "status": coverage["status"],
+            "neutral_extraction_status": "PASS" if not failures else "PARTIAL",
+            "read_coverage": {key: coverage[key] for key in ("entity_count", "capability_counts", "status_counts", "read_failed_count", "pending_object_count", "external_reference_count", "source_identity_issue_count", "source_identity_advisory_count", "source_read_warning_count", "quantity_coverage_proven")},
             "professional_classification_performed": False,
             "authoritative_source": {"path": str(primary_path), "sha256": primary_hash, "bytes": primary_path.stat().st_size},
             "exchange_dxf": {"path": str(dxf_path), "sha256": sha256(dxf_path), "bytes": dxf_path.stat().st_size},
+            "exchange_conversion": conversion,
+            "external_dependency_context": dependency_context,
+            "source_read_diagnostics": source_diagnostics,
+            "source_identity_issues": source_diagnostics['source_identity_issues'],
+            "source_identity_advisories": source_diagnostics['source_identity_advisories'],
             "drawing_unit": {"insunits_code": unit_code, "raw_unit": raw_unit, "conversion_to_business_unit": None},
             "artifacts": {
                 "layout_entities": {"path": str(layout_path), "sha256": sha256(layout_path), "count": layout_count, "entity_type_counts": dict(sorted(layout_types.items()))},
                 "block_definitions": {"path": str(block_path), "sha256": sha256(block_path), "count": block_count, "entity_type_counts": dict(sorted(block_types.items()))},
                 "failures": {"path": str(failure_path), "sha256": sha256(failure_path), "count": len(failures)},
+                "read_coverage": {"path": str(coverage_path), "sha256": sha256(coverage_path), "count": len(coverage["pending_objects"])},
             },
             "layouts": [layout.name for layout in document.layouts],
             "blocks": block_rows,
@@ -270,11 +380,15 @@ def main() -> int:
                 "DXF交换副本不证明DWG代理对象已完整降级；失败对象和交换文件身份必须保留",
                 "块定义只保存一次；专业层按实例路径和冻结范围决定是否递归展开",
                 "原始图层、块名和文字均为中性事实，不是专业分类",
+                "读取覆盖按布局和唯一块定义图元统计，不是实物数量覆盖率；文字、定位证据不等于可测构件",
+                "HATCH须由面层边界适配器处理；代理对象、三维实体、缺失参照及动态状态按待补读保留",
+                "底图仅读取CAD原生定义、引用及变换；文件存在不表示内容已读取，相对路径须有显式原CAD目录或核验通过的导出记录",
+                "PASS只表示本次中性读取未发现待处理项，不证明DXF转换前对象齐全或专业范围完整",
             ],
         }
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({"status": manifest["status"], "layouts": layout_count, "block_entities": block_count, "failures": len(failures), "manifest": str(manifest_path)}, ensure_ascii=False))
-        return 0 if not failures else 3
+        return 0 if manifest["status"] == "PASS" else 3
     except (OSError, ezdxf.DXFError, ExtractionError, ValueError) as exc:
         print(json.dumps({"status": "INPUT_REQUIRED", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2

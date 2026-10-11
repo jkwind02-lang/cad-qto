@@ -75,6 +75,15 @@ def expression(text, variables):
             if isinstance(n.op,ast.Pow):
                 if db or b not in (0.,1.,2.,3.):raise ValueError('仅支持0至3的无量纲整数幂')
                 return a**int(b),tuple((k,v*int(b)) for k,v in da if v*int(b))
+        if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id in ('min','max') and len(n.args)>=2 and not n.keywords:
+            # Every candidate remains a dependency, even when it does not win.
+            # Compare SI values only after checking all dimensions and values;
+            # an infinity/NaN must not disappear behind a finite other branch.
+            candidates=[calc(arg) for arg in n.args]
+            dimension=candidates[0][1]
+            if any(d!=dimension for _,d in candidates):raise ValueError('取大取小的候选量纲必须一致')
+            values=[number(v,'取大取小候选值') for v,_ in candidates]
+            return (min(values) if n.func.id=='min' else max(values)),dimension
         if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id in ('abs','sqrt','ceil') and len(n.args)==1 and not n.keywords:
             v,d=calc(n.args[0])
             if n.func.id=='abs':return abs(v),d
@@ -143,14 +152,18 @@ def recalculate(document,previous=None):
                 if dim!=dimension:raise ValueError('公式量纲与结果单位不一致')
                 if any(n['value'] is None for n in dependencies):status='BLOCKED';reason='上游事实未确定'
                 elif any(rules[k].get('status')=='disabled' for k in rids):status='BLOCKED';reason='所用规则已停用'
-                else:value=test/factor
+                else:value=number(test/factor,key+'.换算结果')
             else:
                 v=r.get('value')
                 if v is None:status='BLOCKED';reason='事实尚未确定'
                 else:value=number(v,key+'.value')
-            if value is not None and calculated and value<0 and r.get('allow_negative') is not True:raise ValueError('派生数量为负，请核对扣减或明确允许有符号结果')
+            if value is not None:
+                number(value*factor,key+'.归一值')
+                if calculated and value<0 and r.get('allow_negative') is not True:raise ValueError('派生数量为负，请核对扣减或明确允许有符号结果')
         except (ValueError,ZeroDivisionError,OverflowError,SyntaxError) as exc:
-            status='BLOCKED';reason=str(exc);errors.append({'node_id':key,'error':reason})
+            # A rejected intermediate value is not a consumable fact. In
+            # particular, abs() downstream must not revive a blocked negative.
+            value=None;status='BLOCKED';reason=str(exc);errors.append({'node_id':key,'error':reason})
         level=min([own_level]+[n['quantity_level'] for n in dependencies],key=RANK.get) if value is not None else '未决量'
         if old is None or old.get('own_fingerprint')!=own_fingerprint:changed.append(key)
         if old is None or old.get('fingerprint')!=fingerprint:affected.append(key)
