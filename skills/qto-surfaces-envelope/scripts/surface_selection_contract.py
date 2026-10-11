@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Contract helpers for future CADINST-aware surface selection."""
+"""Contract helpers for CADINST-aware surface selection."""
 from __future__ import annotations
 from dataclasses import dataclass
 import re
@@ -50,14 +50,14 @@ def validate_cadinst_selection(selection: dict, *, source_sha256: str, layout: s
 
 
 def diagnose_empty_selection(*, requested: int, matched: int, failures: int) -> str:
-    if not all(isinstance(v, int) and v >= 0 for v in (requested, matched, failures)):
+    if not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in (requested, matched, failures)):
         raise SurfaceSelectionError("选择诊断计数必须为非负整数")
-    if failures and matched < requested:
-        return "selection_partial_or_failed"
-    if requested and matched == 0:
-        return "selection_requested_but_no_match"
+    if failures > 0:
+        return "selection_partial_or_failed" if matched > 0 else "selection_failed_with_unresolved_objects"
     if requested > matched:
         return "selection_partial_match"
+    if requested > 0 and matched == 0:
+        return "selection_requested_but_no_match"
     if matched == 0:
         return "no_selection_candidates"
     return "selection_successful"
