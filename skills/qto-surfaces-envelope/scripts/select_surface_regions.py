@@ -64,14 +64,25 @@ def _transform_entity(entity, matrix):
 
 def _unit_scale_from_evidence(doc, unit, unit_evidence):
     insunits = int(doc.header.get("$INSUNITS", 0))
-    declared = {"mm": 4, "m": 6}.get(unit)
-    if declared is None:
+    if unit not in {"mm", "m"}:
         raise SurfaceSelectionError("unknown declared unit")
-    if insunits not in (0, declared):
+    if not isinstance(unit_evidence, str) or not unit_evidence.strip():
+        evidence = ""
+    else:
+        evidence = unit_evidence.strip()
+    evidence_lower = evidence.lower()
+    if insunits == 4 and unit != "mm":
         raise SurfaceSelectionError("declared unit conflicts with INSUNITS")
+    if insunits == 6 and unit != "m":
+        raise SurfaceSelectionError("declared unit conflicts with INSUNITS")
+    if insunits == 0 and not evidence:
+        raise SurfaceSelectionError("unknown unit without traceable evidence")
     if insunits == 0:
-        if unit_evidence not in ("explicit_mm", "explicit_m"):
-            raise SurfaceSelectionError("unknown unit without evidence")
+        # Evidence is retained as provenance text; it is not interpreted as a magic token.
+        if "mm" in evidence_lower and unit != "mm":
+            raise SurfaceSelectionError("unit evidence conflicts with declaration")
+        if ("meter" in evidence_lower or "metre" in evidence_lower or "米" in evidence) and unit != "m":
+            raise SurfaceSelectionError("unit evidence conflicts with declaration")
     return {"mm": 0.001, "m": 1.0}[unit]
 
 
