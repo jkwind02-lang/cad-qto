@@ -37,13 +37,13 @@ def validate_cadinst_selection(selection: dict, *, source_sha256: str, layout: s
         raise SurfaceSelectionError("调用者必须提供非空layout")
     if selection.get("source_sha256") != source_sha256 or selection.get("layout") != layout:
         raise SurfaceSelectionError("选择清单来源或布局不一致")
-    ids=selection.get("cadinst_ids", [])
+    ids = selection.get("cadinst_ids", [])
     if not isinstance(ids, list) or any(not isinstance(x, str) or x == "" for x in ids):
         raise SurfaceSelectionError("CADINST选择项必须为字符串列表")
-    ids=tuple(dict.fromkeys(ids))
+    ids = tuple(dict.fromkeys(ids))
     if any(not _CADINST_ID.fullmatch(x) for x in ids):
         raise SurfaceSelectionError("CADINST ID格式不符合工作台实例契约")
-    names=normalize_layer_names(selection.get("layer_names"))
+    names = normalize_layer_names(selection.get("layer_names"))
     if not ids and not names:
         raise SurfaceSelectionError("空选择条件；不得解释为零工程量")
     return SelectionScope(source_sha256, layout, ids, names)
@@ -54,10 +54,10 @@ def diagnose_empty_selection(*, requested: int, matched: int, failures: int) -> 
         raise SurfaceSelectionError("选择诊断计数必须为非负整数")
     if failures > 0:
         return "selection_partial_or_failed" if matched > 0 else "selection_failed_with_unresolved_objects"
-    if requested > matched:
-        return "selection_partial_match"
     if requested > 0 and matched == 0:
         return "selection_requested_but_no_match"
+    if requested > matched:
+        return "selection_partial_match"
     if matched == 0:
         return "no_selection_candidates"
     return "selection_successful"
