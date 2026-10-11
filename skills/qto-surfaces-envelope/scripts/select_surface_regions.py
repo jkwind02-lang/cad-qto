@@ -129,6 +129,14 @@ def _resolve_selection_ids(objects, selection):
         if (not isinstance(layer_names, list) or not layer_names or
                 any(not isinstance(x, str) or not x for x in layer_names)):
             raise SurfaceSelectionError("invalid layer_names")
+        hatch_layers = {
+            row.get("effective_layer")
+            for row in objects.values()
+            if row.get("entity_type") == "HATCH"
+        }
+        unmatched = [x for x in layer_names if x not in hatch_layers]
+        if unmatched:
+            raise SurfaceSelectionError({"unmatched_layer_names": unmatched})
         layer_selected = [
             oid for oid, row in objects.items()
             if row.get("entity_type") == "HATCH"
