@@ -122,6 +122,32 @@ def test_balanced_count_does_not_hide_duplicate_source_instance(candidate_infere
     assert any("源实例重复" in error for error in validate_valve_summary(candidate_inference))
 
 
+@pytest.mark.parametrize("gate", ["validate_pipe_result.py", "validate_pipe_user_summary.py"])
+@pytest.mark.parametrize("variant", ["hash_case", "object_whitespace", "expanded_id_whitespace"])
+def test_shared_contract_and_both_gates_reject_normalized_duplicate_identity(tmp_path, candidate_inference, gate, variant):
+    first = candidate_inference["valves"][0]
+    first.update(source_sha256="a" * 64)
+    if variant == "expanded_id_whitespace":
+        first.update(source_object_id="CADINST-I1/CAD-AB12", instance_path="I1")
+    duplicate = copy.deepcopy(first)
+    duplicate["valve_id"] = "same-valve-renamed"
+    if variant == "hash_case":
+        duplicate["source_sha256"] = "A" * 64
+    else:
+        duplicate["source_object_id"] = " " + first["source_object_id"] + " "
+        if variant == "expanded_id_whitespace":
+            duplicate["instance_path"] = "I2"
+    candidate_inference["valves"].append(duplicate)
+    candidate_inference["valve_summary"][0]["instance_count"] = 2
+    candidate_inference["metrics"]["valve_count"] = 2
+    # Counts and certainty still reconcile. Only canonical source identity
+    # reveals that these two records refer to the same physical valve.
+    assert any("源实例重复" in error for error in validate_valve_summary(candidate_inference))
+    code, report = run_gate(tmp_path, gate, candidate_inference)
+    assert code == 2
+    assert any("源实例重复" in error for error in report["errors"])
+
+
 def test_distinct_insertions_of_same_definition_remain_two_instances(candidate_inference):
     first = candidate_inference["valves"][0]
     first["instance_path"] = "INSERT-A"

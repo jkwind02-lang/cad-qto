@@ -222,7 +222,8 @@ def signed_sampled_area(part, count=1024):
     return math.fsum(a[0] * b[1] - b[0] * a[1] for a, b in zip(points, points[1:])) / 2
 
 
-@pytest.mark.parametrize('start,end', [(0, 360), (90, 450), (-180, 180), (0, -360), (180, -180)])
+@pytest.mark.parametrize('start,end', [(0, 360), (90, 450), (-180, 180), (0, -360), (180, -180),
+                                     (90, 810), (90, -630)])
 def test_full_turn_arc_has_consistent_length_bounds_samples_and_area(start, end):
     doc = drawing()
     entity = doc.modelspace().add_arc((5, 7, 11), 3, start, end)
@@ -256,6 +257,29 @@ def test_nonzero_partial_arcs_keep_their_actual_sweep(start, end, span):
     assert result['closed'] is result['geometry']['closed'] is False
     assert result['start'] == pytest.approx(entity.start_point)
     assert result['end'] == pytest.approx(entity.end_point)
+
+
+@pytest.mark.parametrize('start,end,span', [
+    (-1e-14, 0., 1e-14),
+    (-1e-15, 1e-15, 2e-15),
+    (-1e-14, 360., 1e-14),
+    (180., -180. + math.ulp(180.), math.ulp(180.)),
+    (0., -1e-14, 360.),
+    (-180. + math.ulp(180.), 180., 360.),
+], ids=['tiny_to_zero', 'tiny_cross_zero', 'tiny_after_full_turn',
+        'tiny_at_signed_remainder_seam', 'almost_full_turn', 'almost_full_at_seam'])
+def test_arc_normalization_does_not_promote_roundoff_to_a_full_turn(start, end, span):
+    doc = drawing()
+    entity = doc.modelspace().add_arc((0, 0), 3, start, end)
+    audit = doc.audit()
+    assert not audit.errors and not audit.fixes
+    result = row(entity)
+    # A near-full sweep may round to 360 in a float, but its source endpoints
+    # still differ. Such an arc is open; a tiny crossing must remain tiny.
+    assert result['raw_length'] == pytest.approx(3 * math.radians(span), rel=1e-12, abs=0)
+    assert result['closed'] is result['geometry']['closed'] is False
+    assert result['geometry_signature']['closed'] is False
+    assert result['geometry_status'] == 'supported'
 
 
 def test_closed_flags_survive_neutral_cli_for_circle_full_arc_and_partial_arc(tmp_path):

@@ -48,16 +48,22 @@ callers without a source hash retain their source_id namespace. Expanded
 CADINST record IDs already contain insertion paths, so a redundant path cannot
 rename that same source instance. For unexpanded source IDs, an explicitly
 separate instance_path keeps two inserts of one definition distinct.
+Surrounding whitespace follows the inference reader's text normalization;
+only a supplied source hash is case-insensitive, not opaque source/object IDs.
     """
     object_id = valve.get("source_object_id")
     if object_id is None:
         return None
-    namespace = valve.get("source_sha256") or valve.get("source_id")
+    source_hash = valve.get("source_sha256")
+    namespace = source_hash or valve.get("source_id")
     instance_path = valve.get("instance_path", "")
     if (not isinstance(object_id, str) or not object_id.strip()
             or not isinstance(namespace, str) or not namespace.strip()
             or not isinstance(instance_path, str)):
         raise ValueError("阀门源对象身份须包含有效来源、源实例对象编号及插入路径")
+    namespace, object_id, instance_path = namespace.strip(), object_id.strip(), instance_path.strip()
+    if source_hash:
+        namespace = namespace.lower()
     if object_id.startswith("CADINST-") and "/" in object_id[len("CADINST-"):]:
         instance_path = ""
     return namespace, object_id, instance_path

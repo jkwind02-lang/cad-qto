@@ -854,24 +854,33 @@ def entity_geometry(entity: Any):
             original_start, original_end = float(entity.dxf.start_angle), float(entity.dxf.end_angle)
             if not math.isfinite(original_start) or not math.isfinite(original_end):
                 raise ValueError("圆弧起终角必须为有限数值")
-            start_degrees, end_degrees = original_start % 360., original_end % 360.
-            span_degrees = (end_degrees-start_degrees) % 360.
-            # Unlike a zero-sweep ARC, distinct source angles that normalize to
-            # the same direction encode a full turn. Do not round a small but
-            # nonzero span into either a zero arc or a complete circle.
-            if span_degrees == 0. and original_start != original_end:
-                span_degrees = 360.
+            # Preserve a local source difference before normalization: a tiny
+            # negative angle modulo 360 can round to exactly 360. For distant
+            # angles, signed remainders also avoid overflowing their difference.
+            start_degrees = math.remainder(original_start, 360.)
+            signed_span = original_end-original_start
+            if not -180. <= signed_span <= 180.:
+                end_degrees = math.remainder(original_end, 360.)
+                signed_span = math.fsum((end_degrees, -start_degrees))
+                if signed_span > 180.:
+                    signed_span = math.fsum((end_degrees, -start_degrees, -360.))
+                elif signed_span < -180.:
+                    signed_span = math.fsum((end_degrees, -start_degrees, 360.))
+            # Closedness follows exact source-direction equality, never a
+            # near-full sweep that rounds to 360 while converting to radians.
+            closed = signed_span == 0. and original_start != original_end
+            span_degrees = 360. if closed else signed_span % 360.
             start, sweep = math.radians(start_degrees), math.radians(span_degrees)
             raw.update(start_angle_degrees=original_start, end_angle_degrees=original_end)
         else:
             start, sweep = 0., TAU
+            closed = True
         raw.update(center=xyz(entity.dxf.center),radius=radius,start_param=start,sweep_param=sweep,coordinate_system="OCS")
         anchor=xyz(ocs.to_wcs(entity.dxf.center))
         if sweep == 0.:
             unresolved("arc_zero_sweep", "圆弧起终角相同，未形成可测弧段；不能作为零长度实物计量", "native_geometry_read_required")
         else:
             arc(anchor,ocs.ux*radius,ocs.uy*radius,start,sweep)
-        closed=sweep==TAU
     elif kind=="ELLIPSE":
         start,end=float(entity.dxf.start_param),float(entity.dxf.end_param)
         delta=end-start

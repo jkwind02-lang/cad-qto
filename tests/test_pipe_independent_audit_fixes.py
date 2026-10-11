@@ -123,6 +123,36 @@ def test_duplicate_source_valve_cannot_be_renamed(tmp_path, same_hash):
     run(tmp_path, data, reject="同一来源实例")
 
 
+@pytest.mark.parametrize("first_identity,second_identity", [
+    ({"source_sha256": "a" * 64}, {"source_sha256": "A" * 64}),
+    ({"source_sha256": "a" * 64}, {"source_sha256": "  " + "a" * 64 + "  "}),
+    ({}, {"source_id": " drawing-A "}),
+    ({}, {"source_object_id": " CAD-AB12 "}),
+    ({"instance_path": "INSERT-I1"}, {"instance_path": " INSERT-I1 "}),
+    ({"source_object_id": "CADINST-I1/CAD-AB12", "instance_path": "I1"},
+     {"source_object_id": " CADINST-I1/CAD-AB12 ", "instance_path": "I2"}),
+], ids=["hash_case", "hash_whitespace", "source_whitespace", "object_whitespace", "path_whitespace", "expanded_id_whitespace"])
+def test_source_identity_normalization_precedes_inference_deduplication(tmp_path, first_identity, second_identity):
+    data = network([pipe("P", (0,0,0), (8,0,0), "DN32")])
+    data["valves"] = [valve(valve_id="V1", **first_identity), valve(valve_id="V2", **second_identity)]
+    run(tmp_path, data, reject="同一来源实例")
+
+
+@pytest.mark.parametrize("field,first_value,second_value", [
+    ("source_id", "drawing-A", "drawing-a"),
+    ("source_object_id", "valve-A", "valve-a"),
+    ("instance_path", "INSERT-A", "insert-a"),
+])
+def test_nonhash_source_and_instance_identifiers_keep_case(tmp_path, field, first_value, second_value):
+    data = network([pipe("P", (0,0,0), (8,0,0), "DN32")])
+    a, b = valve(valve_id="V1", point=[2,0,0]), valve(valve_id="V2", point=[6,0,0])
+    a[field], b[field] = first_value, second_value
+    data["valves"] = [a, b]
+    out = run(tmp_path, data)
+    assert out["metrics"]["valve_count"] == 2
+    assert sum(r["instance_count"] for r in out["valve_summary"]) == 2
+
+
 def test_duplicate_expanded_instance_cannot_be_renamed_by_a_redundant_path(tmp_path):
     data = network([pipe("P", (0,0,0), (8,0,0), "DN32")])
     data["valves"] = [valve(valve_id="V1", source_object_id="CADINST-I1/CAD-AB12", instance_path="I1"),
@@ -147,9 +177,9 @@ def test_distinct_insertions_or_drawings_are_not_deduplicated(tmp_path, identity
     if identity_mode == "cadinst":
         a["source_object_id"], b["source_object_id"] = "CADINST-I1/CAD-AB12", "CADINST-I2/CAD-AB12"
     elif identity_mode == "explicit_instance_path":
-        a["instance_path"], b["instance_path"] = "INSERT-I1", "INSERT-I2"
+        a["instance_path"], b["instance_path"] = " INSERT-I1 ", " INSERT-I2 "
     else:
-        a["source_sha256"], b["source_sha256"] = "a" * 64, "b" * 64
+        a["source_sha256"], b["source_sha256"] = "a" * 64, " " + "B" * 64 + " "
     data["valves"] = [a, b]
     out = run(tmp_path, data)
     assert out["metrics"]["valve_count"] == 2
@@ -260,6 +290,29 @@ def test_instance_requirement_merge_recomputes_existing_valve_quantity_level(tmp
     summary = [r for r in result["accessory_summary"] if r["origin"] == "drawn_network_accessory"]
     assert len(summary) == 1 and summary[0]["quantity_level"] == "方案暂估量"
     assert result["formal_adoption_allowed"] is False
+
+
+@pytest.mark.parametrize("variant", ["hash_case", "object_whitespace"])
+def test_instance_merge_rejects_equivalent_source_identity_spellings(tmp_path, variant):
+    from test_instance_requirements_20261011 import merge_fixture, sha
+    data, _ = merge_fixture(tmp_path)
+    path = Path(data["network_result"]["path"])
+    net = json.loads(path.read_text(encoding="utf-8"))
+    ledger = json.loads(Path(net["recognition_basis"]["ledger_path"]).read_text(encoding="utf-8"))
+    first = net["valves"][0]
+    first.update(source_object_id=first["source_id"], source_sha256=ledger["source_sha256"].lower())
+    duplicate = copy.deepcopy(first)
+    duplicate["valve_id"] = "same-drawn-valve-renamed"
+    if variant == "hash_case":
+        duplicate["source_sha256"] = first["source_sha256"].upper()
+        assert bytes.fromhex(duplicate["source_sha256"]) == bytes.fromhex(first["source_sha256"])
+    else:
+        duplicate["source_object_id"] = " " + first["source_object_id"] + " "
+    net["valves"].append(duplicate)
+    path.write_text(json.dumps(net), encoding="utf-8")
+    data["network_result"]["sha256"] = sha(path)
+    with pytest.raises(ValueError, match="重复来源实例"):
+        merge_requirements(data)
 
 
 @pytest.mark.parametrize("unit", ["m2", "kg", "Unitless"])
