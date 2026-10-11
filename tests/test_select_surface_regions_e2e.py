@@ -48,6 +48,10 @@ def test_exact_selection_uses_verified_index(tmp_path):
     index = _index(dxf)
     ids = [k for k, v in workbench._verified_index(index).items() if v["entity_type"] == "HATCH"]
     assert _select(dxf, index, ids[0])["regions"][0]["area_m2"] == pytest.approx(100)
+    result = _select(dxf, index, ids[0])
+    assert result["formal_adoption_allowed"] is False
+    assert result["adoption_scope"] == "working"
+    assert result["index_sha256"] == index["index_sha256"] and result["conversion_warnings"] == index.get("conversion_warnings", [])
 
 
 def test_nested_insert_transform_changes_area(tmp_path):
