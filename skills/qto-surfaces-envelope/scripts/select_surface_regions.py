@@ -50,8 +50,12 @@ def _transform_entity(entity, matrix):
         return entity
     try:
         from ezdxf.transform import copies
-        result = list(copies([entity], matrix))[1]
-        return result[0] if result else entity
+        logs, entities = copies([entity], matrix)
+        if logs:
+            raise SurfaceSelectionError({"instance_transform_failed": logs[0].message})
+        return entities[0]
+    except SurfaceSelectionError:
+        raise
     except Exception as exc:
         raise SurfaceSelectionError({"instance_transform_failed": str(exc)}) from exc
 
@@ -61,17 +65,30 @@ def select_hatches(source_dxf: Path, selection: dict, *, index: dict, unit_scale
     objects = _verified_objects(index)
     if index.get("source", {}).get("sha256") != digest:
         raise SurfaceSelectionError("source_sha256 does not match verified index")
-    if selection.get("layout") and selection["layout"] != index.get("layout"):
-        raise SurfaceSelectionError("layout does not match verified index")
 
-    wanted = list(dict.fromkeys(selection.get("cadinst_ids", [])))
-    if not wanted:
+    layout = index.get("layout")
+    if selection.get("source_sha256") not in (None, digest):
+        raise SurfaceSelectionError("selection source_sha256 does not match source")
+    if selection.get("source_sha256") is None:
+        raise SurfaceSelectionError("selection source_sha256 required")
+    if selection.get("layout") != layout:
+        raise SurfaceSelectionError("selection layout does not match verified index")
+
+    raw_ids = selection.get("cadinst_ids", [])
+    if not isinstance(raw_ids, list) or not raw_ids:
         raise SurfaceSelectionError("cadinst_ids required")
+    if len(raw_ids) != len(set(raw_ids)):
+        raise SurfaceSelectionError("duplicate cadinst_ids are not allowed")
+    wanted = raw_ids
+
     missing = sorted(set(wanted) - set(objects))
     if missing:
         raise SurfaceSelectionError({"unmatched_cadinst": missing})
 
-    doc = EXTRACT.read_dxf_with_diagnostics(source_dxf)[0]
+    doc, diagnostics = EXTRACT.read_dxf_with_diagnostics(source_dxf)
+    if diagnostics.get("source_identity_issues"):
+        raise SurfaceSelectionError("source_identity_issues prevent normal quantity output")
+
     regions = []
     for oid in wanted:
         row = objects[oid]
@@ -87,4 +104,10 @@ def select_hatches(source_dxf: Path, selection: dict, *, index: dict, unit_scale
             raise SurfaceSelectionError({"geometry_failed": oid, "reason": str(exc)}) from exc
         regions.append({"cadinst_id": oid, "area_m2": geometry.area})
 
-    return {"source_sha256": digest, "layout": index.get("layout"), "regions": regions}
+    return {
+        "source_sha256": digest,
+        "layout": layout,
+        "source_read_diagnostics": diagnostics.get("source_read_warnings", []),
+        "source_identity_issues": diagnostics.get("source_identity_issues", []),
+        "regions": regions,
+    }
