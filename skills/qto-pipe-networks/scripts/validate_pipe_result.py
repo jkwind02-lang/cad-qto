@@ -12,6 +12,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+_shared_dir = Path(__file__).resolve().parents[2] / "_qto-shared-evidence/scripts"
+sys.path.insert(0, str(_shared_dir))
+from qto_pipe_quantity_contract import validate_valve_summary
+
 
 # Reuse the shared partial-result wording check so the two gates cannot drift.
 _minimum_path = Path(__file__).resolve().parents[2] / "_qto-shared-evidence/scripts/validate_minimum_result.py"
@@ -216,6 +220,7 @@ def main() -> int:
         except ValueError as exc:
             errors.append(str(exc))
             inference = {}
+        errors.extend(validate_valve_summary(inference))
         inference_version = inference.get("evidence_version")
         if inference_version not in (
             "qto-pipe-network-inference-evidence/1.0",
@@ -274,6 +279,8 @@ def main() -> int:
                     errors.append("全部唯一虚拟桥方案与桥明细不守恒")
             valves = inference.get("valves", [])
             valve_summary = inference.get("valve_summary", [])
+            if not isinstance(valves, list):
+                valves = []  # The shared contract has already recorded this error.
             if metrics.get("valve_count", 0) and not valve_summary:
                 errors.append("存在阀门或在线附件实例但缺少用户可汇总分组")
             if len(valves) != metrics.get("valve_count"):

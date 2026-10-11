@@ -195,7 +195,7 @@
     "ci_run": false,
     "record": "docs/钢结构真实案例改进_20260929.md"
   },
-  "current_runtime_files": 253,
+  "current_runtime_files": 254,
   "local_pipe_benchmark_update_20260929": {
     "version": "0.2.0+codex.20260929154857",
     "runtime_files": 225,
@@ -418,5 +418,58 @@
     "remote_ci_run": false,
     "project_drawings_or_workpapers_included": false,
     "prepared_at": "2026-10-11T20:06:57.651473+08:00"
+  },
+  "current_repository_version": "0.2.0+codex.20261011.5",
+  "repository_accuracy_repair_20261011": {
+    "version": "0.2.0+codex.20261011.5",
+    "base_commit": "3ae0b154031317249a3ca5ef363f82d1d3674f02",
+    "branch": "fix/accuracy-audit-20261011",
+    "record": "docs/独立审计修复_20261011.md",
+    "runtime_files": 254,
+    "runtime_manifest_sha256": "01957c378c284964841a587a38f064e87e9835ae01ce595389e52eb833f20f80",
+    "geometry_schema": "qto-cad-geometry/1.2",
+    "old_cache_reextraction_required": true,
+    "python_regression": {
+      "environment": "fresh venv / Linux / Python 3.12.14",
+      "declared_requirements_install": "PASS",
+      "pip_check": "PASS",
+      "compileall": "PASS",
+      "passed": 1241,
+      "skipped": 9,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 37.79,
+      "skip_scope": "Windows PowerShell/export integration",
+      "new_regression_cases": 109
+    },
+    "independent_replay": {
+      "test_origin_commit": "3ae0b154031317249a3ca5ef363f82d1d3674f02",
+      "runtime_identity": "runtime_manifest_sha256 above; not the original commit",
+      "geometry": {
+        "passed": 70,
+        "failed": 0
+      },
+      "pipe": {
+        "passed": 12,
+        "failed": 0
+      },
+      "reference": {
+        "passed": 12,
+        "failed": 0
+      },
+      "scale": {
+        "passed": 2,
+        "failed": 0
+      },
+      "interpretation": "原定向算例原样对修复工作副本复验，包含异常输入拒绝；非真实工程准确率"
+    },
+    "cross_review": "geometry and quantity contract reviewed by independent owners; no remaining blocker identified",
+    "remote_ci": "对应本修复分支PR提交的Windows/Linux Actions为准；此文件不自报尚未读取的远端结果",
+    "maintainer_machine_installation_updated": false,
+    "real_dwg_autocad_tested": false,
+    "real_project_recognition_accuracy_verified": false,
+    "professional_maturity_changed": false,
+    "summary_gate_scope": "检查必要业务维度并重算推算证据内部的阀门身份、层级和分组数量；不逐单元格校验任意用户汇总表",
+    "fitted_polyline_scope": "可证明为开放、单调、共线的完整二/三次样条拟合给出精确长度；其它未证明表达保留源角色并PARTIAL"
   }
 }

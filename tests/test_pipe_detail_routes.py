@@ -113,7 +113,7 @@ def test_mirrored_nonuniform_nested_arc_uses_affine_geometry(tmp_path):
     p=m.Drawing(doc).part({'path':[root.dxf.handle,child.dxf.handle,a.dxf.handle]})
     # Quarter ellipse computed by independent dense chord integration.
     expected=sum(math.hypot(2*(math.cos((i+1)*math.pi/20000)-math.cos(i*math.pi/20000)),3*(math.sin((i+1)*math.pi/20000)-math.sin(i*math.pi/20000))) for i in range(10000))
-    value=m.summarize({'schema':'qto-cad-geometry/1.1','coordinate_system':'WCS','parts':[p]})['length']
+    value=m.summarize({'schema':m.GEOMETRY_SCHEMA,'coordinate_system':'WCS','parts':[p]})['length']
     assert value==pytest.approx(expected,rel=1e-8)
     assert value != pytest.approx(math.dist(m.part_point(p,0),m.part_point(p,1)))
 

@@ -24,6 +24,8 @@ INPUT_VERSIONS = {
 }
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from model_recognition_basis import validate_working_basis
+from qto_cad_source_contract import canonical_scale
+from qto_pipe_quantity_contract import valve_quantity_level, valve_source_identity
 from qto_pipe_scope_quantity import boundary_context, restore_omissions
 from qto_pipe_topology import (prepare_network, make_endpoint_nodes, gap_pairs, add_interfaces,
     NodeLocator, RouteIndex, ambiguous_role_nodes, finalize_network, review_markdown)
@@ -151,6 +153,7 @@ def main() -> int:
 
     try:
         data = load(args.input.resolve())
+        canonical_scale(data.get("unit"))
         data, route_preparation = prepare_network(data)
         uncertain_change_systems = set()
         validate_working_basis(data.get("recognition_basis"))
@@ -299,7 +302,7 @@ def main() -> int:
                 "length": length,
                 "source_ids": source_ids,
                 "seeds": seeds,
-                **{k: raw.get(k) for k in ("geometry", "parent_segment_id", "space_id", "start_token", "end_token", "tangent_start", "tangent_end")},
+                **{k: raw.get(k) for k in ("geometry", "parent_segment_id", "space_id", "start_token", "end_token", "tangent_start", "tangent_end", "physical_id", "extent_id")},
             }
             endpoints.extend(
                 [
@@ -870,6 +873,30 @@ def main() -> int:
         runs: list[dict[str, Any]] = []
         seen_segments: set[str] = set()
         decision_queue: list[dict[str, Any]] = []
+        dn_seed_rejections: list[dict[str, Any]] = []
+
+        def prefer_direct_seed(seeds, scope):
+            """Keep incompatible weaker candidates visible without erasing a direct DN.
+
+            Only one unambiguous confirmed DN can supersede weaker evidence.
+            Equal-strength conflicts and conflicts across run boundaries remain.
+            """
+            direct = [(member, seed) for member, seed in seeds if seed["evidence_level"] == "confirmed"]
+            direct_dns = {seed["dn"] for _, seed in direct}
+            if len(direct_dns) != 1:
+                return seeds
+            dn = next(iter(direct_dns))
+            accepted = []
+            for member, seed in seeds:
+                if seed["dn"] != dn and seed["evidence_level"] != "confirmed":
+                    dn_seed_rejections.append({"segment_id": member, "scope": scope,
+                        "candidate": dict(seed), "retained_dn": dn,
+                        "direct_source_ids": sorted({value["source_id"] for _, value in direct}),
+                        "reason": "同一适用管段或无变径直通链的低强度候选与明确图注冲突；保留候选记录但不覆盖直接DN"})
+                else:
+                    accepted.append((member, seed))
+            return accepted
+
         for segment_id in sorted(segments):
             if segment_id in seen_segments:
                 continue
@@ -885,16 +912,18 @@ def main() -> int:
                         queue.append(neighbor)
             seeds = []
             for member in component:
-                seeds.extend((member, seed) for seed in segments[member]["seeds"])
-                seeds.extend((member, seed) for seed in terminal_seeds[member])
-            unique_dns = sorted({seed["dn"] for _, seed in seeds})
+                local = [(member, seed) for seed in segments[member]["seeds"] + terminal_seeds[member]]
+                seeds.extend(prefer_direct_seed(local, "segment:" + member))
             run_id = f"RUN-{len(runs) + 1:04d}"
+            seeds = prefer_direct_seed(seeds, run_id)
+            unique_dns = sorted({seed["dn"] for _, seed in seeds})
             if len(unique_dns) == 1:
                 dn = unique_dns[0]
                 seed_levels = [seed["evidence_level"] for _, seed in seeds]
                 best_level = stronger_level(seed_levels)
                 for member in component:
-                    own = [seed for seed in segments[member]["seeds"] if seed["dn"] == dn]
+                    own = [seed for source_member, seed in seeds if source_member == member
+                           and seed in segments[member]["seeds"] and seed["dn"] == dn]
                     if own:
                         member_level = stronger_level([seed["evidence_level"] for seed in own])
                         method = "direct_or_bound_seed"
@@ -920,7 +949,7 @@ def main() -> int:
                 run_status = "assigned"
             elif len(unique_dns) > 1:
                 for member in component:
-                    own = segments[member]["seeds"] + terminal_seeds[member]
+                    own = [seed for source_member, seed in seeds if source_member == member]
                     own_dns = sorted({seed["dn"] for seed in own})
                     if len(own_dns) == 1:
                         own_level = stronger_level([seed["evidence_level"] for seed in own])
@@ -995,6 +1024,12 @@ def main() -> int:
                     "status": run_status,
                 }
             )
+
+        if dn_seed_rejections:
+            decision_queue.append({"decision_id": "D-DN-WEAKER-CANDIDATES", "type": "低强度DN候选与直接证据冲突",
+                "rejected_candidates": dn_seed_rejections,
+                "recommendation": "保留直接图注及冲突候选来源；如候选实际属于另一变径区段，先按原图划明边界再计算",
+                "formal_release_blocked": True})
 
         node_depth: dict[str, int] = {}
         for system, roots in roots_by_system.items():
@@ -1278,6 +1313,7 @@ def main() -> int:
         valve_route_index = RouteIndex(list(segments.values()))
         valve_records = []
         valve_ids: set[str] = set()
+        valve_source_ids: set[tuple[str, str, str]] = set()
         for index, raw in enumerate(data.get("valves", [])):
             if not isinstance(raw, dict):
                 fail(f"valves[{index}] 必须是对象")
@@ -1285,6 +1321,11 @@ def main() -> int:
             if valve_id in valve_ids:
                 fail(f"valve_id 重复: {valve_id}")
             valve_ids.add(valve_id)
+            source_identity = valve_source_identity(raw)
+            if source_identity is not None:
+                if source_identity in valve_source_ids:
+                    fail(f"{valve_id} 与已有阀门引用同一来源实例对象，不能更换 valve_id 重复计数")
+                valve_source_ids.add(source_identity)
             system = text(raw.get("system"), f"{valve_id}.system")
             valve_point = point(raw.get("point"), f"{valve_id}.point")
             spaces = {r["space_id"] for r in segments.values() if r["system"] == system}
@@ -1337,7 +1378,8 @@ def main() -> int:
                         if assignments[segment_id]["dn"]
                     }
                 )
-                if len(adjacent_dns) == 1:
+                all_adjacent_resolved = all(assignments[segment_id]["dn"] for segment_id in attached_segments)
+                if len(adjacent_dns) == 1 and all_adjacent_resolved:
                     dn = adjacent_dns[0]
                     adjacent_levels = [
                         assignments[segment_id]["evidence_level"]
@@ -1354,7 +1396,8 @@ def main() -> int:
                 else:
                     dn = None
                     dn_level = None
-                    dn_method = "adjacent_dn_conflict" if adjacent_dns else "unresolved"
+                    dn_method = ("adjacent_dn_conflict" if len(adjacent_dns) > 1
+                                 else "adjacent_dn_unresolved" if adjacent_dns else "unresolved")
             else:
                 dn = None
                 dn_level = None
@@ -1391,9 +1434,11 @@ def main() -> int:
                     "source_id": text(raw.get("source_id"), f"{valve_id}.source_id"),
                     "source_object_id": (text(raw["source_object_id"], f"{valve_id}.source_object_id")
                                          if raw.get("source_object_id") is not None else None),
+                    **{key: raw[key] for key in ("scope_evidence_level", "type_evidence_level", "source_sha256", "instance_path") if key in raw},
                     "point": list(valve_point),
                 }
             )
+            valve_records[-1]["quantity_level"] = valve_quantity_level(valve_records[-1])
 
         for bridge in bridges:
             if bridge["classification_method"] != "automatic_geometry_candidate":
@@ -1423,7 +1468,7 @@ def main() -> int:
                 item["valve_type"],
                 item.get("block_family"),
                 item["dn"] or "DN待定",
-                item["dn_quantity_level"],
+                item["quantity_level"],
             )
             valve_summary[key] += 1
             family_key = (item["system"], item.get("block_family") or "无块族")
@@ -1587,6 +1632,7 @@ def main() -> int:
             "endpoint_handoff": endpoint_handoff,
             "dn_match_policy": dn_match_policy,
             "dn_match_candidates": dn_match_candidates,
+            "dn_seed_rejections": dn_seed_rejections,
             "workflow_readiness": {
                 "status": "READY" if workflow_ready else "REVIEW_REQUIRED_WITH_RESULTS",
                 "checks": readiness_checks,

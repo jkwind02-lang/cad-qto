@@ -11,6 +11,10 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as ET
 
+_shared_dir = Path(__file__).resolve().parents[2] / "_qto-shared-evidence/scripts"
+sys.path.insert(0, str(_shared_dir))
+from qto_pipe_quantity_contract import validate_valve_summary
+
 
 MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -102,9 +106,14 @@ def main() -> int:
     checks: dict[str, bool] = {}
     try:
         inference = load_json(args.inference.resolve())
+        valve_errors = validate_valve_summary(inference)
+        checks["valve_evidence_consistency"] = not valve_errors
+        errors.extend(valve_errors)
         sheets = summary_text(args.summary.resolve())
         all_text = "\n".join(f"{name}\n{text}" for name, text in sheets.items())
         metrics = inference.get("metrics", {})
+        if not isinstance(metrics, dict):
+            raise ValueError("管网推算证据 metrics 必须是对象")
         pipe_text = scoped_text(sheets, ("管道长度", "DN分层", "管网长度"))
         checks["pipe_length_dimensions"] = all(
             has_group(pipe_text, group)

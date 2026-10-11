@@ -15,12 +15,15 @@ from pathlib import Path
 import sys
 from typing import Any
 
+from ezdxf.lldxf.const import DXFError
+from ezdxf.math.transformtools import TransformError
+from ezdxf.transform import copies as transformed_copies
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 from shapely import make_valid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / '_qto-shared-evidence/scripts'))
-from qto_cad_geometry import read_dxf_with_diagnostics
+from qto_cad_geometry import block_reference_facts, read_dxf_with_diagnostics
 
 VERSION = 'qto-surface-regions/1.0'
 
@@ -106,14 +109,33 @@ def reassemble_edge_rings(segments, tolerance, repairs):
     return rings
 
 
+def hatch_point_to_world_xy(hatch, scale, *, require_xy_plane=True):
+    """Use the HATCH OCS, including elevation, for geometry and locator points.
+
+    A negative Z extrusion reverses the OCS X axis but is still parallel to XY.
+    A tilted hatch may have a projected locator, never an approved XY area.
+    """
+    ext=tuple(float(v) for v in hatch.dxf.get('extrusion',(0,0,1)))
+    if len(ext)!=3 or not all(math.isfinite(v) for v in ext) or math.hypot(*ext)==0:
+        raise RegionError('invalid_hatch_extrusion')
+    ocs=hatch.ocs()
+    if require_xy_plane and (abs(ocs.uz.x)>1e-9 or abs(ocs.uz.y)>1e-9):
+        raise RegionError('non_xy_plane')
+    elevation=float(hatch.dxf.get('elevation',(0,0,0))[2])
+    if not math.isfinite(elevation):raise RegionError('invalid_hatch_elevation')
+    def point(value):
+        p=ocs.to_wcs((float(value[0]),float(value[1]),elevation))
+        if not all(math.isfinite(v) for v in p):raise RegionError('invalid_ring_coordinates')
+        return [p.x*scale,p.y*scale]
+    return point
+
+
 def hatch_geometry(hatch, scale, *, allow_implicit=False, implicit_segments=None, allow_repair=False, repairs=None, max_implicit_gap_m=0.001, stitch_tolerance_m=0):
     if not math.isfinite(max_implicit_gap_m) or max_implicit_gap_m<=0:raise RegionError('invalid_max_implicit_gap')
     if not math.isfinite(stitch_tolerance_m) or stitch_tolerance_m<0:raise RegionError('invalid_stitch_tolerance')
     style=hatch.dxf.get('hatch_style',0)
     if style not in (0,1,2): raise RegionError('unknown_hatch_style')
-    ext=hatch.dxf.get('extrusion',(0,0,1))
-    if abs(ext[0])>1e-9 or abs(ext[1])>1e-9 or abs(ext[2]-1)>1e-9:
-        raise RegionError('non_xy_plane')
+    world_point=hatch_point_to_world_xy(hatch,scale)
     rings=[]
     # ezdxf's documented rendering filter honors EXTERNAL/OUTERMOST flags.
     # Filling style is a CAD fact, not proof that all physical holes are drawn.
@@ -121,23 +143,18 @@ def hatch_geometry(hatch, scale, *, allow_implicit=False, implicit_segments=None
         if hasattr(path,'vertices'):
             if not path.is_closed: raise RegionError('open_polyline_path')
             if any(abs(p[2])>1e-12 for p in path.vertices): raise RegionError('curved_boundary')
-            points=[[float(p[0])*scale,float(p[1])*scale] for p in path.vertices]
+            points=[world_point(p) for p in path.vertices]
             if points and points[0]!=points[-1]:points.append(points[0])
         else:
             edges=list(path.edges)
             if any(type(e).__name__!='LineEdge' for e in edges):raise RegionError('curved_boundary')
-            segments=[([float(v)*scale for v in e.start],[float(v)*scale for v in e.end]) for e in edges]
-            gaps=[math.dist(segments[i-1][1],a) for i,(a,b) in enumerate(segments)]
-            discontinuous=gaps and max(gaps)>1e-7
+            segments=[(world_point(e.start),world_point(e.end)) for e in edges]
             disconnected_runs=segments and any(math.dist(segments[i-1][1],a)>max(1e-7,stitch_tolerance_m) for i,(a,b) in enumerate(segments) if i>0)
             if disconnected_runs and stitch_tolerance_m>0:
                 if not allow_repair:raise RegionError('stitch_requires_geometry_repair')
                 rings.extend(reassemble_edge_rings(segments,stitch_tolerance_m,repairs));continue
             points=[]
-            for edge in edges:
-                if type(edge).__name__!='LineEdge': raise RegionError('curved_boundary')
-                start=[float(v)*scale for v in edge.start]
-                end=[float(v)*scale for v in edge.end]
+            for start,end in segments:
                 if points and math.dist(points[-1],start)>1e-7:
                     if not allow_implicit: raise RegionError('disconnected_edges')
                     if math.dist(points[-1],start)>max_implicit_gap_m:raise RegionError('implicit_gap_exceeds_declared_limit')
@@ -180,30 +197,87 @@ def geometry_record(geometry):
 
 def locator_bounds(hatch,scale):
     points=[]
-    for p in hatch.paths:
-        if hasattr(p,'vertices'):points.extend((float(v[0])*scale,float(v[1])*scale) for v in p.vertices)
-        else:
-            for e in p.edges:
-                if type(e).__name__=='LineEdge':points.extend([tuple(float(v)*scale for v in e.start),tuple(float(v)*scale for v in e.end)])
+    try:
+        world_point=hatch_point_to_world_xy(hatch,scale,require_xy_plane=False)
+        for p in hatch.paths:
+            if hasattr(p,'vertices'):points.extend(world_point(v) for v in p.vertices)
+            else:
+                for e in p.edges:
+                    if type(e).__name__=='LineEdge':points.extend([world_point(e.start),world_point(e.end)])
+    except (RegionError,ValueError,TypeError,ZeroDivisionError,OverflowError):
+        return None
     # Locator only: curved edges are never approved from endpoint bounds.
     return [min(p[0] for p in points),min(p[1] for p in points),max(p[0] for p in points),max(p[1] for p in points)] if points else None
 
-def walk(entities, path=(), depth=0):
-    if depth>32: raise RegionError('block_depth_exceeded')
+def walk(entities, path=(), depth=0, *, parent_layer=None, transform=None,
+         block_stack=(), unverified_reference_paths=()):
+    """Walk source block definitions without losing instance context.
+
+    Transform leaf copies with the composed matrix. Transforming an INSERT first
+    can cause ezdxf to flatten a nested, sheared INSERT, losing its layer and XREF
+    boundary. MINSERT cells are expanded before composing their parent matrix.
+    """
     for i,e in enumerate(entities):
         source=e.source_of_copy or e
         key=str(source.dxf.get('handle') or i)
         identity=(*path,f'{i}:{key}')
+        raw_layer=e.dxf.get('layer','0')
+        layer=parent_layer if raw_layer=='0' and parent_layer is not None else raw_layer
+        context={'raw_layer':raw_layer,'effective_layer':layer,
+                 'unverified_reference_paths':list(unverified_reference_paths)}
         if e.dxftype()=='INSERT':
-            if e.mcount>1:
-                yield from walk(e.multi_insert(),(*identity,'array'),depth+1)
+            if depth>32:
+                yield identity,e,'block_depth_exceeded',context
                 continue
-            skipped=[]
-            children=list(e.virtual_entities(skipped_entity_callback=lambda entity,reason:skipped.append((entity,reason))))
-            for entity,reason in skipped:
-                yield identity,entity,'insert_transform_skipped:'+str(reason)
-            yield from walk(children,identity,depth+1)
-        else:yield identity,e,None
+            if e.mcount>1:
+                yield from walk(e.multi_insert(),(*identity,'array'),depth,
+                                parent_layer=parent_layer,transform=transform,
+                                block_stack=block_stack,
+                                unverified_reference_paths=unverified_reference_paths)
+                continue
+            reference=block_reference_facts(e)
+            if reference['definition_state']=='missing':
+                yield identity,e,'block_definition_missing',dict(context,block_reference=reference)
+                continue
+            references=unverified_reference_paths
+            if reference['xref']:
+                reason='xref_content_unavailable' if reference['definition_state']=='xref_content_unavailable' else 'xref_identity_not_verified'
+                yield identity,e,reason,dict(context,block_reference=reference)
+                if reason=='xref_content_unavailable':continue
+                references=(*references,'/'.join(identity))
+            name=str(e.dxf.name).casefold()
+            if name in block_stack:
+                yield identity,e,'cyclic_block_reference',context
+                continue
+            try:
+                matrix=e.matrix44()
+                if transform is not None:matrix=matrix @ transform
+            except (DXFError,TransformError,ValueError,TypeError,ZeroDivisionError,OverflowError) as exc:
+                yield identity,e,'insert_transform_skipped:'+str(exc),context
+                continue
+            yield from walk(e.block(),identity,depth+1,parent_layer=layer,
+                            transform=matrix,block_stack=(*block_stack,name),
+                            unverified_reference_paths=references)
+        else:
+            if transform is not None:
+                # ATTDEF templates were also omitted by virtual_entities(); they
+                # are not positioned instance text or surface boundaries.
+                if e.dxftype()=='ATTDEF':continue
+                try:
+                    # Preserve ezdxf's circle/arc conversion under non-uniform
+                    # scaling without letting it flatten INSERT boundaries.
+                    log,children=transformed_copies([e],transform)
+                except (DXFError,TransformError,ValueError,TypeError,ZeroDivisionError,OverflowError,NotImplementedError) as exc:
+                    yield identity,source,'insert_transform_skipped:'+str(exc),context
+                    continue
+                for entry in log:
+                    yield identity,source,'insert_transform_skipped:'+entry.message,context
+                for part,child in enumerate(children):
+                    if hasattr(child,'remove_association'):child.remove_association()
+                    child_identity=identity if len(children)==1 else (*identity,f'part:{part}')
+                    yield child_identity,child,None,context
+                continue
+            yield identity,e,None,context
 
 def extract(path, layer_regex, unit, unit_evidence, allow_implicit=False, allow_repair=False, max_implicit_gap_m=0.001, stitch_tolerance_m=0):
     doc,source_diagnostics=read_dxf_with_diagnostics(path)
@@ -213,20 +287,29 @@ def extract(path, layer_regex, unit, unit_evidence, allow_implicit=False, allow_
     if drawing_unit not in (0,declared): raise RegionError('declared_unit_conflicts_with_insunits')
     scale={'mm':.001,'m':1.}[unit]
     pattern=re.compile(layer_regex)
-    rows=[]; failures=[]; texts=[]; proxy_count=0
-    for identity,e,failure in walk(doc.modelspace()):
-        layer=e.dxf.layer
+    rows=[]; failures=[]; texts=[]; proxy_count=0; selected_count=0; selected_failures=0
+    for identity,e,failure,context in walk(doc.modelspace()):
+        layer=context['effective_layer']
+        selected=e.dxftype()=='HATCH' and bool(pattern.search(layer))
+        if selected:selected_count+=1
         if e.dxftype()=='ACAD_PROXY_ENTITY':proxy_count+=1
         if failure:
-            failures.append({'entity_path':'/'.join(identity),'layer':layer,'reason':failure});continue
+            if selected:selected_failures+=1
+            failures.append(dict(context,entity_path='/'.join(identity),layer=layer,
+                                 entity_type=e.dxftype(),reason=failure))
+            continue
         if e.dxftype() in ('TEXT','MTEXT'):
             txt=e.dxf.text if e.dxftype()=='TEXT' else e.plain_text()
             if '平面图' in txt or 'CH' in txt or any(x in layer for x in ['房间名称','SPACE']):
-                texts.append({'entity_path':'/'.join(identity),'text':txt,'point_m':[float(v)*scale for v in e.dxf.insert][:2],'layer':layer})
-        if e.dxftype()!='HATCH' or not pattern.search(layer):continue
+                point=e.ocs().to_wcs(e.dxf.insert) if e.dxftype()=='TEXT' else e.dxf.insert
+                texts.append({'entity_path':'/'.join(identity),'text':txt,'point_m':[float(v)*scale for v in point][:2],'layer':layer,'raw_layer':context['raw_layer']})
+        if not selected:continue
         key='/'.join(identity)
         base={'region_id':'REG-'+hashlib.sha256(key.encode()).hexdigest()[:16],
-              'entity_path':key,'layer':layer,'pattern':e.dxf.pattern_name,
+              'entity_path':key,'layer':layer,'raw_layer':context['raw_layer'],
+              'unverified_reference_paths':context['unverified_reference_paths'],
+              'geometry_coordinate_system':'WCS_XY',
+              'locator_coordinate_system':'WCS_XY_projection','pattern':e.dxf.pattern_name,
               'pattern_scale':e.dxf.pattern_scale,'pattern_angle':e.dxf.pattern_angle,
               'hatch_style':e.dxf.hatch_style,'boundary_path_count':len(e.paths),
               'entity_invisible':bool(e.dxf.get('invisible',0)),
@@ -239,22 +322,33 @@ def extract(path, layer_regex, unit, unit_evidence, allow_implicit=False, allow_
             implicit=[];repairs=[]
             g=hatch_geometry(e,scale,allow_implicit=allow_implicit,implicit_segments=implicit,allow_repair=allow_repair,repairs=repairs,max_implicit_gap_m=max_implicit_gap_m,stitch_tolerance_m=stitch_tolerance_m)
             geometry_status='candidate_geometry_repair' if repairs else ('candidate_implicit_segments' if implicit else 'geometry_extracted')
-            base.update(status='candidate_source_identity_conflict' if identity_issues else geometry_status,
+            status='candidate_source_identity_conflict' if identity_issues else ('candidate_external_reference_unverified' if context['unverified_reference_paths'] else geometry_status)
+            base.update(status=status,
                         geometry_status_before_source_check=geometry_status,
                         source_identity_status='conflict' if identity_issues else 'no_conflict_detected',
                         implicit_segments=implicit,geometry_repairs=repairs,area_m2=g.area,perimeter_m=g.length,
                         bounds_m=list(g.bounds),anchor_m=list(g.representative_point().coords)[0],polygons=geometry_record(g))
             rows.append(base)
         except (RegionError,ValueError,TypeError,OverflowError) as exc:
+            selected_failures+=1
             failures.append(dict(base,reason=str(exc)))
+    partial=bool(failures or proxy_count or identity_issues)
+    reference_failures=len({f['entity_path'] for f in failures if f.get('entity_type')=='INSERT'})
     return {'schema_version':VERSION,'source_dxf':str(path.resolve()),'source_sha256':sha256(path),
-            'status':'partial_source_identity_conflict' if identity_issues else 'selected_regions_analyzed',
+            'status':'partial_source_identity_conflict' if identity_issues else ('partial_selected_regions' if partial else 'selected_regions_analyzed'),
             'source_identity_status':'conflict' if identity_issues else 'no_conflict_detected',
             'source_identity_issues':identity_issues,'source_read_warnings':source_diagnostics['source_read_warnings'],
             'source_unit':unit,'insunits':drawing_unit,'unit_evidence':unit_evidence,
             'max_implicit_gap_m':max_implicit_gap_m,'stitch_tolerance_m':stitch_tolerance_m,
             'layer_regex':layer_regex,'allow_implicit_segments':allow_implicit,'allow_geometry_repair':allow_repair,'interpretation':'未分配视图及材料的中性面域；不得直接合计为工程量；隐式补线与拓扑修补只输出候选，必须回图确认',
             'regions':rows,'failures':failures,'locator_texts':texts,
+            'coverage':{'scope':'modelspace_hatches_on_effective_layers',
+                        'status':'partial' if partial else 'selected_scope_analyzed',
+                        'selected_hatches_seen':selected_count,'regions_extracted':len(rows),
+                        'selected_hatch_failures':selected_failures,
+                        'unresolved_insert_instances':reference_failures,
+                        'unseen_entities_possible':bool(reference_failures or proxy_count or any(f['reason'].startswith('insert_transform_skipped:') for f in failures)),
+                        'interpretation':'已见 HATCH 数不包含未载入外参或未展开对象；外参告警不受图层筛选隐藏，缓存面域来源未核验时保持候选'},
             'proxy_entities_not_expanded':proxy_count}
 
 def main():
@@ -275,7 +369,7 @@ def main():
     if before!=sha256(a.source_dxf): raise SystemExit('源文件在提取过程中变化')
     a.output.parent.mkdir(parents=True,exist_ok=True)
     a.output.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
-    print(json.dumps({'regions':len(result['regions']),'failures':len(result['failures']),
+    print(json.dumps({'status':result['status'],'regions':len(result['regions']),'failures':len(result['failures']),
           'proxy_entities_not_expanded':result['proxy_entities_not_expanded'],'output':str(a.output)},ensure_ascii=False))
 
 if __name__=='__main__':main()

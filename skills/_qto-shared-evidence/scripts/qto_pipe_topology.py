@@ -536,7 +536,7 @@ def finalize_network(output, report, segments, snap_stats):
     output['vertical_quantities']=report['vertical_quantities']
     for r in output.get('segments',[]):
         source=segments[r['segment_id']]
-        for key in ('parent_segment_id','space_id','start','end','geometry'):
+        for key in ('parent_segment_id','space_id','start','end','geometry','physical_id','extent_id'):
             if key in source:r[key]=copy.deepcopy(source[key])
     output['metrics']['source_route_count']=len(report['source_segment_ids'])
     output['metrics']['source_route_length']=report['source_length']

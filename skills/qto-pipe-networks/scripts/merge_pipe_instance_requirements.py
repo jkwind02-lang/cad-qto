@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-eviden
 from model_recognition_basis import file_sha, validate_working_basis
 from qto_instance_requirements import digest, identity_map, verify_result
 from qto_pipe_topology import review_markdown
+from qto_pipe_quantity_contract import valve_quantity_level, valve_source_identity
 
 SCHEMA = "qto-pipe-instance-merge/1.0"
 RESULT_SCHEMA = "qto-pipe-instance-merged-result/1.0"
@@ -57,14 +58,22 @@ def merge(payload, base_dir="."):
     valves = identity_map(network.get("valves", []), "valve_id", "network.valves")
     claim_owners = {}
     items = []
+    source_instances = set()
     for valve_id, valve in valves.items():
         if not valve.get("system"):
             raise ValueError("既有阀件缺系统")
+        source_identity = valve_source_identity(valve)
+        if source_identity is not None:
+            if source_identity in source_instances:
+                raise ValueError("原管网阀门存在重复来源实例，须先解决重复数量出口")
+            source_instances.add(source_identity)
         items.append({"item_id": valve_id, "origin": "drawn_network_accessory", "system": valve["system"],
             "type": valve.get("valve_type", "未分类"), "specification": {"dn": valve.get("dn")}, "unit": "个",
-            "quantity": 1, "quantity_level": valve.get("dn_quantity_level", "未决量"),
+            "quantity": 1, "quantity_level": valve_quantity_level(valve),
             "block_family": valve.get("block_family"), "candidate_types": valve.get("candidate_types", []),
-            "status": "determined" if valve.get("dn") else "specification_unresolved", "requirement_records": []})
+            "status": "determined" if valve.get("dn") else "specification_unresolved",
+            "status_meaning": "仅表示规格是否已有可计算值；实物存在性、范围及属性证据由quantity_level限定，不因determined升级为确认量",
+            "requirement_records": []})
     item_by_id = {i["item_id"]: i for i in items}
     for row in requirements["records"]:
         if row["professional_owner"] != "qto-pipe-networks":
