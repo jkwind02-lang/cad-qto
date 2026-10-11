@@ -45,15 +45,26 @@ def _entity_by_handle(doc, handle):
     return None
 
 
+def _transform_entity(entity, matrix):
+    if not matrix:
+        return entity
+    try:
+        from ezdxf.transform import copies
+        result = list(copies([entity], matrix))[1]
+        return result[0] if result else entity
+    except Exception as exc:
+        raise SurfaceSelectionError({"instance_transform_failed": str(exc)}) from exc
+
+
 def select_hatches(source_dxf: Path, selection: dict, *, index: dict, unit_scale: float):
     digest = _sha256(source_dxf)
     objects = _verified_objects(index)
     if index.get("source", {}).get("sha256") != digest:
         raise SurfaceSelectionError("source_sha256 does not match verified index")
-    layout = selection.get("layout")
-    if layout and layout != index.get("layout"):
+    if selection.get("layout") and selection["layout"] != index.get("layout"):
         raise SurfaceSelectionError("layout does not match verified index")
-    wanted = selection.get("cadinst_ids", [])
+
+    wanted = list(dict.fromkeys(selection.get("cadinst_ids", [])))
     if not wanted:
         raise SurfaceSelectionError("cadinst_ids required")
     missing = sorted(set(wanted) - set(objects))
@@ -69,6 +80,7 @@ def select_hatches(source_dxf: Path, selection: dict, *, index: dict, unit_scale
         entity = _entity_by_handle(doc, row.get("source_handle"))
         if entity is None:
             raise SurfaceSelectionError({"unresolved_source_handle": oid})
+        entity = _transform_entity(entity, row.get("instance_transform"))
         try:
             geometry = EXTRACT.hatch_geometry(entity, unit_scale)
         except Exception as exc:
