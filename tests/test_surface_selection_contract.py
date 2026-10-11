@@ -1,47 +1,62 @@
-from skills.qto_surfaces_envelope.scripts.surface_selection_contract import (
-    SurfaceSelectionError,
-    diagnose_empty_selection,
-    normalize_layer_names,
-    validate_cadinst_selection,
-)
+import importlib.util
+from pathlib import Path
+import sys
 
 
-def test_explicit_layer_names_do_not_replace_layers_regex():
-    assert normalize_layer_names(["FILL-A", "FILL-B"]) == ("FILL-A", "FILL-B")
-    try:
-        normalize_layer_names("FILL-A,FILL-B")
-    except SurfaceSelectionError:
-        pass
-    else:
-        raise AssertionError("explicit layer names must not accept regex text")
+MODULE = Path(__file__).parents[1] / "skills" / "qto-surfaces-envelope" / "scripts" / "surface_selection_contract.py"
+spec = importlib.util.spec_from_file_location("surface_selection_contract", MODULE)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+SurfaceSelectionError = module.SurfaceSelectionError
+diagnose_empty_selection = module.diagnose_empty_selection
+normalize_layer_names = module.normalize_layer_names
+validate_cadinst_selection = module.validate_cadinst_selection
 
 
-def test_cadinst_selection_uses_source_layout_and_contract_shape():
+VALID_SHA = "a" * 64
+
+
+def test_explicit_layer_names_are_separate_from_regex():
+    assert normalize_layer_names(["FILL-A", "FILL,B"]) == ("FILL-A", "FILL,B")
+    for value in ("FILL-A,FILL-B", {"FILL-A"}):
+        try:
+            normalize_layer_names(value)
+        except SurfaceSelectionError:
+            pass
+        else:
+            raise AssertionError("explicit layer names must require list/tuple")
+
+
+def test_cadinst_selection_requires_real_source_and_layout_binding():
     result = validate_cadinst_selection(
         {
-            "source_sha256": "abc",
-            "layout": "Model",
-            "cadinst_ids": ["CADINST-Model/1:2"],
+            "source_sha256": VALID_SHA,
+            "layout": "Model Space A",
+            "cadinst_ids": ["CADINST-Model Space A/path/record"],
         },
-        source_sha256="abc",
-        layout="Model",
+        source_sha256=VALID_SHA,
+        layout="Model Space A",
     )
-    assert result.cadinst_ids == ("CADINST-Model/1:2",)
+    assert result.layout == "Model Space A"
 
 
-def test_invalid_cadinst_format_is_rejected():
-    try:
-        validate_cadinst_selection(
-            {"source_sha256": "abc", "layout": "Model", "cadinst_ids": ["fake-id"]},
-            source_sha256="abc",
-            layout="Model",
-        )
-    except SurfaceSelectionError:
-        pass
-    else:
-        raise AssertionError("invalid CADINST contract must fail")
+@pytest.mark.parametrize("selection", [
+    {"source_sha256": "abc", "layout": "", "cadinst_ids": ["CADINST-x/y"]},
+    {"source_sha256": "abc", "layout": "Model", "cadinst_ids": ["CADINST-x/y"]},
+])
+def test_invalid_source_is_not_strong_binding(selection):
+    with pytest.raises(SurfaceSelectionError):
+        validate_cadinst_selection(selection, source_sha256=VALID_SHA, layout="Model")
 
 
-def test_empty_selection_is_not_zero_quantity():
-    assert diagnose_empty_selection(requested=2, matched=0, failures=0) == "cadinst_selection_no_match"
-    assert diagnose_empty_selection(requested=0, matched=0, failures=0) == "no_selection_candidates"
+def test_empty_and_partial_selection_diagnostics():
+    assert diagnose_empty_selection(requested=2, matched=0, failures=0) == "selection_requested_but_no_match"
+    assert diagnose_empty_selection(requested=3, matched=1, failures=0) == "selection_partial_match"
+    assert diagnose_empty_selection(requested=0, matched=0, failures=1) == "selection_failed_with_unresolved_objects"
+
+
+def test_invalid_counters_fail():
+    with pytest.raises(SurfaceSelectionError):
+        diagnose_empty_selection(requested=-1, matched=0, failures=0)
