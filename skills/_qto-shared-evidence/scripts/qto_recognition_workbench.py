@@ -228,6 +228,16 @@ def build_index(source, layout="Model", authoritative_source=None, max_depth=32,
             if kind == "INSERT":
                 row["block_name"] = str(entity.dxf.name)
                 row["attributes"] = {str(a.dxf.tag): str(a.dxf.text) for a in entity.attribs}
+                # Tags are labels, not source identity. A valid INSERT can carry
+                # multiple ATTRIB entities with the same tag (even at one point).
+                row["attribute_instances"] = [
+                    dict(source_handle=str(a.dxf.get("handle") or ""),
+                         tag=str(a.dxf.tag), text=str(v.dxf.text))
+                    for a, v in zip(original.attribs, entity.attribs)]
+                tag_counts = Counter(str(a.dxf.tag) for a in entity.attribs)
+                row["duplicate_attribute_tags"] = sorted(t for t, n in tag_counts.items() if n > 1)
+                if row["duplicate_attribute_tags"]:
+                    row["issues"].append("属性标签重复；attributes仅为兼容摘要，逐实例值以attribute_instances及子对象为准")
                 row["array_cell"] = cell
                 if entity.dxf.name in ancestors or len(ancestors) >= max_depth:
                     row["issues"].append("循环块或超过递归深度；子对象未展开")
@@ -265,9 +275,11 @@ def build_index(source, layout="Model", authoritative_source=None, max_depth=32,
                         row["bounds_complete"] = bool(descendants) and all(r["bbox3d"] and not r["issues"] for r in descendants)
                         if not row["bounds_complete"]:
                             row["issues"].append("块范围仅覆盖已解析内容，范围外仍可能存在未解析子对象")
-                for attribute in entity.attribs:
+                for attribute_index, attribute in enumerate(entity.attribs):
                     # Attached attributes are already in the INSERT owner's WCS.
-                    attr_original = next((a for a in original.attribs if a.dxf.tag == attribute.dxf.tag), attribute)
+                    # INSERT.copy() preserves attachment order. Match the copied
+                    # cell to the source ordinal, never to a non-unique tag.
+                    attr_original = original.attribs[attribute_index]
                     visit(attr_original, path, matrix, effective_layer, ancestors, virtual=attribute)
             elif scope_bounds is not None and row['bbox'] is not None and not _intersects(row['bbox'],scope_bounds):
                 if row['geometry'] or row['text'] is not None or row.get('location_method')=='conservative_source_envelope':
