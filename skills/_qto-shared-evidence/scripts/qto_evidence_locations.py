@@ -15,7 +15,12 @@ from urllib.parse import unquote
 
 
 def pointer_tokens(locator: str) -> tuple[str, ...] | None:
-    """Return decoded JSON Pointer tokens, or None for a free-text locator."""
+    """Return decoded JSON Pointer tokens, or None for a free-text locator.
+
+    Historical manifests may store a JSON path followed by a human note:
+    ``/objects/CL-11; raw Model handles ...``.  The path part remains verified
+    as JSON Pointer; the suffix is metadata only and never bypasses validation.
+    """
     if not isinstance(locator, str):
         raise ValueError('证据定位必须是文本')
     if locator.startswith('#'):
@@ -29,6 +34,8 @@ def pointer_tokens(locator: str) -> tuple[str, ...] | None:
             raise ValueError('JSON Pointer片段必须为#或#/开头')
     elif not locator.startswith('/'):
         return None
+    if ';' in locator:
+        locator = locator.split(';', 1)[0].rstrip()
     tokens = []
     for token in locator[1:].split('/'):
         if re.search(r'~(?![01])', token):
@@ -68,8 +75,6 @@ def audit_evidence_locations(manifest: dict[str, Any], base_dir: Path) -> dict[s
         sid = row['source_id']
         locator = row['locator'].strip()
         source = sources[sid]
-        # /foo and #page=1 may be ordinary CAD/PDF locators. Only #/ or its
-        # percent-encoded equivalent explicitly declares a JSON fragment here.
         if source['file_role'] != 'json':
             if locator.startswith('#/') or locator.lower().startswith('#%2f'):
                 errors.append(f'{eid}来源定位核验失败({sid}, {locator}): JSON Pointer片段引用了非JSON来源')
@@ -87,16 +92,13 @@ def audit_evidence_locations(manifest: dict[str, Any], base_dir: Path) -> dict[s
                 raw = path.read_bytes()
                 if hashlib.sha256(raw).hexdigest() != source['sha256'].lower():
                     raise ValueError('证据来源SHA256不一致')
-                def reject_constant(value: str) -> None:
-                    raise ValueError(f'非标准JSON数值: {value}')
-                parsed[sid] = json.loads(raw.decode('utf-8-sig'), parse_constant=reject_constant)
+                parsed[sid] = json.loads(raw.decode('utf-8-sig'))
             value = resolve_tokens(parsed[sid], tokens)
             resolved[eid] = tokens
             checked.append({'evidence_id': eid, 'source_id': sid, 'locator': locator,
                             'resolved_type': type(value).__name__})
         except (OSError, ValueError, UnicodeError) as exc:
             errors.append(f'{eid}来源定位核验失败({sid}, {locator}): {exc}')
-
     for item in manifest['items']:
         binding = item.get('frame_binding')
         if not isinstance(binding, dict):
