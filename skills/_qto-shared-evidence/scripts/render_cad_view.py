@@ -19,12 +19,14 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+import time
 from collections import Counter
 from xml.etree import ElementTree as ET
 
 from qto_cad_geometry import read_dxf_with_diagnostics
 from qto_cad_source_contract import verify_source_file
 import qto_recognition_workbench as workbench
+from qto_render_window import proven_far_outside, deterministic_pattern_baselines
 
 
 SCHEMA = "qto-cad-drawing-view/1.0"
@@ -35,7 +37,7 @@ LIMITATIONS = [
     "简单线型使用ACCURATE；复杂线型内的文字/形状不受支持。颜色按DXF及所选背景解析，不加载CTB/STB。",
     "文字以实际可用字体的字形路径绘制；替代字体、SHX/bigfont与复杂MTEXT可能改变字形和排版，须查看字体诊断。",
     "外部参照不自动加载；IMAGE只画边框，PDF/DGN/DWF底图、OLE和外部内容不能由此视图完整观察。",
-    "局部范围在绘图后裁剪；每次读取DXF并绘制所选布局，不宣称空间增量解析或完整工程覆盖。",
+    "每次完整读取DXF并遍历所选布局；有窗口时仅跳过经保守几何包络及整窗裕量证明远离窗口的简单图元，再裁剪。未知对象/文字/容器不据不完整包络跳过，不宣称空间增量解析或完整工程覆盖。",
     "画面像素及SVG路径不是测量依据；精确几何、源对象身份和编号定位仍使用同源索引及read_cad_scope。",
 ]
 
@@ -141,7 +143,7 @@ def _inline_backend_styles(root):
                 node.set(key.strip(), value.strip())
 
 
-def _renderer(doc, query):
+def _renderer(doc, query, source_sha256=None):
     try:
         from ezdxf.addons.drawing import Frontend, RenderContext
         from ezdxf.addons.drawing import config, svg
@@ -190,6 +192,7 @@ def _renderer(doc, query):
             self.encountered = Counter()
             self.font_observations = {}
             self.display_issues = []
+            self.window_culled = Counter()
             super().__init__(*args, **kwargs)
 
         def log_message(self, message):
@@ -198,6 +201,29 @@ def _renderer(doc, query):
         def skip_entity(self, entity, msg):
             self.skipped.append({"handle": entity.dxf.get("handle"), "entity_type": entity.dxftype(),
                                  "reason": str(msg)})
+
+        def draw_hatch_pattern(self, polygon, paths, properties):
+            # The native frontend uses random origin jitter. Use the same
+            # native hatching/OCS pipeline with a source-bound small jitter;
+            # culling far hatches must not change visible pattern origins.
+            from ezdxf.render import hatching
+            if not polygon.pattern or not polygon.pattern.lines:
+                return
+            ocs=polygon.ocs();elevation=polygon.dxf.elevation.z
+            properties.linetype_pattern=tuple();lines=[]
+            started=time.perf_counter();maximum=self.config.hatching_timeout
+            def timeout():
+                if time.perf_counter()-started>maximum:
+                    self.log_message(f'hatching timeout of {maximum}s reached for {polygon} - aborting')
+                    return True
+                return False
+            for baseline in deterministic_pattern_baselines(polygon,self.config.min_hatch_line_distance,source_sha256):
+                for line in hatching.hatch_paths(baseline,paths,timeout):
+                    for start,end in baseline.pattern_renderer(line.distance).render(line.start,line.end):
+                        if ocs.transform:
+                            start,end=ocs.to_wcs((start.x,start.y,elevation)),ocs.to_wcs((end.x,end.y,elevation))
+                        lines.append((start,end))
+            self.pipeline.draw_solid_lines(lines,properties)
 
         def draw_entity(self, entity, properties):
             kind = entity.dxftype()
@@ -244,6 +270,12 @@ def _renderer(doc, query):
                     cmap = fonts.font_manager.get_ttf_font(actual).getBestCmap() or {}
                     record["glyph_check"] = "base_font_cmap_only; inline_font_overrides_not_fully_checked"
                     record["missing_codepoints"].update(ord(c) for c in text if not c.isspace() and ord(c) not in cmap)
+            marker_size=self.config.pdsize
+            if self.config.pdmode == 0 or properties.layer.lower() == 'defpoints':
+                marker_size=0
+            if proven_far_outside(entity, query.get('bounds'), properties, marker_size):
+                self.window_culled[kind] += 1
+                return
             return super().draw_entity(entity, properties)
 
     cfg = config.Configuration(
@@ -315,7 +347,7 @@ def render_view(source, query, *, svg_path, png_path=None, output_path=None,
         raise ValueError(f"布局不存在: {layout_name}；可用布局: {list(doc.layout_names())}")
     drawing_messages = io.StringIO()
     with contextlib.redirect_stdout(drawing_messages):
-        frontend, backend = _renderer(doc, query)
+        frontend, backend = _renderer(doc, query, source['sha256'])
         frontend.draw_layout(doc.layouts.get(layout_name))
     drawn_box = backend.player().bbox()
     bounds = query.get("bounds")
@@ -392,9 +424,19 @@ def render_view(source, query, *, svg_path, png_path=None, output_path=None,
         "renderer": {"name": "ezdxf.drawing.SVGBackend", "ezdxf_version": ezdxf.__version__,
                      "background": query.get("background", "default"), "line_policy": "ACCURATE", "text_policy": "glyph_paths",
                      "external_images": "frames_only_not_loaded", "coordinate_transform_dxf_to_svg": list(backend.transformation_matrix),
+                     "hatch_pattern_origin_jitter": "source_bound_sha256_small_jitter/1.0; native range preserved; display only; original pattern definitions not rewritten",
                      "font_cache_refreshed_from_installed_fonts": frontend.font_cache_refreshed,
                      "svg_viewbox": root.attrib.get("viewBox"), "png_pixels": png_dimensions},
         "diagnostics_scope": "selected_layout_rendering_before_window_crop; counts_are_not_physical_objects_or_selected_window_inventory",
+        "window_render_filter": {
+            "enabled": query.get('bounds') is not None,
+            "culled_by_type": dict(frontend.window_culled),
+            "culled_count": sum(frontend.window_culled.values()),
+            "padding_raw": max(bounds[2]-bounds[0], bounds[3]-bounds[1]) if query.get('bounds') is not None else None,
+            "resolved_point_marker_size_raw": frontend.config.pdsize,
+            "resolved_point_marker_mode": frontend.config.pdmode,
+            "meaning": "display-only conservative culling; full source/layout traversal retained; unknown geometry, annotations and containers are not culled; drawn_bounds_before_crop_raw covers retained drawn records, not all source extents"
+        },
         "encountered_entity_types": dict(frontend.encountered), "skipped_entities": frontend.skipped,
         "display_issues": issues, "font_observations": font_records,
         "renderer_messages": frontend.messages + drawing_messages.getvalue().splitlines(),
