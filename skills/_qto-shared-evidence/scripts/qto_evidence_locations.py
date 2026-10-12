@@ -92,7 +92,9 @@ def audit_evidence_locations(manifest: dict[str, Any], base_dir: Path) -> dict[s
                 raw = path.read_bytes()
                 if hashlib.sha256(raw).hexdigest() != source['sha256'].lower():
                     raise ValueError('证据来源SHA256不一致')
-                parsed[sid] = json.loads(raw.decode('utf-8-sig'))
+                def reject_constant(value: str) -> None:
+                    raise ValueError(f'非标准JSON数值: {value}')
+                parsed[sid] = json.loads(raw.decode('utf-8-sig'), parse_constant=reject_constant)
             value = resolve_tokens(parsed[sid], tokens)
             resolved[eid] = tokens
             checked.append({'evidence_id': eid, 'source_id': sid, 'locator': locator,
