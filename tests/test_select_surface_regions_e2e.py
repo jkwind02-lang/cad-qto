@@ -1,3 +1,6 @@
+import copy
+import json
+from test_surface_project_feedback import document, run as run_professional, validator, c
 import hashlib
 import importlib.util
 from pathlib import Path
@@ -252,7 +255,7 @@ def test_select_surface_cli_layer_selection(tmp_path):
     assert run.stdout.strip() == ""
 
 
-def test_selected_hatch_regions_feed_measure_union(tmp_path):
+def test_selected_hatch_regions_feed_measure_union(tmp_path, document):
     dxf = tmp_path / "union.dxf"
     doc = ezdxf.new()
     doc.header["$INSUNITS"] = 6
@@ -284,3 +287,39 @@ def test_selected_hatch_regions_feed_measure_union(tmp_path):
     assert measured["region_ids"] == ids
     assert measured["polygons"]
     assert all("area_m2" in r and "bounds_m" in r for r in result["regions"])
+
+    union_path = tmp_path / "union.json"
+    union_path.write_text(json.dumps(measured, ensure_ascii=False), encoding="utf-8")
+    union_sha = hashlib.sha256(union_path.read_bytes()).hexdigest()
+    d = copy.deepcopy(document)
+    src = copy.deepcopy(d["sources"][0])
+    src.update(path=str(dxf), sha256=hashlib.sha256(dxf.read_bytes()).hexdigest(),
+               file_role="dxf", source_role="project_drawing")
+    d["sources"][0] = src
+    for e in d["evidence"]:
+        if e["evidence_id"] == "EV-I":
+            e["source_id"] = src["source_id"]
+    union_src = copy.deepcopy(src)
+    union_src.update(source_id="SRC-UNION", path=str(union_path),
+                     sha256=union_sha, file_role="json",
+                     source_role="calculation_evidence")
+    d["sources"].append(union_src)
+    for e in d["evidence"]:
+        if e["evidence_id"] == "EV-G":
+            e["source_id"] = "SRC-UNION"
+    item = d["items"][0]
+    item.update(object_type="ceiling_finish", method="area_direct",
+                evidence_refs=["EV-I", "EV-G", "EV-L"],
+                inputs={"area_m2": measured["area_m2"]})
+    item.pop("opening_union_evidence_ref", None)
+    item["evidence_refs"] = [x for x in item["evidence_refs"] if x != "EV-O"]
+    out = run_professional(d, tmp_path)
+    r = out["工程量结果"][0]
+    assert r["结果"]["数值"] == pytest.approx(150)
+    assert r["专业检查"]["进入采用小计"] is False
+    assert r["专业检查"]["采用角色"] == "reference"
+    assert r["专业检查"]["规则成熟状态"] == ["候选"]
+    assert validator.validate_document(out) == []
+    union_path.write_bytes(union_path.read_bytes() + b"x")
+    with pytest.raises(c.CalculationError, match="哈希"):
+        run_professional(d, tmp_path)
