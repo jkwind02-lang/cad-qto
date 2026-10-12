@@ -250,3 +250,37 @@ def test_select_surface_cli_layer_selection(tmp_path):
     run = subprocess.run(cmd, capture_output=True, text=True)
     assert run.returncode == 2
     assert run.stdout.strip() == ""
+
+
+def test_selected_hatch_regions_feed_measure_union(tmp_path):
+    dxf = tmp_path / "union.dxf"
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 6
+    h1 = _hatch(doc.modelspace(), 10)
+    h2 = _hatch(doc.modelspace(), 10)
+    h2.transform(ezdxf.math.Matrix44.translate(5, 0, 0))
+    h3 = _hatch(doc.modelspace(), 10)
+    h3.transform(ezdxf.math.Matrix44.translate(100, 0, 0))
+    doc.saveas(dxf)
+
+
+    index = _index(dxf)
+    objects = workbench._verified_index(index)
+    ids = [
+        oid for oid, row in objects.items()
+        if row["entity_type"] == "HATCH"
+        and row["source_handle"] in {h1.dxf.handle, h2.dxf.handle}
+    ]
+    result = module.select_hatches(
+        dxf, {"source_sha256": _sha(dxf), "layout": "Model",
+              "cadinst_ids": ids},
+        index=index, unit="m", unit_evidence="explicit_m"
+    )
+    measured = module.EXTRACT.measure_region_group(result["regions"])
+    assert measured["sum_before_union_m2"] == pytest.approx(200)
+    assert measured["overlap_removed_m2"] == pytest.approx(50)
+    assert measured["area_m2"] == pytest.approx(150)
+    assert measured["candidate_region_ids"] == []
+    assert measured["region_ids"] == ids
+    assert measured["polygons"]
+    assert all("area_m2" in r and "bounds_m" in r for r in result["regions"])
