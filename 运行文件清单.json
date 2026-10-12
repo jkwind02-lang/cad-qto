@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 273,
+  "runtime_file_count": 274,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -41,8 +41,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/CAD图样观察与模型识图.md",
-      "sha256": "35470e5d9520401270e854e7e798fc99113ddb5c13e6f7a6500c4046c9df0a69",
-      "bytes": 6849
+      "sha256": "7bbe982913b97eafaffdaa68a30bfe92ea33dfe9f3679584fb6ff000fc8ac9f8",
+      "bytes": 8413
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
@@ -245,6 +245,11 @@
       "bytes": 49915
     },
     {
+      "path": "_qto-shared-evidence/scripts/qto_render_window.py",
+      "sha256": "7d170e8c433b67d6c71050b06dd3108bbf94c1c03a8380c22d428f6dad2897f3",
+      "bytes": 6218
+    },
+    {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
       "sha256": "9ac79b0c17adc96012fc3088cd673f1b14f7752769127ac0af04f8237a3e100a",
       "bytes": 12264
@@ -306,8 +311,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/render_cad_view.py",
-      "sha256": "73231a74d20e35261f23301eee52d74974ea060a0d6fa56d38b27a8fc9a6b371",
-      "bytes": 25603
+      "sha256": "2e87c19aac90389b91085f1e1287957a422bdc9d35580fe69e2558c7cd60e87b",
+      "bytes": 28567
     },
     {
       "path": "_qto-shared-evidence/scripts/validate_minimum_result.py",

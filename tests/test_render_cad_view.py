@@ -91,7 +91,8 @@ def test_bounds_are_actual_crop_not_only_fitted_extents(tmp_path):
     array = pixels(tmp_path)
     assert color_mask(array, 0).any() and not color_mask(array, 2).any()
     assert result["bounds_raw"] == [-5, 0, 40, 20]
-    assert result["drawn_bounds_before_crop_raw"][2] == 130
+    assert result["drawn_bounds_before_crop_raw"][2] == 30
+    assert result['window_render_filter']['culled_by_type'] == {'LINE': 1}
     assert "before_window_crop" in result["diagnostics_scope"]
 
 
