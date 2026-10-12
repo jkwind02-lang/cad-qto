@@ -179,7 +179,14 @@ def select_hatches(source_dxf: Path, selection: dict, *, index: dict, unit: str,
         if entity is None:
             raise SurfaceSelectionError({"unresolved_source_handle": oid})
         geometry = EXTRACT.hatch_geometry(_transform_entity(entity, row.get("instance_transform")), scale)
-        regions.append({"cadinst_id": oid, "area_m2": geometry.area, "bounds_m": list(geometry.bounds)})
+        regions.append({
+            "cadinst_id": oid,
+            "region_id": oid,
+            "area_m2": geometry.area,
+            "bounds_m": list(geometry.bounds),
+            "polygons": EXTRACT.geometry_record(geometry),
+            "status": "geometry_extracted",
+        })
     _verified_objects(index)
     if _sha256(source_dxf) != digest:
         raise SurfaceSelectionError("source changed during selection")
