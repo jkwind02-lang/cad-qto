@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 271,
+  "runtime_file_count": 273,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -671,8 +671,8 @@
     },
     {
       "path": "qto-electrical-routes/references/常规计算逻辑.md",
-      "sha256": "4c08f0b27a67fc737b3a365327f0a1d0b83d99cfa46b5475520d2081bffb3c6e",
-      "bytes": 2589
+      "sha256": "0b46899be9220cee181faa73425d5a387dd3d0a7204812b509bd2d7f42384e13",
+      "bytes": 2872
     },
     {
       "path": "qto-electrical-routes/references/案例与接入清单.md",
@@ -695,14 +695,24 @@
       "bytes": 896
     },
     {
+      "path": "qto-electrical-routes/references/路径台账端点接收.md",
+      "sha256": "08fd103e12372b54685a715794cc2d5e6ddca409007adba72b68c8dae84cf243",
+      "bytes": 2177
+    },
+    {
       "path": "qto-electrical-routes/scripts/calculate_electrical_paths.py",
-      "sha256": "9d661f320654c5d164b21c39d2f077a1ac50d7866a9ee7912656ec1cf60c8056",
-      "bytes": 7215
+      "sha256": "3a1dc357bf5df7c28d09994b0f5985209fb1840be618f6dd8b65c2ddb4274005",
+      "bytes": 7598
     },
     {
       "path": "qto-electrical-routes/scripts/calculate_electrical_routes_reference.py",
       "sha256": "dcfc31d239f35c9b267d7a68aae0e6663b5b897006cc0c4fc2028f3126f585ca",
       "bytes": 2370
+    },
+    {
+      "path": "qto-electrical-routes/scripts/electrical_endpoint_receipt.py",
+      "sha256": "c5e0f63d442fa0b47c8f0858917473512c955cd871f57daf172a43ab0238fe86",
+      "bytes": 8657
     },
     {
       "path": "qto-electrical-routes/SKILL.md",
