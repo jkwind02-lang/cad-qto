@@ -13,10 +13,15 @@ def main():
    print(json.dumps(calculate(document),ensure_ascii=False,indent=2,allow_nan=False));return 0
   rows=document.get("route_items")
   if not isinstance(rows,list) or not rows:raise ValueError("route_items必须为非空数组")
-  out=[]
+  out=[];seen_ids=set()
   for i,r in enumerate(rows):
+   if not isinstance(r,dict):raise ValueError(f"第{i}项必须为对象")
    for k in ("id","kind","system","spec","path_length_m","parallel_count","extra_each_m","evidence"):
     if k not in r:raise ValueError(f"第{i}项缺少{k}")
+   if not isinstance(r['id'],str) or not r['id'].strip():raise ValueError(f"第{i}项id必须为非空文本")
+   identity=r['id'].strip()
+   if identity in seen_ids:raise ValueError(f"重复route_items id: {identity}")
+   seen_ids.add(identity)
    if r["kind"] not in ALLOWED:raise ValueError(f"{r['id']} kind非法")
    if not num(r["path_length_m"]) or r["path_length_m"]<=0 or not num(r["extra_each_m"]) or r["extra_each_m"]<0:raise ValueError(f"{r['id']}路径或附加长度非法")
    if not isinstance(r["parallel_count"],int) or isinstance(r["parallel_count"],bool) or r["parallel_count"]<=0:raise ValueError(f"{r['id']}并行数量非法")
