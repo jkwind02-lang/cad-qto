@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 266,
+  "runtime_file_count": 271,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -255,6 +255,11 @@
       "bytes": 4378
     },
     {
+      "path": "_qto-shared-evidence/scripts/qto_source_rectangles.py",
+      "sha256": "030ed41797c8c5a57a568cd61822d97a05e327d22b8fb044a437a467f320f5c7",
+      "bytes": 6391
+    },
+    {
       "path": "_qto-shared-evidence/scripts/qto_spatial.py",
       "sha256": "d228ad667878b54244414844df23562feb9ca6471b183d1f4302124e83a84a25",
       "bytes": 6283
@@ -455,9 +460,19 @@
       "bytes": 4014
     },
     {
+      "path": "qto-concrete-formwork/references/阶形独立基础来源复算.md",
+      "sha256": "5caafe2c42207ff53c7b7ea396f6857cb094085b137a0c66092fe061a907aaab",
+      "bytes": 2129
+    },
+    {
       "path": "qto-concrete-formwork/scripts/calculate_concrete_formwork_pairs.py",
       "sha256": "51145e98e29852ac00d27a1112bd2a9202c1f0a3d15a8e56cad7dcbeae8c9250",
       "bytes": 36297
+    },
+    {
+      "path": "qto-concrete-formwork/scripts/calculate_stepped_foundations_reference.py",
+      "sha256": "e4f7b105ef78ef8c71f159981d82a0fa58d17728cbe76a589fe58f89e4348e24",
+      "bytes": 5795
     },
     {
       "path": "qto-concrete-formwork/scripts/validate_concrete_formwork_result.py",
@@ -466,8 +481,8 @@
     },
     {
       "path": "qto-concrete-formwork/SKILL.md",
-      "sha256": "a6952358611e59399baccc9039807b74afd5c65bdd69ffa9c97f149f8417cd9e",
-      "bytes": 10534
+      "sha256": "082ead559a03bd89bdf0bee967c8feb20e3184b50c5a2e74193e9f87b15863d3",
+      "bytes": 10730
     },
     {
       "path": "qto-coordinator/agents/openai.yaml",
@@ -820,6 +835,11 @@
       "bytes": 659
     },
     {
+      "path": "qto-piles-groundwork/references/矩形换填区域来源复算.md",
+      "sha256": "af36e73337f4bec6ced03b35413accb9db6869163cf63e581e5fece189da336f",
+      "bytes": 1775
+    },
+    {
       "path": "qto-piles-groundwork/references/结果检查与输出.md",
       "sha256": "6f458bcbef5a88b28397a57b11d5bcf1d609a81d8475ebe93c64a6d6bf953096",
       "bytes": 656
@@ -835,14 +855,19 @@
       "bytes": 783
     },
     {
+      "path": "qto-piles-groundwork/scripts/calculate_groundwork_regions_reference.py",
+      "sha256": "f39946e97d9e1603acbc80e886665ac13f46069df31a8351148898c8b267a75a",
+      "bytes": 5193
+    },
+    {
       "path": "qto-piles-groundwork/scripts/calculate_pile_groups_reference.py",
       "sha256": "6613faeff8726de298fe5736f09b35724d16e32b66ebe3b6271ec30409c5c1ec",
       "bytes": 1884
     },
     {
       "path": "qto-piles-groundwork/SKILL.md",
-      "sha256": "118315197ec63a1bd5d0e8e7de2964d0a3166448fd2d18917c82b3b5a20217f0",
-      "bytes": 5921
+      "sha256": "ee40e1add275bc0e724cd42f8b73b86c54e324c73f9b9f6e0ae192fd06a44c29",
+      "bytes": 6153
     },
     {
       "path": "qto-pipe-networks/agents/openai.yaml",
