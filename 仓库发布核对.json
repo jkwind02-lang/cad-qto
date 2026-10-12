@@ -195,7 +195,7 @@
     "ci_run": false,
     "record": "docs/钢结构真实案例改进_20260929.md"
   },
-  "current_runtime_files": 265,
+  "current_runtime_files": 267,
   "local_pipe_benchmark_update_20260929": {
     "version": "0.2.0+codex.20260929154857",
     "runtime_files": 225,
@@ -621,7 +621,7 @@
       "execution_snapshot_runtime_manifest_sha256": "a2f02dd393f52f2ae7fa167c63f18c3bdd2e05b01d16751bf9952f8248bcc72f",
       "both_versions_match_reference_line_items": true,
       "reference_quantities": {
-        "pipe_DN50_m": 13.0,
+        "pipe_DN50_m": 13,
         "pipe_DN32_m": 4.3,
         "surfaces_CL11_m2": 17.41,
         "surfaces_CL24_m2": 9.84
@@ -639,5 +639,56 @@
       "first_candidate_linux_skipped": 9,
       "final_commit_checks": "对应PR及main提交Actions分别记录，首候选结果不替代最终提交检查"
     }
+  },
+  "repository_exact_hatch_selection_20261012": {
+    "branch": "feat/exact-hatch-selection-20261011",
+    "pull_request": "https://github.com/jkwind02-lang/cad-qto/pull/5",
+    "status": "draft_pending_final_head_ci",
+    "runtime_files": 267,
+    "runtime_manifest_sha256": "74f4a0ccd8a26af68ee5664802410c9b4aeec7e43dd1588a8f479df5036cf0c7",
+    "runtime_manifest_commit": "79f56c58d936de55a8b49cca13aae709b7fbaea7",
+    "record": "docs/CADINST精确选择适配说明.md",
+    "code_authorship": "Pro Chat 会话生成实现与回归片段；经逐段审查后通过 GitHub 提交；未使用 Work 模式",
+    "verified_prior_ci": {
+      "commit": "f0fda86ed6c6f2c8d08268aa8e35aea8b5406867",
+      "url": "https://github.com/jkwind02-lang/cad-qto/actions/runs/38173231081",
+      "windows_passed": 1687,
+      "linux_passed": 1678,
+      "linux_skipped": 9
+    },
+    "final_commit_checks": "后续部分图层未匹配拒绝、输出来源及工作量状态、文档和运行清单已更新；以 PR 最终提交 Actions 为准，前序绿灯不替代最终检查。",
+    "implemented": [
+      "真实工作台 CADINST 到 HATCH 的来源绑定与实例矩阵映射",
+      "精确有效图层列表及与实例 ID 的交集，任一请求层无 HATCH 时拒绝",
+      "mm/m 与 INSUNITS 一致性及未知单位文字依据保留",
+      "源身份、未核验外参/动态块祖先、计算期间源文件变更保护",
+      "CLI 成功 JSON、失败 exit 2 且不输出数量",
+      "索引哈希、转换警告和 working-only 状态输出"
+    ],
+    "test_boundary": "合成 DXF 的实例、矩阵、布局、单位、来源异常、图层及 CLI 回归，不是实际项目验收或识图准确率评估。",
+    "maintainer_machine_installation_updated": false,
+    "real_dwg_autocad_tested": false,
+    "real_project_recognition_accuracy_verified": false,
+    "professional_maturity_changed": false,
+    "business_adoption_promoted": false,
+    "plugin_version_bumped": false,
+    "merged": false
+  },
+  "repository_selected_polygon_handoff_20261012": {
+    "branch": "feat/exact-hatch-selection-20261011",
+    "pull_request": "https://github.com/jkwind02-lang/cad-qto/pull/5",
+    "status": "pending_final_head_ci",
+    "runtime_files": 267,
+    "runtime_manifest_sha256": "fedfdb9156b095d2942390e8bd5152abc938f8fb3975ac8ff4a3ab9a70b39249",
+    "runtime_manifest_commit": "2cd54d9cebb9f67a1c0b3ca89d1cd3cf129242d7",
+    "implemented": "Pro Chat生成完整多边形证据字段及选择→面域并集→原专业area_direct传值→绑定复算CLI回归，复用原几何/并集/专业计算器。",
+    "verification_scope": "合成DXF两份重叠HATCH原和200、去重50、净150，排除第三个未选实例；真实工作台ID和源/并集JSON哈希，reference结果；证据文件改变后拒绝。以最终提交Actions结果为准，不自报待执行测试通过。",
+    "automatic_area_scalar_to_geometry_binding": false,
+    "real_drawing_available": false,
+    "real_project_recognition_accuracy_verified": false,
+    "maintainer_machine_installation_updated": false,
+    "business_adoption_promoted": false,
+    "merged": false,
+    "remaining": "实际原图独立观察、做法/视图分组、洞口判断及回图验收待取得授权原图后继续；不以合成回归代替。"
   }
 }
