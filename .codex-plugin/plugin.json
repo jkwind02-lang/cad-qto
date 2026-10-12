@@ -1,6 +1,6 @@
 {
   "name": "cad-qto",
-  "version": "0.2.0+codex.20261012.2",
+  "version": "0.2.0+codex.20261013.candidate1",
   "description": "AI自主读图与工程量计算，运用工程知识和人工算量方法选择取证、推导与校核；按物理对象调用13个专业Skill，共用CAD观察、精确计算和证据资源。",
   "author": {
     "name": "Local developer"

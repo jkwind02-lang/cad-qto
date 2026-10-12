@@ -551,8 +551,8 @@
     },
     {
       "path": "qto-duct-air-systems/scripts/calculate_straight_duct_reference.py",
-      "sha256": "638a2ea92910ba9c6b1472fb2eff03aabde50aa38550993af887225fac7dda1e",
-      "bytes": 2092
+      "sha256": "7607ba1b798de2e525d2cd36e604e39babf989c5956e394ecc10215111f043c3",
+      "bytes": 2198
     },
     {
       "path": "qto-duct-air-systems/SKILL.md",
