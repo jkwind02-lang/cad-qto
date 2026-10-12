@@ -1176,8 +1176,8 @@
     },
     {
       "path": "qto-structural-steel/references/构件计算清单格式.md",
-      "sha256": "53676749ade7ce1b09064e3e4f9af4eb655bd3bc5f49b083d2711665f16e35c9",
-      "bytes": 8851
+      "sha256": "e1448cce0e3414d4430e0a44c697b49f684f7fa2757f304de4296a9b6a877bb9",
+      "bytes": 9179
     },
     {
       "path": "qto-structural-steel/references/现行计量标准摘要.md",
@@ -1216,8 +1216,8 @@
     },
     {
       "path": "qto-structural-steel/scripts/validate_structural_steel_result.py",
-      "sha256": "b58ae10726f4851c9fe82d0ce97a2243d3ae90087d1d7d74b68145af7bd8dc11",
-      "bytes": 27752
+      "sha256": "211df6266075284c8decc49a60c4b782e9e07dea08584fcad221f561c2d33d51",
+      "bytes": 28363
     },
     {
       "path": "qto-surfaces-envelope/SKILL.md",
