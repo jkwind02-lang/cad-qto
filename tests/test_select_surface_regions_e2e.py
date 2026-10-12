@@ -320,6 +320,21 @@ def test_selected_hatch_regions_feed_measure_union(tmp_path, document):
     assert r["专业检查"]["采用角色"] == "reference"
     assert r["专业检查"]["规则成熟状态"] == ["候选"]
     assert validator.validate_document(out) == []
+    import subprocess
+    import sys
+    
+    
+    result_path = tmp_path / "result.json"
+    result_path.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+    cmd = [sys.executable, str(Path(validator.__file__)),
+           "--calculator", str(Path(c.__file__)),
+           "--manifest", str(tmp_path / "manifest.json"),
+           "--binding", str(result_path)]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout)["status"] == "PASS"
     union_path.write_bytes(union_path.read_bytes() + b"x")
     with pytest.raises(c.CalculationError, match="哈希"):
         run_professional(d, tmp_path)
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    assert proc.returncode == 2
