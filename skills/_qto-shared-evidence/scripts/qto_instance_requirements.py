@@ -439,6 +439,12 @@ def evaluate(payload, base_dir=".", previous=None):
             else:
                 row["additional_quantity"] = row["required_quantity"] - len(matched)
         row["quantity_owner"] = "existing_and_requirement_remainder" if matched else "instance_requirement"
+        # The arithmetic remainder is relative only to the submitted matches.
+        # An empty/partial match list does not establish a procurement shortfall.
+        # Keep the legacy field for consumers and give it an explicit meaning.
+        row["unmatched_requirement_quantity"] = row["additional_quantity"]
+        row["additional_quantity_meaning"] = "unmatched_declared_requirement; not procurement or installed remainder"
+        row["procurement_additional_quantity"] = None
         records.append(row)
     referenced_subjects = {r["subject_physical_id"] for r in records}
     unassigned = sorted(set(subjects) - referenced_subjects)
@@ -454,6 +460,8 @@ def evaluate(payload, base_dir=".", previous=None):
         "coverage_declaration": {"declared_complete": payload.get("scope_complete") is True,
                                  "verification": "declared_subjects_and_requirements_only; source-reading completeness requires review"},
         "adoption_scope": "working", "review_status": "unreviewed", "formal_adoption_allowed": False,
+        "quantity_meaning": "required_quantity includes matched_existing; additional_quantity/unmatched_requirement_quantity is only the count not matched by this input. It does not prove unpurchased or uninstalled quantity.",
+        "procurement_additional_quantity": None,
     }
     if previous is not None:
         if previous.get("schema") != RESULT_SCHEMA or previous.get("scope_id") != payload["scope_id"]:

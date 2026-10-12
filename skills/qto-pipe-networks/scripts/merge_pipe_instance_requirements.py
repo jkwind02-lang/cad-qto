@@ -107,6 +107,8 @@ def merge(payload, base_dir="."):
                 "requirement_records": [row["record_id"]], "subject_physical_id": row["subject_physical_id"],
                 "issues": row["issues"], "specification_complete": row["specification_complete"]}
         item.update(block_family=None, candidate_types=[])
+        item.update(quantity_meaning="unmatched_declared_requirement; not procurement or installed remainder",
+                    procurement_additional_quantity=None)
         items.append(item)
         item_by_id[item["item_id"]] = item
     groups = defaultdict(lambda: {"quantity": 0, "unresolved_items": [], "excluded_items": [], "item_ids": []})
@@ -133,7 +135,8 @@ def merge(payload, base_dir="."):
               "network_result": copy.deepcopy(network), "instance_requirements": copy.deepcopy(requirements),
               "accessory_items": items, "accessory_summary": summaries,
               "adoption_scope": "working", "review_status": "unreviewed", "formal_adoption_allowed": False,
-              "meaning": "原管网阀附件计数保持；逐实例要求仅增加未被图示附件覆盖的余量。完整施工范围仍须按原管网未决及专业计量待办检查。"}
+              "procurement_additional_quantity": None,
+              "meaning": "原管网阀附件计数保持；需求总量已含匹配现件。未匹配需求仅相对于本次提交的现件对应，不证明采购缺口或安装余量；采购新增量未定。完整施工范围仍须核对原管网未决及专业计量待办。"}
     result["result_sha256"] = digest(result)
     return result
 
@@ -167,14 +170,14 @@ def markdown(result):
     network = result["network_result"]
     output = ["# 管网与逐实例附属量工作计算", "", "范围：" + cell(result["scope_id"]), "",
               result["meaning"], "模型工作识别，尚未人工复核，不进入正式量。", "",
-              "以下原管网逐路摘要完整保留，不与新增附属量互相替代：", "", original_network_markdown(network)]
+              "以下原管网逐路摘要完整保留，不与附属需求互相替代：", "", original_network_markdown(network)]
     output += ["", "原管网未决记录：" + cell(network.get("decision_queue", [])), "",
-               "## 阀门与在线附件汇总", "", "图示数量与规则新增余量分列；规则要求总量已含图示部分，不能再次相加。", "",
+               "## 阀门与在线附件汇总", "", "图示数量与未匹配需求分列；需求总量已含图示部分，不能再次相加。未提交现件匹配不等于没有现件，未匹配需求不作新增采购量。", "",
                "| 数量来源 | 系统 | 阀门/附件类型 | 块族 | 候选类型 | DN/规格 | 已算数量 | 单位 | 数量层级 | 未决记录 | 排除记录 |",
                "| --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- |"]
     output += [accessory_table_row(r) for r in result["accessory_summary"]]
     output += ["", "## 逐实例要求与唯一数量出口", "",
-               "| 记录 | 物理实例/端口 | 条款 | 附件 | 规格 | 应设 | 已绘覆盖 | 新增余量 | 单位 | 层级 | 状态 | 例外 | 未决/冲突 | 专业待补事实 | 各条款适用 | 证据 |",
+               "| 记录 | 物理实例/端口 | 条款 | 附件 | 规格 | 应设 | 已匹配现件 | 未匹配需求 | 单位 | 层级 | 状态 | 例外 | 未决/冲突 | 专业待补事实 | 各条款适用 | 证据 |",
                "| --- | --- | --- | --- | --- | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- | --- | --- |"]
     output += [requirement_table_row(r) for r in result["instance_requirements"]["records"]]
     output += ["", "未分配构造要求的实例：" + cell(result["instance_requirements"]["unassigned_subject_physical_ids"]), "",
