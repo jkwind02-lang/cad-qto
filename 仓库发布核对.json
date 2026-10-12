@@ -673,5 +673,22 @@
     "business_adoption_promoted": false,
     "plugin_version_bumped": false,
     "merged": false
+  },
+  "repository_selected_polygon_handoff_20261012": {
+    "branch": "feat/exact-hatch-selection-20261011",
+    "pull_request": "https://github.com/jkwind02-lang/cad-qto/pull/5",
+    "status": "pending_final_head_ci",
+    "runtime_files": 267,
+    "runtime_manifest_sha256": "fedfdb9156b095d2942390e8bd5152abc938f8fb3975ac8ff4a3ab9a70b39249",
+    "runtime_manifest_commit": "2cd54d9cebb9f67a1c0b3ca89d1cd3cf129242d7",
+    "implemented": "Pro Chat生成完整多边形证据字段及选择→面域并集→原专业area_direct传值→绑定复算CLI回归，复用原几何/并集/专业计算器。",
+    "verification_scope": "合成DXF两份重叠HATCH原和200、去重50、净150，排除第三个未选实例；真实工作台ID和源/并集JSON哈希，reference结果；证据文件改变后拒绝。以最终提交Actions结果为准，不自报待执行测试通过。",
+    "automatic_area_scalar_to_geometry_binding": false,
+    "real_drawing_available": false,
+    "real_project_recognition_accuracy_verified": false,
+    "maintainer_machine_installation_updated": false,
+    "business_adoption_promoted": false,
+    "merged": false,
+    "remaining": "实际原图独立观察、做法/视图分组、洞口判断及回图验收待取得授权原图后继续；不以合成回归代替。"
   }
 }
