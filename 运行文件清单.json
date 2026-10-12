@@ -1326,8 +1326,8 @@
     },
     {
       "path": "qto-surfaces-envelope/scripts/select_surface_regions.py",
-      "sha256": "b87a81363d45596467b0f24cc4bd7c450607c677588ffa2303aca4eb91fcef6d",
-      "bytes": 8814
+      "sha256": "53ef5ceeb45597753f7cde13e5e81b2ebdcbf232cc2772a5c87fde2626f9473b",
+      "bytes": 8994
     },
     {
       "path": "qto-surfaces-envelope/scripts/surface_selection_contract.py",
