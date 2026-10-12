@@ -148,7 +148,18 @@ def validate_document(data: Any) -> list[str]:
             errors.append(f"{identifier}数值不得为负数")
         if status == "部分计算" and any(word in str(name) or word in str(formula) for word in PARTIAL_WORDS):
             errors.append(f"{identifier}部分结果夸大范围完整性")
-        if numeric(value) and object_type in MASS_TYPES and unit != "t":
+        count_dimension = (
+            method in {"count", "explicit_summary"}
+            and unit in COUNT_UNITS and mass_inclusion == "not_mass"
+        )
+        if numeric(value) and method == "count":
+            if unit not in COUNT_UNITS:
+                errors.append(f"{identifier}计数必须使用套/个/根等数量单位")
+            if mass_inclusion != "not_mass":
+                errors.append(f"{identifier}计数结果不得作为钢材质量")
+            if not float(value).is_integer():
+                errors.append(f"{identifier}计数结果必须是整数")
+        if numeric(value) and object_type in MASS_TYPES and unit != "t" and not count_dimension:
             errors.append(f"{identifier}钢材质量必须使用t")
         if numeric(value) and object_type == "connection_hardware":
             if unit not in COUNT_UNITS:
