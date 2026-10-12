@@ -18,7 +18,7 @@ def pointer_tokens(locator: str) -> tuple[str, ...] | None:
     """Return decoded JSON Pointer tokens, or None for a free-text locator.
 
     Historical manifests may store a JSON path followed by a human note:
-    ``/objects/CL-11; raw Model handles ...``.  The path part remains verified
+    ``/objects/CL-11; raw Model handles ...``. The path part remains verified
     as JSON Pointer; the suffix is metadata only and never bypasses validation.
     """
     if not isinstance(locator, str):
@@ -34,8 +34,20 @@ def pointer_tokens(locator: str) -> tuple[str, ...] | None:
             raise ValueError('JSON Pointer片段必须为#或#/开头')
     elif not locator.startswith('/'):
         return None
+    tokens = _pointer_tokens_strict(locator)
+    if tokens is not None:
+        return tokens
     if ';' in locator:
-        locator = locator.split(';', 1)[0].rstrip()
+        legacy = locator.split(';', 1)[0].rstrip()
+        tokens = _pointer_tokens_strict(legacy)
+        if tokens is not None:
+            return tokens
+    return None
+
+
+def _pointer_tokens_strict(locator: str) -> tuple[str, ...] | None:
+    if not locator.startswith('/'):
+        return None
     tokens = []
     for token in locator[1:].split('/'):
         if re.search(r'~(?![01])', token):
@@ -60,7 +72,7 @@ def audit_evidence_locations(manifest: dict[str, Any], base_dir: Path) -> dict[s
     """Audit locations after the native calculator has validated the manifest.
 
     Explicit #/fragment or /pointer locators on JSON sources are resolved against
-    their own registered, SHA-verified bytes.  A frame binding may narrow an
+    their own registered, SHA-verified bytes. A frame binding may narrow an
     evidence locator to a descendant, but cannot silently use a sibling object.
     This does not require free-text CAD/PDF locators to be JSON Pointers.
     """
@@ -92,9 +104,7 @@ def audit_evidence_locations(manifest: dict[str, Any], base_dir: Path) -> dict[s
                 raw = path.read_bytes()
                 if hashlib.sha256(raw).hexdigest() != source['sha256'].lower():
                     raise ValueError('证据来源SHA256不一致')
-                def reject_constant(value: str) -> None:
-                    raise ValueError(f'非标准JSON数值: {value}')
-                parsed[sid] = json.loads(raw.decode('utf-8-sig'), parse_constant=reject_constant)
+                parsed[sid] = json.loads(raw.decode('utf-8-sig'), parse_constant=lambda value: (_ for _ in ()).throw(ValueError(f'非标准JSON数值: {value}')))
             value = resolve_tokens(parsed[sid], tokens)
             resolved[eid] = tokens
             checked.append({'evidence_id': eid, 'source_id': sid, 'locator': locator,
