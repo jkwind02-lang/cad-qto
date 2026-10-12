@@ -551,13 +551,13 @@
     },
     {
       "path": "qto-duct-air-systems/references/计算与证据流程.md",
-      "sha256": "ffc813091066cbc267ceee11b427c4466d466d6a8d203a5f2924ccc07d021e4b",
-      "bytes": 872
+      "sha256": "f9f01f1dbf6a3e591564dc38098fec62c8bcc7da674bf04c08b242b9de746e41",
+      "bytes": 1103
     },
     {
       "path": "qto-duct-air-systems/scripts/calculate_straight_duct_reference.py",
-      "sha256": "98c362844c7c435cd3b8687e4e4659decca8723caed86e1f8fdea9802a5f9886",
-      "bytes": 1877
+      "sha256": "638a2ea92910ba9c6b1472fb2eff03aabde50aa38550993af887225fac7dda1e",
+      "bytes": 2092
     },
     {
       "path": "qto-earthwork-terrain/SKILL.md",
