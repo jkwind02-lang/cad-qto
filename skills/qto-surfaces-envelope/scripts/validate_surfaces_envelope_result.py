@@ -12,6 +12,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / '_qto-shared-evidence/scripts'))
+from qto_evidence_locations import audit_evidence_locations
+
 
 OBJECT_TYPES = {
     "floor_finish", "wall_finish", "ceiling_finish", "roof_covering",
@@ -325,6 +328,8 @@ def main() -> int:
         data = load_json(binding)
         errors = validate_document(data)
         replay = import_calculator(calculator).calculate_from_path(manifest)
+        location_audit = audit_evidence_locations(load_json(manifest), manifest.parent)
+        errors.extend(location_audit["errors"])
         if data != replay:
             errors.append("成果与当前计算器、运行清单绑定复算结果不一致")
         bound = data.get("绑定验证", {}) if isinstance(data, dict) else {}
@@ -338,6 +343,7 @@ def main() -> int:
             "manifest": str(manifest),
             "calculator": str(calculator),
             "error_count": len(errors),
+            "evidence_location_audit": location_audit,
             "errors": errors,
             "business_correctness_proven": False,
             "note": "通过表示绑定复算与已编码不变量成立，不替代项目专业复核。",

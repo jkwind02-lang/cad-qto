@@ -8,10 +8,15 @@ def main():
  try:
   rows=json.loads(a.input.read_text(encoding="utf-8")).get("straight_sections")
   if not isinstance(rows,list) or not rows:raise ValueError("straight_sections必须为非空数组")
-  out=[]
+  out=[];seen=set()
   for i,r in enumerate(rows):
+   if not isinstance(r,dict):raise ValueError(f"第{i}项必须为对象")
    for k in ("id","system","shape","count","length_each_m","evidence"):
     if k not in r:raise ValueError(f"第{i}项缺少{k}")
+   if not isinstance(r["id"],str) or not r["id"].strip():raise ValueError(f"第{i}项id必须为非空文本")
+   identity=r['id'].strip()
+   if identity in seen:raise ValueError(f"直管段id重复: {identity}")
+   seen.add(identity)
    if not isinstance(r["count"],int) or isinstance(r["count"],bool) or r["count"]<=0 or not num(r["length_each_m"]) or r["length_each_m"]<=0:raise ValueError(f"{r['id']}数量或长度非法")
    if r["shape"]=="rectangle" and num(r.get("width_m")) and num(r.get("height_m")) and r["width_m"]>0 and r["height_m"]>0:per=2*(r["width_m"]+r["height_m"]);spec=f"{r['width_m']}x{r['height_m']}m"
    elif r["shape"]=="circle" and num(r.get("diameter_m")) and r["diameter_m"]>0:per=math.pi*r["diameter_m"];spec=f"D{r['diameter_m']}m"
