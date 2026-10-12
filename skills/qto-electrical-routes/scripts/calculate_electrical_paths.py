@@ -2,9 +2,12 @@
 """Measure drawing-backed electrical paths; count shared channels separately."""
 from __future__ import annotations
 import argparse, json, math
+import sys
 from collections import defaultdict
 from pathlib import Path
 SCHEMA='qto-electrical-path-ledger/1.0'
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from electrical_endpoint_receipt import receive
 CHANNELS={'tray','trunking','conduit','busbar'}
 CIRCUITS={'cable','wire'}
 def number(v,label):
@@ -27,7 +30,7 @@ def rows(values,label):
         if key in result:raise ValueError(label+'编号重复:'+key)
         result[key]=r
     return result
-def calculate(d):
+def calculate(d,base_dir='.'):
     if d.get('schema')!=SCHEMA or d.get('unit')!='m':raise ValueError('路径契约或单位错误；先明确换算为m')
     project=text(d.get('project_id'),'project_id');paths=rows(d.get('paths'),'paths')
     for pid,r in paths.items():
@@ -83,14 +86,18 @@ def calculate(d):
     summaries=defaultdict(list)
     for r in items:summaries[(r['kind'],r['system'],r['spec'])].append(r['length_m'])
     unused=sorted(set(paths)-set(usage))
-    return {'schema':'qto-electrical-path-result/1.0','project_id':project,'status':'REVIEW_REQUIRED' if unused else 'REFERENCE_ONLY',
+    receipt=receive(d,paths,items,base_dir)
+    needs_review=bool(unused) or (receipt is not None and not receipt['identity_receipt_complete'])
+    result={'schema':'qto-electrical-path-result/1.0','project_id':project,'status':'REVIEW_REQUIRED' if needs_review else 'REFERENCE_ONLY',
         'items':items,'summary':[{'kind':k[0],'system':k[1],'spec':k[2],'unit':'m','length_m':math.fsum(v)} for k,v in sorted(summaries.items())],
         'shared_path_usage':dict(usage),'unused_path_ids':unused,'business_adoption_allowed':False,
         'meaning':'已识别路径的参考复算；通道与回路分别计量，芯数不乘入电缆长度；未使用路径需模型解释归属，未证明原图完整'}
+    if receipt is not None:result['endpoint_receipt']=receipt
+    return result
 def main():
     p=argparse.ArgumentParser();p.add_argument('input',type=Path);p.add_argument('--output',type=Path);a=p.parse_args()
     try:
-        result=calculate(json.loads(a.input.read_text(encoding='utf-8-sig')))
+        result=calculate(json.loads(a.input.read_text(encoding='utf-8-sig')),a.input.resolve().parent)
         content=json.dumps(result,ensure_ascii=False,indent=2,allow_nan=False)+'\n'
         if a.output:
             if a.output.exists():raise ValueError('输出已存在，请使用新版本文件名')
