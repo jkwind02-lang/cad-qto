@@ -54,7 +54,7 @@ python skills/qto-surfaces-envelope/scripts/select_surface_regions.py --dxf draw
 
 ## 输出及追溯
 
-结果包含 source_sha256、index_sha256、layout、unit、unit_evidence、source_read_diagnostics、source_identity_issues、conversion_warnings，以及 regions 中各实例的 cadinst_id、area_m2、bounds_m。
+结果包含 source_sha256、index_sha256、layout、unit、unit_evidence、source_read_diagnostics、source_identity_issues、conversion_warnings，以及 regions 中各实例的 cadinst_id、region_id、area_m2、bounds_m、polygons 和 status。region_id 保持与 CADINST 相同，polygons 复用现有 geometry_record 序列化，status=geometry_extracted 仅表示几何提取成功，不表示工程语义已核准。
 
 `formal_adoption_allowed=false`、`adoption_scope="working"` 明确限定为工作计算结果。读取/转换警告不能被忽略；程序成功并不证明原始 DWG 中外参、动态可见状态或整个专业范围均已完整取得。正式采用仍须原图证据、业务口径和专业复核闭合。
 
@@ -65,3 +65,13 @@ python skills/qto-surfaces-envelope/scripts/select_surface_regions.py --dxf draw
 这些是合成 DXF 和接口回归，不是实际项目验收，也不能据此宣称实际算量准确率提升。当前改动位于 PR #5；CI 应以最终提交为准。未合并、未发布或未更新用户本机时，不应将分支能力表述为已经安装。
 
 本轮代码与测试片段由项目内 Pro Chat 会话生成，逐段审查后提交，并以 GitHub CI 验证；未切换 ChatGPT Work 模式。
+
+## 2026-10-12 接续：完整面域交接与专业传值回归
+
+选择器现在保留完整多边形（外边界及内孔），可将已由模型明确属于同一物理视图、同一做法组的 regions 传入原有 `EXTRACT.measure_region_group(regions)`。分组必须先由识图者明确，程序不会按坐标或图层自动把不同楼层、不同做法合并。该函数保留实例列表、并集前面积、重叠扣除、净面积与多边形。
+
+新增回归实际执行：保存合成 DXF → 真实工作台索引 → 选择两份重叠 HATCH（排除第三个未选实例）→ 原生面域并集 → 并集 JSON 证据及来源哈希 → 原专业计算器的 area_direct 输入 → 最小成果检查及绑定复算 CLI。构造值为原和 200、重叠 50、净面积 150 平方米，结果保持 reference；篡改并集证据文件后，计算及绑定复算均应拒绝。
+
+这证明本次程序调用链真实传递了并集面积，不证明 `area_direct` 会自动把手填标量与 CAD 几何比对。当前 `area_direct` 没有新增 JSON Pointer 数值绑定；其输入应由上述实际计算结果生成，不能以登记了证据哈希就宣称数量天然一致。测试也未包含 AI 对图例、材料做法或现场图纸的独立判断。
+
+真实项目原图尚未取得，原图独立识图、分组、洞口判断和回图验收继续待验证，不以这项合成回归替代。
