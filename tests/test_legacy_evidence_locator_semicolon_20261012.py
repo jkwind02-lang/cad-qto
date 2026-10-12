@@ -17,5 +17,9 @@ def test_real_json_key_with_semicolon_is_not_truncated():
     assert mod.resolve_tokens(value, mod.pointer_tokens('/objects/a;b')) == {'ok': True}
 
 
-def test_bad_legacy_path_still_does_not_resolve():
-    assert mod.pointer_tokens('/objects/not-found; explanation') == ('objects', 'not-found')
+def test_invalid_legacy_path_is_still_rejected_by_resolution():
+    try:
+        mod.resolve_tokens({'objects': {}}, mod.pointer_tokens('/objects/not-found; explanation'))
+    except ValueError:
+        return
+    raise AssertionError('missing JSON location must remain invalid')
