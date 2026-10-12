@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 265,
+  "runtime_file_count": 266,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -208,6 +208,11 @@
       "path": "_qto-shared-evidence/scripts/qto_elevation_facts.py",
       "sha256": "783a955729e4f63408de0d2bce4e3158ef135e0c1ec9e4490ecc0a92175803a8",
       "bytes": 26117
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_evidence_locations.py",
+      "sha256": "e1a955d9d3482f3422a894254b1e30978b0e2f8fb6ea8057ef8f46b6d361dd24",
+      "bytes": 7373
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_instance_requirements.py",
@@ -1326,8 +1331,8 @@
     },
     {
       "path": "qto-surfaces-envelope/scripts/validate_surfaces_envelope_result.py",
-      "sha256": "c7a102dcbb9becce93b11ee8b6c172d5b29f61dfed66322f42f5f133cc1aa7ff",
-      "bytes": 20020
+      "sha256": "65427f872054f03119152d682b9883ca84cfd453bbe21cba855b90beb0ad8bce",
+      "bytes": 20366
     }
   ]
 }
