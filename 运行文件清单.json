@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 276,
+  "runtime_file_count": 278,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -115,6 +115,11 @@
       "bytes": 3530
     },
     {
+      "path": "_qto-shared-evidence/references/源对象接续专业输入.md",
+      "sha256": "45ec35fd8f6e7ebfdc2fe8ba9d17bdcb3c601718eae95769d9dbe0772d50eefe",
+      "bytes": 3775
+    },
+    {
       "path": "_qto-shared-evidence/references/现行规则来源选择门.md",
       "sha256": "c937a35378b3de5cf45724f0f14fbda211cdd2c22d835e3b4d0df5bb8cf666c2",
       "bytes": 1768
@@ -188,6 +193,11 @@
       "path": "_qto-shared-evidence/scripts/model_recognition_basis.py",
       "sha256": "6f6cd8f4b427859bd091996788fbedacd01e09d313088ecb2de7bf7611d8e98f",
       "bytes": 6685
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/prepare_source_specialists.py",
+      "sha256": "7f122747e6b7bf13c309d73848e032c03abd6b64f39b44f8328ecea68063ef18",
+      "bytes": 16108
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_cad_geometry.py",
@@ -271,8 +281,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_workflow_dependencies.py",
-      "sha256": "a61f9bcbf5097c865263558a7a1d87b7bbf975cc1fe2cf444b8cb3b1ecd3a4de",
-      "bytes": 14502
+      "sha256": "e82f4751ca027556b5ffc3906eeeebaf1cc1c2b7f63f2f2cec831a5d2c34da77",
+      "bytes": 16146
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_workflow_quantities.py",
@@ -291,8 +301,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_workflow_tools.py",
-      "sha256": "bdfb5f76cdaab9d2a7a07fd037282ab90694a74557e69893c0f4a82a122dd85c",
-      "bytes": 15458
+      "sha256": "80e3e9d97552268a41e8f25538669502a42c3f11bd495d08eff899a8ec6810e8",
+      "bytes": 15756
     },
     {
       "path": "_qto-shared-evidence/scripts/read_cad_scope.py",
@@ -371,8 +381,8 @@
     },
     {
       "path": "qto-components-points/references/计算与证据流程.md",
-      "sha256": "919281b3786356b02069cb9f465e4864d9b6cdb1fe12cdd6031aacc73efe45c1",
-      "bytes": 2135
+      "sha256": "c7f8faac3b5ebc126ed04162678fd048df2487aa12fef91205cc41f6ac5ec26b",
+      "bytes": 2360
     },
     {
       "path": "qto-components-points/references/跨专业端点事实.md",
@@ -706,8 +716,8 @@
     },
     {
       "path": "qto-electrical-routes/references/计算与证据流程.md",
-      "sha256": "fc36b54bafa2bfd71db7bfe2bdb146802a92c84e40d9ada2de4c415d7e7c2055",
-      "bytes": 896
+      "sha256": "8743adda9086ce397360d7063e2b91b99139aa41814d56caa73e5b230899e002",
+      "bytes": 1130
     },
     {
       "path": "qto-electrical-routes/references/路径台账端点接收.md",

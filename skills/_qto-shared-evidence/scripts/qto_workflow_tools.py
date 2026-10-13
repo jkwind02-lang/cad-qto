@@ -45,6 +45,8 @@ TOOLS = {
     "cad_view": spec("_qto-shared-evidence", "render_cad_view.py", ["source", "query"], ["svg", "png", "output"], values={"pixels": "positive_integer"}),
     "cad_scope": spec("_qto-shared-evidence", "read_cad_scope.py", ["index", "query"], ["output"], values={"cursor": "text", "mode": "mode", "max-objects": "positive_integer", "max-bytes": "positive_integer"}),
     "pipe_prepare": spec("_qto-shared-evidence", "qto_recognition_workbench.py", ["index", "operations", "ledger"], ["output"], prefix=["apply"]),
+    "source_specialist_prepare": spec("_qto-shared-evidence", "prepare_source_specialists.py", ["index", "operations", "ledger"], ["output"], prefix=["prepare"]),
+    "source_evidence_search": spec("_qto-shared-evidence", "prepare_source_specialists.py", ["input"], ["output"], prefix=["search"]),
     "correspondence": spec("_qto-shared-evidence", "qto_object_correspondence.py", ["input"], ["output"]),
     "instance_requirements": spec("_qto-shared-evidence", "qto_instance_requirements.py", ["input", "previous"], ["output"], optional=["previous"]),
     "dependency_recalculate": spec("_qto-shared-evidence", "recompute_qto_dependencies.py", ["input", "previous"], ["output"], optional=["previous"]),
