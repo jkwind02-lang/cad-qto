@@ -31,7 +31,7 @@ HARD_MAX_BYTES = 262144
 MIN_MAX_BYTES = 1024
 QUERY_FIELDS = {
     "question", "bounds", "object_ids", "text_pattern", "entity_types", "layers",
-    "include_descendants", "context_padding_raw", "neighbor_distance_raw",
+    "include_descendants", "context_padding_raw", "neighbor_distance_raw", "context_regions",
 }
 ZERO_HASH = "0" * 64
 
@@ -94,6 +94,20 @@ def _query(query):
             workbench._number(query[name], name)
     if "text_pattern" in query and not isinstance(query["text_pattern"], str):
         raise ValueError("text_pattern 必须是字符串")
+    if "context_regions" in query:
+        regions = query["context_regions"]
+        if not isinstance(regions, list) or not 1 <= len(regions) <= 32:
+            raise ValueError("context_regions 须为1到32个模型指定的有界上下文区域")
+        ids = set()
+        for region in regions:
+            if (not isinstance(region, dict) or set(region) - {
+                    "id", "role", "bounds", "object_ids", "layers", "entity_types"}
+                    or not isinstance(region.get("id"), str) or not region["id"]
+                    or region["id"] in ids or not isinstance(region.get("role"), str)
+                    or not region["role"] or "bounds" not in region):
+                raise ValueError("上下文区域须有唯一id、模型声明的role及bounds")
+            ids.add(region["id"])
+            _query({"question": query["question"], **{k:v for k,v in region.items() if k not in {"id", "role"}}})
     try:
         if query.get("text_pattern"):
             re.compile(query["text_pattern"])
@@ -119,7 +133,9 @@ def _select(index, objects, query):
     wanted = None if ids is None else set(ids)
     pattern = re.compile(query["text_pattern"]) if query.get("text_pattern") else None
     rows = list(objects.values())
-    selected = [r for r in rows if (wanted is None or r["object_id"] in wanted)
+    context_only = "context_regions" in query and not any(k in query for k in
+        ("bounds", "object_ids", "text_pattern", "entity_types", "layers"))
+    selected = [r for r in rows if not context_only and (wanted is None or r["object_id"] in wanted)
                 and (bounds is None or workbench._intersects(r.get("bbox"), bounds))
                 and (pattern is None or pattern.search(r.get("text") or ""))
                 and (not query.get("entity_types") or r["entity_type"] in query["entity_types"])
@@ -145,7 +161,25 @@ def _select(index, objects, query):
         # usable search window, but remains evidence that needs interpretation.
         selected = [r for r in rows if r["object_id"] in seed_ids
                     or any(workbench._intersects(r.get("bbox"), b) for b in windows)]
+    for region in query.get("context_regions", []):
+        part = _select(index, objects, {k:v for k,v in region.items() if k not in {"id", "role"}})
+        selected.extend(part)
+    selected = list({r["object_id"]: r for r in selected}.values())
     return sorted(selected, key=lambda r: r["object_id"])
+
+
+def context_regions(index, objects, query):
+    """Retain model-selected row/header/merged-cell membership, never infer a table.
+
+    Each window is checked against the same verified index. Far-away headers
+    remain separate windows instead of inventing a connection from proximity.
+    """
+    return [dict(id=r["id"], role=r["role"], bounds=r["bounds"],
+                 selection={k:v for k,v in r.items() if k not in {"id", "role"}},
+                 object_ids=[x["object_id"] for x in _select(index, objects,
+                    {k:v for k,v in r.items() if k not in {"id", "role"}})],
+                 semantic_status="model_selected_context_not_verified_table_structure")
+            for r in query.get("context_regions", [])]
 
 
 def _protected_files(index, index_path=None, query_path=None):
@@ -360,6 +394,13 @@ def read_scope(index, query, artifact_dir, *, cursor=None, mode="summary",
             "meaning": "not_selected_by_query; not_proof_of_absence"}) for r in outside)),
         "unlocated": store.write(folder / "unlocated.jsonl", (_encoded(r) for r in unlocated)),
     }
+    region_records = context_regions(index, objects, query)
+    if region_records:
+        records["context_regions"] = store.json(folder / "context-regions.json", {
+            "index_sha256": index["index_sha256"], "query_sha256": query_digest,
+            "regions": region_records, "source": index["source"],
+            "authoritative_source": index["authoritative_source"], "layout": index["layout"],
+            "meaning": "Explicit windows and fragment membership only; model decides row, column and applicability."})
     counts = {"indexed": len(objects), "matched": len(selected), "not_selected": len(outside),
               "unlocated": len(unlocated), "matched_with_issues": sum(bool(r.get("issues")) for r in selected)}
     manifest = {"schema_version": PACK_SCHEMA, "index_sha256": index["index_sha256"],
@@ -398,6 +439,8 @@ def read_scope(index, query, artifact_dir, *, cursor=None, mode="summary",
                                      "artifact_ref": {"path": str(folder / "pages" / (name + "-neighbors.jsonl")), "sha256": ZERO_HASH}}
         else:
             response["neighbors"] = {"coverage": "not_computed", "cross_page_pairs_evaluated": False}
+        if region_records:
+            response["context_regions_ref"] = records["context_regions"]
         if svg_path is not None:
             response["preview"] = {"path": str(svg_path), "sha256": ZERO_HASH, "coverage": "returned_page_only"}
         _size(response)
@@ -409,15 +452,22 @@ def read_scope(index, query, artifact_dir, *, cursor=None, mode="summary",
         detail_ref = {"path": str(detail_path), "sha256": hashlib.sha256(payload).hexdigest()}
         shown = (_summary(row, detail_ref) if mode == "summary" else
                  {**row, "representation": "detail", "semantic_status": "uninterpreted", "detail_ref": detail_ref})
+        memberships = [r["id"] for r in region_records if row["object_id"] in r["object_ids"]]
+        if memberships:
+            shown["context_region_ids"] = memberships
         candidate = response_for(page_objects + [shown])
         if candidate["response_bytes"] > max_bytes:
             if page_objects:
                 break
             shown = _summary(row, detail_ref)
+            if memberships:
+                shown["context_region_ids"] = memberships
             shown["detail_delivery_reason"] = "response_byte_budget"
             candidate = response_for([shown])
             if candidate["response_bytes"] > max_bytes:
                 shown = _summary(row, detail_ref, minimal=True)
+                if memberships:
+                    shown["context_region_ids"] = memberships
                 shown["detail_delivery_reason"] = "response_byte_budget"
                 candidate = response_for([shown])
             if candidate["response_bytes"] > max_bytes:

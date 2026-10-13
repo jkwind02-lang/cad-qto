@@ -31,6 +31,7 @@ def main():
    if k==1:pts=[[index+.5,1],[index+.5,4],[index+1,4],[index+1,1]] if kind=='polygon' else [[index+.5,3]] if kind=='point' else [[index+.5,1],[index+.5,4]]
    obj={'id':oid,'catalog_key':key,'professional':prof,'scene_id':scene,'kind':kind,'points':pts if kind!='unlocated' else [],'title':label+'对象'+str(k+1),'category':'同类对象复核' if k<2 else '资料待补','status':'规则推算' if k<2 else '缺可靠图面定位','source':'合成源V / 测试对象'+str(index),'detail':'核对本对象的边界或连接；数量仅为合成测试值','quantities':[{'name':'主项','value':3.25+index if k<2 else None,'unit':unitmap[prof][0],'level':'规则推算量' if k<2 else '未决量'},{'name':'不同单位附项','value':2 if k<2 else None,'unit':unitmap[prof][1],'level':'方案暂估量' if k<2 else '未决量'}],'attributes':{'构造/规格':'本专业示例，不能跨专业套公式','计算口径':'合成测试'}}
    if prof=='qto-surfaces-envelope' and k==0:obj['holes']=[[[x+200,y+300],[x+700,y+300],[x+700,y+800],[x+200,y+800]]]
+   if k==0:obj['attributes']['source_context']=[{'label':'原表列头','text':'地（楼）面','source_refs':['V/heading']},{'label':'原表房间行及拆分编号','text':'合成房间；F + 1','source_refs':['V/row','V/code-a','V/code-b']}]
    if prof=='qto-components-points' and k==1:obj.update(scene_id='raster',points=[[240,320]])
    d['objects'].append(obj)
   d['groups'].append({'id':'GROUP-'+prof,'title':label+'同类问题组','category':'待复核','status':'方法待核对','proposal':'按本专业图纸依据逐成员复核，保留各自单位','reason':'同类判断可以整组反馈；第三个对象缺少定位，不填假坐标','member_keys':ids})
@@ -47,6 +48,7 @@ def main():
   except (ValueError,KeyError,TypeError):checks.append(name);return
   raise AssertionError('应拒绝:'+name)
  bad=copy.deepcopy(d);bad['objects'][0]['quantities'][0]['value']=False;rejected('布尔值不能冒充数量',lambda:c.normalize_view(bad,out))
+ bad=copy.deepcopy(d);bad['objects'][0]['attributes']['source_context'][0]['source_refs']=[];rejected('原文上下文缺来源定位拒绝',lambda:c.normalize_view(bad,out))
  bad=copy.deepcopy(d);bad['objects'][0]['points'][0][0]=float('inf');rejected('非有限坐标拒绝',lambda:c.normalize_view(bad,out))
  bad=copy.deepcopy(d);bad['groups'][0]['member_keys'].append('missing');rejected('不存在的组成员拒绝',lambda:c.normalize_view(bad,out))
  bad=copy.deepcopy(d);bad['scenes'][0]['raster_data_uri']='https://example.invalid/image.png';rejected('外部底图依赖拒绝',lambda:c.normalize_view(bad,out))

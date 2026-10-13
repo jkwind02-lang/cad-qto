@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 278,
+  "runtime_file_count": 279,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -16,8 +16,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
-      "sha256": "cde187521b09227e1cfd86a5fffafc201f5c4cb1e077feb1de4b11258331c011",
-      "bytes": 28152
+      "sha256": "7eb6a7eeaee5eff2d281e47277e1d09b9c0568f8548ea3d1a08ed7f0a2c09915",
+      "bytes": 28954
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-core.js",
@@ -26,8 +26,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-shell.html",
-      "sha256": "f0bede42a52f12ce095dac76e306f79583a2e19358f3fe37a4128b123272c267",
-      "bytes": 16623
+      "sha256": "a87570d44d351781faaacf0f1c5545760f5b44a1181a63771088d4614c91f4f5",
+      "bytes": 16977
     },
     {
       "path": "_qto-shared-evidence/assets/模型工作识别记录模板.json",
@@ -116,8 +116,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/源对象接续专业输入.md",
-      "sha256": "45ec35fd8f6e7ebfdc2fe8ba9d17bdcb3c601718eae95769d9dbe0772d50eefe",
-      "bytes": 3775
+      "sha256": "1424cf10b500aac54a60dc497b12c58653fb93c336c2d115a2c330b373a2feff",
+      "bytes": 7420
     },
     {
       "path": "_qto-shared-evidence/references/现行规则来源选择门.md",
@@ -196,8 +196,13 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/prepare_source_specialists.py",
-      "sha256": "7f122747e6b7bf13c309d73848e032c03abd6b64f39b44f8328ecea68063ef18",
-      "bytes": 16108
+      "sha256": "743b7d40fd8e3712e618e9e8e75b5f76fe76d593e5a571a097f9d79a1ac5bdd0",
+      "bytes": 16529
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/prepare_surface_source.py",
+      "sha256": "6edf75771c1222ec3504abfdd67502f6bf013dc6e0f35a3df329d6e5bade9812",
+      "bytes": 21452
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_cad_geometry.py",
@@ -261,8 +266,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
-      "sha256": "7a257588af50e16fbd1ab67377f808cd9d19fbf2bb9035462a8683ae406fce2e",
-      "bytes": 13226
+      "sha256": "92f09de07ce35dc5f0fc98cf217bc4ed0ce6ce40b6f4a6e3edadc69d37bb224d",
+      "bytes": 13720
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_revision.py",
@@ -281,8 +286,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_workflow_dependencies.py",
-      "sha256": "e82f4751ca027556b5ffc3906eeeebaf1cc1c2b7f63f2f2cec831a5d2c34da77",
-      "bytes": 16146
+      "sha256": "2dd88150cd92a883f175932da41d9d25b5252b379ba0b342f0f55521a8e7d025",
+      "bytes": 18378
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_workflow_quantities.py",
@@ -306,8 +311,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/read_cad_scope.py",
-      "sha256": "3c4c97f4687da3da28ed5544914ba2c941307fc6ea288bba80b33c71385059e2",
-      "bytes": 26514
+      "sha256": "b83a24a5631947013cd7e27820414a20c784d989496ed80db8d6b1a4bb14ec0e",
+      "bytes": 29607
     },
     {
       "path": "_qto-shared-evidence/scripts/read_qto_review_feedback.py",
@@ -1391,8 +1396,8 @@
     },
     {
       "path": "qto-surfaces-envelope/SKILL.md",
-      "sha256": "4794167eb873fd1a524d47b295edbc81673b09fa4913948ca29c98bc06c3fd03",
-      "bytes": 12560
+      "sha256": "a5a1f6517c9b2cc0c59c6232dd7850c3e00a90e0d1d284dec4c2a86d96cf6788",
+      "bytes": 12919
     }
   ]
 }

@@ -98,6 +98,16 @@ try{
  }
  function showFacts(i){
   $('object-facts').replaceChildren();const heading=document.createElement('strong');heading.textContent=i.title;$('object-facts').append(heading);
+  if(i.attributes?.source_context?.length){
+   const box=document.createElement('section');box.className='source-context';
+   const title=document.createElement('strong');title.textContent='模型选定原文上下文';box.append(title);
+   const hint=document.createElement('small');hint.textContent='原文分片在此重排供核对；图面框与完整属性保留来源位置。';box.append(hint);
+   for(const entry of i.attributes.source_context){
+    const row=document.createElement('div'),label=document.createElement('b'),text=document.createElement('p'),refs=document.createElement('small');
+    label.textContent=entry.label;text.textContent=entry.text;refs.textContent=entry.source_refs.join(' · ');row.append(label,text,refs);box.append(row);
+   }
+   $('object-facts').append(box);
+  }
   if(i.quantities?.length){const table=document.createElement('table');table.className='qty';
    const head=document.createElement('tr');for(const label of ['数量项','数值','单位','层级']){const th=document.createElement('th');th.textContent=label;head.append(th);}table.append(head);
    for(const q of i.quantities){const tr=document.createElement('tr');for(const v of [q.name,q.value===null?'待定':q.value,q.unit,q.level]){const td=document.createElement('td');td.textContent=String(v);tr.append(td);}table.append(tr);}$('object-facts').append(table);
