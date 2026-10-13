@@ -16,8 +16,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
-      "sha256": "d47ddf4564e2a75d9ad4dc6563676a861fd557fddd77233a8624136d6f4426cc",
-      "bytes": 26750
+      "sha256": "edeb0ab850053d8b9632dd0ca99548120d7f2a65ce6dd2db22946b3a2f150b2e",
+      "bytes": 27090
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-core.js",
@@ -46,8 +46,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
-      "sha256": "178c533df3360610554377458d1f9a5e63b2ab93dd681a9d68c9519afbe4c3f6",
-      "bytes": 13267
+      "sha256": "a866b53f3479df3145b131c77d0e2cf83cc2b24b85487debf25e904ef8669892",
+      "bytes": 13445
     },
     {
       "path": "_qto-shared-evidence/references/PDF图片与表格提取.md",

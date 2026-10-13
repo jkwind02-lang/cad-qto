@@ -27,6 +27,14 @@ jobs:
       - run: python -m pytest tests -q
       - run: python tests/run_html_review_tests.py --root skills --output-root .codex_work/html-review
       - run: node tests/run_html_review_ui_tests.mjs --root skills --report .codex_work/html-review/最新核验.json
+      - name: Install browser regression dependencies
+        if: runner.os == 'Linux'
+        run: |
+          python -m pip install playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Verify material identity in a real browser
+        if: runner.os == 'Linux'
+        run: python tests/run_material_identity_browser.py --synthetic-root skills --output-root .codex_work/material-identity-browser
       - run: node --test feedback-service/tests/*.test.mjs
       - run: npm ci --no-audit --no-fund
         working-directory: feedback-service
