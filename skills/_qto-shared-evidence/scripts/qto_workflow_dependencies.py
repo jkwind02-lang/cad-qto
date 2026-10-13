@@ -28,6 +28,7 @@ INDIRECT_TOOLS = frozenset({
     "concrete_formwork", "rebar", "structural_steel", "surfaces_envelope",
     "earthwork_terrain", "cad_index", "cad_view", "cad_scope", "pipe_prepare",
     "correspondence", "instance_requirements", "review_html", "review_feedback",
+    "source_specialist_prepare", "source_evidence_search",
 })
 SUPPORTED_TOOLS = NO_INDIRECT_TOOLS | INDIRECT_TOOLS
 
@@ -193,6 +194,36 @@ class _Dependencies:
 
     def inspect_tool(self, tool_id, args):
         if tool_id in NO_INDIRECT_TOOLS:
+            return
+        if tool_id in {"source_specialist_prepare", "source_evidence_search"}:
+            if tool_id == "source_specialist_prepare":
+                aid = args.get("index")
+                data = self.json(aid, "index")
+                if data is not None:
+                    self.cad_sources(data, aid)
+                self.ledger(args.get("ledger"))
+            aid = args.get("operations" if tool_id == "source_specialist_prepare" else "input")
+            data = self.json(aid, "源选择或检索")
+            if data is None:
+                return
+            refs = []
+            if tool_id == "source_evidence_search":
+                refs.extend(self.rows(data, "scopes", aid))
+            else:
+                if data.get("unit_declaration") is not None:
+                    refs.append((data["unit_declaration"], aid + ".unit_declaration"))
+                field = "instances" if data.get("target") == "components" else "paths"
+                for row, label in self.rows(data, field, aid):
+                    refs.extend(self.rows(row, "evidence_refs", label, optional=True))
+            for ref, label in refs:
+                if not isinstance(ref, dict):
+                    self.error(label + " 必须为索引引用对象")
+                    continue
+                rid = self.reference(ref.get("index"), label + ".index", self.paths[aid].parent)
+                if rid is not None:
+                    index = self.json(rid, label + ".index")
+                    if index is not None:
+                        self.cad_sources(index, rid)
             return
         if tool_id in {"cad_index", "cad_view"}:
             aid = args.get("source")
