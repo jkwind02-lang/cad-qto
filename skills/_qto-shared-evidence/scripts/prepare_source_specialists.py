@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Carry reviewed source selections into existing component/electrical inputs.
+"""Carry reviewed source selections into existing professional inputs.
 
 This adapter never recognizes equipment, chooses a cable or connects drawings.
 Text hits are observations; model decisions, ambiguities and exclusions remain
@@ -141,16 +141,17 @@ def unit_scale(index, operations, refs):
     return canonical_scale(raw), bound
 
 
-def prepare(index, operations, ledger_path, base_dir="."):
+def prepare(index, operations, ledger_path, base_dir=".", *, operations_path=None):
     objects = _verified_index(index)
     if index["source_identity_issues"]:
         raise ValueError("源身份冲突")
     if operations.get("index_sha256") != index["index_sha256"]:
         raise ValueError("操作与当前索引快照不一致")
     target = operations.get("target")
-    owners = {"components": "qto-components-points", "electrical": "qto-electrical-routes"}
+    owners = {"components": "qto-components-points", "electrical": "qto-electrical-routes",
+              "surfaces": "qto-surfaces-envelope"}
     if target not in owners:
-        raise ValueError("target 须为 components 或 electrical")
+        raise ValueError("target 须为 components、electrical 或 surfaces")
     scope = texts(operations.get("scope_object_ids"), "scope_object_ids")
     if not set(scope) <= objects.keys():
         raise ValueError("范围引用不存在的源对象")
@@ -160,6 +161,10 @@ def prepare(index, operations, ledger_path, base_dir="."):
                                           index["authoritative_source"]["sha256"])
     refs = References(base_dir)
     factor, unit_evidence = unit_scale(index, operations, refs)
+    if target == "surfaces":
+        from prepare_surface_source import prepare_surfaces
+        return prepare_surfaces(index, objects, operations, operations_path, ledger_path,
+                                ledger, entries, refs, factor, unit_evidence, scope, scope_basis)
     matrix = (factor, 0., 0., 0., 0., factor, 0., 0., 0., 0., factor, 0., 0., 0., 0., 1.)
     used, bindings, unresolved = set(), [], []
     rows = operations.get("instances" if target == "components" else "paths")
@@ -283,7 +288,8 @@ def main():
     if args.action == "search":
         out = search(read(args.input), args.input.resolve().parent)
     else:
-        out = prepare(read(args.index), read(args.operations), args.ledger, args.operations.resolve().parent)
+        out = prepare(read(args.index), read(args.operations), args.ledger, args.operations.resolve().parent,
+                      operations_path=args.operations.resolve())
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("x", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2, allow_nan=False)

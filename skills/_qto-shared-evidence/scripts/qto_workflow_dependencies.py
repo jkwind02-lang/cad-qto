@@ -212,9 +212,39 @@ class _Dependencies:
             else:
                 if data.get("unit_declaration") is not None:
                     refs.append((data["unit_declaration"], aid + ".unit_declaration"))
-                field = "instances" if data.get("target") == "components" else "paths"
-                for row, label in self.rows(data, field, aid):
-                    refs.extend(self.rows(row, "evidence_refs", label, optional=True))
+                if data.get("target") == "surfaces":
+                    # Conditions, variants and ordered fragments all use the
+                    # same source-reference contract. Register even unselected
+                    # branches: the adapter checks their source conditions.
+                    def collect_refs(value, label):
+                        if isinstance(value, dict):
+                            if "index" in value:
+                                refs.append((value, label))
+                            for key, child in value.items():
+                                collect_refs(child, label + "." + key)
+                        elif isinstance(value, list):
+                            for n, child in enumerate(value):
+                                collect_refs(child, label + "[" + str(n) + "]")
+                    collect_refs(data, aid)
+                    for surface, label in self.rows(data, "surfaces", aid):
+                        files = [(surface.get("assignment", {}).get("context"), label + ".assignment.context", False)]
+                        files += [(surface.get("source_face", {}).get(k), label + ".source_face." + k, k == "request") for k in ("request", "result")]
+                        for ref, name, is_request in files:
+                            if not isinstance(ref, dict):
+                                self.error(name + " 必须提供文件引用")
+                                continue
+                            rid = self.reference(ref.get("path"), name + ".path", self.paths[aid].parent)
+                            if rid is not None and is_request:
+                                request = self.json(rid, name)
+                                if request is not None:
+                                    drawing = request.get("drawing", {})
+                                    self.reference(drawing.get("path"), name + ".drawing.path", self.root, strip=False)
+                                    if isinstance(drawing.get("authoritative_source"), dict):
+                                        self.reference(drawing["authoritative_source"].get("path"), name + ".drawing.authoritative_source.path", self.root, strip=False)
+                else:
+                    field = "instances" if data.get("target") == "components" else "paths"
+                    for row, label in self.rows(data, field, aid):
+                        refs.extend(self.rows(row, "evidence_refs", label, optional=True))
             for ref, label in refs:
                 if not isinstance(ref, dict):
                     self.error(label + " 必须为索引引用对象")

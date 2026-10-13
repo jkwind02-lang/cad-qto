@@ -139,6 +139,50 @@ def test_small_detail_is_inline_and_lossless(tmp_path):
         assert {key: row[key] for key in full} == full
 
 
+def test_separate_context_windows_keep_remote_header_and_split_code(tmp_path):
+    doc=ezdxf.new();doc.units=4;m=doc.modelspace()
+    labels=[m.add_text(t,dxfattribs={'insert':xy}) for t,xy in
+            [('Floor',(20,10000)),('F',(20,0)),('1',(30,0)),('Other',(500,0))]]
+    source=tmp_path/'table.dxf';doc.saveas(source)
+    index=workbench.build_index({'path':str(source),'sha256':hashlib.sha256(source.read_bytes()).hexdigest()})
+    q={'question':'read model-selected table windows','context_regions':[
+       {'id':'column','role':'model_selected_heading','bounds':[10,9990,50,10010]},
+       {'id':'cell','role':'model_selected_code','bounds':[10,-10,50,10]},
+       {'id':'row','role':'model_selected_row','bounds':[0,-20,100,20]}]}
+    cursor=None;seen=[];refs=[]
+    while True:
+        response=reader.read_scope(index,q,tmp_path/'contexts',cursor=cursor,max_objects=1,max_bytes=10000)
+        check_response(response,10000,tmp_path/'contexts')
+        context=load_ref(response['context_regions_ref']);refs.append(response['context_regions_ref'])
+        for row in response['objects']:
+            seen.append(row['object_id'])
+            assert row['context_region_ids']==[r['id'] for r in context['regions'] if row['object_id'] in r['object_ids']]
+        cursor=response['page']['next_cursor']
+        if not cursor:break
+    assert set(seen)=={'CADINST-Model/'+e.dxf.handle for e in labels[:3]}
+    assert len(seen)==3 and all(r==refs[0] for r in refs)
+    assert all(r['semantic_status']=='model_selected_context_not_verified_table_structure' for r in context['regions'])
+
+
+def test_large_context_object_retains_membership_in_summary_fallback(tmp_path):
+    index,_=make_index(tmp_path,lines=0,points=[(n,n%2*3) for n in range(6000)])
+    q={'question':'bounded complex member','context_regions':[
+        {'id':'cell','role':'model_selected_area','bounds':[-1,-1,6001,5]}]}
+    response=reader.read_scope(index,q,tmp_path/'context-large',mode='detail',max_bytes=6500)
+    check_response(response,6500,tmp_path/'context-large')
+    assert response['objects'][0]['representation']=='summary'
+    assert response['objects'][0]['context_region_ids']==['cell']
+
+
+@pytest.mark.parametrize('regions', [[],[{'id':'x','role':'row'}],
+    [{'id':'x','role':'row','bounds':[0,0,1,1]},{'id':'x','role':'column','bounds':[0,0,1,1]}],
+    [{'id':'x','role':'row','bounds':[2,0,1,1]}]])
+def test_invalid_context_windows_stop(tmp_path,regions):
+    index,_=make_index(tmp_path)
+    with pytest.raises(ValueError):
+        reader.read_scope(index,{'question':'invalid context','context_regions':regions},tmp_path/'invalid-context')
+
+
 def test_unlocated_objects_remain_pending_when_spatial_query_matches_nothing(tmp_path):
     index, _ = make_index(tmp_path, lines=3, unknown=4)
     query = {"question": "此窗口是否有相关对象？", "bounds": [1000, 1000, 2000, 2000]}

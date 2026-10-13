@@ -93,6 +93,12 @@ def normalize_view(raw, base_dir=None):
    require(string(q.get('name')) and string(q.get('unit')) and string(q.get('level')),'数量须含名称、单位和证据层级')
    require(q.get('value') is None or number(q.get('value')),'数量必须为有限数字或null；不接受NaN/布尔值')
   o.setdefault('attributes',{});require(isinstance(o['attributes'],dict),'对象属性须为对象')
+  context=o['attributes'].get('source_context')
+  if context is not None:
+   require(isinstance(context,list) and context,'原文上下文须为非空条目数组')
+   for entry in context:
+    require(isinstance(entry,dict) and string(entry.get('label')) and string(entry.get('text')),'原文上下文须有标签和文字')
+    require(isinstance(entry.get('source_refs'),list) and entry['source_refs'] and all(string(r) for r in entry['source_refs']),'原文上下文须保留来源定位')
  groups=d.setdefault('groups',[]);gids=set();bykey={o['catalog_key']:o for o in objects}
  for g in groups:
   require(string(g.get('id')) and g['id'] not in gids,'问题组编号重复或为空');gids.add(g['id'])
