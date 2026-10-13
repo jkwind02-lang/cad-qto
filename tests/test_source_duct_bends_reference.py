@@ -73,3 +73,46 @@ def test_reverse_arc_traversal_preserves_same_sector(tmp_path):
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(mod.Reader,'arc',reversed_arc)
         assert mod.calculate(data)['items'][0]['open_shell_surface_m2']==pytest.approx(.18095573684677208)
+
+
+@pytest.mark.parametrize('padding',[' ','\t\r\n','\u00a0'])
+def test_renamed_source_arcs_with_whitespace_are_not_counted_twice(padding,tmp_path):
+    data,_,_,_=fixture(tmp_path);q=copy.deepcopy(data['elbows'][0]);q['physical_id']='renamed'
+    for key in ('inner_arc_object_id','centerline_object_id','outer_arc_object_id'):
+        q[key]=padding+q[key]+padding
+    data['elbows'].append(q)
+    with pytest.raises(ValueError,match='source arc reused'):
+        mod.calculate(data)
+
+
+def test_single_padded_binding_emits_canonical_source_identity(tmp_path):
+    data,_,_,_=fixture(tmp_path);row=data['elbows'][0]
+    ids=[row[key] for key in ('inner_arc_object_id','centerline_object_id','outer_arc_object_id')]
+    for key in ('inner_arc_object_id','centerline_object_id','outer_arc_object_id'):
+        row[key]=' \t'+row[key]+'\n '
+    result=mod.calculate(data)
+    assert result['items'][0]['source_arc_ids']==ids
+    assert [f['object_id'] for f in result['source_facts'] if f['kind']=='source_circular_arc']==ids
+    assert result['items'][0]['open_shell_surface_m2']==pytest.approx(.18095573684677208)
+
+
+def test_whitespace_cannot_reuse_arc_within_row(tmp_path):
+    data,_,_,_=fixture(tmp_path);row=data['elbows'][0]
+    row['outer_arc_object_id']=' '+row['inner_arc_object_id']+' '
+    with pytest.raises(ValueError,match='source arc reused'):
+        mod.calculate(data)
+
+
+def test_distinct_physical_source_instances_are_still_counted(tmp_path):
+    data,doc,arcs,path=fixture(tmp_path)
+    ins=doc.modelspace().add_blockref('actual-bend',(22000,-4000))
+    q=copy.deepcopy(data['elbows'][0]);q['physical_id']='bend-2'
+    ids=['CADINST-Model/'+ins.dxf.handle+'/'+a.dxf.handle for a in arcs]
+    for key,ident in zip(('inner_arc_object_id','centerline_object_id','outer_arc_object_id'),ids):
+        q[key]=' \t'+ident+'\n '
+    data['elbows'].append(q);rewrite(data,doc,path)
+    result=mod.calculate(data)
+    assert len(result['items'])==2
+    assert result['items'][1]['source_arc_ids']==ids
+    assert set(result['items'][0]['source_arc_ids']).isdisjoint(ids)
+    assert sum(x['open_shell_surface_m2'] for x in result['items'])==pytest.approx(2*.18095573684677208)

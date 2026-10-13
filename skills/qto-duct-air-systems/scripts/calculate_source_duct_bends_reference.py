@@ -49,7 +49,7 @@ class Reader:
         directions=[]
         for f in (0,.5,1):
             t=p['start_param']+f*p['sweep_param'];directions.append([(a*math.cos(t)+b*math.sin(t))/ru for a,b in zip(u,v)])
-        a=dict(object_id=key,center_m=[finite(x,'arc center')*scale for x in p['center']],radius_m=ru*scale,angle_rad=angle,directions=directions,normal=[x/(ru*rv) for x in cross(u,v)])
+        a=dict(object_id=o['object_id'],center_m=[finite(x,'arc center')*scale for x in p['center']],radius_m=ru*scale,angle_rad=angle,directions=directions,normal=[x/(ru*rv) for x in cross(u,v)])
         self.facts.append(dict(kind='source_circular_arc',**a));return a
 
 
@@ -70,7 +70,7 @@ def calculate(data):
         if not isinstance(row,dict) or set(row)!=allowed:raise ValueError('bend row must contain only explicit source bindings; no count, assumed radius or answer override')
         ident=text(row.get('physical_id'),'physical_id')
         if ident in seen:raise ValueError('duplicate physical bend')
-        seen.add(ident);keys=[row[x] for x in ['inner_arc_object_id','centerline_object_id','outer_arc_object_id']]
+        seen.add(ident);keys=[text(row[x],'source object id') for x in ['inner_arc_object_id','centerline_object_id','outer_arc_object_id']]
         if len(set(keys))!=3 or any(k in used for k in keys):raise ValueError('source arc reused or renamed and counted twice')
         used.update(keys);inner,centre,outer=[reader.arc(k,scale) for k in keys]
         for a in (inner,outer):
