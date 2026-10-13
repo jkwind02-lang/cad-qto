@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 274,
+  "runtime_file_count": 276,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -550,6 +550,11 @@
       "bytes": 2197
     },
     {
+      "path": "qto-duct-air-systems/references/有源矩形圆弧弯头参考.md",
+      "sha256": "7c83bb9b0968647ebcbea48ac0b96f3aba8f4e97bdffa7d8a7f8ab2f46573583",
+      "bytes": 2240
+    },
+    {
       "path": "qto-duct-air-systems/references/案例与接入清单.md",
       "sha256": "5134236651f4aaa7b6709e56689a31353bf4cabf30eb9a87e4d4d870aa70c0eb",
       "bytes": 600
@@ -570,14 +575,19 @@
       "bytes": 1103
     },
     {
+      "path": "qto-duct-air-systems/scripts/calculate_source_duct_bends_reference.py",
+      "sha256": "153bd00f4a7c1c6b6c84fed41f78f28f04e327532ef8a9f0d27e8dfe01b7dd5f",
+      "bytes": 7878
+    },
+    {
       "path": "qto-duct-air-systems/scripts/calculate_straight_duct_reference.py",
       "sha256": "7607ba1b798de2e525d2cd36e604e39babf989c5956e394ecc10215111f043c3",
       "bytes": 2198
     },
     {
       "path": "qto-duct-air-systems/SKILL.md",
-      "sha256": "7d3af4d39b6be0c4b6787c0e54f50d58a580e19a805183db57720da0b73f93e7",
-      "bytes": 6103
+      "sha256": "177ec27349bc1d0100b4936a0e3a1856b2b8051c04490d6268d69054e556c616",
+      "bytes": 6413
     },
     {
       "path": "qto-earthwork-terrain/agents/openai.yaml",
