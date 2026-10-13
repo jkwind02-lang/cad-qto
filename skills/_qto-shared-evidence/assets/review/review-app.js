@@ -27,7 +27,8 @@ try{
  const screen=p=>[(p[0]-cx)*scale+cw/2,(p[1]-cy)*scale*sign()+ch/2];
  const world=p=>[(p[0]-cw/2)/scale+cx,(p[1]-ch/2)/scale*sign()+cy];
  const visible=o=>o.kind!=='unlocated'&&o.scene_id===scene.id;
- function catalogue(){return Array.from(new Map(data.objects.map(o=>[o.professional+'|'+o.category+'|'+o.id,o])).values());}
+ const listKey=i=>i.member_keys?'group|'+i.id:'record|'+i.catalog_key;
+ function catalogue(){return data.objects;}
  function source(){return mode==='groups'?data.groups:catalogue();}
  function option(select,value,label){const o=document.createElement('option');o.value=value;o.textContent=label;select.append(o);}
  function populateCategories(preferred){
@@ -43,7 +44,8 @@ try{
   items=source().filter(o=>(prof==='全部'||(o.member_keys?groupProfessional(o).includes(prof):o.professional===prof))&&(cat==='全部'||o.category===cat)&&(!q||JSON.stringify(o).toLowerCase().includes(q)));
   page=Math.min(page,Math.max(0,Math.ceil(items.length/PAGE)-1));$('list').replaceChildren();
   for(const i of items.slice(page*PAGE,(page+1)*PAGE)){
-   const b=document.createElement('button');b.className='item';b.dataset.key=i.id;
+   const b=document.createElement('button');b.className='item';b.dataset.key=listKey(i);
+   b.classList.toggle('active',!!selected&&listKey(selected)===listKey(i));
    const strong=document.createElement('strong');strong.textContent=i.title;
    const sub=document.createElement('small');sub.textContent=i.category+' · '+i.status+(i.member_keys?' · '+i.member_keys.length+'处':qtyText(i)?' · '+qtyText(i):'');
    b.append(strong,sub);b.onclick=()=>select(i);$('list').append(b);
@@ -52,7 +54,10 @@ try{
   $('list-page').textContent=(page+1)+' / '+Math.max(1,Math.ceil(items.length/PAGE));$('list-prev').disabled=page===0;$('list-next').disabled=(page+1)*PAGE>=items.length;draw();
  }
  function select(i){
-  selected=i;focused=null;memberPage=0;document.querySelectorAll('.item').forEach(b=>b.classList.toggle('active',b.dataset.key===i.id));
+  selected=i;focused=null;memberPage=0;
+  const index=items.findIndex(o=>listKey(o)===listKey(i));
+  if(index>=0&&Math.floor(index/PAGE)!==page){page=Math.floor(index/PAGE);list(false);}
+  document.querySelectorAll('.item').forEach(b=>{const active=b.dataset.key===listKey(i);b.classList.toggle('active',active);if(active)b.scrollIntoView?.({block:'nearest'});});
   const note=feedback.drafts[key(i)]||feedback.annotations[key(i)];
   checked=new Set(i.member_keys?(note?.selected_object_keys||i.member_keys).filter(k=>i.member_keys.includes(k)):[]);
   $('members-panel').hidden=!i.member_keys;if(i.member_keys)renderMembers();reviewShow(i);
@@ -164,7 +169,7 @@ try{
  $('list-prev').onclick=()=>{page--;list(false);};$('list-next').onclick=()=>{page++;list(false);};$('members-prev').onclick=()=>{memberPage--;renderMembers();};$('members-next').onclick=()=>{memberPage++;renderMembers();};
  $('member-all').onclick=()=>{if(selected?.member_keys){checked=new Set(selected.member_keys);renderMembers();stash();draw();}};$('member-none').onclick=()=>{if(selected?.member_keys){checked.clear();renderMembers();stash();draw();}};
  function step(delta){if(!selected?.member_keys)return;const ms=members(selected);focus(ms[(Math.max(0,ms.indexOf(focused))+delta+ms.length)%ms.length]);}
- $('member-prev').onclick=()=>step(-1);$('member-next').onclick=()=>step(1);$('member-single').onclick=()=>{if(!focused)return;const obj=focused;$('search').value='';setMode('objects');select(obj);};
+ $('member-prev').onclick=()=>step(-1);$('member-next').onclick=()=>step(1);$('member-single').onclick=()=>{if(!focused)return;const obj=focused;$('search').value='';$('professional').value=obj.professional;setMode('objects');select(obj);};
  $('scene').onchange=()=>changeScene($('scene').value);$('fit').onclick=fit;$('group-fit').onclick=groupFit;$('plus').onclick=()=>{scale*=1.4;draw();};$('minus').onclick=()=>{scale/=1.4;draw();};
  function segmentDistance(p,a,b){const u=[b[0]-a[0],b[1]-a[1]],den=u[0]**2+u[1]**2,t=den?Math.max(0,Math.min(1,((p[0]-a[0])*u[0]+(p[1]-a[1])*u[1])/den)):0;return Math.hypot(p[0]-a[0]-t*u[0],p[1]-a[1]-t*u[1]);}
  function inside(p,points){let yes=false;for(let i=0,j=points.length-1;i<points.length;j=i++){const a=points[i],b=points[j];if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])yes=!yes;}return yes;}

@@ -111,4 +111,20 @@ if(h.ids['problem-config']){
  await putHarness.ids['problem-send'].click();assert.match(putHarness.ids['problem-message'].textContent,/TC-put/);assert.equal(putHarness.ctx.QtoProblemFeedback.endpoint('https://tencent.example/cad-qto-feedback/'),'https://tencent.example/cad-qto-feedback');
  checks.push('腾讯云开发实际PUT直传协议逐字节保全，支持专用子路径入口');
 }
+// Multiple material records share one physical surface but retain independent identity.
+const layered=structuredClone(data),surface=layered.objects.find(o=>o.professional==='qto-surfaces-envelope'),layers=[];
+for(let n=0;n<75;n++){const o=structuredClone(surface);o.catalog_key='material-layer|'+n;o.title='Surface material layer '+n;layers.push(o);layered.objects.push(o);}
+const layerGroup=structuredClone(layered.groups.find(g=>g.member_keys.includes(surface.catalog_key)));
+layerGroup.id='layer-selection';layerGroup.title='Layer selection';layerGroup.member_keys=layers.map(o=>o.catalog_key);layerGroup.member_snapshot=layers.map(o=>({catalog_key:o.catalog_key,object_id:o.id,title:o.title,professional:o.professional,scene_id:o.scene_id,quantities:o.quantities,attributes:o.attributes,result_fingerprint:o.result_fingerprint}));layered.groups=[layerGroup];
+const lh=harness(withData(sourceHTML,layered));await lh.start();const le=lh.ids,target=layers.at(-1);
+le['member-list'].children.at(-1).children[1].click();le['member-single'].click();
+assert.equal(le.professional.value,surface.professional);assert.match(le['list-page'].textContent,/2 \/ 2/);
+let active=le.list.children.filter(x=>x.className.split(' ').includes('active'));
+assert.equal(active.length,1);assert.equal(active[0].dataset.key,'record|'+target.catalog_key);assert.match(le['object-facts'].textContent,/Surface material layer 74/);
+for(const o of layers){le.search.value=o.catalog_key;le.search.oninput();const row=le.list.children.find(x=>x.dataset.key==='record|'+o.catalog_key);assert(row,'material record must be searchable');row.click();assert(le['object-facts'].textContent.includes(o.title));}
+le['review-result'].value='Independent layer note';le['review-result'].oninput();le['review-reason'].value='Same physical id, selected material only';le['review-reason'].oninput();le['save-review'].click();
+let layerPkg=JSON.parse([...lh.cache.values()][0]);assert.equal(layerPkg.annotations[target.catalog_key].object_snapshot.catalog_key,target.catalog_key);assert(!layerPkg.annotations[layers[0].catalog_key]);
+le['save-html'].click();const layerRestored=harness(await lh.downloads.at(-1).blob.text());await layerRestored.start();layerRestored.ids['member-list'].children.at(-1).children[1].click();layerRestored.ids['member-single'].click();assert.equal(layerRestored.ids['review-result'].value,'Independent layer note');
+assert.equal(layerRestored.ids.list.children.filter(x=>x.className.split(' ').includes('active')).length,1);
+checks.push('同物理表面75层逐条可搜索，组转单层定位分页；列表/详情/批注记录身份一致，保存恢复不串层');
 const result={status:'PASS',count:checks.length,checks,scope:'无浏览器DOM模拟，非原生浏览器视觉验收',saved_feedback:packageFile};fs.writeFileSync(path.join(path.dirname(arg('--report')),'交互核验.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
