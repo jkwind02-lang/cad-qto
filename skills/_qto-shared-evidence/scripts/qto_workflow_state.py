@@ -309,8 +309,16 @@ def _file_snapshot(plan, root):
                         digest.update(chunk)
                     after = os.fstat(stream.fileno())
                 current = path.stat()
-                signature = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
-                if len({signature(stat), signature(before), signature(after), signature(current)}) != 1:
+                # On Windows stat(path) and fstat(fd) may expose different
+                # meanings of ctime (creation vs metadata change time). Compare
+                # ctime within each API, not across them. File identity, size
+                # and mtime still have to agree across all four observations:
+                # this also rejects a path replacement around the open handle.
+                identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns)
+                stable_identity = len({identity(s) for s in (stat, before, after, current)}) == 1
+                stable_path = stat.st_ctime_ns == current.st_ctime_ns
+                stable_handle = before.st_ctime_ns == after.st_ctime_ns
+                if not (stable_identity and stable_path and stable_handle):
                     row.update(file_status="invalid", reason="artifact changed while hashing")
                 else:
                     row.update(file_status="present", sha256=digest.hexdigest())
