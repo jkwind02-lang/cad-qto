@@ -6,11 +6,21 @@ const instructions=['确认现结果','修改结果','排除对象','仍需核�
 const clone=x=>JSON.parse(JSON.stringify(x));
 function ensure(ok,message){if(!ok)throw Error(message);}
 function text(x){return typeof x==='string'?x:'';}
+function recordProvenance(r,complete=true){
+ const value=(key,fallback)=>r[key]===undefined?fallback:r[key];
+ const out={author_role:value('author_role','unknown'),author_source:value('author_source',''),author_evidence:value('author_evidence',''),
+ user_confirmation:value('user_confirmation','unknown'),user_confirmation_evidence:value('user_confirmation_evidence','')};
+ ensure(['user','assistant','unknown'].includes(out.author_role),'批注作者角色无效');
+ ensure(['confirmed','unconfirmed','unknown'].includes(out.user_confirmation),'用户确认状态无效');
+ for(const k of ['author_source','author_evidence','user_confirmation_evidence'])ensure(typeof out[k]==='string','批注来源和确认依据须为文字');
+ if(complete&&out.user_confirmation==='confirmed')ensure(out.user_confirmation_evidence.trim(),'用户确认须有明确依据；保存意见或选择处理意向不等于用户确认');
+ return out;
+}
 function cleanRecord(r,key,complete=true){
  ensure(r&&typeof r==='object'&&!Array.isArray(r),'批注结构无效');
  ensure(typeof r.confirmed_result==='string'&&typeof r.reason==='string','结果和原因须为文字');
  if(complete)ensure(r.confirmed_result.trim()&&r.reason.trim(),'请填写结论和判断原因；需要助手判断时也请说明问题');
- const q={...clone(r),annotation_id:key,object_id:text(r.object_id),object_ids:r.object_ids||[],
+ const q={...clone(r),...recordProvenance(r,complete),annotation_id:key,object_id:text(r.object_id),object_ids:r.object_ids||[],
  confirmed_result:r.confirmed_result,reason:r.reason,scope:scopes.includes(r.scope)?r.scope:scopes[0],
  instruction:instructions.includes(r.instruction)?r.instruction:'请助手复核',history:r.history||[]};
  ensure(Array.isArray(q.object_ids)&&q.object_ids.every(x=>typeof x==='string'),'对象清单无效');
@@ -79,7 +89,7 @@ function parse(input,view){
  return p;
 }
 function saveRecord(previous,next,key,now){
- const q=cleanRecord(next,key,true);q.updated_at=now;q.entry_origin='用户在HTML保存';
+ const q=cleanRecord(next,key,true);q.updated_at=now;q.entry_origin='HTML保存';
  q.history=clone(previous?.history||[]);
  if(previous){const old=clone(previous);delete old.history;q.history.push(old);}
  return q;
@@ -105,5 +115,5 @@ function mergePackages(local,incoming){
 function embed(html,pkg){const json=JSON.stringify(pkg,null,1).replace(/^[ \t]+/gm,'').replace(/</g,'\\u003c');ensure(/id="feedback-seed"/.test(html),'页面缺少批注嵌入块');return html.replace(/(<script id="feedback-seed" type="application\/json">)[\s\S]*?(<\/script>)/,(_,a,b)=>a+json+b);}
 function readFileText(text){if(text.trimStart().startsWith('<')){const m=text.match(/<script id="feedback-seed" type="application\/json">([\s\S]*?)<\/script>/);ensure(m,'HTML没有批注数据块');return JSON.parse(m[1]);}return JSON.parse(text);}
 function receiptState(receipt,annotation){return receipt&&annotation&&annotation.result_fingerprint&&annotation.applicability_state!=='stale'&&annotation.applicability_state!=='unmatched'&&receipt.source_annotation_updated_at===annotation.updated_at&&receipt.source_result_fingerprint===annotation.result_fingerprint?'current':receipt?'stale':'none';}
-root.QtoReviewCore={schema,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord};
+root.QtoReviewCore={schema,scopes,instructions,recordProvenance,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord};
 })(globalThis);

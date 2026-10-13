@@ -28,7 +28,11 @@ def _label(row):
 def bind_view(document, execution, quantities, template, base_dir=None):
     if template.get("project_id") != document["project_id"]:
         raise ValueError("复核图面模板不属于当前项目")
+    policy = document.get("review_binding_policy", "strict")
+    if policy not in {"strict", "registered_only"}:
+        raise ValueError("未知复核量项绑定策略")
     view = copy.deepcopy(template)
+    template_summary = copy.deepcopy(view.get("workflow_binding", {}).get("unbound_template_summary", view.get("summary", [])))
     for source in view.get("sources", []):
         aid = source.get("artifact_id", source.get("id"))
         actual = execution["artifacts"].get(aid, {})
@@ -82,11 +86,15 @@ def bind_view(document, execution, quantities, template, base_dir=None):
     if set(mapping) - object_keys:
         raise ValueError("登记的复核对象不在当前图面模板中")
     quantity_outlets = set()
+    unbound = []
     for obj in view.get("objects", []):
         binding = mapping.get(obj["catalog_key"])
         if not binding:
-            if obj.get("quantities"):
+            if obj.get("quantities") and policy == "strict":
                 raise ValueError("数量对象必须绑定真实量项，不能沿用手抄数字：" + obj["catalog_key"])
+            if obj.get("attributes", {}).get("workflow_target_ids"):
+                raise ValueError("已有量项绑定不能静默退回未绑定记录：" + obj["catalog_key"])
+            unbound.append(obj["catalog_key"])
             continue
         ids = binding.get("target_ids", [])
         if not ids or len(set(ids)) != len(ids) or set(ids) - set(targets):
@@ -140,6 +148,14 @@ def bind_view(document, execution, quantities, template, base_dir=None):
     view.setdefault("scope_notes", []).append("工作流程对账只覆盖已声明范围及实际登记的原图索引；未读范围、未知对象和未决量项仍须处理。")
     view["workflow_binding"] = {"project_id": document["project_id"], "task_id": document["task_id"],
                                 "revision_id": document["revision_id"], "quantity_adoption_changed": False}
+    if policy == "registered_only":
+        view["workflow_binding"].update(binding_policy=policy,
+            bound_catalog_keys=sorted(mapping), unbound_catalog_keys=sorted(unbound),
+            unbound_template_summary=template_summary,
+            scope_note="仅登记对象的量项接入本轮执行链；其余旧记录按原样保留，尚未建立可执行量项映射。")
+        bound_summary = [{**row, "label": "本轮绑定量项：" + row["label"],
+                          "scope": "仅本轮已登记量项，不与原页面汇总相加；" + row["scope"]} for row in view["summary"]]
+        view["summary"] = template_summary + bound_summary
     # Existing snapshot hashing includes attributes, so dependency changes also
     # invalidate feedback when the displayed number happens to remain unchanged.
     return normalize_view(view, base_dir)
@@ -208,8 +224,13 @@ def feedback_patch(document, execution, artifact_id, workflow_sha256):
     packages = {p["id"]: p for p in document["work_packages"]}
     reviews = {r["catalog_key"]: r for r in document.get("review_bindings", [])}
     imported = {}
+    imported_unmapped = {}
     for row in document.get("review_imports", []):
         imported.setdefault(row["action_fingerprint"], set()).update(row["target_ids"])
+        imported_unmapped.setdefault(row["action_fingerprint"], set()).update(row.get("unmapped_catalog_keys", []))
+    partial = document.get("review_binding_policy") == "registered_only"
+    if partial != (original_view.get("workflow_binding", {}).get("binding_policy") == "registered_only"):
+        raise ValueError("本次绑定策略不同于实际受批注版本，须先明确迁移意见")
     upsert = {k: [] for k in ("artifacts", "tasks", "issues", "quantity_targets", "quantity_claims", "scopes", "review_imports")}
     grouped, scope_new_tasks = {}, {}
     fresh_objects = None
@@ -221,10 +242,14 @@ def feedback_patch(document, execution, artifact_id, workflow_sha256):
             continue
         unknown = selected_keys - set(original_objects)
         chosen = set()
+        unmapped = set()
         for key in selected_keys & set(original_objects):
             old = original_objects[key]
             old_targets = set(old.get("attributes", {}).get("workflow_target_ids", []))
             if not old_targets:
+                if partial and key not in reviews:
+                    unmapped.add(key)
+                    continue
                 raise ValueError("旧复核对象缺少量项身份，须先作明确迁移：" + key)
             if (key not in reviews or old_targets != set(reviews[key]["target_ids"]) or
                     any(t not in targets or targets[t]["physical_id"] != old["id"] for t in old_targets)):
@@ -241,6 +266,16 @@ def feedback_patch(document, execution, artifact_id, workflow_sha256):
                 if fresh_objects[key]["result_fingerprint"] != old["result_fingerprint"]:
                     raise ValueError("受批注对象的实际数量/依赖已变，旧意见仅供历史参考：" + key)
                 chosen.update(remaining)
+        pending = unmapped - imported_unmapped.get(action_fp, set())
+        if pending:
+            upsert["issues"].append({"id": "review-unmapped-" + action_fp[:16], "kind": "read_more",
+                "cause_id": action_fp, "status": "waiting_mapping",
+                "question": "逐条核对工程意见；本轮尚无真实量项绑定，不能按记录编号造计算目标。非数量证据可有据解释，不强制重算。",
+                "target_ids": [], "catalog_keys": sorted(pending), "attempt_refs": [artifact_id],
+                "review_action": copy.deepcopy(action)})
+            upsert["review_imports"].append({"id": "import-unmapped-" + fingerprint([action_fp, sorted(pending)])[:24],
+                "action_fingerprint": action_fp, "artifact_id": artifact_id, "sha256": artifact["sha256"],
+                "target_ids": [], "unmapped_catalog_keys": sorted(pending), "status": "waiting_mapping"})
         if unknown or unresolved_selection:
             upsert["issues"].append({"id": "review-map-" + action_fp[:16], "kind": "read_more", "cause_id": action_fp,
                                       "question": "核对意见的实际复核对象和量项；缺少快照且物理编号对应多个视图/量项时须由模型补对应，不能扩大选择范围",
@@ -264,7 +299,7 @@ def feedback_patch(document, execution, artifact_id, workflow_sha256):
         upsert["tasks"].append({"id": decide_task, "title": "解释真实意见并确定本次修订范围", "stage": "review",
                                  "work_package_id": wp, "actor": "model", "depends_on": [],
                                  "input_ids": [artifact_id], "output_ids": [decision_id],
-                                 "instruction": "逐条保留用户原话、对象与例外、需改事实/方法及依据。多意见同作业一起解释；矛盾先定位，方法认可不等于数字确认。",
+                                 "instruction": "逐条保留评审原话、作者与确认来源、对象与例外、需改事实/方法及依据。多意见同作业一起解释；矛盾先定位，方法认可不等于数字确认。",
                                  "review_actions": group["actions"], "selected_target_ids": sorted(selected_targets)})
         for tid in sorted(selected_targets):
             revised_target = copy.deepcopy(targets[tid])

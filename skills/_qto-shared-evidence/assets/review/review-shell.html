@@ -53,7 +53,14 @@ main{--navw:260px;--revieww:clamp(390px,34vw,620px);display:grid;grid-template-c
 <div id="editor"><b id="editor-title">先选问题组或对象</b><div id="group-guidance" hidden></div><div id="current-adoption" hidden></div>
 <div id="object-facts"></div><details id="source-details"><summary>查看完整依据、属性与原话</summary><div id="detail"></div><div id="original" hidden></div></details>
 <div class="fields"><div><label for="review-instruction">处理意见</label><select id="review-instruction"><option value="请助手复核">请助手继续判断</option><option value="确认现结果">认可当前结果</option><option value="修改结果">给出修正结果</option><option value="排除对象">排除所选对象</option><option value="暂缓计算">暂缓所选部分</option><option value="仍需核实">仍需补充资料</option></select></div><div><label for="review-scope">应用范围</label><select id="review-scope"><option>仅所选对象</option><option>本组勾选对象</option><option>本图同类对象（需核对范围）</option><option>供通用规则评估</option></select></div></div>
-<label for="review-result">你的结论或需要判断的问题</label><textarea id="review-result" placeholder="可以确认某种判断方法；不同规格和单位保留各成员原值，不会自动统一改数。"></textarea>
+<div id="saved-provenance" class="minor"></div>
+<details id="review-provenance"><summary>本次填写作者与用户确认</summary>
+<label for="review-author-role">本次填写作者</label><select id="review-author-role"><option value="unknown">作者未知／尚未声明</option><option value="user">用户</option><option value="assistant">助手／监督助手</option></select>
+<label for="review-author-evidence">作者来源说明（可选）</label><textarea id="review-author-evidence" placeholder="填写者身份或显式交接依据；不由意见正文推测作者。"></textarea>
+<label for="review-user-confirmation">本条意见是否经用户明确确认</label><select id="review-user-confirmation"><option value="unconfirmed">尚未经用户明确确认</option><option value="unknown">历史确认状态未知</option><option value="confirmed">已有明确用户确认依据</option></select>
+<label for="review-user-confirmation-evidence">用户确认依据</label><textarea id="review-user-confirmation-evidence" placeholder="仅在用户已明确确认时填写对应消息或记录；保存意见、助手评审和选择处理意向不等于用户确认。"></textarea>
+</details>
+<label for="review-result">评审结论或需要判断的问题</label><textarea id="review-result" placeholder="可以确认某种判断方法；不同规格和单位保留各成员原值，不会自动统一改数。"></textarea>
 <label for="review-reason">判断原因／图纸依据</label><textarea id="review-reason" placeholder="说明依据或需要助手继续核对的位置；整组例外可取消勾选。"></textarea>
 <details><summary>补充定位说明（可选）</summary><textarea id="review-evidence" placeholder="图页、轴线、编号、图例或构造做法"></textarea></details>
 <details><summary>本条修改历史</summary><div id="history-content"></div></details>
