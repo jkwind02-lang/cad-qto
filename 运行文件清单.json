@@ -16,18 +16,18 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
-      "sha256": "edeb0ab850053d8b9632dd0ca99548120d7f2a65ce6dd2db22946b3a2f150b2e",
-      "bytes": 27090
+      "sha256": "cde187521b09227e1cfd86a5fffafc201f5c4cb1e077feb1de4b11258331c011",
+      "bytes": 28152
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-core.js",
-      "sha256": "75cbba37f1ede3818c684aef3b4c00c17a444814b10e00ba3baa9afee5123a1c",
-      "bytes": 9186
+      "sha256": "2bcab43b3071577a78b1e2eac1d3fb211d84615376dfa458837d01ce56b2fdbc",
+      "bytes": 10159
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-shell.html",
-      "sha256": "6212376160568b6a95efa12a5218953688d9c0798421165177f7ac09fedc2a20",
-      "bytes": 15417
+      "sha256": "f0bede42a52f12ce095dac76e306f79583a2e19358f3fe37a4128b123272c267",
+      "bytes": 16623
     },
     {
       "path": "_qto-shared-evidence/assets/模型工作识别记录模板.json",
@@ -46,8 +46,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
-      "sha256": "a866b53f3479df3145b131c77d0e2cf83cc2b24b85487debf25e904ef8669892",
-      "bytes": 13445
+      "sha256": "ef03f778f75e6c4672e9c7fa66d55773651191d00b219f248e2eb7cac9ecc94e",
+      "bytes": 14731
     },
     {
       "path": "_qto-shared-evidence/references/PDF图片与表格提取.md",
@@ -251,8 +251,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
-      "sha256": "9ac79b0c17adc96012fc3088cd673f1b14f7752769127ac0af04f8237a3e100a",
-      "bytes": 12264
+      "sha256": "7a257588af50e16fbd1ab67377f808cd9d19fbf2bb9035462a8683ae406fce2e",
+      "bytes": 13226
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_revision.py",
@@ -281,8 +281,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_workflow_review.py",
-      "sha256": "97f0907879d31d8efe67e3b58731e80c7bd323250721fd71e43bdbc5aa4ac12e",
-      "bytes": 27937
+      "sha256": "5927846ffac3b4bf6652fd5fc4269b9b65a35bc20b37e0993737d504427c4a2b",
+      "bytes": 30690
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_workflow_state.py",
@@ -301,8 +301,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/read_qto_review_feedback.py",
-      "sha256": "b9a5cc060cd80c388b3bc9017ec556a1528c665e2917ce559b37914a8a02da17",
-      "bytes": 2202
+      "sha256": "72e247f806b4e061bf726dec0600d07a27d5b6aeae0a5996e9020d6c9a3ceeee",
+      "bytes": 2794
     },
     {
       "path": "_qto-shared-evidence/scripts/recompute_qto_dependencies.py",

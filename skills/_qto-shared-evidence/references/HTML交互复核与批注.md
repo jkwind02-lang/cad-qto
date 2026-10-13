@@ -83,6 +83,10 @@ python ../_qto-shared-evidence/scripts/build_qto_review_html.py --input 本轮�
 
 ## 4. 收到批注后的闭环
 
+批注的作者、确认来源与处理状态分别记录。每条批注使用 `author_role`（`user/assistant/unknown`）、`author_source`、`author_evidence`、`user_confirmation`（`confirmed/unconfirmed/unknown`）和 `user_confirmation_evidence`。旧版缺少这些字段时保持未知；不能由 `entry_origin`、正文称谓、`confirmed_result` 或旧 `user_result` 字段名推断作者或批准。新页面填写作者默认未知，用户确认须另给依据。读取交接使用中性 `review_result/review_reason` 并保留旧别名；监督助手评审和用户授权实施均不等于设计裁定或数量正式采用。
+
+汇编成果可在工作流显式设置 `review_binding_policy: registered_only`，只给本轮实际处理的记录建立真实量项目标和产物指针。未绑定记录的旧值、空值和原页面汇总保留，视图登记其范围；不能把它们报作已完成映射。`import-review` 对已绑定的所选量项形成执行任务，对尚未绑定的所选记录形成待映射问题，并保留作者、原话和排除成员。重复导入同一意见不会重复建任务或问题。默认仍为严格绑定。来源或结果版本已变的旧意见必须显式迁移并保留原始快照；不得自动继承旧数字确认。
+
 ~~~text
 python ../_qto-shared-evidence/scripts/read_qto_review_feedback.py --view 本轮复核视图.json --feedback 用户保存的HTML或JSON --output 收到批注交接_本轮.json
 ~~~

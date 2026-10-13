@@ -19,6 +19,19 @@ def require(ok, message):
  if not ok: raise ValueError(message)
 
 def string(v): return isinstance(v,str) and bool(v.strip())
+def record_provenance(record, complete=True):
+ """Explicit declarations only; legacy origin text never establishes an author."""
+ result={key:record.get(key,default) for key,default in {
+  'author_role':'unknown','author_source':'','author_evidence':'',
+  'user_confirmation':'unknown','user_confirmation_evidence':''}.items()}
+ require(result['author_role'] in ('user','assistant','unknown'),'批注作者角色无效')
+ require(result['user_confirmation'] in ('confirmed','unconfirmed','unknown'),'用户确认状态无效')
+ for key in ('author_source','author_evidence','user_confirmation_evidence'):
+  require(isinstance(result[key],str),'批注来源和确认依据须为文字')
+ if complete and result['user_confirmation']=='confirmed':
+  require(string(result['user_confirmation_evidence']),'用户确认须有明确依据；保存意见或选择处理意向不等于用户确认')
+ return result
+
 def number(v): return isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v)
 def xy(v): return isinstance(v,list) and len(v)==2 and all(number(n) for n in v)
 
@@ -130,6 +143,7 @@ def validate_feedback(raw, view):
  for field in ['annotations','drafts']:
   for key,r in p[field].items():
    require(key not in ['__proto__','constructor','prototype'] and isinstance(r,dict),'批注键或结构无效')
+   r.update(record_provenance(r,field=='annotations'))
    require(isinstance(r.get('confirmed_result',''),str) and isinstance(r.get('reason',''),str),'批注结果和原因必须是文字')
    if field=='annotations':require(string(r.get('confirmed_result')) and string(r.get('reason')),'已保存批注须有结果及原因')
    if r.get('group_id'):
