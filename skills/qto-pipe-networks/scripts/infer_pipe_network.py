@@ -1287,6 +1287,10 @@ def main() -> int:
             valve_ids.add(valve_id)
             system = text(raw.get("system"), f"{valve_id}.system")
             valve_point = point(raw.get("point"), f"{valve_id}.point")
+            if len(valve_point) == 2:
+                # 节点坐标已按网络统一补成三维；二维阀门点（无 z 的图元或外包框中心）
+                # 按同一口径补 z=0，否则落在唯一拓扑桥上的阀门会让整网以维度不一致中断。
+                valve_point = (*valve_point, 0.0)
             spaces = {r["space_id"] for r in segments.values() if r["system"] == system}
             valve_space = raw.get("space_id") or (next(iter(spaces)) if len(spaces) == 1 else None)
             ranked = valve_route_index.within(valve_point, system, valve_max, valve_space)

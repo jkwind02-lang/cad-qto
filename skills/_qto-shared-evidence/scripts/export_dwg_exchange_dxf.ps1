@@ -22,34 +22,14 @@ function Get-SourceSnapshot([string]$Path) {
 function Test-DxfCompletion([string]$Path) {
     # Export backends produce ASCII DXF. A nonempty file or exit=0 does not
     # prove a complete export: some hosts stop midway through a block record.
-    $reader = [System.IO.File]::OpenText($Path)
-    $inSection = $false; $sawEntities = $false; $sawEof = $false
-    try {
-        while (($codeLine = $reader.ReadLine()) -ne $null) {
-            if ($sawEof) {
-                if ($codeLine.Trim()) { throw 'DXF EOF后仍有数据。' }
-                continue
-            }
-            $valueLine = $reader.ReadLine()
-            if ($null -eq $valueLine) { throw 'DXF组码缺值，文件可能截断。' }
-            $code = $codeLine.Trim(); $value = $valueLine.Trim()
-            if ($code -notmatch '^\d+$') { throw 'DXF组码非法或不是ASCII交换格式。' }
-            if ($code -eq '0' -and $value -eq 'SECTION') {
-                if ($inSection) { throw 'DXF节未关闭。' }
-                $inSection = $true
-                $sectionCode = $reader.ReadLine(); $sectionName = $reader.ReadLine()
-                if ($null -eq $sectionCode -or $sectionCode.Trim() -ne '2' -or $null -eq $sectionName) { throw 'DXF节名缺失。' }
-                if ($sectionName.Trim() -eq 'ENTITIES') { $sawEntities = $true }
-            } elseif ($code -eq '0' -and $value -eq 'ENDSEC') {
-                if (-not $inSection) { throw 'DXF存在无对应起点的ENDSEC。' }
-                $inSection = $false
-            } elseif ($code -eq '0' -and $value -eq 'EOF') {
-                if ($inSection) { throw 'DXF节未闭合即结束。' }
-                $sawEof = $true
-            }
-        }
-        if ($inSection -or -not $sawEof -or -not $sawEntities) { throw 'DXF未完整导出：缺少闭合ENDSEC、ENTITIES或EOF。' }
-    } finally { $reader.Dispose() }
+    # The scan runs in compiled C# (DxfCompletion.cs next to this script): the
+    # former PowerShell per-line loop took 80-230 s on 200 MB exports, longer
+    # than the export itself; the compiled scan takes seconds.
+    if (-not ('QtoDxfCompletion' -as [type])) {
+        Add-Type -Path (Join-Path $PSScriptRoot 'DxfCompletion.cs') -ErrorAction Stop
+    }
+    $failure = [QtoDxfCompletion]::Check($Path)
+    if ($null -ne $failure) { throw $failure }
 }
 
 function Close-AutoCad([object]$Document, [object]$Application) {
@@ -155,7 +135,7 @@ function Invoke-OdaExport([string]$WorkingDwg, [string]$TargetDxf, [string]$Stag
     if ((Test-Path -LiteralPath $errorFile) -and (Get-Item -LiteralPath $errorFile).Length -gt 0) {
         throw ('ODA导出报告错误：' + (Get-Content -Raw -LiteralPath $errorFile))
     }
-    Test-DxfCompletion $converted
+    # Completion is verified once by the main flow after the copy; scanning here too doubled the cost.
     Copy-Item -LiteralPath $converted -Destination $TargetDxf -Force
 }
 
@@ -182,6 +162,9 @@ $workingDwg = Join-Path $stageDirectory 'source.dwg'
 $stagedDxf = Join-Path $stageDirectory 'exchange.dxf'
 $backendUsed = $null
 $comError = $null
+# The source is hashed once before and once after the export (in the try block, or in
+# finally when the export failed earlier); a third pass on multi-GB sources was pure cost.
+$sourceAfter = $null
 
 try {
     Copy-Item -LiteralPath $sourcePath -Destination $workingDwg
@@ -233,13 +216,12 @@ try {
         }
         Remove-Item -LiteralPath $resolvedStage -Recurse -Force
     }
-    $sourceAfter = Get-SourceSnapshot $sourcePath
+    if ($null -eq $sourceAfter) { $sourceAfter = Get-SourceSnapshot $sourcePath }
     if ($sourceBefore.Sha256 -ne $sourceAfter.Sha256 -or $sourceBefore.Length -ne $sourceAfter.Length -or $sourceBefore.LastWriteTimeUtc -ne $sourceAfter.LastWriteTimeUtc) {
         throw '权威源 DWG 在导出期间发生变化；本次导出无效。'
     }
 }
 
-$sourceAfter = Get-SourceSnapshot $sourcePath
 if ($sourceBefore.Sha256 -ne $sourceAfter.Sha256 -or $sourceBefore.Length -ne $sourceAfter.Length -or $sourceBefore.LastWriteTimeUtc -ne $sourceAfter.LastWriteTimeUtc) {
     throw '权威源 DWG 在导出期间发生变化；输出已判无效，请先核查源文件。'
 }

@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 271,
+  "runtime_file_count": 272,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -42,8 +42,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/CAD中性事实提取.md",
-      "sha256": "21287782dd6bbe11ef66d63fa5199f27c23f10f3be204189e7bfc8e3bf7f820c",
-      "bytes": 6659
+      "sha256": "70c8211ac367026727264f3e16ffaa5c63b20d0b7d71171e8cd67f43b15de6b0",
+      "bytes": 7895
     },
     {
       "path": "_qto-shared-evidence/references/CAD基础读取与天正原生字段.md",
@@ -157,8 +157,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/通用成果字段与状态.md",
-      "sha256": "dcde8910617951ae611de10a92e2f7375ddc03592359d9701fb68d4614585771",
-      "bytes": 10755
+      "sha256": "2ade7fd07a968eb9fbc25b9543f7c4678acb8c4b4d77efb4fa0d8f5c672e321c",
+      "bytes": 11632
     },
     {
       "path": "_qto-shared-evidence/references/项目文档条款提取.md",
@@ -202,8 +202,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/cad_native/reader.py",
-      "sha256": "461f5a8c721384bbd8ffff9c6f2f06658373f2b2388e4931fccd8015ac2a82d6",
-      "bytes": 16666
+      "sha256": "8d74435b36d89e982e517fcbdabb58f446d86e863de67efb8c4702f563d3a35e",
+      "bytes": 18845
     },
     {
       "path": "_qto-shared-evidence/scripts/cad_native/runtime_audit.py",
@@ -211,14 +211,19 @@
       "bytes": 2824
     },
     {
+      "path": "_qto-shared-evidence/scripts/DxfCompletion.cs",
+      "sha256": "8de3def552f140b1442d7222f5dfbfe555176da7438f79ba24aadcc9e0d31e56",
+      "bytes": 2862
+    },
+    {
       "path": "_qto-shared-evidence/scripts/export_dwg_exchange_dxf.ps1",
-      "sha256": "5797d0b370ca63f4f81321996aaf07d716098e3ff7f53efb8045af7beca0b47b",
-      "bytes": 14341
+      "sha256": "0999758e6a5eec7a462db2d8402a206af9f0bf98f9c0e6b2533f73c1e21f95e7",
+      "bytes": 13423
     },
     {
       "path": "_qto-shared-evidence/scripts/extract_cad_neutral.py",
-      "sha256": "904b406ed96737ae48036a03c8ba2390f04bd6566ffe2e18d83740e46d600f27",
-      "bytes": 23814
+      "sha256": "aa00833ff8983c7a6c588d687b96360ede8676cd343ac4d5d33917267b80ff09",
+      "bytes": 28394
     },
     {
       "path": "_qto-shared-evidence/scripts/migrate_cad_review_view.py",
@@ -582,8 +587,8 @@
     },
     {
       "path": "qto-duct-air-systems/SKILL.md",
-      "sha256": "7ab9c0306479d4b9787d5cce69f59b96085799c476e008c29c37d19f8e3d0252",
-      "bytes": 5202
+      "sha256": "a828bdd2e46d5b56db6605e5df5556a036fa95887ea42cf11d89b9c9c9e57bbb",
+      "bytes": 5584
     },
     {
       "path": "qto-earthwork-terrain/agents/openai.yaml",
@@ -952,8 +957,8 @@
     },
     {
       "path": "qto-pipe-networks/references/结果检查与输出.md",
-      "sha256": "5b21876e425c925cb3c5baa07964fa3f67d077c9757a8553712445c8c53ee21e",
-      "bytes": 7041
+      "sha256": "3a6ae3a2c5c60013a0235e7fd92f4354c78b1c480e114e05d11fd10191757904",
+      "bytes": 7415
     },
     {
       "path": "qto-pipe-networks/references/给水管道规则.md",
@@ -1007,8 +1012,8 @@
     },
     {
       "path": "qto-pipe-networks/scripts/infer_pipe_network.py",
-      "sha256": "58807cc2cc37a000b7bc5ac9ed5634613e55510539e8d727f5c38d06afdbb9c1",
-      "bytes": 89532
+      "sha256": "b2c482edc794b086aec546b1f913da8809af7032f558c490d4d9bc14d7257386",
+      "bytes": 89860
     },
     {
       "path": "qto-pipe-networks/scripts/measure_pipe_centerlines.py",
@@ -1042,8 +1047,8 @@
     },
     {
       "path": "qto-pipe-networks/scripts/validate_pipe_user_summary.py",
-      "sha256": "173e3425b5ac104c6399658e0be99ef6af3a3957e1f81717ab41bde245fe303c",
-      "bytes": 7744
+      "sha256": "695d8f0b001d8050449fd75c149d002452c0e45daf882177d00eeb7ab107124a",
+      "bytes": 10526
     },
     {
       "path": "qto-pipe-networks/SKILL.md",

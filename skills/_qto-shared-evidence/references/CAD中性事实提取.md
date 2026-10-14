@@ -84,6 +84,10 @@ python scripts/extract_cad_neutral.py --source-dxf <交换副本.dxf> --source-d
 
 产物固定为布局图元流、唯一块定义流、失败对象表和 `CAD中性取证清单.json`。清单必须枚举全部布局、块定义及失败数；`PARTIAL` 只能继续不受影响范围。公共层不得生成管道、阀门、钢构件等专业分类或工程量。
 
+块定义流默认只写“被引用闭包”：从各布局的 INSERT 递归、尺寸和表格的几何块，以及原生构件引用的符号块出发能到达的块定义。竣工图里大量粘贴残留块（`A$C…`）、旧底图块和图库块从未被插入，之前占了块定义流的九成以上体积；现在它们只在清单 `blocks[]` 里登记名称、图元数和 `serialized=false`，`block_definition_serialization` 给出引用、序列化和未序列化的块数与图元数。确实需要全部块定义时加 `--all-blocks`。覆盖统计 `read_coverage.entity_count` 按序列化的块计，`counting_basis` 写明口径。
+
+ODA 后端会把 AutoCAD 自身的动态块、关联性支撑对象（`ACDB_DYNAMICBLOCKPURGEPREVENTER_VERSION`、`ACDBASSOCNETWORK`、`ACAD_EVALUATION_GRAPH` 等）写成 `ACAD_PROXY_OBJECT`，AutoCAD 则按真实类名写出。原生读取器只清点代理实体、`TCH_*` 和类名不属于 `ACDB*`/`ACAD_*` 的代理对象；这些 AutoCAD 内部对象只在 `class_catalog` 计数、在 `excluded_internal_proxy_objects` 按类统计，不保留载荷、不递归引用。两种后端的中性包布局、块定义和失败数应一致，差异只应出现在这一统计里。
+
 用于人工复核的CAD叠加图必须采用可显示中文的字体、按任务对象范围裁切，并使标签在常规缩放下可读。按本次对象形态分别保留纳入、排除、未决、几何或属性推算的代表性样本；只有坐标全图而对象挤在局部、标题乱码或标签不可辨认的图片不算有效视觉验证。
 
 ## 1.1 几何契约修订

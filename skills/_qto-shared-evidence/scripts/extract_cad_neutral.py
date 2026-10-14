@@ -13,7 +13,7 @@ import hashlib
 import json
 import math
 import sys
-from collections import Counter
+from collections import Counter, deque
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -25,7 +25,9 @@ except ImportError as exc:  # pragma: no cover - exercised by deployment checks
 
 from qto_cad_geometry import GEOMETRY_SCHEMA, entity_geometry as extract_geometry_facts, read_dxf_with_diagnostics, resolve_underlay_dependency
 
-VERSION = "qto-cad-neutral-extractor/1.4.0"
+VERSION = "qto-cad-neutral-extractor/1.5.0"
+# Entity types whose named block is drawn as part of the entity (geometry blocks).
+GEOMETRY_BLOCK_TYPES = {"DIMENSION", "ARC_DIMENSION", "LARGE_RADIAL_DIMENSION", "ACAD_TABLE", "TABLE"}
 CURVE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "CIRCLE", "ELLIPSE", "SPLINE"}
 UNIT_NAMES = {
     0: "Unitless",
@@ -262,11 +264,51 @@ def write_stream(path: Path, groups: Iterable[tuple[str, str | None, Iterable[An
     return count, types, failures
 
 
+def block_references(entities: Iterable[Any]) -> Iterable[str]:
+    """Block names an entity container draws: INSERT definitions and geometry blocks (DIMENSION/TABLE)."""
+    for entity in entities:
+        kind = entity.dxftype()
+        if kind == "INSERT":
+            name = get_dxf(entity, "name")
+        elif kind in GEOMETRY_BLOCK_TYPES:
+            name = get_dxf(entity, "geometry")
+        else:
+            continue
+        if name:
+            yield str(name)
+
+
+def referenced_block_closure(document: Any, seeds: Iterable[str], *, include_layouts: bool = True) -> set[str]:
+    """Names of block definitions reachable from the layouts (recursively) and from explicit seeds.
+
+    Paste residue (`A$C...`), old base-map blocks and library blocks that no layout inserts are
+    left out: they draw nothing visible and were up to 94% of the serialized volume on as-built sets.
+    MLEADER content blocks are not traced (no quantity consumer reads them).
+    """
+    pending: deque[str] = deque(seeds)
+    if include_layouts:
+        for layout in document.layouts:
+            pending.extend(block_references(layout))
+    closure: set[str] = set()
+    while pending:
+        name = pending.popleft()
+        if name in closure:
+            continue
+        block = document.blocks.get(name)
+        if block is None or block.is_any_layout:
+            continue
+        closure.add(name)
+        pending.extend(block_references(block))
+    return closure
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="从DXF交换副本生成专业无关的CAD中性取证包")
     parser.add_argument("--source-dxf", required=True, type=Path)
     parser.add_argument("--source-dwg", type=Path, help="可选：作为权威来源绑定的原DWG")
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--all-blocks", action="store_true",
+                        help="序列化全部块定义图元，包括没有任何布局（递归）引用的块；默认只写被引用闭包，未引用块只在清单里登记")
     args = parser.parse_args(argv)
     try:
         dxf_path = args.source_dxf.resolve()
@@ -284,8 +326,11 @@ def main(argv=None) -> int:
         unit_code = int(document.header.get("$INSUNITS", 0) or 0)
         raw_unit = UNIT_NAMES.get(unit_code, f"INSUNITS-{unit_code}")
         primary_path = dwg_path or dxf_path
-        primary_hash = sha256(primary_path)
+        # Hash each input once; large exchange files take seconds per pass.
+        dxf_hash = sha256(dxf_path)
+        primary_hash = sha256(dwg_path) if dwg_path else dxf_hash
         receipt_path = dxf_path.with_name(dxf_path.name + '.export.json')
+        receipt_hash = sha256(receipt_path) if receipt_path.is_file() else None
         conversion, dependency_context = None, None
         if dwg_path:
             dependency_context = {"original_cad_directory": str(dwg_path.parent),
@@ -293,12 +338,12 @@ def main(argv=None) -> int:
                 "basis": "explicit_source_dwg"}
         if receipt_path.is_file():
             receipt = json.loads(receipt_path.read_text(encoding='utf-8-sig'))
-            if (receipt.get('output_sha256') != sha256(dxf_path)
+            if (receipt.get('output_sha256') != dxf_hash
                     or (dwg_path is not None and receipt.get('source_sha256') != primary_hash)):
                 raise ExtractionError('转换记录与当前原图或DXF不一致，须重新转换')
             if not isinstance(receipt.get('exchange_geometry_review_required'), bool):
                 raise ExtractionError('转换记录缺少几何复核状态')
-            conversion = {'path': str(receipt_path), 'sha256': sha256(receipt_path),
+            conversion = {'path': str(receipt_path), 'sha256': receipt_hash,
                 'backend': receipt.get('backend'), 'geometry_review_required': receipt['exchange_geometry_review_required']}
             if not dependency_context and receipt.get('source'):
                 origin = Path(receipt['source'])
@@ -307,7 +352,7 @@ def main(argv=None) -> int:
                     dependency_context = {"original_cad_directory": str(origin.parent),
                         "original_cad_path": str(origin), "original_cad_sha256": receipt['source_sha256'],
                         "basis": "verified_export_receipt", "receipt_path": str(receipt_path),
-                        "receipt_sha256": sha256(receipt_path)}
+                        "receipt_sha256": receipt_hash}
         layout_path = output / "中性布局图元.ndjson"
         block_path = output / "中性块定义图元.ndjson"
         failure_path = output / "CAD提取失败对象.json"
@@ -316,7 +361,7 @@ def main(argv=None) -> int:
         native_path = output / "CAD原生构件基础数据.json"
         from cad_native import read_document
         native = read_document(document)
-        native['input']={'exchange_path':str(dxf_path),'exchange_sha256':sha256(dxf_path),
+        native['input']={'exchange_path':str(dxf_path),'exchange_sha256':dxf_hash,
             'original_dwg':str(dwg_path) if dwg_path else None,'original_sha256':primary_hash if dwg_path else None,
             'dxf_version':document.dxfversion,'insunits_original':unit_code,'primary_source_sha256':primary_hash}
         native['source_diagnostics']=source_diagnostics
@@ -325,13 +370,23 @@ def main(argv=None) -> int:
         native_path.write_text(json.dumps(native,ensure_ascii=False,indent=2,allow_nan=False)+'\n',encoding='utf8')
 
         layout_groups = [(layout.name, None, layout) for layout in document.layouts]
-        block_groups = [
-            ("BlockDefinition", block.name, block)
-            for block in document.blocks
-            if not block.is_any_layout
-        ]
+        definition_blocks = [block for block in document.blocks if not block.is_any_layout]
+        # Only definitions some layout draws (recursive INSERT / geometry blocks) or a native
+        # symbol references are serialized; the rest are inventoried in the manifest only.
+        layout_closure = referenced_block_closure(document, ())
+        native_symbol_blocks = {row["name"] for row in native["referenced_blocks"].values()}
+        native_closure = referenced_block_closure(document, native_symbol_blocks, include_layouts=False)
+        referenced_blocks = layout_closure | native_closure
+        serialized_blocks = [block for block in definition_blocks
+                             if args.all_blocks or block.name in referenced_blocks]
+        serialized_names = {block.name for block in serialized_blocks}
+        block_groups = [("BlockDefinition", block.name, block) for block in serialized_blocks]
         coverage = new_coverage()
         coverage['native_read_coverage']=native['summary']
+        if not args.all_blocks:
+            coverage["counting_basis"] = ("layout entities and unique definition entities of blocks referenced from layouts "
+                                          "(recursive INSERT, DIMENSION/TABLE geometry blocks) or by native symbols; "
+                                          "unreferenced block definitions are inventoried, not serialized; not expanded physical instances")
         layout_count, layout_types, layout_failures = write_stream(layout_path, layout_groups, primary_hash, raw_unit, coverage=coverage, dependency_context=dependency_context)
         block_count, block_types, block_failures = write_stream(block_path, block_groups, primary_hash, raw_unit, coverage=coverage, dependency_context=dependency_context)
         failures = layout_failures + block_failures
@@ -345,14 +400,28 @@ def main(argv=None) -> int:
         failure_path.write_text(json.dumps({"failures": failures}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
         block_rows = []
-        for block in sorted((item for item in document.blocks if not item.is_any_layout), key=lambda item: item.name):
+        for block in sorted(definition_blocks, key=lambda item: item.name):
             block_rows.append({
                 "block_name": block.name,
                 "origin": point(block.block.dxf.base_point) or [0.0, 0.0, 0.0],
                 "direct_entity_count": len(block),
                 "is_xref": bool(block.block.is_xref or block.block.is_xref_overlay),
                 "xref_path": block.block.dxf.get("xref_path", "") if block.block.is_xref or block.block.is_xref_overlay else None,
+                "referenced_from_layouts": block.name in layout_closure,
+                "referenced_by_native_symbols": block.name in native_closure,
+                "serialized": block.name in serialized_names,
             })
+        unserialized_rows = [row for row in block_rows if not row["serialized"]]
+        block_serialization = {
+            "mode": "all_blocks" if args.all_blocks else "referenced_closure",
+            "closure_basis": "layout INSERT recursion, DIMENSION/TABLE geometry blocks, native symbol block references; MLEADER content blocks not traced",
+            "definition_block_count": len(block_rows),
+            "referenced_block_count": len(referenced_blocks),
+            "serialized_block_count": len(serialized_names),
+            "unserialized_block_count": len(unserialized_rows),
+            "unserialized_entity_count": sum(row["direct_entity_count"] for row in unserialized_rows),
+        }
+        coverage["block_definition_serialization"] = block_serialization
         coverage.update(source_sha256=primary_hash, pending_object_count=len(coverage["pending_objects"]),
                         external_reference_count=len(coverage["external_references"]),
                         external_dependency_context=dependency_context,
@@ -377,7 +446,7 @@ def main(argv=None) -> int:
             "native_decoder_baseline": "0.5.1-native-fields-inline",
             "native_read_coverage": native['summary'],
             "authoritative_source": {"path": str(primary_path), "sha256": primary_hash, "bytes": primary_path.stat().st_size},
-            "exchange_dxf": {"path": str(dxf_path), "sha256": sha256(dxf_path), "bytes": dxf_path.stat().st_size},
+            "exchange_dxf": {"path": str(dxf_path), "sha256": dxf_hash, "bytes": dxf_path.stat().st_size},
             "exchange_conversion": conversion,
             "external_dependency_context": dependency_context,
             "source_read_diagnostics": source_diagnostics,
@@ -394,9 +463,11 @@ def main(argv=None) -> int:
             "layouts": [layout.name for layout in document.layouts],
             "blocks": block_rows,
             "block_definition_count": len(block_rows),
+            "block_definition_serialization": block_serialization,
             "limitations": [
                 "DXF交换副本不证明DWG代理对象已完整降级；失败对象和交换文件身份必须保留",
                 "块定义只保存一次；专业层按实例路径和冻结范围决定是否递归展开",
+                "默认只序列化被布局递归引用或被原生符号引用的块定义；未引用块只登记名称和图元数（blocks[].serialized=false），需要时用 --all-blocks 全写",
                 "原始图层、块名和文字均为中性事实，不是专业分类",
                 "读取覆盖按布局和唯一块定义图元统计，不是实物数量覆盖率；文字、定位证据不等于可测构件",
                 "HATCH须由面层边界适配器处理；代理对象、三维实体、缺失参照及动态状态按待补读保留",
@@ -405,7 +476,9 @@ def main(argv=None) -> int:
             ],
         }
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(json.dumps({"status": manifest["status"], "layouts": layout_count, "block_entities": block_count, "failures": len(failures), "manifest": str(manifest_path)}, ensure_ascii=False))
+        print(json.dumps({"status": manifest["status"], "layouts": layout_count, "block_entities": block_count,
+                          "unserialized_blocks": block_serialization["unserialized_block_count"],
+                          "failures": len(failures), "manifest": str(manifest_path)}, ensure_ascii=False))
         return 0 if manifest["status"] == "PASS" else 3
     except (OSError, ezdxf.DXFError, ExtractionError, ValueError) as exc:
         print(json.dumps({"status": "INPUT_REQUIRED", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)

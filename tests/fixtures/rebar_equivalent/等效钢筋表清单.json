@@ -1,0 +1,230 @@
+{
+  "manifest_version": "qto-rebar-manifest/1.0",
+  "case_id": "RB-EQUIVALENT-EXPLICIT-SCHEDULE-001",
+  "test_mode": true,
+  "readonly_roots": [],
+  "scope": {
+    "project": "钢筋确定性机制等效测试",
+    "building": "等效独立基础",
+    "area": "EQ-DJ01",
+    "drawing_type": "已核定钢筋表等效夹具",
+    "drawing_version": "qto-rebar-explicit-schedule-fixture/1.0",
+    "output_dimension": "根数、中心线展开长度、理论重量分链",
+    "main_object": "独立基础底部双向直筋",
+    "system": "基础配筋",
+    "included": [
+      "底部X向直筋",
+      "底部Y向直筋"
+    ],
+    "excluded": [
+      "平法语义解析",
+      "首末根推导",
+      "锚固搭接",
+      "措施筋",
+      "清单与采购量"
+    ]
+  },
+  "sources": [
+    {
+      "source_id": "SRC-EQ-RB-SCHEDULE",
+      "path": "等效钢筋表事实.json",
+      "sha256": "6797c33d57b0fd3395ff442682c5c7cfdf2cac5c761b3169a2dc167f8ba8ddeb",
+      "file_role": "json",
+      "source_role": "test_fixture",
+      "version_identity": "qto-rebar-explicit-schedule-fixture/1.0 + SHA256 6797c33d...8ddeb",
+      "reason": "只验证根数、显式单根中心线展开长度和理论重量的确定性复算机制。",
+      "neutral_facts": "两组HRB400 Φ14直筋各8根、单根展开长度1.22m，显式密度7850kg/m³。",
+      "unused_impact": "不能证明任何真实项目的钢筋根数、长度、图集适用性或采用量。",
+      "json_assertions": {
+        "fixture_version": "qto-rebar-explicit-schedule-fixture/1.0",
+        "material.grade": "HRB400",
+        "material.diameter_mm": 14,
+        "material.density_kg_m3": 7850,
+        "bar_groups.0.schedule_mark": "EQ-DJ01-B-X",
+        "bar_groups.0.count": 8,
+        "bar_groups.0.developed_length_each_m": 1.22,
+        "bar_groups.1.schedule_mark": "EQ-DJ01-B-Y",
+        "bar_groups.1.count": 8,
+        "bar_groups.1.developed_length_each_m": 1.22
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "EV-EQ-RB-X",
+      "source_id": "SRC-EQ-RB-SCHEDULE",
+      "evidence_class": "bar_schedule",
+      "fact_status": "test_only",
+      "neutral_fact": "EQ-DJ01-B-X：底部X向HRB400 Φ14，8根，单根中心线展开长度1.22m。",
+      "locator": "等效钢筋表事实.json > bar_groups[0]",
+      "source_identity": "SRC-EQ-RB-SCHEDULE SHA256 6797c33d57b0fd3395ff442682c5c7cfdf2cac5c761b3169a2dc167f8ba8ddeb",
+      "extraction_method": "JSON显式字段读取并由来源断言核对",
+      "quality_status": "等效测试事实已闭合",
+      "limitation": "仅为测试夹具，不是项目钢筋表或项目采用量。",
+      "object_keys": [
+        "schedule:EQ-DJ01-B-X"
+      ]
+    },
+    {
+      "evidence_id": "EV-EQ-RB-Y",
+      "source_id": "SRC-EQ-RB-SCHEDULE",
+      "evidence_class": "bar_schedule",
+      "fact_status": "test_only",
+      "neutral_fact": "EQ-DJ01-B-Y：底部Y向HRB400 Φ14，8根，单根中心线展开长度1.22m。",
+      "locator": "等效钢筋表事实.json > bar_groups[1]",
+      "source_identity": "SRC-EQ-RB-SCHEDULE SHA256 6797c33d57b0fd3395ff442682c5c7cfdf2cac5c761b3169a2dc167f8ba8ddeb",
+      "extraction_method": "JSON显式字段读取并由来源断言核对",
+      "quality_status": "等效测试事实已闭合",
+      "limitation": "仅为测试夹具，不是项目钢筋表或项目采用量。",
+      "object_keys": [
+        "schedule:EQ-DJ01-B-Y"
+      ]
+    },
+    {
+      "evidence_id": "EV-EQ-RB-MATERIAL",
+      "source_id": "SRC-EQ-RB-SCHEDULE",
+      "evidence_class": "material_property",
+      "fact_status": "test_only",
+      "neutral_fact": "材料为HRB400，公称直径14mm，圆截面几何理论质量计算密度显式取7850kg/m³。",
+      "locator": "等效钢筋表事实.json > material",
+      "source_identity": "SRC-EQ-RB-SCHEDULE SHA256 6797c33d57b0fd3395ff442682c5c7cfdf2cac5c761b3169a2dc167f8ba8ddeb",
+      "extraction_method": "JSON显式字段读取并由来源断言核对",
+      "quality_status": "等效测试输入已闭合",
+      "limitation": "密度只用于验证几何理论单位质量公式，不代替真实项目产品标准复核。",
+      "object_keys": [
+        "material:HRB400-D14"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": "R-RB-001",
+      "name": "构件与钢筋组唯一身份及去重",
+      "source": "qto-rebar/references/钢筋识别与构件配筋规则.md",
+      "decision": "adopted",
+      "maturity": "trial",
+      "execution": "X向与Y向分别建立唯一钢筋组，不按同直径合并对象。",
+      "locator": "钢筋识别与构件配筋规则.md > 唯一钢筋组"
+    },
+    {
+      "rule_id": "R-RB-002",
+      "name": "按位置、类别、级别和直径分组",
+      "source": "qto-rebar/references/规则清单与成熟状态.md",
+      "decision": "adopted",
+      "maturity": "trial",
+      "execution": "分别计算底部X向与底部Y向HRB400 Φ14直筋。",
+      "locator": "规则清单与成熟状态.md > R-RB-002"
+    },
+    {
+      "rule_id": "R-RB-003",
+      "name": "显式钢筋表根数与展开长度复算",
+      "source": "qto-rebar/references/展开长度锚固搭接与节点规则.md",
+      "decision": "adopted",
+      "maturity": "trial",
+      "execution": "直接采用测试钢筋表明确的8根与1.22m，不从间距推导。",
+      "locator": "展开长度锚固搭接与节点规则.md > 本候选脚本的能力边界"
+    },
+    {
+      "rule_id": "R-RB-004",
+      "name": "圆截面几何理论单位质量",
+      "source": "qto-rebar/references/根数理论重量连接与措施规则.md",
+      "decision": "adopted",
+      "maturity": "trial",
+      "execution": "按π/4×d²×密度计算理论单位质量，再乘总展开长度。",
+      "locator": "根数理论重量连接与措施规则.md > 理论单位质量"
+    },
+    {
+      "rule_id": "R-RB-010",
+      "name": "设计、下料、清单、合同和采购口径分离",
+      "source": "qto-rebar/references/现行标准与计量口径摘要.md",
+      "decision": "adopted",
+      "maturity": "trial",
+      "execution": "本案例为test_reference且adoption_role=reference，不进入项目采用量。",
+      "locator": "现行标准与计量口径摘要.md > 口径隔离"
+    }
+  ],
+  "unresolved": [],
+  "bar_groups": [
+    {
+      "group_id": "RB-EQ-DJ01-B-X",
+      "physical_object_id": "EQ-DJ01-B-X",
+      "component_type": "独立基础",
+      "bar_category": "底部受力直筋",
+      "member_id": "EQ-DJ01",
+      "position": "底部X向",
+      "grade": "HRB400",
+      "diameter_mm": 14,
+      "specification": "HRB400 Φ14 / 底部X向 / 等效钢筋表",
+      "measurement_basis": "等效钢筋表显式根数与单根中心线展开长度",
+      "quantity_basis": "test_reference",
+      "adoption_role": "reference",
+      "status": "complete",
+      "method": "explicit_developed_length",
+      "count": 8,
+      "developed_length_each_m": 1.22,
+      "developed_length_basis": "等效钢筋表已明确的单根中心线展开长度",
+      "unit_mass_method": "geometric_density",
+      "density_kg_m3": 7850,
+      "density_basis": "EV-EQ-RB-MATERIAL显式测试输入",
+      "evidence_ids": [
+        "EV-EQ-RB-X",
+        "EV-EQ-RB-MATERIAL"
+      ],
+      "rule_ids": [
+        "R-RB-001",
+        "R-RB-002",
+        "R-RB-003",
+        "R-RB-004",
+        "R-RB-010"
+      ],
+      "unresolved_ids": [],
+      "trial_result": true,
+      "outputs": {
+        "count": "QTY-RB-EQ-X-COUNT",
+        "length": "QTY-RB-EQ-X-LENGTH",
+        "weight": "QTY-RB-EQ-X-WEIGHT"
+      }
+    },
+    {
+      "group_id": "RB-EQ-DJ01-B-Y",
+      "physical_object_id": "EQ-DJ01-B-Y",
+      "component_type": "独立基础",
+      "bar_category": "底部受力直筋",
+      "member_id": "EQ-DJ01",
+      "position": "底部Y向",
+      "grade": "HRB400",
+      "diameter_mm": 14,
+      "specification": "HRB400 Φ14 / 底部Y向 / 等效钢筋表",
+      "measurement_basis": "等效钢筋表显式根数与单根中心线展开长度",
+      "quantity_basis": "test_reference",
+      "adoption_role": "reference",
+      "status": "complete",
+      "method": "explicit_developed_length",
+      "count": 8,
+      "developed_length_each_m": 1.22,
+      "developed_length_basis": "等效钢筋表已明确的单根中心线展开长度",
+      "unit_mass_method": "geometric_density",
+      "density_kg_m3": 7850,
+      "density_basis": "EV-EQ-RB-MATERIAL显式测试输入",
+      "evidence_ids": [
+        "EV-EQ-RB-Y",
+        "EV-EQ-RB-MATERIAL"
+      ],
+      "rule_ids": [
+        "R-RB-001",
+        "R-RB-002",
+        "R-RB-003",
+        "R-RB-004",
+        "R-RB-010"
+      ],
+      "unresolved_ids": [],
+      "trial_result": true,
+      "outputs": {
+        "count": "QTY-RB-EQ-Y-COUNT",
+        "length": "QTY-RB-EQ-Y-LENGTH",
+        "weight": "QTY-RB-EQ-Y-WEIGHT"
+      }
+    }
+  ],
+  "note": "等效钢筋表只验证确定性复算机制；不是任何真实项目的采用量，也不证明平法节点成熟。"
+}

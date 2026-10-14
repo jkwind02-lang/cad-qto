@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -84,6 +85,35 @@ def has_group(text: str, alternatives: tuple[str, ...]) -> bool:
     return any(value in text for value in alternatives)
 
 
+# 模型自己做出的判断不得写成人工结论。"待/需/须/请/未/拟/应 人工确认"是待办，不算冒用。
+HUMAN_DECISION_TERMS = re.compile(
+    r"(?<![待需须请未拟应])(人工裁定|人工核定|人工认定|已人工确认|经人工确认|人工已确认|人工确认通过|已人工复核|经人工复核|人工复核通过)"
+)
+HUMAN_REVIEW_SCHEMA = "qto-human-review-evidence/1.0"
+VALIDATOR_STATEMENT_TERMS = (
+    "validate_minimum_result", "validate_pipe_result", "必需校验器", "最小结果校验", "管网结果校验", "校验器",
+)
+
+
+def first_section(sheets: dict[str, str]) -> str:
+    """用户汇总首段：第一张表，Markdown 里取第二个标题之前的内容。"""
+    text = next(iter(sheets.values()), "")
+    lines = text.splitlines()
+    headings = [index for index, line in enumerate(lines) if line.lstrip().startswith("#")]
+    if len(headings) >= 2:
+        return "\n".join(lines[: headings[1]])
+    return text
+
+
+def human_review_evidence_present(path: Path | None) -> bool:
+    if path is None:
+        return False
+    data = load_json(path.resolve())
+    if data.get("schema_version") != HUMAN_REVIEW_SCHEMA and data.get("schema") != HUMAN_REVIEW_SCHEMA:
+        raise ValueError(f"--human-review-evidence 不是 {HUMAN_REVIEW_SCHEMA} 凭据")
+    return True
+
+
 def scoped_text(sheets: dict[str, str], name_terms: tuple[str, ...]) -> str:
     selected = [text for name, text in sheets.items() if any(term in name for term in name_terms)]
     if selected:
@@ -97,6 +127,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="检查管网用户可见汇总是否暴露必要业务维度")
     parser.add_argument("--inference", required=True, type=Path)
     parser.add_argument("--summary", required=True, type=Path)
+    parser.add_argument("--human-review-evidence", type=Path,
+                        help=f"可选：{HUMAN_REVIEW_SCHEMA} 人工复核凭据；给出后才允许汇总出现人工裁定/确认用语")
     args = parser.parse_args()
     errors: list[str] = []
     checks: dict[str, bool] = {}
@@ -105,6 +137,23 @@ def main() -> int:
         sheets = summary_text(args.summary.resolve())
         all_text = "\n".join(f"{name}\n{text}" for name, text in sheets.items())
         metrics = inference.get("metrics", {})
+
+        # 登记 20261014-2103：未运行必需校验器、未读取必需资料时必须在首段写明并降级，不能让读者当成已通过。
+        opening = first_section(sheets)
+        checks["validator_run_statement"] = has_group(opening, VALIDATOR_STATEMENT_TERMS)
+        if not checks["validator_run_statement"]:
+            errors.append("用户汇总首段缺少必需校验器运行情况说明：须写明 validate_minimum_result、validate_pipe_result "
+                          "是否运行及结果；未运行或未通过时成果不得标为可交付")
+
+        # 登记 20261014-2103：模型判断只能写成"模型判断/模型工作识别"，人工用语须有人工复核凭据。
+        if human_review_evidence_present(args.human_review_evidence):
+            checks["human_decision_terms"] = True
+        else:
+            misused = sorted(set(HUMAN_DECISION_TERMS.findall(all_text)))
+            checks["human_decision_terms"] = not misused
+            if misused:
+                errors.append("用户汇总没有人工复核凭据却使用人工结论用语: " + "、".join(misused)
+                              + "；模型做出的判断只能写成\"模型判断\"或\"模型工作识别\"")
         pipe_text = scoped_text(sheets, ("管道长度", "DN分层", "管网长度"))
         checks["pipe_length_dimensions"] = all(
             has_group(pipe_text, group)

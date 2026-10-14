@@ -1,0 +1,32 @@
+{
+  "fixture_version": "qto-rebar-explicit-schedule-fixture/1.0",
+  "purpose": "只验证已核定钢筋表进入确定性计算后的根数、中心线展开长度和理论重量守恒，不代表青海项目采用量。",
+  "scenario": "等效独立基础底部双向直筋钢筋表",
+  "material": {
+    "grade": "HRB400",
+    "diameter_mm": 14,
+    "density_kg_m3": 7850,
+    "density_basis": "等效测试显式输入；用于验证圆截面几何理论质量公式"
+  },
+  "bar_groups": [
+    {
+      "schedule_mark": "EQ-DJ01-B-X",
+      "position": "底部X向",
+      "count": 8,
+      "developed_length_each_m": 1.22,
+      "length_basis": "等效钢筋表已明确的单根中心线展开长度"
+    },
+    {
+      "schedule_mark": "EQ-DJ01-B-Y",
+      "position": "底部Y向",
+      "count": 8,
+      "developed_length_each_m": 1.22,
+      "length_basis": "等效钢筋表已明确的单根中心线展开长度"
+    }
+  ],
+  "limitations": [
+    "根数和单根长度是测试夹具的显式钢筋表字段，不是由间距、基础尺寸或保护层推导。",
+    "该夹具不验证22G101-3具体构造、底板缩短、标注归属、锚固搭接或项目清单口径。",
+    "所有结果采用角色为reference，不得写入项目采用量或报价数量。"
+  ]
+}

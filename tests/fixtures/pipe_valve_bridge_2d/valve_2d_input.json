@@ -1,0 +1,130 @@
+{
+  "schema_version": "qto-pipe-network-inference-input/1.2",
+  "network_id": "SYNTHETIC-CONNECTION-SCOPE",
+  "unit": "m",
+  "parameters": {
+    "snap_tolerance": 0.001,
+    "gap_max": 0.3,
+    "terminal_attach_max": 0.1,
+    "valve_attach_max": 0.3
+  },
+  "object_selection": {
+    "audit_id": "SYNTHETIC",
+    "status": "READY",
+    "candidate_count": 3,
+    "included_count": 3,
+    "excluded_count": 0,
+    "unresolved_count": 0,
+    "included_segment_ids": [
+      "LEFT",
+      "RIGHT",
+      "NEAR"
+    ],
+    "source_ids": [
+      "EV-SYNTHETIC"
+    ],
+    "anomaly_groups": []
+  },
+  "segments": [
+    {
+      "segment_id": "LEFT",
+      "system": "废水",
+      "start": [
+        0,
+        0
+      ],
+      "end": [
+        0.9,
+        0
+      ],
+      "length": 0.9,
+      "source_ids": [
+        "EV-LEFT"
+      ],
+      "dn_seeds": [
+        {
+          "dn": "DN25",
+          "evidence_level": "confirmed",
+          "source_id": "EV-DN-LEFT"
+        }
+      ]
+    },
+    {
+      "segment_id": "RIGHT",
+      "system": "废水",
+      "start": [
+        1.1,
+        0
+      ],
+      "end": [
+        2,
+        0
+      ],
+      "length": 0.8999999999999999,
+      "source_ids": [
+        "EV-RIGHT"
+      ],
+      "dn_seeds": []
+    },
+    {
+      "segment_id": "NEAR",
+      "system": "废水",
+      "start": [
+        0.8,
+        0.2
+      ],
+      "end": [
+        1.2,
+        0.2
+      ],
+      "length": 0.3999999999999999,
+      "source_ids": [
+        "EV-NEAR"
+      ],
+      "dn_seeds": [
+        {
+          "dn": "DN65",
+          "evidence_level": "confirmed",
+          "source_id": "EV-DN-NEAR"
+        }
+      ]
+    }
+  ],
+  "terminals": [],
+  "valves": [
+    {
+      "valve_id": "V",
+      "system": "废水",
+      "point": [
+        1,
+        0
+      ],
+      "valve_type": "检查口",
+      "instance_level": "inferred",
+      "source_id": "EV-VALVE"
+    }
+  ],
+  "roots": [],
+  "endpoint_handoff": {
+    "handoff_id": "SYNTHETIC-HANDOFF",
+    "required": false,
+    "source_instance_count": 0,
+    "delivered_count": 0,
+    "not_applicable_count": 0,
+    "unresolved_count": 0,
+    "source_id": "EV-SYNTHETIC-HANDOFF",
+    "reason": "等效网络测试；端口在本测试内直接给定"
+  },
+  "dn_match_candidates": [],
+  "dn_match_policy": {
+    "policy_id": "SYNTHETIC-POLICY",
+    "detected_candidate_count": 0,
+    "source_ids": [
+      "EV-SYNTHETIC-POLICY"
+    ],
+    "thresholds": {
+      "max_distance": 0.1
+    },
+    "sensitivity_scenarios": []
+  }
+}

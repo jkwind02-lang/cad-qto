@@ -14,7 +14,7 @@ from .native_decode import NativeReader,parse_native,SUPPORTED_CLASSES
 from .basic_data import usable_data,transform_data
 from .bitstream import ParseError
 
-VERSION='0.5.1-native-fields-inline'
+VERSION='0.5.2-native-fields-inline'  # 0.5.1 decoder; 0.5.2 only excludes AutoCAD internal proxy objects
 
 def sha_file(path):
     with Path(path).open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
@@ -173,8 +173,40 @@ def referenced_records(doc,objects):
             if is_pointer_code(tag.code) and tag.code!=330 and tag.value!='0':queue.append(tag.value)
     return records,blocks,relations,issues
 
+INTERNAL_PROXY_CLASS_PREFIXES=('ACDB','ACAD_')
+
+
+def proxy_class_name(entity,doc):
+    """Registered class name of a proxy (code 91 -> CLASSES), without decoding its payload."""
+    tags=getattr(entity,'acdb_proxy_entity',None)
+    if tags is None:tags=TagCollector.dxftags(entity,dxfversion=doc.dxfversion)
+    ids=[t.value for t in tags if t.code==91]
+    class_id=ids[0] if len(ids)==1 and isinstance(ids[0],int) else None
+    classes=list(doc.classes)
+    cls=classes[class_id-500] if class_id is not None and 0<=class_id-500<len(classes) else None
+    return cls.dxf.name if cls else None
+
+
+def internal_proxy_object_class(entity):
+    """AutoCAD's own support objects written as ACAD_PROXY_OBJECT by non-AutoCAD exporters.
+
+    ODA writes dynamic-block and associativity support records (ACDB_DYNAMICBLOCKPURGEPREVENTER_VERSION,
+    ACDBASSOCNETWORK, ACAD_EVALUATION_GRAPH, ...) as proxies; AutoCAD writes them under their real
+    class names. They are never Tianzheng components, so they stay in class_catalog only. Unresolved
+    classes are kept: an unknown payload is retained rather than dropped.
+    """
+    if entity.dxftype()!='ACAD_PROXY_OBJECT':return None
+    doc=getattr(entity,'doc',None)
+    if doc is None:return None
+    name=proxy_class_name(entity,doc)
+    if name and name.upper().startswith(INTERNAL_PROXY_CLASS_PREFIXES):return name
+    return None
+
+
 def is_native_entity(entity):
-    return entity.dxftype() in ('ACAD_PROXY_ENTITY','ACAD_PROXY_OBJECT') or entity.dxftype().startswith('TCH_')
+    if entity.dxftype().startswith('TCH_'):return True
+    if entity.dxftype() not in ('ACAD_PROXY_ENTITY','ACAD_PROXY_OBJECT'):return False
+    return internal_proxy_object_class(entity) is None
 
 
 def decode_entity(e,doc):
@@ -217,7 +249,12 @@ def decode_entity(e,doc):
 def read_document(doc):
     from .api import read_native_entity
     classes=list(doc.classes)
-    objects=[read_native_entity(e) for e in doc.entitydb.values() if e.is_alive and is_native_entity(e)]
+    objects=[];excluded=Counter()
+    for e in doc.entitydb.values():
+        if not e.is_alive:continue
+        internal=internal_proxy_object_class(e)
+        if internal:excluded[internal]+=1;continue
+        if is_native_entity(e):objects.append(read_native_entity(e))
     referenced,blocks,relations,reference_issues=referenced_records(doc,objects)
     for obj in objects:
         symbol_refs={key:value for key,value in obj['decoded'].get('named_properties',{}).items()
@@ -228,11 +265,14 @@ def read_document(doc):
             'primitive_records_path':'referenced_records', 'coordinates':'source block coordinates'} for key,ref in symbol_refs.items()}
     instances,instance_issues=instance_records(doc,objects)
     return {'schema':'tianzheng-foundation/0.5','reader_version':VERSION,
-        'scope':'all proxy and TCH records, their occurrence transforms, retained payloads and referenced records; no quantity or viewport filtering',
+        'scope':'all proxy entities and TCH records, their occurrence transforms, retained payloads and referenced records; no quantity or viewport filtering; AutoCAD internal support objects written as ACAD_PROXY_OBJECT are counted but not retained',
         'class_catalog':[{'name':c.dxf.name,'cpp_class':c.dxf.cpp_class_name,'application':c.dxf.app_name} for c in classes],
+        'excluded_internal_proxy_objects':{'rule':'ACAD_PROXY_OBJECT whose registered class name starts with ACDB or ACAD_ (dynamic-block, associativity and evaluation-graph support objects; ODA exports them as proxies)',
+            'count':sum(excluded.values()),'classes':dict(sorted(excluded.items()))},
         'objects':objects,'instances':instances,'referenced_records':referenced,'referenced_blocks':blocks,
         'reference_relations':relations,'reference_issues':reference_issues,'instance_issues':instance_issues,
         'summary':{'object_records':len(objects),'classes':dict(Counter(o['class_name'] for o in objects)),
+            'excluded_internal_proxy_objects':sum(excluded.values()),
             'decoded_statuses':dict(Counter(o['decoded']['status'] for o in objects)),
             'properties_complete':sum(o['read_state']['properties_complete'] for o in objects),
             'derived_serialization_complete':sum(o['read_state']['derived_serialization_complete'] for o in objects),
