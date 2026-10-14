@@ -92,11 +92,14 @@ def test_invalid_boundary_declarations_are_rejected(tmp_path, bad):
 
 
 PS = shutil.which('pwsh') or shutil.which('powershell')
+# The caller prefers pwsh but falls back to Windows PowerShell 5.1, so the exporter must work on both.
+SHELLS = [s for s in dict.fromkeys([shutil.which('pwsh'), shutil.which('powershell')]) if s]
 
 
 @pytest.mark.skipif(sys.platform != 'win32' or not PS, reason='Windows PowerShell export integration')
+@pytest.mark.parametrize('shell', SHELLS, ids=lambda s: Path(s).stem)
 @pytest.mark.parametrize('mode', ['success', 'failure', 'timeout', 'existing', 'truncated', 'unclosed', 'bad_pair'])
-def test_export_unicode_paths_source_protection_and_failure_atomicity(tmp_path, mode):
+def test_export_unicode_paths_source_protection_and_failure_atomicity(tmp_path, mode, shell):
     folder = tmp_path/'中文路径 带空格'; folder.mkdir()
     source = folder/'原始 图纸.dwg'; source.write_bytes(b'authoritative-dwg-fixture')
     target = folder/'交换 成果.dxf'
@@ -128,7 +131,7 @@ function Start-Process {
 }
 & $Exporter -SourceDwg $Source -OutputDxf $Target -ExportBackend coreconsole -TimeoutSeconds 1
 ''', encoding='utf-8-sig')
-    run = subprocess.run([PS, '-NoProfile', '-File', str(wrapper),
+    run = subprocess.run([shell, '-NoProfile', '-File', str(wrapper),
                           str(ROOT/'skills/_qto-shared-evidence/scripts/export_dwg_exchange_dxf.ps1'),
                           str(source), str(target), mode], capture_output=True)
     assert (source.read_bytes(), source.stat().st_mtime_ns) == before
@@ -142,8 +145,9 @@ function Start-Process {
 
 
 @pytest.mark.skipif(sys.platform != 'win32' or not PS, reason='Windows export integration')
+@pytest.mark.parametrize('shell', SHELLS, ids=lambda s: Path(s).stem)
 @pytest.mark.parametrize('backend',['oda','oda-audit'])
-def test_oda_only_opens_staged_copy_and_records_audit(tmp_path,backend):
+def test_oda_only_opens_staged_copy_and_records_audit(tmp_path,backend,shell):
     source=tmp_path/'original.dwg';source.write_bytes(b'drawing')
     target=tmp_path/'converted.dxf';wrapper=tmp_path/'oda-probe.ps1'
     wrapper.write_text(r'''
@@ -164,7 +168,7 @@ function Start-Process {
 }
 & $Exporter -SourceDwg $Source -OutputDxf $Target -ExportBackend $Backend
 ''',encoding='utf-8-sig')
-    p=subprocess.run([PS,'-NoProfile','-File',str(wrapper),str(ROOT/'skills/_qto-shared-evidence/scripts/export_dwg_exchange_dxf.ps1'),str(source),str(target),backend],capture_output=True)
+    p=subprocess.run([shell,'-NoProfile','-File',str(wrapper),str(ROOT/'skills/_qto-shared-evidence/scripts/export_dwg_exchange_dxf.ps1'),str(source),str(target),backend],capture_output=True)
     assert p.returncode==0,p.stdout+p.stderr
     assert source.read_bytes()==b'drawing' and target.exists()
     receipt=json.loads(Path(str(target)+'.export.json').read_text(encoding='utf-8'))

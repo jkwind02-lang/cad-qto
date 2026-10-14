@@ -1,0 +1,3 @@
+#!/bin/sh
+# cad-qto: pushed commits need a passing full-regression record for their exact tree fingerprint.
+exec python "$(git rev-parse --show-toplevel)/maintenance/git_hook_checks.py" pre-push

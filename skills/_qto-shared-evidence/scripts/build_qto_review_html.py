@@ -5,6 +5,21 @@ from html.parser import HTMLParser
 from pathlib import Path
 from qto_review_contract import normalize_view,validate_feedback,empty_feedback,extract_json_file
 
+def plugin_version(root):
+ """Common business version: release source record first, else both host manifests; a conflict is reported, never hidden."""
+ root=Path(root);source=root/'发布来源.json'
+ if source.exists():
+  version=json.loads(source.read_text(encoding='utf-8-sig')).get('business_version')
+  if not isinstance(version,str) or not version.strip():raise ValueError('发布来源.json缺少business_version')
+  return version
+ found={}
+ for host,rel in (('Codex','.codex-plugin/plugin.json'),('Claude','.claude-plugin/plugin.json')):
+  path=root/rel
+  if path.exists():found[host]=str(json.loads(path.read_text(encoding='utf-8-sig')).get('version','')).split('+')[0]
+ if not found:return '未提供'
+ if len(set(found.values()))>1:raise ValueError('两份插件清单的业务版本不一致：'+'，'.join(f'{k}={v}' for k,v in found.items()))
+ return next(iter(found.values())) or '未提供'
+
 def build(data_path,output,feedback_path=None,feedback_url=None,feedback_backup_url=None,feedback_provider=None):
  data_path=Path(data_path).resolve();output=Path(output).resolve()
  if output.exists():raise ValueError('目标HTML已存在；请使用新版本名，保护已有批注')
@@ -27,8 +42,7 @@ def build(data_path,output,feedback_path=None,feedback_url=None,feedback_backup_
  if backup and (not endpoint or backup==endpoint):raise ValueError('备用地址需要不同的主站地址')
  provider=feedback_provider or ('tencent' if backup else 'cloudflare')
  if provider not in ('tencent','cloudflare'):raise ValueError('不支持的反馈主站类型')
- manifest=Path(__file__).resolve().parents[3]/'.codex-plugin/plugin.json'
- version=json.loads(manifest.read_text(encoding='utf-8-sig')).get('version','未提供') if manifest.exists() else '未提供'
+ version=plugin_version(Path(__file__).resolve().parents[3])
  config={'url':endpoint,'provider':provider,'backup_url':backup,'client_id':str(uuid.uuid4()),'plugin_version':version}
  template=(assets/'review-shell.html').read_text(encoding='utf-8')
  raw=json.dumps(view,ensure_ascii=False,separators=(',',':')).encode();payload='\n'.join(textwrap.wrap(base64.b64encode(gzip.compress(raw,mtime=0)).decode(),180))

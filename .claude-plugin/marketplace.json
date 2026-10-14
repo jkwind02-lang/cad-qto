@@ -1,0 +1,17 @@
+{
+  "name": "cad-qto-local",
+  "owner": {
+    "name": "Local developer"
+  },
+  "metadata": {
+    "description": "cad-qto 本机发布目录市场：由同步脚本从插件仓库已提交版本提取生成，不手工修改。"
+  },
+  "plugins": [
+    {
+      "name": "cad-qto",
+      "source": "./",
+      "description": "CAD基础读取、全专业算量与明细复核",
+      "version": "0.3.0"
+    }
+  ]
+}

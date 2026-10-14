@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 266,
+  "runtime_file_count": 271,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -29,6 +29,11 @@
       "path": "_qto-shared-evidence/assets/review/review-shell.html",
       "sha256": "6212376160568b6a95efa12a5218953688d9c0798421165177f7ac09fedc2a20",
       "bytes": 15417
+    },
+    {
+      "path": "_qto-shared-evidence/assets/插件问题登记模板.md",
+      "sha256": "8f1b8ac12a66e857b691f10b5603104094998e383cf5a89a05815fac8519f8da",
+      "bytes": 564
     },
     {
       "path": "_qto-shared-evidence/assets/模型工作识别记录模板.json",
@@ -106,6 +111,11 @@
       "bytes": 6217
     },
     {
+      "path": "_qto-shared-evidence/references/插件问题登记.md",
+      "sha256": "b9f39e8a6b835207a90c9f203d9f37f1b285fce9d2ff655302ecacd0cf5434d5",
+      "bytes": 2950
+    },
+    {
       "path": "_qto-shared-evidence/references/模型工作识别记录格式.md",
       "sha256": "f78162acbf6a0e171aac47e232a0051267a229a1f082c9d295e35834ff275ebf",
       "bytes": 3530
@@ -157,8 +167,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/build_qto_review_html.py",
-      "sha256": "43cf2c33d6f707282ea8147df652acb64149d094bdd0a32e10aa703de39df554",
-      "bytes": 6026
+      "sha256": "bfa688aa5a7ed745fc1a694072f251e5011ce28c3be15657170a459b37414176",
+      "bytes": 6835
     },
     {
       "path": "_qto-shared-evidence/scripts/cad_native/__init__.py",
@@ -202,8 +212,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/export_dwg_exchange_dxf.ps1",
-      "sha256": "9cd0c1b71b7aabe78e016272e1da974d3b9e2d12a8225eea1a53a895bed85dec",
-      "bytes": 14117
+      "sha256": "7a05f2ed6c759c2466f90f72201cb5f0d0880257be22bddc649e6451a4507154",
+      "bytes": 14120
     },
     {
       "path": "_qto-shared-evidence/scripts/extract_cad_neutral.py",
@@ -219,6 +229,11 @@
       "path": "_qto-shared-evidence/scripts/model_recognition_basis.py",
       "sha256": "6f6cd8f4b427859bd091996788fbedacd01e09d313088ecb2de7bf7611d8e98f",
       "bytes": 6685
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_actor_identity.py",
+      "sha256": "18b6805167e0070e73a1d479d056e2dbf0f74e24ed8005e4a0e19048ff5632ac",
+      "bytes": 1209
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_cad_geometry.py",
@@ -239,6 +254,11 @@
       "path": "_qto-shared-evidence/scripts/qto_elevation_facts.py",
       "sha256": "783a955729e4f63408de0d2bce4e3158ef135e0c1ec9e4490ecc0a92175803a8",
       "bytes": 26117
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_human_review_evidence.py",
+      "sha256": "d7380a0a28dae03017e44b37d5dc415435f593d9813d7564251ae6eb338a4b08",
+      "bytes": 9709
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_instance_requirements.py",
@@ -292,8 +312,13 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/recompute_qto_dependencies.py",
-      "sha256": "13f4427b8d37538aa9bdb8c71537429c7ba1d883f6d64f9ca03c2ec588208b4d",
-      "bytes": 15337
+      "sha256": "04838a844452421c065fe54f5e1250ee1a9f284694acc6ac7816a5118a2790cf",
+      "bytes": 17338
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/register_plugin_issue.py",
+      "sha256": "65438495ce04d8fa0cc688f70ebf7f11feabf915949c74693d60c6a22b1d45e0",
+      "bytes": 3407
     },
     {
       "path": "_qto-shared-evidence/scripts/validate_minimum_result.py",
@@ -317,8 +342,8 @@
     },
     {
       "path": "cad-basic-read/SKILL.md",
-      "sha256": "7f9109cbf52962d9eb5f3f00341abc9d431a8370c1b4dd264d186b37abbda0bf",
-      "bytes": 2572
+      "sha256": "59e85e3a4980237fdbfa53d63852f9d0c2b86eb63f07dd6dde16e648586e431e",
+      "bytes": 2732
     },
     {
       "path": "qto-components-points/agents/openai.yaml",
@@ -377,8 +402,8 @@
     },
     {
       "path": "qto-components-points/scripts/build_component_instances_from_neutral.py",
-      "sha256": "c7aa7936369f095b773d6e86c51755e9983e7b7918a1eb676673fb26b3885b43",
-      "bytes": 36353
+      "sha256": "06f03177c096735eeefe4664f313f4b82fc246a010798a80ae80a3492b0ab503",
+      "bytes": 36334
     },
     {
       "path": "qto-components-points/scripts/build_network_endpoint_handoff.py",
@@ -392,8 +417,8 @@
     },
     {
       "path": "qto-components-points/SKILL.md",
-      "sha256": "c5c2b16a7b896c7fecce2fcd3c3fcc726d69ea8e76ea8a26476e6e1ebafdcd03",
-      "bytes": 6464
+      "sha256": "7e0ef21ab89def38e3d59a7d3162d06a05836de474836e474d491daf7c7d8de8",
+      "bytes": 6624
     },
     {
       "path": "qto-concrete-formwork/agents/openai.yaml",
@@ -472,8 +497,8 @@
     },
     {
       "path": "qto-concrete-formwork/SKILL.md",
-      "sha256": "0161b2614c7253f112626ee4fd5fab1ff1b6f6b34ead522d9602a62aa08dd038",
-      "bytes": 9473
+      "sha256": "2b450b94d5cccbddcc02ecc9d3bef4d699fb65acb5b16f17777f818d19f2901b",
+      "bytes": 9633
     },
     {
       "path": "qto-coordinator/agents/openai.yaml",
@@ -507,8 +532,8 @@
     },
     {
       "path": "qto-coordinator/SKILL.md",
-      "sha256": "2b6f4730cd06e90a062e984fe2382cfd29305f41f17369a9e330741e8552ef02",
-      "bytes": 8154
+      "sha256": "0a17dcf5c5a1d2a07d2cf2dcb90904748e55f137a652f6746642cee739e6bb5b",
+      "bytes": 8314
     },
     {
       "path": "qto-duct-air-systems/agents/openai.yaml",
@@ -557,8 +582,8 @@
     },
     {
       "path": "qto-duct-air-systems/SKILL.md",
-      "sha256": "55e69308a14d3b07eb9e5569857ca4f595d446b9f98d581b506d2771fd86cac7",
-      "bytes": 5042
+      "sha256": "7ab9c0306479d4b9787d5cce69f59b96085799c476e008c29c37d19f8e3d0252",
+      "bytes": 5202
     },
     {
       "path": "qto-earthwork-terrain/agents/openai.yaml",
@@ -637,8 +662,8 @@
     },
     {
       "path": "qto-earthwork-terrain/SKILL.md",
-      "sha256": "4155c644f3390603364e49af8bc289bce14f55a89179a1bcbcc25a9b4cab627f",
-      "bytes": 10237
+      "sha256": "cce6229c65c42ac6a7933b621a820b5ad493f5d6629a9707a4cd8b22f9accd0c",
+      "bytes": 10397
     },
     {
       "path": "qto-electrical-routes/agents/openai.yaml",
@@ -692,8 +717,8 @@
     },
     {
       "path": "qto-electrical-routes/SKILL.md",
-      "sha256": "c2a500639b009d0e751708268d759f5b567791cd80c7684bbbb31b45f8969fe1",
-      "bytes": 5642
+      "sha256": "c2c75513707228bb0d161c55d303a99222d4847b0208998d917606e71919b615",
+      "bytes": 5802
     },
     {
       "path": "qto-framing-supports/agents/openai.yaml",
@@ -742,8 +767,8 @@
     },
     {
       "path": "qto-framing-supports/SKILL.md",
-      "sha256": "41b5346713c006e3aa5025e3c36313a8bc59fa834c2f5154a7a73e680fb8cfc3",
-      "bytes": 5090
+      "sha256": "7f8357dacf56ccdba6874e18e16afb19c7565161a5308be66737e382f1712c2a",
+      "bytes": 5250
     },
     {
       "path": "qto-masonry-secondary/agents/openai.yaml",
@@ -792,8 +817,8 @@
     },
     {
       "path": "qto-masonry-secondary/SKILL.md",
-      "sha256": "fa13455af4efd52abee96b4b300f99b84e5a8079937dcfbf23957867a16abe03",
-      "bytes": 5499
+      "sha256": "f9d58c769bab139f1e2b22d4c68a98f82bc659a67b75c877caf48571e7f4450f",
+      "bytes": 5659
     },
     {
       "path": "qto-piles-groundwork/agents/openai.yaml",
@@ -842,8 +867,8 @@
     },
     {
       "path": "qto-piles-groundwork/SKILL.md",
-      "sha256": "e8517ae280468553be5c608ad0824f3f19e52eb477c945a0bdaae2b901360b3d",
-      "bytes": 4860
+      "sha256": "8dc95394a1beb54f2077a7b1e242164feeb31268fb790e23635ab3844e1ce307",
+      "bytes": 5020
     },
     {
       "path": "qto-pipe-networks/agents/openai.yaml",
@@ -977,8 +1002,8 @@
     },
     {
       "path": "qto-pipe-networks/scripts/build_pipe_inference_input.py",
-      "sha256": "77aa9a12bfc6e2882ccd9b4b03a29583d3b00dd76484303fef62643ed1e7acd0",
-      "bytes": 67861
+      "sha256": "bb764c893e29514c27145910b0fb14e11b2d0c4ef879d0e678857acf6d154651",
+      "bytes": 67842
     },
     {
       "path": "qto-pipe-networks/scripts/infer_pipe_network.py",
@@ -1022,8 +1047,8 @@
     },
     {
       "path": "qto-pipe-networks/SKILL.md",
-      "sha256": "e761fa87c61283d9110b11aae4ac72781a448aab923af9887f6ea8735b8f1abc",
-      "bytes": 14877
+      "sha256": "d53c5b9598eb5e194202110354980948429833dbeb07d0d72b4769708d23f904",
+      "bytes": 15037
     },
     {
       "path": "qto-rebar/agents/openai.yaml",
@@ -1092,8 +1117,8 @@
     },
     {
       "path": "qto-rebar/SKILL.md",
-      "sha256": "d69b7c63887dba8f42b91116eb114371cde4ba96a391506a17f1a2cf4ed79c48",
-      "bytes": 11354
+      "sha256": "7ee4af541c96eb582b2dbb4bba3f42ef01eb263daf34645078e5a078b9b90614",
+      "bytes": 11514
     },
     {
       "path": "qto-roads-siteworks/agents/openai.yaml",
@@ -1142,8 +1167,8 @@
     },
     {
       "path": "qto-roads-siteworks/SKILL.md",
-      "sha256": "6979d18a5a3f9a0188e73b466d9d1f0f653abbf7910f9f439b7bd529b0569f98",
-      "bytes": 4976
+      "sha256": "2ad854ca6c4cc7d73a042495002d2d4c54ac71523a81c712153392a8bc4956e1",
+      "bytes": 5136
     },
     {
       "path": "qto-structural-steel/agents/openai.yaml",
@@ -1217,8 +1242,8 @@
     },
     {
       "path": "qto-structural-steel/SKILL.md",
-      "sha256": "577959a55a80c4ba23a838e55ab27851d17e88ffe81595136b43ed3b41747fc1",
-      "bytes": 11672
+      "sha256": "08da5112bdf692d1a7a5c05c470cd44abf86425d3b0bd755d584274affc45363",
+      "bytes": 11832
     },
     {
       "path": "qto-surfaces-envelope/agents/openai.yaml",
@@ -1332,8 +1357,8 @@
     },
     {
       "path": "qto-surfaces-envelope/SKILL.md",
-      "sha256": "2fa3510e94d43aa9b1024e45f26f5b2950381ae5091704fbd41e3887c284af51",
-      "bytes": 11499
+      "sha256": "153bf749286b008ce288654e66d2e45da099fe33cabf055daa2249214fe39943",
+      "bytes": 11659
     }
   ]
 }

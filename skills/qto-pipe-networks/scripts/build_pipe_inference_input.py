@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-eviden
 from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_entries, applies_to, recognition_basis, validate_working_basis
 
 import qto_cad_geometry as cad_geometry
+from qto_actor_identity import is_model_identity
 from qto_cad_source_contract import check_unit_factor, verify_source_file
 
 from qto_pipe_topology import RouteIndex, route_distance, project_route, geometry_parts, scale_route_geometry
@@ -40,7 +41,6 @@ CONFIRMATION_SOURCES = {
     "user_adjudication",
     "authoritative_project_document",
 }
-MODEL_ACTORS = {"model", "assistant", "codex", "llm", "ai"}
 
 
 class InputError(ValueError):
@@ -187,7 +187,7 @@ def load_adjudication_ledger(path: Path, expected_source_sha256: str) -> tuple[d
         if source_type not in CONFIRMATION_SOURCES:
             fail(f"{adjudication_id}.confirmation_source 不是允许的独立确认来源")
         confirmed_by = text(entry.get("confirmed_by"), f"{adjudication_id}.confirmed_by")
-        if confirmed_by.casefold() in MODEL_ACTORS:
+        if is_model_identity(confirmed_by):
             fail(f"{adjudication_id}.confirmed_by 不能是模型或助手")
         text(entry.get("source_id"), f"{adjudication_id}.source_id")
         evidence_ids = entry.get("evidence_ids")

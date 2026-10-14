@@ -12,6 +12,8 @@ import qto_cad_geometry as g
 import qto_pipe_topology as t
 from qto_spatial import PointIndex,BoundsIndex,nearby_pairs
 from recompute_qto_dependencies import recalculate,check_result_dependencies,digest
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from review_evidence_helpers import write_review
 
 
 def line(sid,a,b,space='plan',system='W',**extra):
@@ -239,10 +241,14 @@ def graph():
                  {'id':'surface','unit':'m²','variables':{'r':'radius','l':'total'},'expression':'2*3.141592653589793*r*l','rule_ids':['geometry']}]}
 
 
-def test_height_change_recomputes_transitive_quantities_and_invalidates_review():
+def test_height_change_recomputes_transitive_quantities_and_invalidates_review(tmp_path):
     d=graph();first=recalculate(d);values={r['id']:r for r in first['nodes']};assert values['total']['value']==pytest.approx(24.2)
-    for r in first['nodes']:r['review_state']='current'
-    d['nodes'][1]['value']=8.2;second=recalculate(d,first);values={r['id']:r for r in second['nodes']}
+    # Reviews are current only with human evidence (see test_approval_evidence.py); a bare 'current' is not inherited.
+    approvals=write_review(tmp_path,d['project_id'],first['nodes'])
+    for node in d['nodes']:node['approval']=approvals[node['id']]
+    first=recalculate(d,None,tmp_path);assert all(r['review_state']=='current' for r in first['nodes'])
+    for node in d['nodes']:del node['approval']
+    d['nodes'][1]['value']=8.2;second=recalculate(d,first,tmp_path,tmp_path);values={r['id']:r for r in second['nodes']}
     assert values['total']['value']==pytest.approx(25.2) and values['surface']['value']==pytest.approx(2*math.pi*.05*25.2)
     assert set(second['affected_nodes'])=={'high','vertical','total','surface'}
     assert set(second['stale_reviews'])=={'high','vertical','total','surface'}

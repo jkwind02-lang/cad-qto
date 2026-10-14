@@ -15,6 +15,8 @@ import math
 from pathlib import Path
 from collections import defaultdict, deque
 
+from qto_human_review_evidence import _SKIP as SKIP, approval_field_issues, verify_evidence
+
 SCHEMA='qto-calculation-graph/1.0'
 UNIT={'1':(1.,()),'m':(1.,(('L',1),)),'mm':(.001,(('L',1),)),'cm':(.01,(('L',1),)),
       'm2':(1.,(('L',2),)),'m²':(1.,(('L',2),)),'mm2':(1e-6,(('L',2),)),
@@ -99,7 +101,8 @@ def expression(text, variables):
     return value,dimension
 
 
-def recalculate(document,previous=None):
+def recalculate(document,previous=None,base_dir=None,previous_base_dir=None):
+    """base_dir/previous_base_dir resolve relative evidence paths; never the process working directory."""
     if document.get('schema')!=SCHEMA:raise ValueError('依赖计算契约版本无效')
     project=document.get('project_id')
     if not isinstance(project,str) or not project.strip():raise ValueError('缺少project_id')
@@ -126,7 +129,7 @@ def recalculate(document,previous=None):
             degree[child]-=1
             if degree[child]==0:queue.append(child)
     if len(order)!=len(nodes):raise ValueError('计算依赖成环:'+','.join(k for k in nodes if degree[k]))
-    evaluated={};output=[];changed=[];affected=[];stale=[];errors=[]
+    evaluated={};output=[];changed=[];affected=[];stale=[];errors=[];issues=[]
     for key in order:
         r=nodes[key];unit=r.get('unit')
         if unit not in UNIT:raise ValueError(key+'单位未支持或未显式换算:'+str(unit))
@@ -167,23 +170,36 @@ def recalculate(document,previous=None):
         level=min([own_level]+[n['quantity_level'] for n in dependencies],key=RANK.get) if value is not None else '未决量'
         if old is None or old.get('own_fingerprint')!=own_fingerprint:changed.append(key)
         if old is None or old.get('fingerprint')!=fingerprint:affected.append(key)
-        approval=r.get('approval') or {}
-        review='unreviewed'
-        if approval:
-            if approval.get('fingerprint')==fingerprint and approval.get('actor') not in (None,'model','codex','assistant','ai') and value is not None:
-                review='current'
-            else:review='stale';stale.append(key)
+        # A review is current only with verifiable human evidence bound to this node, fingerprint and value.
+        # Invalid approvals keep the computed value but are reported; nothing is zeroed or blocked.
+        approval=r.get('approval');review='unreviewed';evidence=None
+        if approval is not None:
+            problems=approval_field_issues(approval)
+            if not problems:
+                claimed=approval['fingerprint']==fingerprint and value is not None
+                evidence,problems=verify_evidence(approval['evidence'],base_dir=base_dir,project_id=project,node_id=key,fingerprint=approval['fingerprint'],
+                    unit=unit,value=value if claimed else SKIP,reviewer=approval['reviewer'],reviewed_at=approval['reviewed_at'])
+            if problems:issues.append({'node_id':key,'source':'approval','issues':problems});evidence=None
+            elif approval['fingerprint']==fingerprint and value is not None:review='current'
+            else:review='stale';stale.append(key);evidence=None
         elif old and old.get('review_state')=='current':
-            if old.get('fingerprint')==fingerprint and value is not None:review='current'
-            else:review='stale';stale.append(key)
+            # Inheritance re-verifies the evidence file; an old 'current' without evidence is not a human review.
+            ref=old.get('review_evidence')
+            if not ref:problems=['旧结果的已复核状态没有人工复核凭据引用，不再继承']
+            else:evidence,problems=verify_evidence(ref,base_dir=previous_base_dir,project_id=project,node_id=key,fingerprint=old.get('fingerprint'),
+                    unit=old.get('unit'),value=old.get('value'),reviewer=ref.get('reviewer'),reviewed_at=ref.get('reviewed_at'))
+            if problems:issues.append({'node_id':key,'source':'inherited','issues':problems});evidence=None
+            elif old.get('fingerprint')==fingerprint and value is not None:review='current'
+            else:review='stale';stale.append(key);evidence=None
         row={'id':key,'unit':unit,'value':value,'status':status,'reason':reason,'quantity_level':level,
              'expression':r.get('expression'),'variables':refs,'dependency_values':{a:evaluated[k]['value'] for a,k in refs.items()},
              'source_ids':sids,'rule_ids':rids,'own_fingerprint':own_fingerprint,'fingerprint':fingerprint,'review_state':review,
-             'official_adoption':False}
+             'review_evidence':evidence,'official_adoption':False}
         evaluated[key]={**row,'si_value':None if value is None else value*factor,'dimensions':dimension};output.append(row)
     return {'schema':'qto-calculation-run/1.0','project_id':project,'input_fingerprint':digest(document),
-            'status':'REVIEW_REQUIRED' if any(r['status']=='BLOCKED' for r in output) or stale else 'CALCULATED',
+            'status':'REVIEW_REQUIRED' if any(r['status']=='BLOCKED' for r in output) or stale or issues else 'CALCULATED',
             'nodes':output,'changed_inputs_or_rules':changed,'affected_nodes':affected,'stale_reviews':stale,'errors':errors,
+            'approval_issues':issues,
             'removed_nodes':sorted(set(previous_rows)-set(nodes)),'evaluation_order':order,'computed_node_count':len(order),
             'business_adoption_allowed':False,'meaning':'按完整依赖重新计算并标识变化影响；不自动识别图纸变化，不自动升级正式采用'}
 
@@ -194,6 +210,7 @@ def markdown(run):
         esc=lambda x:str(x).replace('|','\\|').replace('\n',' ')
         lines.append('| '+ ' | '.join(esc(x) for x in (r['id'],'待确定' if r['value'] is None else format(r['value'],'.12g'),r['unit'],r['quantity_level'],r['review_state']))+' |')
     lines+=['','受影响节点：'+', '.join(run['affected_nodes']),'旧确认失效：'+', '.join(run['stale_reviews']),
+            '审批校验问题（不判为已复核，数量照常计算）：'+('; '.join(i['node_id']+'：'+'，'.join(i['issues']) for i in run.get('approval_issues',[])) or '无'),
             '','不同单位分别核对；未确定不按零计。结果不代表已获正式采用授权。']
     return '\n'.join(lines)+'\n'
 
@@ -233,10 +250,10 @@ def main():
         targets=[a.output,a.output.with_suffix('.md')]
         if any(t.exists() for t in targets):raise ValueError('输出已存在，请使用新版本文件名')
         data=json.loads(a.input.read_text(encoding='utf-8-sig'));old=json.loads(a.previous.read_text(encoding='utf-8-sig')) if a.previous else None
-        run=recalculate(data,old);a.output.parent.mkdir(parents=True,exist_ok=True)
+        run=recalculate(data,old,a.input.resolve().parent,a.previous.resolve().parent if a.previous else None);a.output.parent.mkdir(parents=True,exist_ok=True)
         a.output.write_text(json.dumps(run,ensure_ascii=False,indent=2,allow_nan=False)+'\n',encoding='utf-8')
         a.output.with_suffix('.md').write_text(markdown(run),encoding='utf-8')
-        print(json.dumps({'status':run['status'],'affected':len(run['affected_nodes']),'stale_reviews':len(run['stale_reviews']),'output':str(a.output)},ensure_ascii=False));return 0
+        print(json.dumps({'status':run['status'],'affected':len(run['affected_nodes']),'stale_reviews':len(run['stale_reviews']),'approval_issues':len(run['approval_issues']),'output':str(a.output)},ensure_ascii=False));return 0
     except (ValueError,OSError,KeyError,TypeError) as exc:
         print(json.dumps({'status':'INPUT_REQUIRED','error':str(exc)},ensure_ascii=False));return 2
 if __name__=='__main__':raise SystemExit(main())

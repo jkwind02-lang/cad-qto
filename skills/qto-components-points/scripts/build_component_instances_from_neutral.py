@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-eviden
 from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_entries, applies_to, recognition_basis
 
 import qto_cad_geometry as cad_geometry
+from qto_actor_identity import is_model_identity
 
 VERSION = "qto-component-neutral-adapter/1.2.0"
 PROFILE_SCHEMA = "qto-component-recognition-profile/1.0"
@@ -34,7 +35,6 @@ CONFIRMATION_SOURCES = {
     "user_adjudication",
     "authoritative_project_document",
 }
-MODEL_ACTORS = {"model", "assistant", "codex", "llm", "ai"}
 
 
 class InputError(ValueError):
@@ -147,7 +147,7 @@ def load_ledger(path: Path, expected_source: str) -> tuple[dict[str, Any], dict[
             fail(f"{adjudication_id}.status 必须为 active")
         if text(entry.get("confirmation_source"), f"{adjudication_id}.confirmation_source") not in CONFIRMATION_SOURCES:
             fail(f"{adjudication_id}.confirmation_source 不是允许的独立确认来源")
-        if text(entry.get("confirmed_by"), f"{adjudication_id}.confirmed_by").casefold() in MODEL_ACTORS:
+        if is_model_identity(text(entry.get("confirmed_by"), f"{adjudication_id}.confirmed_by")):
             fail(f"{adjudication_id}.confirmed_by 不能是模型或助手")
         text(entry.get("source_id"), f"{adjudication_id}.source_id")
         evidence_ids = entry.get("evidence_ids")

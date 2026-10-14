@@ -19,6 +19,8 @@ SHARED = ROOT / "skills/_qto-shared-evidence/scripts"
 sys.path.insert(0, str(SHARED))
 from qto_elevation_facts import SCHEMA, evaluate_elevation_link
 from qto_pipe_topology import prepare_network
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from review_evidence_helpers import inherited_refs, write_review
 
 
 def ev(label="section"):
@@ -243,7 +245,7 @@ def test_path_hash_binds_source_bytes(tmp_path):
         evaluate_elevation_link(spec)
 
 
-def test_existing_dependency_engine_invalidates_only_related_reviews():
+def test_existing_dependency_engine_invalidates_only_related_reviews(tmp_path):
     spec = outer(base())
     observations = spec["sources"][0]["facts"]
     spec["sources"] = []
@@ -259,8 +261,12 @@ def test_existing_dependency_engine_invalidates_only_related_reviews():
     spec["route"]["source_ids"] = ["source:route-shape"]
     first = evaluate_elevation_link(spec)
     previous = copy.deepcopy(first["calculation_run"])
-    for node in previous["nodes"]:
+    # A previous 'current' is inherited only with verifiable human evidence (see test_approval_evidence.py).
+    reviewed = [node for node in previous["nodes"] if node["value"] is not None]
+    refs = inherited_refs(tmp_path, write_review(tmp_path, previous["project_id"], reviewed))
+    for node in reviewed:
         node["review_state"] = "current"
+        node["review_evidence"] = refs[node["id"]]
     conversion["outer_diameter"]["value"] = 168.3
     od_source = next(s for s in spec["sources"] if s["id"] == "source:OD-from")
     od_source["facts"][0]["value"] = 168.3

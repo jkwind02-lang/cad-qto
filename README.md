@@ -1,12 +1,14 @@
 # CAD 算量插件
 
-按人工算量思路执行识图、测量、计算和回图复核的 Codex 插件，包含 **CAD基础读取入口、13 个专业 Skill、1 个协调入口和共享取证资源**。
+按人工算量思路执行识图、测量、计算和回图复核的插件，Claude Code 与 Codex 共用，包含 **CAD基础读取入口、13 个专业 Skill、1 个协调入口和共享取证资源**。
 
-当前运行包版本 **`0.2.0+codex.20261014.1`**。模型负责依据本次图纸识别对象与工程关系，程序负责提取事实、确定性计算和已编码约束检查。安装或合成测试通过，不代表所有专业已达到原图自动识别成熟状态，也不替代具体项目计量依据及专业复核。
+当前业务版本 **`0.3.0`**（双宿主改造，尚未发布安装；此前安装的是 `0.2.0+codex.20261014.1`）。模型负责依据本次图纸识别对象与工程关系，程序负责提取事实、确定性计算和已编码约束检查。安装或合成测试通过，不代表所有专业已达到原图自动识别成熟状态，也不替代具体项目计量依据及专业复核。
 
 **主分支 `main` 已统一当前各工作分支的有效修改。** 获取最新版直接下载或更新主分支即可，包含人工算量路径修复、全专业完整HTML反馈、无需反馈码上传，以及腾讯云HTML文件名恢复。原工作分支保留用于追溯；各分支核对及整合方式见[主分支整合记录](docs/主分支整合记录_20260920.md)。
 
 ## 本轮改进与复核入口
+
+2026-10-14起插件改为 Claude Code 与 Codex 共同维护：本仓库是唯一修改位置，维护规则见 [AGENTS.md](AGENTS.md) 与 [docs/维护/](docs/维护/README.md)；新增 Claude 清单与本地市场清单、维护锁、按提交提取的发布与安装核对工具、双宿主兼容检查；人工数量复核改为必须有用户复核凭据（[审批凭据契约](docs/维护/审批凭据契约.md)），DWG 转换脚本可在 Windows PowerShell 5.1 下运行。Codex 一侧的安装适配与验收由 Codex 接续。
 
 2026-10-14新增[CAD基础读取与天正原生字段](docs/天正基础读取接入_20261014.md)。`cad-basic-read` 只读取基础数据；公共中性提取器和实例工作台共用0.5.1读取包。实际活动实例验证与安装记录保存在本地，项目数据不进入插件。 本版1147项插件回归与68项基线回归通过；266个运行文件在开发源、仓库、安装源和缓存一致。已验证35个活动原生水系统实例及15个实际发现入口，整体读取缺口仍为PARTIAL。
 
@@ -67,22 +69,30 @@
 git clone https://github.com/jkwind02-lang/cad-qto.git
 ```
 
-仓库为私有，下载需要具备访问权限。根目录就是插件根目录，保留 `.codex-plugin/plugin.json` 和完整 `skills/`；不要只复制单个专业目录。
+仓库为私有，下载需要具备访问权限。根目录就是插件根目录，保留 `.codex-plugin/plugin.json`、`.claude-plugin/` 和完整 `skills/`；不要只复制单个专业目录。
 
-按当前宿主支持的本地插件流程注册并安装此目录；已有同名来源时先核对来源，避免覆盖其他插件。安装后确认实际版本、启用状态和运行路径，不能以GitHub更新替代本机安装验证。
+正式安装不直接装仓库工作区，而是先用 `python maintenance/release_package.py build --commit <提交号> --out <临时目录>` 从已提交版本提取发布包，再发布到本机发布目录后由各宿主安装（见[发布与安装](docs/维护/发布与安装.md)）：
+
+- Claude Code：`claude plugin marketplace add <发布目录>`，再 `claude plugin install cad-qto@cad-qto-local`；或用 `python maintenance/install_check.py claude-install` 完成安装与逐文件核对。开发调试可用 `claude --plugin-dir <仓库>` 临时加载。
+- Codex：按 Codex 的本地插件流程从发布目录安装（Codex 一侧的安装适配由 Codex 维护）。
+
+已有同名来源时先核对来源，避免覆盖其他插件。安装后确认实际版本、启用状态和运行路径，不能以GitHub更新替代本机安装验证。
 
 本仓库不附带用户级市场配置。[使用说明](使用说明.md)和[维护说明](维护说明.md)保留原发布记录；其中绝对路径属于原维护机器，其他电脑应使用实际路径。原始DWG转换依赖本机已有AutoCAD或Core Console，仓库不包含CAD软件。
 
 ## 仓库结构
 
 ```text
-.codex-plugin/plugin.json       当前插件版本
+AGENTS.md / CLAUDE.md           两个宿主共用的维护规则入口
+.codex-plugin/plugin.json       Codex 插件清单
+.claude-plugin/                 Claude 插件清单与本地市场清单
+.githooks/                      提交前与推送前检查（git config core.hooksPath .githooks）
 skills/cad-basic-read/          CAD基础读取入口
 skills/qto-*/                  13个专业和1个协调入口
 skills/_qto-shared-evidence/    共享取证、计算辅助、契约、HTML与运行说明
 tests/                         实际模块的合成工程算例与HTML回归
-docs/                          审查、修复和人工算量路径复核
-maintenance/                   运行文件清单维护工具
+docs/                          审查、修复和人工算量路径复核；docs/维护/ 为维护流程资料
+maintenance/                   运行清单、维护锁、发布提取、安装核对、登记整理等维护工具
 feedback-service/              可选的问题接收服务（需维护者独立部署）
 运行文件清单.json              当前运行文件的大小与SHA-256
 仓库发布核对.json              当前版本的验证范围和历史基线
