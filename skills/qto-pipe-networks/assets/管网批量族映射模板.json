@@ -26,8 +26,19 @@
     "declaration": {
       "raw_unit": "Millimeters",
       "annotation_object_ids": ["填写本图单位说明文字的中性record_id；图纸INSUNITS非0时删除整个declaration"],
-      "observation": "填写说明条款位置与原文",
-      "source_excerpt": "填写只含一种单位词的完整原句，可省略",
+      "applies_to": "coordinates（说明写的是绘图坐标）/ annotation_values（标注数值）/ pipe_length_elevation（管长标高），三选一",
+      "observation": "填写说明条款位置与整句原文",
+      "source_excerpt": "填写逐字原文，不得截断单位词，可省略",
+      "geometric_corroboration": [
+        {
+          "kind": "frame_size_scale",
+          "paper_size_mm": 841,
+          "scale_denominator": 100,
+          "measured_drawing_units": 84100,
+          "object_ids": ["填写图框边线的中性record_id"],
+          "basis": "填写幅面与比例的出处（图签比例栏、图纸目录）；applies_to 为 coordinates 且说明只含一种单位时可删除本数组"
+        }
+      ],
       "evidence_ids": ["EV-图例"]
     }
   },
@@ -56,6 +67,16 @@
       "evidence_ids": ["EV-图例"],
       "valve_type": null,
       "candidate_types": []
+    },
+    {
+      "family_id": "填写排除族ID（例：底图、标注符号块）",
+      "kind": "block",
+      "layer_pattern": "填写图层正则",
+      "block_pattern": "填写块名正则",
+      "decision": "exclude",
+      "priority": 5,
+      "basis": "填写为何不是本专业管线（图例、底图来源）；排除族可不写 system，入口补“排除对象（无系统）”",
+      "evidence_ids": ["EV-图例"]
     },
     {
       "family_id": "填写立管符号族ID",

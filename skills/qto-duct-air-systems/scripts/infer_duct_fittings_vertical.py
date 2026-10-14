@@ -22,7 +22,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from qto_cad_source_contract import canonical_scale
 
-VERSION = "qto-duct-fitting-vertical/1.0.0"
+VERSION = "qto-duct-fitting-vertical/1.1.0"
 INPUT_SCHEMA = "qto-duct-fitting-vertical-input/1.0"
 RESULT_SCHEMA = "qto-duct-fitting-vertical-result/1.0"
 FITTING_KINDS = {"elbow", "tee", "cross", "reducer", "rect_to_round", "tap", "offset", "unknown"}
@@ -40,7 +40,19 @@ DEFAULT_PARAMETERS = {
     "riser_match_distance": 2500.0,     # plan distance between stacked single-ended elbows of adjacent floors
     "fitting_overlap_duplicate": 0.7,   # same-kind fittings overlapping this much are one physical fitting
     "accessory_gap_policy": "exclude",  # exclude (GB 50856 部件所占长度不计) or include
+    # Single-ended fitting plane segment. The block extent along the pipe is measured from
+    # the drawn straight end. extension_minus_half_width assumes the extent reaches the
+    # outer face of the turned duct (library blocks drawn to the outline); extension_full
+    # assumes it stops at the turn centreline. Both values are always reported.
+    "single_end_plane_policy": "extension_minus_half_width",
 }
+POLICY_PARAMETERS = {
+    "accessory_gap_policy": {"exclude", "include"},
+    "single_end_plane_policy": {"extension_minus_half_width", "extension_full"},
+}
+ELEVATION_ORIGIN_LABELS = {"tag": "本段标高标注", "host_propagated": "宿主传播标高", "system_diagram": "系统图标高", "section": "剖面标高"}
+ELEVATION_ORIGINS = set(ELEVATION_ORIGIN_LABELS)
+VERTICAL_LINK_KINDS = {"segment_to_segment", "single_end_to_segment"}
 
 
 class InputError(ValueError):
@@ -116,9 +128,9 @@ class Network:
                 continue
             if key not in DEFAULT_PARAMETERS:
                 fail(f"未知参数 {key}")
-            if key == "accessory_gap_policy":
-                if value not in {"exclude", "include"}:
-                    fail("accessory_gap_policy 必须是 exclude 或 include")
+            if key in POLICY_PARAMETERS:
+                if value not in POLICY_PARAMETERS[key]:
+                    fail(f"{key} 必须是 {' 或 '.join(sorted(POLICY_PARAMETERS[key]))}")
                 self.params[key] = value
             else:
                 self.params[key] = finite(value, f"parameters.{key}", 0.0)
@@ -182,12 +194,17 @@ class Network:
                 reference = str(raw_elevation.get("reference") or "")
                 if reference not in ELEVATION_REFERENCES:
                     fail(f"{sid}.elevation.reference 必须是 bottom/top/center")
-                level = str(raw_elevation.get("evidence_level") or "确认")
+                origin = str(raw_elevation.get("origin") or "tag")
+                if origin not in ELEVATION_ORIGINS:
+                    fail(f"{sid}.elevation.origin 必须是 {sorted(ELEVATION_ORIGINS)} 之一")
+                level = str(raw_elevation.get("evidence_level") or ("确认" if origin == "tag" else ""))
                 if level not in {"确认", "规则推算", "方案暂估"}:
-                    fail(f"{sid}.elevation.evidence_level 无效")
+                    fail(f"{sid}.elevation.evidence_level 无效（origin={origin} 时必须显式给出）")
+                if origin == "host_propagated" and level == "确认":
+                    fail(f"{sid}.elevation：宿主沿管路传播的标高不是本段标注，evidence_level 只能是 规则推算 或 方案暂估")
                 value = finite(raw_elevation.get("value"), f"{sid}.elevation.value")
                 text(raw_elevation.get("source_id"), f"{sid}.elevation.source_id")
-                segment["elevation"] = {"value": value, "reference": reference, "evidence_level": level,
+                segment["elevation"] = {"value": value, "reference": reference, "evidence_level": level, "origin": origin,
                                         "source_id": raw_elevation["source_id"], "text": raw_elevation.get("text")}
             self.segments[sid] = segment
         self.fittings: list[dict[str, Any]] = []
@@ -220,6 +237,38 @@ class Network:
                 "bbox": [float(v) for v in bbox], "source_id": raw.get("source_id"), "block_name": raw.get("block_name"),
                 "explicit_ends": explicit_ends, "ends": [], "arms": [], "notes": [], "status": "unprocessed",
             })
+        fitting_ids = {f["fitting_id"] for f in self.fittings}
+        self.vertical_links: list[dict[str, Any]] = []
+        raw_links = data.get("vertical_links", [])
+        if not isinstance(raw_links, list):
+            fail("vertical_links 必须是数组")
+        link_ids: set[str] = set()
+        for index, raw in enumerate(raw_links):
+            if not isinstance(raw, dict):
+                fail(f"vertical_links[{index}] 必须是对象")
+            lid = text(raw.get("link_id"), f"vertical_links[{index}].link_id")
+            if lid in link_ids:
+                fail(f"竖向连接重复: {lid}")
+            link_ids.add(lid)
+            kind = raw.get("kind")
+            if kind not in VERTICAL_LINK_KINDS:
+                fail(f"{lid}.kind 必须是 {sorted(VERTICAL_LINK_KINDS)} 之一")
+            target = text(raw.get("to_segment_id"), f"{lid}.to_segment_id")
+            if target not in self.segments:
+                fail(f"{lid}.to_segment_id 不是已登记管段")
+            link = {"link_id": lid, "kind": kind, "to_segment_id": target, "source_id": text(raw.get("source_id"), f"{lid}.source_id"),
+                    "basis": text(raw.get("basis"), f"{lid}.basis"), "evidence_level": str(raw.get("evidence_level") or "规则推算")}
+            if link["evidence_level"] not in {"确认", "规则推算", "方案暂估"}:
+                fail(f"{lid}.evidence_level 无效")
+            if kind == "segment_to_segment":
+                link["segment_id"] = text(raw.get("segment_id"), f"{lid}.segment_id")
+                if link["segment_id"] not in self.segments or link["segment_id"] == target:
+                    fail(f"{lid}.segment_id 必须是不同于 to_segment_id 的已登记管段")
+            else:
+                link["fitting_id"] = text(raw.get("fitting_id"), f"{lid}.fitting_id")
+                if link["fitting_id"] not in fitting_ids:
+                    fail(f"{lid}.fitting_id 不是已登记管件")
+            self.vertical_links.append(link)
 
     # ------------------------------------------------------------ geometry helpers
     def end_point(self, sid: str, which: str) -> list[float]:
@@ -395,10 +444,20 @@ def fitting_arms(net: Network, result: dict[str, Any]) -> None:
             x1, y1, x2, y2 = fitting["bbox"]
             ext = max((cx - e[0]) * od[0] + (cy - e[1]) * od[1] for cx in (x1, x2) for cy in (y1, y2))
             half = segment["width"] / 2.0 if segment.get("width") is not None else (segment["diameter"] / 2.0 if segment.get("diameter") is not None else None)
-            plane = max(0.0, ext - half) if half is not None else max(0.0, ext)
-            fitting["arms"].append({"segment_id": sid, "end": which, "length": plane,
-                                    "evidence_level": "规则推算" if half is not None else "方案暂估",
-                                    "basis": "单端管件：平面段取块范围沿管向伸出长度减半宽（竖向另列）" if half is not None else "单端管件：平面段取块范围沿管向伸出长度；缺宽度，未减半宽"})
+            full = max(0.0, ext)
+            minus = max(0.0, ext - half) if half is not None else None
+            if p["single_end_plane_policy"] == "extension_full":
+                plane, level = full, "规则推算"
+                basis = "单端管件：平面段取块范围沿管向伸出长度整段（口径 extension_full：块范围止于转弯中心线；竖向另列）"
+            elif minus is not None:
+                plane, level = minus, "规则推算"
+                basis = "单端管件：平面段取块范围沿管向伸出长度减半宽（口径 extension_minus_half_width：块范围画到转弯后管外皮；竖向另列）"
+            else:
+                plane, level = full, "方案暂估"
+                basis = "单端管件：缺宽度，无法减半宽，平面段暂取伸出长度整段"
+            fitting["arms"].append({"segment_id": sid, "end": which, "length": plane, "evidence_level": level, "basis": basis,
+                                    "plane_scenarios": {"extension_minus_half_width": minus, "extension_full": full},
+                                    "plane_policy": p["single_end_plane_policy"], "half_width": half})
             fitting["status"] = "single_end"
             fitting["plane_extension"] = ext
             continue
@@ -526,7 +585,11 @@ def propagate_elevation(net: Network, adjacency: dict[str, set[str]]) -> dict[st
     for sid, segment in net.segments.items():
         own, level, why = net.center_elevation(segment)
         if own is not None:
-            resolved[sid] = {"value": own, "evidence_level": level, "basis": f"本段标高标注 {segment['elevation']['source_id']}（{segment['elevation']['reference']}）", "hops": 0}
+            # A given elevation (tag, system diagram, section or host propagation) always wins over
+            # script propagation; the script only fills segments that carry no elevation at all.
+            source = ELEVATION_ORIGIN_LABELS[segment["elevation"]["origin"]]
+            resolved[sid] = {"value": own, "evidence_level": level, "origin": segment["elevation"]["origin"],
+                             "basis": f"{source} {segment['elevation']['source_id']}（{segment['elevation']['reference']}）", "hops": 0}
             continue
         seen = {sid}
         frontier = deque([(sid, 0)])
@@ -546,7 +609,8 @@ def propagate_elevation(net: Network, adjacency: dict[str, set[str]]) -> dict[st
                 if len(values) == 1:
                     node, value, lvl = tagged[0]
                     derived = "方案暂估" if lvl == "方案暂估" else "规则推算"
-                    found = {"value": value, "evidence_level": derived, "basis": f"沿连续管路传播自 {node} 的标高（{hop} 跳，无变径/支管竖向）", "hops": hop}
+                    found = {"value": value, "evidence_level": derived, "origin": "script_propagated",
+                             "basis": f"沿连续管路传播自 {node} 的标高（{hop} 跳，无变径/支管竖向）", "hops": hop}
                 else:
                     found = {"value": None, "evidence_level": "未决", "basis": f"同距离多个不同标高 {values}，无法判定", "hops": hop}
                 break
@@ -571,9 +635,54 @@ def vertical_items(net: Network, elevations: dict[str, dict[str, Any]], result: 
             return "方案暂估"
         return "规则推算"
 
+    # 0. host-declared vertical connections: the host has judged which pipes join; the script
+    #    only takes the centre-elevation difference and keeps the host as the source.
+    host_pairs: set[frozenset[str]] = set()
+    fittings_by_id = {f["fitting_id"]: f for f in net.fittings}
+    for link in net.vertical_links:
+        fitting = None
+        if link["kind"] == "segment_to_segment":
+            sa, sb = link["segment_id"], link["to_segment_id"]
+        else:
+            fitting = fittings_by_id[link["fitting_id"]]
+            if fitting["status"] != "single_end":
+                fail(f"{link['link_id']}: 管件 {fitting['fitting_id']} 状态为 {fitting['status']}，不是单端管件，不能按单端竖向连接")
+            if fitting.get("vertical_id"):
+                fail(f"{link['link_id']}: 管件 {fitting['fitting_id']} 已有竖向连接")
+            sa, sb = fitting["ends"][0][0], link["to_segment_id"]
+        if frozenset((sa, sb)) in host_pairs:
+            fail(f"{link['link_id']}: {sa} 与 {sb} 的竖向连接重复声明")
+        ea, eb = elevations[sa], elevations[sb]
+        levels = [ea["evidence_level"], eb["evidence_level"], link["evidence_level"]]
+        floor_a, floor_b = net.segments[sa]["floor_id"], net.segments[sb]["floor_id"]
+        base_a = base_b = 0.0
+        floor_note = ""
+        if floor_a != floor_b:
+            fa, fb = net.floors.get(floor_a), net.floors.get(floor_b)
+            if fa is None or fb is None or fa["level"] is None or fb["level"] is None:
+                levels.append("未决")
+                floor_note = "；跨层但缺层标高"
+            else:
+                base_a, base_b = fa["level"], fb["level"]
+                levels += [fa["level_evidence_level"], fb["level_evidence_level"]]
+                floor_note = f"；层标高 {floor_a} {base_a} / {floor_b} {base_b}"
+        level = combine(levels)
+        length = abs((base_a + ea["value"]) - (base_b + eb["value"])) if level != "未决" else None
+        vid = f"VERT-{len(items) + 1:03d}"
+        segment = net.segments[sa]
+        items.append({"vertical_id": vid, "kind": "host_declared_link", "link_id": link["link_id"], "link_kind": link["kind"], "origin": "宿主判定",
+                      "floor_id": floor_a if floor_a == floor_b else f"{floor_a}-{floor_b}", "fitting_ids": [fitting["fitting_id"]] if fitting else [],
+                      "segment_ids": [sa, sb], "system": segment["system"], "spec": spec_of(segment), "length": length, "evidence_level": level,
+                      "basis": f"宿主判定 {link['link_id']}（{link['source_id']}：{link['basis']}）；{sa}: {ea['value']}（{ea['basis']}） / {sb}: {eb['value']}（{eb['basis']}）{floor_note}；按管中心标高差"})
+        host_pairs.add(frozenset((sa, sb)))
+        if fitting is not None:
+            fitting["vertical_id"] = vid
     # 1. in-floor offsets
     for group in net.offset_groups.values():
         (sa, _), (sb, _) = group["ends"]
+        if frozenset((sa, sb)) in host_pairs:
+            group["superseded_by_host_link"] = True
+            continue
         ea, eb = elevations[sa], elevations[sb]
         segment = net.segments[sa]
         level = combine([ea["evidence_level"], eb["evidence_level"]])
@@ -584,6 +693,8 @@ def vertical_items(net: Network, elevations: dict[str, dict[str, Any]], result: 
     # 2. single-ended elbows: branch rising/dropping onto a main of the same floor
     singles = [f for f in net.fittings if f["status"] == "single_end"]
     for fitting in singles:
+        if fitting.get("vertical_id"):
+            continue
         sid, which = fitting["ends"][0]
         segment = net.segments[sid]
         x1, y1, x2, y2 = fitting["bbox"]
@@ -660,6 +771,7 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
     summary: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
     surface: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
     part_totals: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    plane_totals: dict[str, float] = defaultdict(float)
 
     def add(part: str, segment: dict[str, Any], level: str, length_units: float) -> None:
         metres = length_units * f
@@ -683,7 +795,19 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
         for arm in fitting["arms"]:
             segment = net.segments[arm["segment_id"]]
             add("fitting", segment, arm["evidence_level"], arm["length"])
-            arms.append({**arm, "length": arm["length"] * f, "system": segment["system"], "spec": spec_of(segment)})
+            converted = {**arm, "length": arm["length"] * f, "system": segment["system"], "spec": spec_of(segment)}
+            if "plane_scenarios" in arm:
+                converted["plane_scenarios"] = {k: (v * f if v is not None else None) for k, v in arm["plane_scenarios"].items()}
+                converted["half_width"] = arm["half_width"] * f if arm["half_width"] is not None else None
+                minus, full = converted["plane_scenarios"]["extension_minus_half_width"], converted["plane_scenarios"]["extension_full"]
+                plane_totals["fittings"] += 1
+                plane_totals["extension_full"] += full
+                if minus is None:
+                    plane_totals["without_width"] += 1
+                else:
+                    plane_totals["extension_minus_half_width"] += minus
+                    plane_totals["minus_half_width_zero"] += int(minus == 0)
+            arms.append(converted)
         fittings_out.append({"fitting_id": fitting["fitting_id"], "kind": fitting["kind"], "floor_id": fitting["floor_id"], "status": fitting["status"],
                              "block_name": fitting.get("block_name"), "source_id": fitting.get("source_id"),
                              "ends": [{"segment_id": s, "end": w} for s, w in fitting["ends"]], "junction": fitting.get("junction"),
@@ -693,6 +817,18 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
             result["pending"].append({"kind": "fitting_unconnected", "fitting_id": fitting["fitting_id"], "floor_id": fitting["floor_id"],
                                       "reason": "管件块范围内没有中心线端点；核对块位置、图层或中心线是否缺绘"})
     result["fittings"] = fittings_out
+    # Both single-end plane readings, so the choice of reading is visible as a quantity difference.
+    result["single_end_plane_scenarios"] = {
+        "policy": net.params["single_end_plane_policy"],
+        "fitting_count": int(plane_totals["fittings"]),
+        "extension_minus_half_width": plane_totals["extension_minus_half_width"],
+        "extension_full": plane_totals["extension_full"],
+        "difference_full_minus_default": plane_totals["extension_full"] - plane_totals["extension_minus_half_width"],
+        "minus_half_width_zero_count": int(plane_totals["minus_half_width_zero"]),
+        "without_width_count": int(plane_totals["without_width"]),
+        "meaning": ("extension_minus_half_width 假定块范围画到转弯后管外皮；extension_full 假定块范围止于转弯中心线。"
+                    "两者只差块的画法，由宿主核对管件块图形后选择 single_end_plane_policy；未核对前按待确认口径列示差额。"),
+    }
     for tap in result["open_taps"]:
         segment = net.segments[tap["segment_id"]]
         add("fitting", segment, tap["evidence_level"], tap["length"])
@@ -726,6 +862,9 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
         "accessory_gap_count": len(result["accessory_gaps"]),
         "accessory_gap_length_excluded": sum(g["length"] for g in result["accessory_gaps"] if g["quantity_action"] == "exclude"),
         "pending_count": len(result["pending"]),
+        "single_end_plane_default": result["single_end_plane_scenarios"]["extension_minus_half_width"],
+        "single_end_plane_full": result["single_end_plane_scenarios"]["extension_full"],
+        "host_vertical_links": sum(1 for item in result["vertical_items"] if item["kind"] == "host_declared_link"),
         "measured_length_rule": part_totals["straight"]["确认"] + part_totals["fitting"]["规则推算"] + part_totals["vertical"]["规则推算"] + part_totals["accessory_gap"]["规则推算"],
     }
 

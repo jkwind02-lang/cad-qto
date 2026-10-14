@@ -25,11 +25,12 @@ from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_
 
 import qto_cad_geometry as cad_geometry
 from qto_actor_identity import is_model_identity
-from qto_cad_source_contract import check_unit_factor, verify_source_file, unit_known, verify_unit_declaration_texts
+from qto_cad_source_contract import (check_unit_factor, verify_source_file, unit_known, verify_unit_declaration_texts,
+                                     verify_unit_corroboration, unit_tokens, UNIT_APPLIES_TO)
 
 from qto_pipe_topology import RouteIndex, route_distance, project_route, geometry_parts, scale_route_geometry
 
-VERSION = "qto-pipe-neutral-adapter/1.7.0"
+VERSION = "qto-pipe-neutral-adapter/1.8.0"
 PROFILE_SCHEMA = "qto-pipe-recognition-profile/1.1"
 LEDGER_SCHEMA = "qto-project-adjudication-ledger/1.0"
 LINE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "SPLINE"}
@@ -405,6 +406,74 @@ def expanded_manifest_rows(layout_path: Path, block_path: Path, manifest: dict[s
             yield from expand(row, cad_geometry.IDENTITY, str(row.get("record_id") or "LAYOUT-INSERT"), (), layout, str(row.get("layer") or ""))
 
 
+PRESCOPED_SCHEMA = "qto-pipe-prescoped-rows/1.0"
+
+
+def load_prescoped_rows(manifest_path: Path, manifest: dict[str, Any], profile_path: Path, profile: dict[str, Any],
+                        max_depth: int) -> tuple[Iterable[dict[str, Any]], dict[str, Any]]:
+    """Rows already expanded and cut to this frame by the batch entry, bound by hash.
+
+    The batch entry reads the large neutral streams once for all frames and writes,
+    per frame, the in-scope expanded rows plus the out-of-scope context this adapter
+    still needs (ancestor INSERTs of in-scope children, unit statement texts and
+    unit corroboration objects). The header must match the manifest artifacts and
+    the frozen scope, so a prescoped file cannot be reused for another drawing or window.
+    """
+    ref = profile.get("prescoped_rows")
+    if not isinstance(ref, dict):
+        fail("profile.prescoped_rows 必须是对象")
+    raw_path = Path(text(ref.get("path"), "prescoped_rows.path"))
+    path = (raw_path if raw_path.is_absolute() else profile_path.parent / raw_path).resolve()
+    if not path.is_file() or sha256(path) != text(ref.get("sha256"), "prescoped_rows.sha256").lower():
+        fail("预扫描图元文件缺失或哈希与识别配置不一致")
+    with path.open("r", encoding="utf-8") as handle:
+        first = handle.readline()
+    try:
+        header = json.loads(first)
+    except json.JSONDecodeError as exc:
+        fail(f"预扫描图元文件首行无效: {exc}")
+    if not isinstance(header, dict) or header.get("row_type") != "prescoped_header" or header.get("schema_version") != PRESCOPED_SCHEMA:
+        fail(f"预扫描图元文件首行必须是 {PRESCOPED_SCHEMA} 头")
+    artifacts = manifest.get("artifacts") or {}
+    expected = {
+        "cad_manifest_sha256": sha256(manifest_path),
+        "layout_entities_sha256": str((artifacts.get("layout_entities") or {}).get("sha256") or "").lower(),
+        "block_definitions_sha256": str((artifacts.get("block_definitions") or {}).get("sha256") or "").lower(),
+    }
+    for key, value in expected.items():
+        if str(header.get(key) or "").lower() != value:
+            fail(f"预扫描图元文件不是由当前CAD证据生成（{key} 不一致）")
+    scope = profile.get("scope") or {}
+    if header.get("layout") != str(scope.get("layout", "Model")):
+        fail("预扫描图元文件的布局与识别配置范围不一致")
+    if header.get("bounds") != scope.get("bounds"):
+        fail("预扫描图元文件的坐标框与识别配置范围不一致")
+    if header.get("max_depth") != max_depth:
+        fail("预扫描图元文件的块展开深度与识别配置不一致")
+    failures = header.get("block_expansion_failures")
+    if not isinstance(failures, list) or not isinstance(header.get("source_total_rows"), int) or not isinstance(header.get("row_count"), int):
+        fail("预扫描图元文件头缺少块展开失败、全图行数或行数")
+
+    def rows() -> Iterable[dict[str, Any]]:
+        count = 0
+        with path.open("r", encoding="utf-8") as stream:
+            stream.readline()
+            for line_number, line in enumerate(stream, 2):
+                if not line.strip():
+                    continue
+                try:
+                    value = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    fail(f"{path}:{line_number} JSON 无效: {exc}")
+                if not isinstance(value, dict):
+                    fail(f"{path}:{line_number} 必须是对象")
+                count += 1
+                yield value
+        if count != header["row_count"]:
+            fail("预扫描图元文件行数与文件头不一致")
+    return rows(), header
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="从CAD中性事实构建管网对象审计和1.2推算输入")
     source = parser.add_mutually_exclusive_group(required=True)
@@ -427,6 +496,7 @@ def main() -> int:
         output = args.output_dir.resolve()
         output.mkdir(parents=True, exist_ok=True)
         block_expansion_failures: list[dict[str, Any]] = []
+        prescoped_header: dict[str, Any] | None = None
         if args.cad_manifest:
             stream_path, block_path, cad_manifest = source_from_manifest(args.cad_manifest.resolve())
             source_identity = cad_manifest.get("authoritative_source", {})
@@ -436,15 +506,19 @@ def main() -> int:
             raw_max_depth = expansion.get("max_depth", 16)
             if isinstance(raw_max_depth, bool) or not isinstance(raw_max_depth, int) or raw_max_depth < 1:
                 fail("block_expansion.max_depth 必须是正整数")
-            rows: Iterable[dict[str, Any]] = expanded_manifest_rows(
-                stream_path,
-                block_path,
-                cad_manifest,
-                raw_max_depth,
-                block_expansion_failures,
-                target_layout=str((profile.get("scope") or {}).get("layout", "Model")),
-                scope_bounds=(profile.get("scope") or {}).get("bounds"),
-            )
+            if profile.get("prescoped_rows") is not None:
+                rows, prescoped_header = load_prescoped_rows(args.cad_manifest.resolve(), cad_manifest, profile_path, profile, raw_max_depth)
+                block_expansion_failures.extend(prescoped_header["block_expansion_failures"])
+            else:
+                rows = expanded_manifest_rows(
+                    stream_path,
+                    block_path,
+                    cad_manifest,
+                    raw_max_depth,
+                    block_expansion_failures,
+                    target_layout=str((profile.get("scope") or {}).get("layout", "Model")),
+                    scope_bounds=(profile.get("scope") or {}).get("bounds"),
+                )
         else:
             stream_path = args.neutral_stream.resolve()
             cad_manifest = None
@@ -494,6 +568,7 @@ def main() -> int:
         unit_declaration = None
         declared_unit = None
         pending_unit_texts: dict[str, dict[str, Any] | None] | None = None
+        pending_corroboration: dict[str, dict[str, Any] | None] = {}
         if source_raw_unit is not None and not unit_known(source_raw_unit):
             # INSUNITS 0 drawings carry no unit; only a model-reviewed unit statement
             # written on this drawing may supply it, never a layer or drafting habit.
@@ -506,11 +581,27 @@ def main() -> int:
             if not isinstance(annotation_ids, list) or not annotation_ids or any(not isinstance(v, str) or not v.strip() for v in annotation_ids) or len(set(annotation_ids)) != len(annotation_ids):
                 fail("unit.declaration.annotation_object_ids 必须是不重复的中性文字对象ID数组")
             text(unit_declaration.get("observation"), "unit.declaration.observation")
+            unit_applies_to = unit_declaration.get("applies_to")
+            if unit_applies_to not in UNIT_APPLIES_TO:
+                fail("unit.declaration.applies_to 必须写明所引条款适用的对象：coordinates（图纸坐标）、annotation_values（标注数值）或 pipe_length_elevation（管长、标高）")
+            corroboration = unit_declaration.get("geometric_corroboration")
+            corroboration_ids: list[str] = []
+            if corroboration is not None:
+                if not isinstance(corroboration, list) or not corroboration or any(not isinstance(item, dict) for item in corroboration):
+                    fail("unit.declaration.geometric_corroboration 必须是非空对象数组")
+                for item in corroboration:
+                    ids = item.get("object_ids")
+                    if not isinstance(ids, list) or not ids or any(not isinstance(v, str) or not v.strip() for v in ids):
+                        fail("geometric_corroboration[].object_ids 必须是非空对象ID数组")
+                    corroboration_ids.extend(v for v in ids if v not in corroboration_ids)
+            elif unit_applies_to != "coordinates":
+                fail(f"所引单位条款适用于{UNIT_APPLIES_TO[unit_applies_to]}，不是图纸坐标；须提供 geometric_corroboration（图框幅面×出图比例或已知构件尺寸）才能确定坐标单位")
             unit_entry = ledger_entries.get(text(unit_declaration.get("adjudication_id"), "unit.declaration.adjudication_id"))
             if (unit_entry is None or unit_entry.get("decision") != "include" or unit_entry.get("professional_owner") != "qto-pipe-networks"
-                    or not set(annotation_ids) <= set(unit_entry.get("object_ids") or [])):
-                fail("单位裁决必须引用模型已审阅的真实单位文字（include 记录须覆盖全部 annotation_object_ids）")
+                    or not (set(annotation_ids) | set(corroboration_ids)) <= set(unit_entry.get("object_ids") or [])):
+                fail("单位裁决必须引用模型已审阅的真实单位文字和佐证对象（include 记录须覆盖全部 annotation_object_ids 与 geometric_corroboration 对象）")
             pending_unit_texts = {object_id: None for object_id in annotation_ids}
+            pending_corroboration = {object_id: None for object_id in corroboration_ids}
             source_raw_unit = declared_unit
         elif source_raw_unit is not None:
             check_unit_factor(source_raw_unit, output_unit, factor, unit.get("raw_unit"))
@@ -580,6 +671,8 @@ def main() -> int:
                 continue
             if pending_unit_texts is not None and row.get("record_id") in pending_unit_texts:
                 pending_unit_texts[str(row["record_id"])] = row
+            if row.get("record_id") in pending_corroboration:
+                pending_corroboration[str(row["record_id"])] = row
             if row.get("entity_type") == "INSERT":
                 context_insert_rows.append(row)
             if not bbox_intersects(row, bounds):
@@ -728,7 +821,20 @@ def main() -> int:
                 if str(found.get("entity_type") or "").upper() not in TEXT_TYPES:
                     fail(f"单位说明对象 {object_id} 不是文字实体")
                 unit_texts.append(str(found.get("text") or ""))
+            # A statement naming several units (e.g. 管长、标高以m计，其余以mm计) cannot fix the
+            # coordinate unit by quoting part of it; geometry has to agree independently.
+            if len(unit_tokens("\n".join(unit_texts))) > 1 and not pending_corroboration:
+                fail("所引单位说明同时写有多种单位；摘取其中一句不能确定图纸坐标单位，须提供 geometric_corroboration（图框幅面×出图比例或已知构件尺寸）")
             verify_unit_declaration_texts(unit_texts, declared_unit, unit_declaration.get("source_excerpt"))
+            if pending_corroboration:
+                missing = sorted(object_id for object_id, found in pending_corroboration.items() if found is None)
+                if missing:
+                    fail(f"单位佐证对象不在当前布局的中性事实中: {', '.join(missing)}")
+                checked = verify_unit_corroboration(declared_unit, unit_declaration["geometric_corroboration"],
+                                                    {oid: found.get("bbox") for oid, found in pending_corroboration.items()})
+                unit_declaration = {**unit_declaration, "geometric_corroboration": checked}
+            unit_declaration = {**unit_declaration, "applies_to_label": UNIT_APPLIES_TO[unit_declaration["applies_to"]],
+                                "coordinate_unit_basis": "geometric_corroboration" if pending_corroboration else "coordinate_statement"}
         insert_rows = apply_insert_quantity_ownership(
             insert_rows, block_rules, root_consumed_ids, object_dispositions,
             candidates, candidate_meta, explicit_dispositions, derived_roots, factor,
@@ -1125,14 +1231,17 @@ def main() -> int:
             "status": "REVIEW_REQUIRED" if unresolved or audit.get("unresolved_count", 0) else "READY",
             "profile": {"path": str(profile_path), "sha256": sha256(profile_path), "profile_id": profile_id, "profile_version": profile_version},
             "adjudication_ledger": {"path": str(ledger_path), "sha256": ledger_sha, "ledger_id": ledger["ledger_id"], "ledger_version": ledger["ledger_version"]},
-            "neutral_source": {"path": str(stream_path), "sha256": sha256(stream_path), "cad_manifest": str(args.cad_manifest.resolve()) if args.cad_manifest else None},
+            "neutral_source": {"path": str(stream_path), "sha256": sha256(stream_path), "cad_manifest": str(args.cad_manifest.resolve()) if args.cad_manifest else None,
+                               "prescoped_rows": ({"path": str(profile["prescoped_rows"]["path"]), "sha256": profile["prescoped_rows"]["sha256"],
+                                                   "generator": prescoped_header.get("generator"), "scoped_by": "batch_entry_single_read"} if prescoped_header else None)},
             "scope": scope,
             "unit": {"raw_unit": source_raw_unit, "factor_to_output": factor, "output_unit": output_unit, "source_id": unit_source_id,
                      "source_declared_unit": (cad_manifest.get("drawing_unit") or {}).get("raw_unit") if cad_manifest else unit.get("raw_unit"),
                      "declaration": unit_declaration},
             "scope_boundary_objects": boundary_objects,
             "counts": {
-                "total_neutral_rows": total_rows,
+                "total_neutral_rows": prescoped_header["source_total_rows"] if prescoped_header else total_rows,
+                "rows_read": total_rows,
                 "scoped_rows": scoped_rows,
                 "segment_candidates": len(candidates),
                 "included_segments": len(segments),

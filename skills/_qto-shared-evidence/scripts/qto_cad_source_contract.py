@@ -68,6 +68,68 @@ def verify_unit_declaration_texts(source_texts, declared_raw_unit, source_excerp
     return scale
 
 
+UNIT_APPLIES_TO = {
+    'coordinates': '图纸坐标/绘图单位',
+    'annotation_values': '图面标注的尺寸数值',
+    'pipe_length_elevation': '管长、标高等数值',
+}
+_RATIO_TOLERANCE = .02     # implied metres per drawing unit vs declared unit
+_MEASURE_TOLERANCE = .01   # stated measured span vs the cited objects' extent
+
+
+def _positive(value, label):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        raise ValueError(f'{label} 必须是正数')
+    return float(value)
+
+
+def verify_unit_corroboration(declared_raw_unit, items, object_bounds):
+    """Geometry that independently fixes the drawing unit, for INSUNITS-0 drawings.
+
+    A text statement about annotation values or pipe lengths says nothing about the
+    coordinate unit by itself. Each item ties a measured span of cited objects to a
+    known real size: a sheet frame at a stated plot scale, or a component of known
+    size. object_bounds maps each cited object id to its [xmin, ymin, xmax, ymax]
+    in raw drawing units. Returns the checked items with their implied scale.
+    """
+    scale = canonical_scale(declared_raw_unit)
+    if not isinstance(items, list) or not items:
+        raise ValueError('geometric_corroboration 必须是非空数组')
+    checked = []
+    for index, item in enumerate(items):
+        label = f'geometric_corroboration[{index}]'
+        if not isinstance(item, dict):
+            raise ValueError(f'{label} 必须是对象')
+        kind = item.get('kind')
+        measured = _positive(item.get('measured_drawing_units'), f'{label}.measured_drawing_units')
+        if kind == 'frame_size_scale':
+            real_m = _positive(item.get('paper_size_mm'), f'{label}.paper_size_mm') * _positive(item.get('scale_denominator'), f'{label}.scale_denominator') / 1000.
+        elif kind == 'known_component_size':
+            real_m = _positive(item.get('real_length_m'), f'{label}.real_length_m')
+        else:
+            raise ValueError(f'{label}.kind 必须是 frame_size_scale 或 known_component_size')
+        if not str(item.get('basis') or '').strip():
+            raise ValueError(f'{label}.basis 必须写明图框幅面/比例或构件尺寸的依据')
+        ids = item.get('object_ids')
+        if not isinstance(ids, list) or not ids or any(not isinstance(v, str) or not v.strip() for v in ids):
+            raise ValueError(f'{label}.object_ids 必须是非空对象ID数组')
+        boxes = []
+        for oid in ids:
+            box = object_bounds.get(oid)
+            if not isinstance(box, (list, tuple)) or len(box) < 4 or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in box[:4]):
+                raise ValueError(f'{label} 引用的对象 {oid} 不在当前布局或没有可量的范围')
+            boxes.append(box)
+        width = max(b[2] for b in boxes) - min(b[0] for b in boxes)
+        height = max(b[3] for b in boxes) - min(b[1] for b in boxes)
+        if min(abs(width - measured), abs(height - measured)) > _MEASURE_TOLERANCE * measured:
+            raise ValueError(f'{label}.measured_drawing_units={measured} 与所引对象的实际宽 {width:.6g} / 高 {height:.6g} 都不符')
+        implied = real_m / measured
+        if abs(implied / scale - 1.) > _RATIO_TOLERANCE:
+            raise ValueError(f'{label} 推得每绘图单位 {implied:.6g} m，与声明单位 {declared_raw_unit}（{scale} m）不符')
+        checked.append({**item, 'object_width': width, 'object_height': height, 'implied_metres_per_unit': implied})
+    return checked
+
+
 def check_unit_factor(raw_unit, output_unit, factor, declared_raw_unit=None):
     raw = canonical_scale(raw_unit)
     if declared_raw_unit is not None and canonical_scale(declared_raw_unit) != raw:

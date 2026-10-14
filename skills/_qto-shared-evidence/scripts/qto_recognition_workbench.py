@@ -21,7 +21,7 @@ from pathlib import Path
 from qto_cad_geometry import (IDENTITY, compose_matrix, entity_geometry,
     measure_part, part_extrema, summarize, transform_geometry, transform_point, transform_bounds,
     read_dxf_with_diagnostics)
-from qto_cad_source_contract import canonical_scale, verify_source_file, unit_tokens, verify_unit_declaration_texts
+from qto_cad_source_contract import canonical_scale, verify_source_file, unit_tokens, verify_unit_declaration_texts, verify_unit_corroboration, UNIT_APPLIES_TO
 from model_recognition_basis import load_working_entries, recognition_basis
 
 SCHEMA = "qto-recognition-context/1.0"
@@ -489,7 +489,20 @@ def prepare_pipe(index, operations, ledger_path):
         source_texts=[objects[i].get("text") or "" for i in unit_ids]
         excerpt=unit_declaration.get('source_excerpt')
         if excerpt is not None:excerpt=_text(excerpt,'单位适用条款原文 source_excerpt')
+        # Same rule as the pipe adapter (registration 20261015-0155): say what the clause is
+        # about; a clause on annotation values or a text naming several units needs geometry.
+        applies=unit_declaration.get("applies_to")
+        if applies not in UNIT_APPLIES_TO:
+            raise ValueError("unit_declaration.applies_to 必须写明所引条款适用的对象：coordinates、annotation_values 或 pipe_length_elevation")
+        corroboration=unit_declaration.get("geometric_corroboration")
+        if corroboration is None and (applies!="coordinates" or len(unit_tokens("\n".join(source_texts)))>1):
+            raise ValueError("所引单位条款不是只写图纸坐标的单一单位说明；须提供 geometric_corroboration（图框幅面×出图比例或已知构件尺寸）")
         verify_unit_declaration_texts(source_texts,raw_unit,excerpt)
+        if corroboration is not None:
+            cited=[i for item in corroboration if isinstance(item,dict) for i in (item.get("object_ids") or [])] if isinstance(corroboration,list) else []
+            if any(i not in objects for i in cited) or not set(cited)<=set(unit_entry["object_ids"]):
+                raise ValueError("单位佐证对象必须是当前索引中的真实对象，并被单位识别记录覆盖")
+            unit_declaration={**unit_declaration,"geometric_corroboration":verify_unit_corroboration(raw_unit,corroboration,{i:objects[i].get("bbox") for i in cited})}
     if operations.get("raw_unit") is not None and canonical_scale(operations["raw_unit"]) != canonical_scale(raw_unit):
         raise ValueError("操作单位与图纸INSUNITS不一致；单位不明须先核定来源")
     factor=canonical_scale(raw_unit)/canonical_scale(unit)

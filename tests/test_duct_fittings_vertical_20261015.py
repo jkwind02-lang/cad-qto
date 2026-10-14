@@ -65,7 +65,7 @@ def plan():
 
 def run(tmp_path, data):
     ip = tmp_path / 'in.json'; ip.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
-    op = tmp_path / 'out.json'
+    op = tmp_path / 'out.json'; op.unlink(missing_ok=True)
     p = subprocess.run([sys.executable, '-B', str(SCRIPT), '--input', str(ip), '--output', str(op)], stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding='utf-8')
     return p, json.loads(op.read_text(encoding='utf-8')) if op.exists() else None
 
@@ -158,3 +158,80 @@ def test_bottom_tag_without_height_cannot_give_centre_elevation(tmp_path, plan):
     s1 = by_id(out['straight_segments'], 'segment_id', 'S1')
     assert s1['center_elevation'] == pytest.approx(3.25) and s1['elevation_evidence_level'] == '规则推算' and 'S2' in s1['elevation_basis']
     assert by_id(out['pending'], 'kind', 'single_end_destination_unknown')['center_elevation'] is None
+
+
+# --- registration 20261015-0152: single-end plane reading, host-declared vertical links, elevation origin ---
+
+def test_single_end_plane_reports_both_readings_and_default_is_unchanged(tmp_path, plan):
+    _, out = run(tmp_path, plan)
+    e3 = by_id(out['fittings'], 'fitting_id', 'E3')
+    arm = e3['arms'][0]
+    assert arm['length'] == pytest.approx(0.75) and arm['plane_policy'] == 'extension_minus_half_width'
+    assert arm['plane_scenarios'] == pytest.approx({'extension_minus_half_width': 0.75, 'extension_full': 1.0})
+    sc = out['single_end_plane_scenarios']
+    assert sc['policy'] == 'extension_minus_half_width' and sc['fitting_count'] >= 1
+    assert sc['difference_full_minus_default'] == pytest.approx(sc['extension_full'] - sc['extension_minus_half_width'])
+    assert sc['difference_full_minus_default'] >= 0.25 - 1e-9
+    assert out['metrics']['single_end_plane_default'] == pytest.approx(sc['extension_minus_half_width'])
+    # control: choosing the full-extension reading changes only the single-end arms
+    plan['parameters']['single_end_plane_policy'] = 'extension_full'
+    _, full = run(tmp_path, plan)
+    assert by_id(full['fittings'], 'fitting_id', 'E3')['centerline_length'] == pytest.approx(1.0)
+    assert by_id(full['fittings'], 'fitting_id', 'E1')['centerline_length'] == pytest.approx(1.0)
+    assert full['single_end_plane_scenarios']['extension_full'] == pytest.approx(sc['extension_full'])
+
+
+def test_unknown_plane_policy_is_rejected(tmp_path, plan):
+    plan['parameters']['single_end_plane_policy'] = 'half'
+    p, out = run(tmp_path, plan)
+    assert p.returncode == 2 and out is None and 'single_end_plane_policy' in p.stderr
+
+
+def test_host_declared_single_end_link_replaces_pending_and_is_marked(tmp_path, plan):
+    plan['vertical_links'] = [dict(link_id='HL1', kind='single_end_to_segment', fitting_id='E3', to_segment_id='S1',
+                                   source_id='SEC-01', basis='剖面显示 E3 下翻接主管 S1')]
+    p, out = run(tmp_path, plan)
+    assert p.returncode == 0, p.stderr
+    item = by_id(out['vertical_items'], 'kind', 'host_declared_link')
+    assert item['origin'] == '宿主判定' and item['link_id'] == 'HL1' and item['fitting_ids'] == ['E3']
+    assert item['length'] == pytest.approx(abs(2.15 - 3.25)) and item['evidence_level'] == '规则推算'
+    assert '宿主判定' in item['basis'] and 'SEC-01' in item['basis']
+    assert not any(p.get('fitting_id') == 'E3' for p in out['pending'])
+    assert out['metrics']['host_vertical_links'] == 1
+
+
+def test_host_declared_segment_link_supersedes_automatic_offset(tmp_path, plan):
+    plan['vertical_links'] = [dict(link_id='HL2', kind='segment_to_segment', segment_id='S6', to_segment_id='S7',
+                                   source_id='SYS-01', basis='系统图上翻', evidence_level='确认')]
+    _, out = run(tmp_path, plan)
+    kinds = [item['kind'] for item in out['vertical_items']]
+    assert 'in_floor_offset' not in kinds and kinds.count('host_declared_link') == 1
+    item = by_id(out['vertical_items'], 'kind', 'host_declared_link')
+    assert item['length'] == pytest.approx(1.5) and item['evidence_level'] == '方案暂估'  # S7 elevation is only a scenario
+
+
+@pytest.mark.parametrize('link,message', [
+    (dict(link_id='X', kind='single_end_to_segment', fitting_id='E1', to_segment_id='S1', source_id='s', basis='b'), '不是单端管件'),
+    (dict(link_id='X', kind='segment_to_segment', segment_id='S1', to_segment_id='S1', source_id='s', basis='b'), 'segment_id'),
+    (dict(link_id='X', kind='guess', segment_id='S1', to_segment_id='S2', source_id='s', basis='b'), 'kind'),
+    (dict(link_id='X', kind='segment_to_segment', segment_id='S1', to_segment_id='S2', basis='b'), 'source_id'),
+])
+def test_invalid_host_links_stop_with_reason(tmp_path, plan, link, message):
+    plan['vertical_links'] = [link]
+    p, out = run(tmp_path, plan)
+    assert p.returncode == 2 and out is None and message in p.stderr
+
+
+def test_host_propagated_elevation_keeps_origin_and_cannot_claim_confirmed(tmp_path, plan):
+    s3 = by_id(plan['segments'], 'segment_id', 'S3')
+    s3['elevation'] = dict(value=2.5, reference='center', origin='host_propagated', evidence_level='规则推算', source_id='HOST-PROP-1')
+    _, out = run(tmp_path, plan)
+    row = by_id(out['straight_segments'], 'segment_id', 'S3')
+    assert row['center_elevation'] == pytest.approx(2.5) and row['elevation_evidence_level'] == '规则推算'
+    assert '宿主传播标高' in row['elevation_basis'] and 'HOST-PROP-1' in row['elevation_basis']
+    s3['elevation']['evidence_level'] = '确认'
+    p, out = run(tmp_path, plan)
+    assert p.returncode == 2 and out is None
+    s3['elevation'].pop('evidence_level')
+    p, out = run(tmp_path, plan)
+    assert p.returncode == 2 and 'evidence_level' in p.stderr

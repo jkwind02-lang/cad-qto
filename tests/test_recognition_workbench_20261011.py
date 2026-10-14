@@ -196,9 +196,20 @@ def test_unitless_needs_source_unit_text(tmp_path):
         endpoint_review=dict(complete=False,basis='未决端口'))
     with pytest.raises(ValueError,match='单位未设'):w.prepare_pipe(i,o,lp)
     o['unit_declaration']=dict(raw_unit='Millimeters',adjudication_id='PIPE',annotation_object_ids=[note],observation='图面平面尺寸为毫米，标高独立为米',source_excerpt='其余尺寸为毫米')
+    with pytest.raises(ValueError,match='applies_to'):w.prepare_pipe(i,o,lp)
+    # registration 20261015-0155: half of a mixed m/mm sentence cannot fix the coordinate unit by itself
+    o['unit_declaration']['applies_to']='annotation_values'
+    with pytest.raises(ValueError,match='geometric_corroboration'):w.prepare_pipe(i,o,lp)
+    o['unit_declaration']['applies_to']='coordinates'
+    with pytest.raises(ValueError,match='geometric_corroboration'):w.prepare_pipe(i,o,lp)
+    known=dict(kind='known_component_size',real_length_m=1.0,measured_drawing_units=1000,object_ids=[line],basis='设备表：该段为 1.0 m 定尺短管')
+    o['unit_declaration']['geometric_corroboration']=[dict(known,real_length_m=2.0)]
+    with pytest.raises(ValueError,match='不符'):w.prepare_pipe(i,o,lp)
+    o['unit_declaration']['geometric_corroboration']=[known]
     result=w.prepare_pipe(i,o,lp)
     assert result['segments'][0]['length']==1
     assert result['workbench']['source_declared_unit']=='Unitless'
+    assert result['workbench']['unit_declaration']['geometric_corroboration'][0]['implied_metres_per_unit']==pytest.approx(.001)
 
 
 def test_output_cannot_overwrite_original(branch):
@@ -249,7 +260,7 @@ def test_source_excerpt_cannot_cut_mm_into_m(tmp_path):
         parameters=dict(snap_tolerance=.001,gap_max=.1),parameter_basis='毫米原图',
         assignments=[dict(adjudication_id='PIPE',object_ids=[line],role='pipe_centerline',system='W',observation='中心线')],
         endpoint_review=dict(complete=False,basis='未决端口'),unit_declaration=dict(raw_unit='Meters',adjudication_id='PIPE',
-            annotation_object_ids=[note],source_excerpt='米',observation='incorrect extraction'))
+            annotation_object_ids=[note],source_excerpt='米',observation='incorrect extraction',applies_to='coordinates'))
     with pytest.raises(ValueError,match='截断'):w.prepare_pipe(i,o,lp)
     o['unit_declaration'].pop('source_excerpt')
     with pytest.raises(ValueError,match='单位原文'):w.prepare_pipe(i,o,lp)
