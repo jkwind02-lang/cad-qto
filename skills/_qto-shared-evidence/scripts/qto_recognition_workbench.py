@@ -21,7 +21,7 @@ from pathlib import Path
 from qto_cad_geometry import (IDENTITY, compose_matrix, entity_geometry,
     measure_part, part_extrema, summarize, transform_geometry, transform_point, transform_bounds,
     read_dxf_with_diagnostics)
-from qto_cad_source_contract import canonical_scale, verify_source_file
+from qto_cad_source_contract import canonical_scale, verify_source_file, unit_tokens, verify_unit_declaration_texts
 from model_recognition_basis import load_working_entries, recognition_basis
 
 SCHEMA = "qto-recognition-context/1.0"
@@ -46,15 +46,8 @@ def _json(path):
 
 
 def _unit_tokens(text, with_spans=False):
-    # Longest complete units first: 毫米 is one token, never also 米.
-    aliases={"毫米":.001,"厘米":.01,"米":1.,"千米":1000.,"公里":1000.,"英寸":.0254,"英尺":.3048,
-        "mm":.001,"millimeter":.001,"millimeters":.001,"millimetre":.001,"millimetres":.001,
-        "cm":.01,"centimeter":.01,"centimeters":.01,"centimetre":.01,"centimetres":.01,
-        "m":1.,"meter":1.,"meters":1.,"metre":1.,"metres":1.,"km":1000.,
-        "in":.0254,"inch":.0254,"inches":.0254,"ft":.3048,"foot":.3048,"feet":.3048}
-    pattern=r"毫米|厘米|千米|公里|英寸|英尺|(?<![毫厘分千公])米|(?<![A-Za-z])(?:millimet(?:er|re)s?|centimet(?:er|re)s?|met(?:er|re)s?|inches|inch|feet|foot|mm|cm|km|ft|in|m)(?![A-Za-z])"
-    matches=[(m.start(),m.end(),aliases[m[0].lower()]) for m in re.finditer(pattern,text,re.I)]
-    return matches if with_spans else {value for _,_,value in matches}
+    # Shared with the pipe adapter's unit declaration; one implementation only.
+    return unit_tokens(text, with_spans)
 
 
 def index_digest(index):
@@ -495,22 +488,8 @@ def prepare_pipe(index, operations, ledger_path):
         scale=canonical_scale(raw_unit)
         source_texts=[objects[i].get("text") or "" for i in unit_ids]
         excerpt=unit_declaration.get('source_excerpt')
-        if excerpt is not None:
-            excerpt=_text(excerpt,'单位适用条款原文 source_excerpt')
-            valid_excerpt=False
-            for text in source_texts:
-                start=text.find(excerpt)
-                while start>=0:
-                    end=start+len(excerpt)
-                    # A quoted 米 inside 毫米 must not change the source unit.
-                    if not any(a<start<b or a<end<b for a,b,_ in _unit_tokens(text,with_spans=True)):
-                        valid_excerpt=True
-                    start=text.find(excerpt,start+1)
-            if not valid_excerpt:raise ValueError("单位条款不是完整来源原文，或截断了单位词")
-            inspected=excerpt
-        else:inspected='\n'.join(source_texts)
-        if _unit_tokens(inspected)!={scale}:
-            raise ValueError("单位原文与声明不一致或含多种单位；须引用适用于当前量测的唯一单位条款，不能按子串猜测")
+        if excerpt is not None:excerpt=_text(excerpt,'单位适用条款原文 source_excerpt')
+        verify_unit_declaration_texts(source_texts,raw_unit,excerpt)
     if operations.get("raw_unit") is not None and canonical_scale(operations["raw_unit"]) != canonical_scale(raw_unit):
         raise ValueError("操作单位与图纸INSUNITS不一致；单位不明须先核定来源")
     factor=canonical_scale(raw_unit)/canonical_scale(unit)

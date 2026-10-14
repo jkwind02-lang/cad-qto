@@ -25,11 +25,11 @@ from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_
 
 import qto_cad_geometry as cad_geometry
 from qto_actor_identity import is_model_identity
-from qto_cad_source_contract import check_unit_factor, verify_source_file
+from qto_cad_source_contract import check_unit_factor, verify_source_file, unit_known, verify_unit_declaration_texts
 
 from qto_pipe_topology import RouteIndex, route_distance, project_route, geometry_parts, scale_route_geometry
 
-VERSION = "qto-pipe-neutral-adapter/1.6.0"
+VERSION = "qto-pipe-neutral-adapter/1.7.0"
 PROFILE_SCHEMA = "qto-pipe-recognition-profile/1.1"
 LEDGER_SCHEMA = "qto-project-adjudication-ledger/1.0"
 LINE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "SPLINE"}
@@ -491,8 +491,32 @@ def main() -> int:
         output_unit = text(unit.get("output_unit"), "unit.output_unit")
         unit_source_id = text(unit.get("source_id"), "unit.source_id")
         source_raw_unit = (cad_manifest.get("drawing_unit") or {}).get("raw_unit") if cad_manifest else unit.get("raw_unit")
-        if source_raw_unit is not None:
+        unit_declaration = None
+        declared_unit = None
+        pending_unit_texts: dict[str, dict[str, Any] | None] | None = None
+        if source_raw_unit is not None and not unit_known(source_raw_unit):
+            # INSUNITS 0 drawings carry no unit; only a model-reviewed unit statement
+            # written on this drawing may supply it, never a layer or drafting habit.
+            unit_declaration = unit.get("declaration")
+            if not isinstance(unit_declaration, dict):
+                fail(f"CAD中性事实单位为 {source_raw_unit!r}；须在 unit.declaration 引用本图单位说明文字并绑定识别记录，单位未知不得出长度")
+            declared_unit = text(unit_declaration.get("raw_unit"), "unit.declaration.raw_unit")
+            check_unit_factor(declared_unit, output_unit, factor, unit.get("raw_unit"))
+            annotation_ids = unit_declaration.get("annotation_object_ids")
+            if not isinstance(annotation_ids, list) or not annotation_ids or any(not isinstance(v, str) or not v.strip() for v in annotation_ids) or len(set(annotation_ids)) != len(annotation_ids):
+                fail("unit.declaration.annotation_object_ids 必须是不重复的中性文字对象ID数组")
+            text(unit_declaration.get("observation"), "unit.declaration.observation")
+            unit_entry = ledger_entries.get(text(unit_declaration.get("adjudication_id"), "unit.declaration.adjudication_id"))
+            if (unit_entry is None or unit_entry.get("decision") != "include" or unit_entry.get("professional_owner") != "qto-pipe-networks"
+                    or not set(annotation_ids) <= set(unit_entry.get("object_ids") or [])):
+                fail("单位裁决必须引用模型已审阅的真实单位文字（include 记录须覆盖全部 annotation_object_ids）")
+            pending_unit_texts = {object_id: None for object_id in annotation_ids}
+            source_raw_unit = declared_unit
+        elif source_raw_unit is not None:
             check_unit_factor(source_raw_unit, output_unit, factor, unit.get("raw_unit"))
+
+        def row_raw_unit(value: Any) -> Any:
+            return declared_unit if declared_unit is not None and not unit_known(value) else value
         boundary_policy = scope.get("boundary_policy", "contained")
         if boundary_policy not in {"contained", "whole_objects"}:
             fail("scope.boundary_policy 必须为 contained 或 whole_objects")
@@ -554,6 +578,8 @@ def main() -> int:
             total_rows += 1
             if row.get("row_type") != "entity" or row.get("layout") != layout:
                 continue
+            if pending_unit_texts is not None and row.get("record_id") in pending_unit_texts:
+                pending_unit_texts[str(row["record_id"])] = row
             if row.get("entity_type") == "INSERT":
                 context_insert_rows.append(row)
             if not bbox_intersects(row, bounds):
@@ -562,7 +588,7 @@ def main() -> int:
             entity_type = str(row.get("entity_type") or "").upper()
             source_record_id = text(row.get("record_id"), "record_id")
             if entity_type in LINE_TYPES:
-                check_unit_factor(row.get("raw_unit"), output_unit, factor, source_raw_unit)
+                check_unit_factor(row_raw_unit(row.get("raw_unit")), output_unit, factor, source_raw_unit)
             if source_record_id in object_dispositions:
                 fail(f"范围内中性对象ID重复: {source_record_id}")
             review_required = entity_type in LINE_TYPES or entity_type in {"CIRCLE", "INSERT"}
@@ -693,6 +719,16 @@ def main() -> int:
                     "basis": str(rule.get("basis") or rule.get("authority", {}).get("basis") or f"冻结识别规则 {rule['rule_id']}"),
                     "source_id": str(rule.get("authority", {}).get("source_id") or rule.get("source_id") or rule["rule_id"]),
                 })
+        if pending_unit_texts is not None:
+            missing = sorted(object_id for object_id, found in pending_unit_texts.items() if found is None)
+            if missing:
+                fail(f"单位说明文字不在当前布局的中性事实中（块内文字须位于已展开范围）: {', '.join(missing)}")
+            unit_texts = []
+            for object_id, found in pending_unit_texts.items():
+                if str(found.get("entity_type") or "").upper() not in TEXT_TYPES:
+                    fail(f"单位说明对象 {object_id} 不是文字实体")
+                unit_texts.append(str(found.get("text") or ""))
+            verify_unit_declaration_texts(unit_texts, declared_unit, unit_declaration.get("source_excerpt"))
         insert_rows = apply_insert_quantity_ownership(
             insert_rows, block_rules, root_consumed_ids, object_dispositions,
             candidates, candidate_meta, explicit_dispositions, derived_roots, factor,
@@ -1091,7 +1127,9 @@ def main() -> int:
             "adjudication_ledger": {"path": str(ledger_path), "sha256": ledger_sha, "ledger_id": ledger["ledger_id"], "ledger_version": ledger["ledger_version"]},
             "neutral_source": {"path": str(stream_path), "sha256": sha256(stream_path), "cad_manifest": str(args.cad_manifest.resolve()) if args.cad_manifest else None},
             "scope": scope,
-            "unit": {"raw_unit": source_raw_unit, "factor_to_output": factor, "output_unit": output_unit, "source_id": unit_source_id},
+            "unit": {"raw_unit": source_raw_unit, "factor_to_output": factor, "output_unit": output_unit, "source_id": unit_source_id,
+                     "source_declared_unit": (cad_manifest.get("drawing_unit") or {}).get("raw_unit") if cad_manifest else unit.get("raw_unit"),
+                     "declaration": unit_declaration},
             "scope_boundary_objects": boundary_objects,
             "counts": {
                 "total_neutral_rows": total_rows,

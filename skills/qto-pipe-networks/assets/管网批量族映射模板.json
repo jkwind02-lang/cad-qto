@@ -1,0 +1,89 @@
+{
+  "schema_version": "qto-pipe-batch-family-mapping/1.0",
+  "mapping_id": "填写项目内唯一映射ID",
+  "mapping_version": "1",
+  "expected_source_sha256": "填写原始DWG或权威DXF的SHA256（与CAD中性取证清单 authoritative_source 一致）",
+  "recognized_by": "填写实际模型标识",
+  "recognized_at": "填写实际识别时间",
+  "source_id": "填写本轮资料编号",
+  "network_id_prefix": "填写管网ID前缀（各图框追加 -图框编号）",
+  "layout": "Model",
+  "evidence": [
+    {
+      "evidence_id": "EV-图例",
+      "path": "填写证据文件路径（相对本文件或绝对路径）",
+      "sha256": "填写该证据文件SHA256",
+      "kind": "drawing_view",
+      "locator": "填写图号、布局、区域和对象定位",
+      "observation": "填写实际观察到的图例、图层与块族含义"
+    }
+  ],
+  "unit": {
+    "factor_to_output": 0.001,
+    "output_unit": "m",
+    "source_id": "填写单位证据ID",
+    "raw_unit": "Millimeters",
+    "declaration": {
+      "raw_unit": "Millimeters",
+      "annotation_object_ids": ["填写本图单位说明文字的中性record_id；图纸INSUNITS非0时删除整个declaration"],
+      "observation": "填写说明条款位置与原文",
+      "source_excerpt": "填写只含一种单位词的完整原句，可省略",
+      "evidence_ids": ["EV-图例"]
+    }
+  },
+  "block_expansion": {"max_depth": 16},
+  "families": [
+    {
+      "family_id": "填写族ID（作为规则ID和识别记录ID）",
+      "kind": "layer",
+      "layer_pattern": "填写图层正则",
+      "system": "填写系统",
+      "decision": "include",
+      "allowed_entity_types": ["LINE", "LWPOLYLINE", "POLYLINE", "ARC", "SPLINE"],
+      "priority": 10,
+      "basis": "填写为何这样识别",
+      "evidence_ids": ["EV-图例"],
+      "frame_pattern": "可选：只用于编号匹配该正则的图框"
+    },
+    {
+      "family_id": "填写阀门族ID",
+      "kind": "block",
+      "layer_pattern": "填写图层正则",
+      "block_pattern": "填写块名正则",
+      "system": "填写系统",
+      "decision": "include",
+      "basis": "填写图例依据",
+      "evidence_ids": ["EV-图例"],
+      "valve_type": null,
+      "candidate_types": []
+    },
+    {
+      "family_id": "填写立管符号族ID",
+      "kind": "root",
+      "layer_pattern": "填写图层正则",
+      "block_pattern": ".*",
+      "allowed_entity_types": ["CIRCLE", "INSERT"],
+      "system": "填写系统",
+      "decision": "include",
+      "root_role": "vertical_candidate",
+      "evidence_level": "scenario",
+      "basis": "填写图例依据",
+      "evidence_ids": ["EV-图例"]
+    },
+    {
+      "family_id": "填写DN文字族ID",
+      "kind": "text",
+      "layer_pattern": "填写图层正则",
+      "text_pattern": "DN(?P<dn>\\d+)",
+      "system": "填写系统",
+      "max_distance": 1.5,
+      "min_second_candidate_margin": 0.2,
+      "evidence_level": "scenario"
+    }
+  ],
+  "use_conventional_terminal_type_candidates": true,
+  "use_conventional_valve_type_candidates": true,
+  "object_audit_parameters": {"connection_tolerance": 0.01, "repeat_min_count": 3, "signature_precision": 6},
+  "inference_parameters": {},
+  "endpoint_not_required_reason": "批量入口未接入点位工作包；末端按后续交接补充，未以零代替未知端点"
+}
