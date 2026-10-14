@@ -1,0 +1,3 @@
+(load (getenv "QTO_DXF_EXPORT_LSP"))
+(qto:export-benchmark-dxf)
+_.QUIT

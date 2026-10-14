@@ -1,0 +1,5 @@
+(load (getenv "QTO_BASE_LSP"))
+(load (getenv "QTO_FULL_LSP"))
+(qto:export-all-blocks)
+_.QUIT
+

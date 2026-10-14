@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "qto-benchmark-result/1.0",
+  "title": "Frozen recognition result record",
+  "type": "object",
+  "required": [
+    "object_id",
+    "disposition",
+    "professional_owner",
+    "object_class",
+    "quantity_level",
+    "unique_output_id"
+  ],
+  "properties": {
+    "object_id": {"type": "string", "minLength": 1},
+    "disposition": {"enum": ["ADOPT", "EXCLUDE", "UNRESOLVED"]},
+    "professional_owner": {"type": "string"},
+    "system": {"type": "string"},
+    "space": {"type": "string"},
+    "object_class": {"type": "string"},
+    "rule_id": {"type": ["string", "null"]},
+    "rule_version": {"type": ["string", "null"]},
+    "specification": {"type": ["string", "null"]},
+    "quantity_value": {"type": ["number", "null"]},
+    "quantity_unit": {"type": ["string", "null"]},
+    "quantity_level": {"enum": ["CONFIRMED", "INFERRED", "SCENARIO", "UNRESOLVED", "NOT_APPLICABLE"]},
+    "handoff_status": {"enum": ["DELIVERED", "NOT_APPLICABLE", "UNRESOLVED", "NOT_REQUIRED"]},
+    "unique_output_id": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": true
+}

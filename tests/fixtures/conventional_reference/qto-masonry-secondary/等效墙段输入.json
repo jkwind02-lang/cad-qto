@@ -1,0 +1,5 @@
+{
+  "wall_segments": [
+    {"id":"W-01","length_m":10,"height_m":3,"thickness_m":0.2,"opening_union_area_m2":4,"embedded_volume_m3":0.4,"evidence":"等效图纸 A-01/W-01"}
+  ]
+}

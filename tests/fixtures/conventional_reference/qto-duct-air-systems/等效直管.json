@@ -1,0 +1,1 @@
+{"straight_sections":[{"id":"D-RECT","system":"送风","shape":"rectangle","count":1,"length_each_m":10,"width_m":0.8,"height_m":0.4,"evidence":"等效风管表1"},{"id":"D-CIRC","system":"排风","shape":"circle","count":1,"length_each_m":10,"diameter_m":0.5,"evidence":"等效风管表2"}]}

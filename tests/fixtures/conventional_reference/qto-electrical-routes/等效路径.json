@@ -1,0 +1,1 @@
+{"route_items":[{"id":"TRAY-01","kind":"tray","system":"动力","spec":"300x100","path_length_m":50,"parallel_count":1,"extra_each_m":0,"evidence":"等效桥架路径"},{"id":"WIRE-01","kind":"wire","system":"动力","spec":"单芯线","path_length_m":50,"parallel_count":3,"extra_each_m":2,"evidence":"等效回路及端接表"}]}

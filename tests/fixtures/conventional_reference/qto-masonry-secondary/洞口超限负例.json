@@ -1,0 +1,5 @@
+{
+  "wall_segments": [
+    {"id":"W-BAD","length_m":2,"height_m":2,"thickness_m":0.2,"opening_union_area_m2":5,"embedded_volume_m3":0,"evidence":"等效负例"}
+  ]
+}

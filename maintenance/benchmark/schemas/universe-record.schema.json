@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "qto-benchmark-universe/1.0",
+  "title": "QTO benchmark universe record",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "universe_version",
+    "policy_version",
+    "object_id",
+    "source_level",
+    "entity_type",
+    "scope_relation",
+    "closure_status"
+  ],
+  "properties": {
+    "schema_version": {"const": "qto-benchmark-universe/1.0"},
+    "universe_version": {"type": "string", "minLength": 1},
+    "policy_version": {"type": "string", "minLength": 1},
+    "object_id": {"type": "string", "minLength": 1},
+    "parent_object_id": {"type": ["string", "null"]},
+    "source_level": {"enum": ["MODEL", "NESTED"]},
+    "entity_type": {"type": ["string", "null"]},
+    "scope_relation": {"enum": ["INSIDE", "INTERSECTS_BOUNDARY", "ANCESTOR_OF_IN_SCOPE", "UNKNOWN"]},
+    "closure_status": {"enum": ["RESOLVED", "DEFINITION_MISSING", "CYCLE", "MAX_DEPTH"]},
+    "benchmark_shape": {
+      "enum": ["LINE_NETWORK", "DISCRETE_INSTANCE", "ANNOTATION_CONTEXT", "OTHER_CONTEXT"]
+    },
+    "t1_eligible": {"type": "boolean"}
+  },
+  "additionalProperties": true
+}

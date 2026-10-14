@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "qto-score-report/1.0",
+  "title": "Deterministic QTO score report",
+  "type": "object",
+  "required": ["schema_version", "status", "inputs", "hard_failures", "metrics", "differences"],
+  "properties": {
+    "schema_version": {"const": "qto-score-report/1.0"},
+    "status": {"enum": ["PASS", "FAIL", "NOT_SCORED"]},
+    "hard_failures": {"type": "array", "items": {"type": "object"}},
+    "metrics": {"type": "object"},
+    "differences": {"type": "object"}
+  },
+  "additionalProperties": true
+}

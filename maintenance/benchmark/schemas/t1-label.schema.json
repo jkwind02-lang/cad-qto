@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "qto-t1-label/1.0",
+  "title": "Human-frozen T1 label",
+  "type": "object",
+  "required": ["object_id", "sample_set", "human_disposition", "label_status"],
+  "properties": {
+    "object_id": {"type": "string", "minLength": 1},
+    "sample_set": {"enum": ["PROBABILITY", "PROBABILITY_PILOT", "CHALLENGE", "HIDDEN"]},
+    "human_disposition": {"enum": ["ADOPT", "EXCLUDE", "UNRESOLVED"]},
+    "human_object_class": {"type": "string"},
+    "human_professional_owner": {"type": "string"},
+    "human_system": {"type": "string"},
+    "human_space": {"type": "string"},
+    "adjudication_basis": {"type": "string", "minLength": 1},
+    "annotator": {"type": "string", "minLength": 1},
+    "label_status": {"const": "FROZEN"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"human_disposition": {"const": "ADOPT"}}},
+      "then": {
+        "required": ["human_object_class", "human_professional_owner", "adjudication_basis", "annotator"]
+      }
+    }
+  ],
+  "additionalProperties": true
+}

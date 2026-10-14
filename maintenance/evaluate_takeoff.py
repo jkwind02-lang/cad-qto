@@ -2,7 +2,7 @@
 """Compare independently prepared takeoffs without treating totals as accuracy.
 
 Maintenance only. This small adapter reuses the object-set, duplicate and unresolved
-semantics of _qto-benchmark/scripts/score_benchmark.py, without its phase-specific
+semantics of maintenance/benchmark/scripts/score_benchmark.py, without its phase-specific
 label manifests. Provenance checks detect declared reuse and source identity; they
 cannot prove independent reasoning, historical blindness, or source correctness.
 """
