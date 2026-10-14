@@ -296,6 +296,69 @@ def test_nested_insert_line_proof_preserves_column_vector_convention(tmp_path):
     assert proof['transform_max_coefficient_error'] < 1e-8
 
 
+def partial_parent_fixture(tmp_path, *, unresolved_parent_state=False):
+    doc = drawing()
+    block = doc.blocks.new('partially-readable')
+    line = block.add_line((0, 0, 7), (20, 10, 7))
+    sibling = block.add_spline(fit_points=[(1e6, 1e6), (1e6 + 10, 1e6 + 20), (1e6 + 20, 1e6)])
+    parent = doc.modelspace().add_blockref('partially-readable', (1000, -2000, 10),
+                                          dxfattribs={'rotation': 90})
+    if unresolved_parent_state:
+        parent.new_extension_dict()
+    ctx = evidence.viewport_context(viewport(doc))
+    index = build_index(tmp_path, doc)
+    byid = {r['object_id']: r for r in index['objects']}
+    rows = {r['source_handle']: r for r in index['objects']}
+    return doc, ctx, byid, rows[parent.dxf.handle], rows[line.dxf.handle], rows[sibling.dxf.handle]
+
+
+def test_unsupported_sibling_does_not_invalidate_proven_child_line(tmp_path):
+    doc, ctx, byid, parent, line, sibling = partial_parent_fixture(tmp_path)
+    assert parent['bounds_complete'] is False
+    assert parent['issues'] == ['块范围仅覆盖已解析内容，范围外仍可能存在未解析子对象']
+    assert evidence.geometric_relation(parent, ctx['model_bounds']) == 'unknown'
+    assert evidence.geometric_relation(sibling, ctx['model_bounds']) == 'unknown'
+    assert line['geometry_status'] == 'measurable' and line['issues'] == []
+    proof = evidence.line_source_proof(line, byid, doc, ctx)
+    assert proof['supported']
+    # Rotation 90 degrees maps (x,y,z) to (-y,x,z), then adds the INSERT.
+    assert_points(proof['WCS_endpoints'], [[1000, -2000, 17], [990, -1980, 17]])
+    assert proof['actual_WCS_Z'] == [17, 17]
+    assert proof['source_to_index_endpoint_max_error'] < 1e-8
+    assert proof['via_parent_chain_endpoint_max_error'] < 1e-8
+    assert proof['parent_coverage_warnings'] == [{
+        'object_id': parent['object_id'], 'source_handle': parent['source_handle'],
+        'issues': parent['issues']}]
+    assert proof['parent_INSERT_chain'][0]['coverage_only_issues'] == parent['issues']
+    # A successful child proof does not promote the parent's unknown extent.
+    assert evidence.geometric_relation(parent, ctx['model_bounds']) == 'unknown'
+    assert parent['bounds_complete'] is False
+
+
+def test_partial_parent_with_additional_native_state_warning_still_rejects_child_proof(tmp_path):
+    doc, ctx, byid, parent, line, _ = partial_parent_fixture(tmp_path, unresolved_parent_state=True)
+    assert parent['bounds_complete'] is False
+    assert '块范围仅覆盖已解析内容，范围外仍可能存在未解析子对象' in parent['issues']
+    assert '可能含动态块或扩展数据；可见状态需原生CAD或模型另核' in parent['issues']
+    proof = evidence.line_source_proof(line, byid, doc, ctx)
+    assert proof['supported'] is False
+    assert proof['reasons']
+
+
+@pytest.mark.parametrize('mutation', ['parent_identity', 'child_transform', 'child_geometry_issue'])
+def test_coverage_warning_exception_does_not_relax_identity_transform_or_geometry(tmp_path, mutation):
+    doc, ctx, byid, parent, line, _ = partial_parent_fixture(tmp_path)
+    if mutation == 'parent_identity':
+        parent['parent_object_id'] = 'not-the-native-parent'
+    elif mutation == 'child_transform':
+        line['instance_transform'][3] += 10
+    else:
+        line['issues'] = ['unresolved_LINE_geometry']
+    proof = evidence.line_source_proof(line, byid, doc, ctx)
+    assert proof['supported'] is False
+    assert proof['reasons']
+
+
 def test_broken_source_line_proof_cannot_claim_success(tmp_path):
     doc = drawing()
     doc.modelspace().add_line((1000, -2000, 0), (1010, -1990, 0))

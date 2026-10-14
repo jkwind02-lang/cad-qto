@@ -25,6 +25,9 @@ from qto_recognition_workbench import SCHEMA as INDEX_SCHEMA, build_index, index
 
 SCHEMA = "qto-standard-viewport-evidence/1.0"
 DOMAIN = "positive_Z_top_orthographic_zero_twist_rectangular_no_depth_clip"
+_PARENT_COVERAGE_ONLY_ISSUES = frozenset({
+    "块范围仅覆盖已解析内容，范围外仍可能存在未解析子对象",
+})
 _KEYS = (
     "handle", "id", "status", "flags", "center", "width", "height",
     "view_center_point", "view_height", "view_target_point", "view_direction_vector",
@@ -285,9 +288,11 @@ def line_source_proof(row, byid, doc, ctx):
             raise ValueError("invalid_LINE_endpoints")
         qto_matrix = row["instance_transform"]
         from_index = [transform_point(p, qto_matrix) for p in raw]
+        if not all(_vector(p, (3,)) for p in from_index):
+            raise ValueError("nonfinite_indexed_LINE_transform")
         # QTO uses column vectors; ezdxf uses row vectors. Do not change QTO.
         matrix = Matrix44([qto_matrix[j*4+i] for i in range(4) for j in range(4)])
-        transform, parents = Matrix44(), []
+        transform, parents, coverage_warnings = Matrix44(), [], []
         definition = doc.modelspace()
         parent_oid = None
         for depth, handle in enumerate(path[:-1]):
@@ -299,21 +304,35 @@ def line_source_proof(row, byid, doc, ctx):
             parent_row = byid.get("CADINST-Model/" + "/".join(path[:depth+1]))
             if parent_row is None or parent_row.get("parent_object_id") != parent_oid:
                 raise ValueError("index_parent_chain_mismatch")
-            if parent_row.get("issues"):
+            parent_issues = parent_row.get("issues") or []
+            if any(issue not in _PARENT_COVERAGE_ONLY_ISSUES for issue in parent_issues):
                 raise ValueError("unresolved_parent_state")
+            if parent_issues:
+                # A sibling's missing coverage does not invalidate this known
+                # LINE's owner chain or actual INSERT transform. The parent's
+                # whole bounds remain incomplete and geometrically unknown.
+                coverage_warnings.append(dict(object_id=parent_row["object_id"],
+                                              source_handle=handle, issues=list(parent_issues)))
             definition = doc.blocks.get(parent.dxf.name)
             if definition is None or definition.block.is_xref or definition.block.is_xref_overlay:
                 raise ValueError("missing_or_external_parent_definition")
             pm = parent.matrix44()
+            if not all(_finite(n) for n in pm):
+                raise ValueError("nonfinite_native_parent_matrix")
             transform = pm @ transform
+            if not all(_finite(n) for n in transform):
+                raise ValueError("nonfinite_composed_parent_matrix")
             parent_oid = parent_row["object_id"]
             parents.append(dict(handle=handle, block_name=parent.dxf.name, insert=list(parent.dxf.insert),
                                 xscale=parent.dxf.xscale, yscale=parent.dxf.yscale, zscale=parent.dxf.zscale,
-                                rotation=parent.dxf.rotation, extrusion=list(parent.dxf.extrusion), native_matrix=list(pm)))
+                                rotation=parent.dxf.rotation, extrusion=list(parent.dxf.extrusion), native_matrix=list(pm),
+                                coverage_only_issues=list(parent_issues)))
         if source not in definition or row.get("parent_object_id") != parent_oid:
             raise ValueError("source_LINE_owner_chain_mismatch")
         coeff_error = max(abs(a-b) for a, b in zip(list(transform), list(matrix)))
         chain = [list(transform.transform(p)) for p in raw]
+        if not all(_vector(p, (3,)) for p in chain):
+            raise ValueError("nonfinite_native_LINE_endpoints")
         index_error = max(abs(a-b) for p, q in zip(from_index, indexed) for a, b in zip(p, q))
         chain_error = max(abs(a-b) for p, q in zip(chain, indexed) for a, b in zip(p, q))
         if max(coeff_error, index_error, chain_error) >= 1e-6:
@@ -321,6 +340,8 @@ def line_source_proof(row, byid, doc, ctx):
         r, s = ctx["raw"], ctx["scale"]
         t, v, c = (r[k] for k in ("view_target_point", "view_center_point", "center"))
         paper = [[s*(p[0]-t[0]-v[0])+c[0], s*(p[1]-t[1]-v[1])+c[1]] for p in chain]
+        if not all(_vector(p, (2,)) for p in paper):
+            raise ValueError("nonfinite_projected_LINE_endpoints")
         pb = ctx["paper_bounds"]
         inside = [pb[0] <= p[0] <= pb[2] and pb[1] <= p[1] <= pb[3] for p in paper]
         relation = geometric_relation(row, ctx["model_bounds"])
@@ -332,6 +353,7 @@ def line_source_proof(row, byid, doc, ctx):
                 raise ValueError("outside_projection_mismatch")
         return dict(supported=True, source_handle=row["source_handle"], source_path=path,
                     raw_LINE_start_end=raw, parent_INSERT_chain=parents,
+                    parent_coverage_warnings=coverage_warnings,
                     matrix_conventions="QTO column-vector row-major translation 3/7/11; ezdxf row-vector row-major translation 12/13/14; transpose before coefficient comparison",
                     index_instance_transform=list(qto_matrix), index_transform_transposed_for_ezdxf=list(matrix),
                     composed_parent_transform=list(transform), transform_max_coefficient_error=coeff_error,
@@ -339,7 +361,7 @@ def line_source_proof(row, byid, doc, ctx):
                     WCS_endpoints=chain, actual_WCS_Z=[p[2] for p in chain], paper_XY_closed_form=paper,
                     paper_bounds=pb, endpoints_inside=inside, relation=relation,
                     inverse_projection_plane=copy.deepcopy(ctx["inverse_projection_plane"]),
-                    meaning="source endpoints through actual parent INSERTs; source Z is never replaced by target.z")
+                    meaning="source endpoints through actual parent INSERTs; source Z is never replaced by target.z; coverage-only parent warnings do not certify the parent's complete bounds")
     except (ArithmeticError, AttributeError, IndexError, KeyError, TypeError, ValueError) as exc:
         return dict(failure, reasons=[str(exc)])
 
