@@ -212,8 +212,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/export_dwg_exchange_dxf.ps1",
-      "sha256": "7a05f2ed6c759c2466f90f72201cb5f0d0880257be22bddc649e6451a4507154",
-      "bytes": 14120
+      "sha256": "5797d0b370ca63f4f81321996aaf07d716098e3ff7f53efb8045af7beca0b47b",
+      "bytes": 14341
     },
     {
       "path": "_qto-shared-evidence/scripts/extract_cad_neutral.py",
@@ -257,8 +257,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_human_review_evidence.py",
-      "sha256": "d7380a0a28dae03017e44b37d5dc415435f593d9813d7564251ae6eb338a4b08",
-      "bytes": 9709
+      "sha256": "eb090a6c477e32e0606b2394ce9c28981a439cbef769c4301fa3e11d85bd53fe",
+      "bytes": 10915
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_instance_requirements.py",
@@ -312,8 +312,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/recompute_qto_dependencies.py",
-      "sha256": "04838a844452421c065fe54f5e1250ee1a9f284694acc6ac7816a5118a2790cf",
-      "bytes": 17338
+      "sha256": "09789d0b59f1b1a39f84dd9a2b3fa7727ac3eaeb44e3389550e69eb7ff78be2a",
+      "bytes": 17381
     },
     {
       "path": "_qto-shared-evidence/scripts/register_plugin_issue.py",

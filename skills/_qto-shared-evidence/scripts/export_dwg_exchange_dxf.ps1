@@ -6,6 +6,9 @@
 )
 
 $ErrorActionPreference = 'Stop'
+# A Python caller launched from pwsh can leave Windows PowerShell 5.1 unable to
+# auto-discover the Get-FileHash function. Load its built-in module explicitly.
+Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
 
 function Get-SourceSnapshot([string]$Path) {
     $item = Get-Item -LiteralPath $Path

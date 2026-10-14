@@ -43,7 +43,10 @@ def _aware_time(value) -> bool:
 
 def _same_number(left, right) -> bool:
     numeric = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
-    return numeric(left) and numeric(right) and math.isclose(left, right, rel_tol=1e-9, abs_tol=1e-12)
+    try:
+        return numeric(left) and numeric(right) and math.isclose(left, right, rel_tol=1e-9, abs_tol=1e-12)
+    except (OverflowError, ValueError):
+        return False
 
 
 def _resolve(path_text, base_dir):
@@ -57,14 +60,22 @@ def _resolve(path_text, base_dir):
 
 def _load_hashed(ref, base_dir, label, issues):
     """Resolve and hash-check a referenced file; returns (path, bytes) or (None, None)."""
-    path = _resolve(ref['path'], base_dir)
+    try:
+        path = _resolve(ref['path'], base_dir)
+    except (OSError, ValueError) as exc:
+        issues.append(f'{label}路径无效：{exc}')
+        return None, None
     if path is None:
         issues.append(f'{label}路径为相对路径，但没有可用的所在目录，不按当前目录猜测')
         return None, None
-    if not path.is_file():
-        issues.append(f'{label}文件不存在：{path}')
+    try:
+        if not path.is_file():
+            issues.append(f'{label}文件不存在：{path}')
+            return None, None
+        data = path.read_bytes()
+    except (OSError, ValueError) as exc:
+        issues.append(f'{label}文件无法读取：{exc}')
         return None, None
-    data = path.read_bytes()
     if hashlib.sha256(data).hexdigest() != ref['sha256'].lower():
         issues.append(f'{label}哈希与登记不一致，文件可能已被修改：{path}')
         return None, None
@@ -131,19 +142,31 @@ def _feedback_issues(source, record, project_id, base_dir) -> list[str]:
         return [f'原批注文件不是 {FEEDBACK_SCHEMA}']
     if feedback.get('project_id') != project_id:
         issues.append('原批注属于其他项目')
-    annotation = (feedback.get('annotations') or {}).get(source['annotation_key'])
+    annotations = feedback.get('annotations')
+    if not isinstance(annotations, dict):
+        return issues + ['原批注的 annotations 必须是对象']
+    annotation = annotations.get(source['annotation_key'])
     if not isinstance(annotation, dict):
         return issues + [f"原批注中没有已保存批注 {source['annotation_key']}"]
     if annotation.get('decision_type') != FEEDBACK_DECISION:
         issues.append('原批注不是明确的数量确认操作；普通意见、方法意见或助手回执不能当作数量确认')
     if annotation.get('reviewer') != record.get('reviewer'):
         issues.append('原批注填写的复核者与凭据记录不一致')
+    if annotation.get('reviewed_at') != record.get('reviewed_at'):
+        issues.append('原批注的复核时间与凭据记录不一致')
+    if source['saved_at'] != annotation.get('updated_at', annotation.get('reviewed_at')):
+        issues.append('原批注的保存时间与 source_feedback.saved_at 不一致')
+    confirmations = annotation.get('quantity_confirmations')
+    if not isinstance(confirmations, list):
+        return issues + ['原批注的 quantity_confirmations 必须是数组']
     wanted = {k: record.get(k) for k in ('node_id', 'calculation_fingerprint', 'review_object_key', 'result_fingerprint', 'unit')}
-    matches = [item for item in annotation.get('quantity_confirmations') or []
+    matches = [item for item in confirmations
                if isinstance(item, dict) and all(item.get(k) == v for k, v in wanted.items())
                and _same_number(item.get('quantity'), record.get('quantity'))]
     if not matches:
         issues.append('原批注的 quantity_confirmations 中没有与本节点、指纹、对象、数值和单位一致的确认项')
+    elif len(matches) != 1:
+        issues.append('原批注中同一数量确认重复，不能唯一对应')
     return issues
 
 
@@ -164,7 +187,9 @@ def verify_evidence(ref, *, base_dir, project_id, node_id, fingerprint, unit, va
         return None, [f'人工复核凭据不是 {EVIDENCE_SCHEMA}']
     if document.get('project_id') != project_id:
         issues.append('人工复核凭据属于其他项目')
-    records = [r for r in document.get('records') or [] if isinstance(r, dict) and r.get('record_id') == ref['record_id']]
+    if not isinstance(document.get('records'), list):
+        return None, issues + ['人工复核凭据的 records 必须是数组']
+    records = [r for r in document['records'] if isinstance(r, dict) and r.get('record_id') == ref['record_id']]
     if len(records) != 1:
         return None, issues + [f"人工复核凭据中 record_id={ref['record_id']} 应恰好一条，实际 {len(records)} 条"]
     record = records[0]
@@ -182,8 +207,8 @@ def verify_evidence(ref, *, base_dir, project_id, node_id, fingerprint, unit, va
         issues.append('凭据记录指向其他计算节点')
     if record.get('calculation_fingerprint') != fingerprint:
         issues.append('凭据记录的计算指纹与审批所述指纹不一致')
-    if not _text(record.get('review_object_key')) or not _text(record.get('result_fingerprint')):
-        issues.append('凭据记录缺少 review_object_key 或对象 result_fingerprint')
+    if not _text(record.get('review_object_key')) or not _hex64(record.get('result_fingerprint')):
+        issues.append('凭据记录缺少 review_object_key 或完整对象 result_fingerprint')
     if record.get('unit') != unit:
         issues.append('凭据记录的单位与节点单位不一致')
     if value is not _SKIP and not _same_number(record.get('quantity'), value):

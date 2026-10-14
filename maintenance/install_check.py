@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Per-version install check records for both hosts, with the Claude install implemented.
+"""Per-version install check records and host-owned install/verify/rollback adapters.
 
 The record lives next to the release record (<版本>_<提交>_安装核对.json). Each host writes only its
-own section. Codex install, verification and rollback are Codex's (plan C1): those commands here
-refuse with "待 Codex 接续" and never report success. A version counts as released on both hosts
-only when both sections are verified.
+own section. A version counts as released on both hosts only when both sections are verified.
 
 Claude steps use the claude CLI; pass --claude-config-dir to rehearse in an isolated
-CLAUDE_CONFIG_DIR without touching the real installation.
+CLAUDE_CONFIG_DIR without touching the real installation. Codex steps use --codex-home;
+give isolated rehearsals their own --check-file.
 """
 from __future__ import annotations
 
@@ -38,6 +37,10 @@ def check_path(record_path: Path) -> Path:
     return record_path.with_name(record_path.stem + '_安装核对.json')
 
 
+def operation_path(args) -> Path:
+    return getattr(args, 'check_file', None) or check_path(args.record)
+
+
 def load_check(path: Path) -> dict:
     if not path.exists():
         raise ReleaseError(f'安装核对记录不存在，先运行 init：{path}')
@@ -54,13 +57,13 @@ def save(path: Path, check: dict) -> None:
 
 def cmd_init(args) -> dict:
     record = read_json(args.record)
-    path = check_path(args.record)
+    path = operation_path(args)
     if path.exists():
         return {'status': 'PASS', 'check': str(path), 'note': '已存在，未改写'}
     check = {'schema': SCHEMA, 'business_version': record['business_version'], 'source_commit': record['source_commit'],
              'release_record': str(args.record.resolve()), 'release_record_sha256': sha256_file(args.record),
              'hosts': {'Claude': {'status': '待执行'},
-                       'Codex': {'status': CODEX_PENDING, 'note': 'Codex 的安装、缓存核对与恢复由 Codex 执行并回写（方案 C1）'}},
+                       'Codex': {'status': '待执行', 'note': '由 Codex 执行安装、核对与恢复，不由 Claude 代办'}},
              'overall': '未完成', 'created_at': now_iso()}
     save(path, check)
     return {'status': 'PASS', 'check': str(path)}
@@ -114,7 +117,7 @@ def claude_verify_installed(check: dict, config_dir: str | None) -> dict:
 
 
 def cmd_claude_install(args) -> dict:
-    path = check_path(args.record)
+    path = operation_path(args)
     check = load_check(path)
     section = check['hosts']['Claude']
     release_dir = args.release_dir.resolve()
@@ -153,7 +156,7 @@ def cmd_claude_install(args) -> dict:
 
 
 def cmd_claude_verify(args) -> dict:
-    path = check_path(args.record)
+    path = operation_path(args)
     check = load_check(path)
     result = claude_verify_installed(check, args.claude_config_dir)
     section = check['hosts']['Claude']
@@ -169,7 +172,7 @@ def cmd_claude_rollback(args) -> dict:
     An upgrade is rolled back by first restoring the previous release directory (release_package publish of
     the kept rollback package) and then running claude-install again; this command reports that need.
     """
-    path = check_path(args.record)
+    path = operation_path(args)
     check = load_check(path)
     section = check['hosts']['Claude']
     actions = section.get('actions', [])
@@ -195,7 +198,12 @@ def cmd_claude_rollback(args) -> dict:
 
 
 def cmd_codex(args) -> dict:
-    return {'status': CODEX_PENDING, 'reason': 'Codex 安装、核对与恢复接口由 Codex 接入（方案 C1）；此处不执行、不判成功'}
+    import codex_install
+    path = operation_path(args)
+    check = load_check(path)
+    handlers = {'codex-install': codex_install.cmd_install, 'codex-verify': codex_install.cmd_verify,
+                'codex-rollback': codex_install.cmd_rollback}
+    return handlers[args.command](args, path, check, save)
 
 
 def main(argv=None) -> int:
@@ -204,16 +212,24 @@ def main(argv=None) -> int:
     for name in ('init', 'claude-install', 'claude-verify', 'claude-rollback', 'codex-install', 'codex-verify', 'codex-rollback'):
         p = sub.add_parser(name)
         p.add_argument('--record', required=True, type=Path, help='发布记录 JSON')
+        p.add_argument('--check-file', type=Path, help='隔离演练用独立安装核对记录，避免覆盖正式状态')
         if name.startswith('claude-'):
             p.add_argument('--claude-config-dir', help='隔离演练用 CLAUDE_CONFIG_DIR；正式安装不填')
         if name == 'claude-install':
             p.add_argument('--release-dir', required=True, type=Path)
+        if name.startswith('codex-'):
+            p.add_argument('--codex-home', type=Path, help='隔离演练用 CODEX_HOME；正式安装不填')
+            p.add_argument('--codex-marketplace', help='Codex 市场名，默认 personal')
+        if name == 'codex-install':
+            p.add_argument('--release-dir', required=True, type=Path)
+            p.add_argument('--codex-marketplace-root', type=Path, help='不存在的市场由 CLI 从此根目录注册')
+            p.add_argument('--rollback-release-dir', type=Path, help='可复用的上一版发布包，避免另存一套')
     args = parser.parse_args(argv)
     handlers = {'init': cmd_init, 'claude-install': cmd_claude_install, 'claude-verify': cmd_claude_verify,
                 'claude-rollback': cmd_claude_rollback}
     try:
         result = handlers.get(args.command, cmd_codex)(args)
-    except (ReleaseError, FileNotFoundError, json.JSONDecodeError) as exc:
+    except (ReleaseError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
         result = {'status': 'FAIL', 'error': str(exc)}
     print(dump_json(result), end='')
     return {'PASS': 0, CODEX_PENDING: 3}.get(result['status'], 1)

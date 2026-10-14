@@ -26,7 +26,7 @@
    - `python maintenance/release_package.py run-tests` 跑完整回归并按受测指纹记录；提交后指纹相同即可复用，字节有变就补测；
    - 提交信息写明维护宿主、模型和登记编号；
    - `release_package.py build --commit <完整提交号>` 从提交提取临时包，检查缺失、篡改、多余三类问题，生成 `发布来源.json` 和冻结的发布记录；`publish` 再替换唯一发布目录并保留上一版回滚包；
-   - 每个宿主只安装、核对、恢复自己的那一边：`python maintenance/install_check.py init|claude-install|claude-verify|claude-rollback`。Codex 一侧由 Codex 执行并回写，工具对 Codex 命令只返回"待 Codex 接续"。两边都核对通过才算双宿主发布完成。
+   - 每个宿主只安装、核对、恢复自己的那一边：`python maintenance/install_check.py init|claude-install|claude-verify|claude-rollback`。Codex 一侧由 Codex 执行并回写，Codex 使用 `codex-install|codex-verify|codex-rollback`；`--codex-home` 指定隔离环境，隔离演练另给 `--check-file`，不覆盖正式核对记录。两边都核对通过才算双宿主发布完成。
 8. **回写**：区分代码已修复、单侧已安装、双侧发布完成和工程复验范围；登记补齐提交、版本和原任务是否需复跑。
 9. **释放锁**：`python maintenance/maint_lock.py release --commit <提交号>`，只有持锁会话能释放。
 

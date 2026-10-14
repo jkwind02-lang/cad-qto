@@ -179,14 +179,17 @@ def test_publish_keeps_previous_and_restores_it_when_the_new_copy_fails(mini,tmp
     assert (Path(result['previous_package'])/'old.txt').exists()
 
 
-def test_codex_install_side_is_pending_never_success(mini,tmp_path):
+def test_codex_install_refuses_untested_rehearsal_and_never_fake_success(mini,tmp_path,monkeypatch):
+    import codex_install
+    monkeypatch.setattr(codex_install,'require_owner',lambda:None)
     repo,maint,commit=mini
     record=Path(rp.build(commit,tmp_path/'pkg',maint,maint/'r',False,True)['record'])
     assert install_check.main(['init','--record',str(record)])==0
     for name in ['codex-install','codex-verify','codex-rollback']:
-        assert install_check.main([name,'--record',str(record)])==3
+        extra=['--release-dir',str(tmp_path/'pkg')] if name=='codex-install' else []
+        assert install_check.main([name,'--record',str(record),*extra])==1
     check=json.loads(install_check.check_path(record).read_text(encoding='utf-8'))
-    assert check['hosts']['Codex']['status']=='待 Codex 接续' and check['overall']=='未完成'
+    assert check['hosts']['Codex']['status']=='待执行' and check['overall']=='未完成'
 
 
 # ---------- issue registration ----------

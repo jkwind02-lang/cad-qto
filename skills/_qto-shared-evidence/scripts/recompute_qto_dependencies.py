@@ -185,7 +185,7 @@ def recalculate(document,previous=None,base_dir=None,previous_base_dir=None):
         elif old and old.get('review_state')=='current':
             # Inheritance re-verifies the evidence file; an old 'current' without evidence is not a human review.
             ref=old.get('review_evidence')
-            if not ref:problems=['旧结果的已复核状态没有人工复核凭据引用，不再继承']
+            if not isinstance(ref,dict) or not ref:problems=['旧结果的已复核状态没有有效的人工复核凭据引用对象，不再继承']
             else:evidence,problems=verify_evidence(ref,base_dir=previous_base_dir,project_id=project,node_id=key,fingerprint=old.get('fingerprint'),
                     unit=old.get('unit'),value=old.get('value'),reviewer=ref.get('reviewer'),reviewed_at=ref.get('reviewed_at'))
             if problems:issues.append({'node_id':key,'source':'inherited','issues':problems});evidence=None
