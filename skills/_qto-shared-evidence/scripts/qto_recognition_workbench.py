@@ -203,6 +203,13 @@ def build_index(source, layout="Model", authoritative_source=None, max_depth=32,
                    instance_transform=list(matrix))
         try:
             facts = facts_of(entity)
+            if facts.get('native_data') is not None:
+                from cad_native.basic_data import transform_data
+                from ezdxf.math import Matrix44
+                row['native_data']=copy.deepcopy(facts['native_data'])
+                # Common geometry uses column vectors; ezdxf uses row vectors.
+                native_matrix=Matrix44([matrix[c*4+r] for r in range(4) for c in range(4)])
+                row['native_geometry_wcs']=transform_data(facts['native_data']['basic_data'],native_matrix)
             row["issues"] = list(facts.get("geometry_issues", []))
             row["anchor"] = transform_point(facts.get("anchor"), matrix)
             if kind in {"TEXT", "MTEXT", "ATTRIB", "ATTDEF"}:
@@ -218,6 +225,11 @@ def build_index(source, layout="Model", authoritative_source=None, max_depth=32,
                            geometry_status="container" if kind == "INSERT" else "location_only")
             else:
                 row["issues"].append("没有可定位的完整几何；不得解释成图上没有对象")
+            if facts.get('native_data') is not None:
+                # A native insertion point does not bound the whole component.
+                row['bbox']=row['bbox3d']=None
+                row['geometry_status']='native_fields_read' if facts['native_data']['read_status']=='SERIALIZATION_COMPLETE' else 'native_fields_partial'
+                row['text']=facts['native_data']['basic_data'].get('text',{}).get('content')
             if not row['geometry'] and row['bbox'] is None:
                 envelope_box=transform_bounds(_unmeasured_envelope(entity),matrix)
                 if envelope_box is not None:

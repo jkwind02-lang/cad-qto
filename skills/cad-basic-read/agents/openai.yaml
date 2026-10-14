@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAD基础读取"
+  short_description: "读取普通CAD与天正构件参数、文字、位置和原生几何，明确数据缺口"
+  default_prompt: "使用 $cad-basic-read 读取图纸中的构件基础数据，保留来源、活动实例和缺失状态，不做算量。"

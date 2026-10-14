@@ -160,7 +160,7 @@
     }
   },
   "version_role": "historical_published_baseline",
-  "current_local_version": "0.2.0+codex.20261011.4",
+  "current_local_version": "0.2.0+codex.20261014.1",
   "local_update_20260929": {
     "version": "0.2.0+codex.20260929132631",
     "python_regressions_passed": 149,
@@ -195,7 +195,7 @@
     "ci_run": false,
     "record": "docs/钢结构真实案例改进_20260929.md"
   },
-  "current_runtime_files": 253,
+  "current_runtime_files": 266,
   "local_pipe_benchmark_update_20260929": {
     "version": "0.2.0+codex.20260929154857",
     "runtime_files": 225,
@@ -418,5 +418,33 @@
     "remote_ci_run": false,
     "project_drawings_or_workpapers_included": false,
     "prepared_at": "2026-10-11T20:06:57.651473+08:00"
+  },
+  "local_native_read_update_20261014": {
+    "version": "0.2.0+codex.20261014.1",
+    "status": "PASS",
+    "decoder_baseline": "0.5.1-native-fields-inline",
+    "runtime_files": 266,
+    "development_repository_installation_source_cache_equal": true,
+    "runtime_manifest_sha256": "e29725e6b86751b0417748f4a81476e9c94c9a94c9d543bdf6c092d9c0ae0908",
+    "full_regression_passed": 1147,
+    "baseline_regression_passed": 68,
+    "actual_entries": 15,
+    "active_instances": 35,
+    "fully_decoded_active_instances": 35,
+    "workbench_native_instances": 35,
+    "independent_port_endpoint_checks": 29,
+    "reader_vendor_modules_detected": [],
+    "conversion_process_module_sampling": "PASS",
+    "prototype_051_unchanged": true,
+    "source_unchanged": true,
+    "overall_cad_read_status": "PARTIAL",
+    "calculation_performed": false,
+    "git_committed": false,
+    "git_pushed": false,
+    "remaining_limits": [
+      "TCH_DBCONFIG、TCH_PSCONFIG未解码。",
+      "全部字段工程名称和部分曲线语义尚未核明。",
+      "普通CAD待补读和图纸原单位未知仍保留原状态。"
+    ]
   }
 }

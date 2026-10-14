@@ -12,7 +12,7 @@ def main():
             continue
         data=path.read_bytes()
         files.append({'path':path.relative_to(root/'skills').as_posix(),'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data)})
-    document={'schema_version':'cad-qto-runtime-manifest/1.0','professional_skills':13,'coordinator_skills':1,'runtime_file_count':len(files),'files':files}
+    document={'schema_version':'cad-qto-runtime-manifest/1.0','professional_skills':13,'coordinator_skills':1,'basic_read_skills':1,'runtime_file_count':len(files),'files':files}
     (root/'运行文件清单.json').write_text(json.dumps(document,ensure_ascii=False,indent=2)+'\n',encoding='utf-8',newline='\n')
     print(json.dumps({'status':'PASS','runtime_file_count':len(files)}))
 

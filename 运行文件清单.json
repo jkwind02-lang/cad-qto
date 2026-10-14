@@ -2,7 +2,8 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 253,
+  "basic_read_skills": 1,
+  "runtime_file_count": 266,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -38,6 +39,11 @@
       "path": "_qto-shared-evidence/references/CAD中性事实提取.md",
       "sha256": "21287782dd6bbe11ef66d63fa5199f27c23f10f3be204189e7bfc8e3bf7f820c",
       "bytes": 6659
+    },
+    {
+      "path": "_qto-shared-evidence/references/CAD基础读取与天正原生字段.md",
+      "sha256": "49f0cbb2da14e77baaec044080ea13212a39e408292578c4cd030f69fa0c92a6",
+      "bytes": 2527
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
@@ -155,14 +161,54 @@
       "bytes": 6026
     },
     {
+      "path": "_qto-shared-evidence/scripts/cad_native/__init__.py",
+      "sha256": "c7507682aba0fcb17b27af609acb03d031d93ab5e179de4e16be02a9d615772d",
+      "bytes": 239
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/cad_native/api.py",
+      "sha256": "9b0f882f96328aede1d36cf16b30990c2fddafeea252322b75a76d39a8fb1e4e",
+      "bytes": 4534
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/cad_native/basic_data.py",
+      "sha256": "90ed90c6e36a26a182e0dca2210fa7814d294f1c8eb89168455648ea7199efa4",
+      "bytes": 6293
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/cad_native/bitstream.py",
+      "sha256": "af141ed866f596d4804aa78aa691ece078078483cbe4accc34a703de707273c7",
+      "bytes": 3373
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/cad_native/legacy_schema.py",
+      "sha256": "e154cc12fac1b077e60ef79092e77b61e4c7124220489e162da086a818bfba49",
+      "bytes": 16084
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/cad_native/native_decode.py",
+      "sha256": "da816b0118d8147aabb8ed520530b64c25a4a805c5eba9b3fc08d2a4342e5774",
+      "bytes": 22794
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/cad_native/reader.py",
+      "sha256": "461f5a8c721384bbd8ffff9c6f2f06658373f2b2388e4931fccd8015ac2a82d6",
+      "bytes": 16666
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/cad_native/runtime_audit.py",
+      "sha256": "913deaba81b34f379f6a61088afe2ffa483b0a10fdcb877812cf028f49eabff3",
+      "bytes": 2824
+    },
+    {
       "path": "_qto-shared-evidence/scripts/export_dwg_exchange_dxf.ps1",
       "sha256": "9cd0c1b71b7aabe78e016272e1da974d3b9e2d12a8225eea1a53a895bed85dec",
       "bytes": 14117
     },
     {
       "path": "_qto-shared-evidence/scripts/extract_cad_neutral.py",
-      "sha256": "49864d2b0cd0c02028242f4d7a39d0ad66f298a496fb7799d88111887aba2444",
-      "bytes": 22527
+      "sha256": "904b406ed96737ae48036a03c8ba2390f04bd6566ffe2e18d83740e46d600f27",
+      "bytes": 23814
     },
     {
       "path": "_qto-shared-evidence/scripts/migrate_cad_review_view.py",
@@ -176,8 +222,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_cad_geometry.py",
-      "sha256": "ba551903169d2e881eaa98ca5fb52ded5b22abd09832ea2bd7920c495874fad5",
-      "bytes": 50278
+      "sha256": "252907c34f42209a1ea0cc9fc75cfaf42a5643ecdec3646cacae4bb3f88fd18c",
+      "bytes": 50485
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_cad_source_contract.py",
@@ -216,8 +262,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_recognition_workbench.py",
-      "sha256": "490bb7ae13bc0c4e0c152110c82cea4e0c579bd630c23440345a924442c911c3",
-      "bytes": 49915
+      "sha256": "5957915594897b5144fe754f4217094e603ec2d0b1d57f90a2f0bb5d7bfa082e",
+      "bytes": 50857
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
@@ -233,6 +279,11 @@
       "path": "_qto-shared-evidence/scripts/qto_spatial.py",
       "sha256": "d228ad667878b54244414844df23562feb9ca6471b183d1f4302124e83a84a25",
       "bytes": 6283
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/read_cad_basic.py",
+      "sha256": "1eb35994475b4a380877bc7267400782a8049fc3e6c09d250b4d4807e5b14cbd",
+      "bytes": 6379
     },
     {
       "path": "_qto-shared-evidence/scripts/read_qto_review_feedback.py",
@@ -253,6 +304,21 @@
       "path": "_qto-shared-evidence/scripts/validate_shared_evidence.py",
       "sha256": "a5a8622eee71ff7f13ce868f1bbda83fda2fce9e0fed7d4f48538ff44e749576",
       "bytes": 8144
+    },
+    {
+      "path": "cad-basic-read/agents/openai.yaml",
+      "sha256": "1f0eb0f0b0900263c0cec0bf3501ee2621139c58fdeb9f26b4fbe3415e2c549e",
+      "bytes": 306
+    },
+    {
+      "path": "cad-basic-read/capability.json",
+      "sha256": "e4d109b7cb5d95fe75e7687284e17c85561e3f2f9b400141173f77ee9e53edb4",
+      "bytes": 770
+    },
+    {
+      "path": "cad-basic-read/SKILL.md",
+      "sha256": "7f9109cbf52962d9eb5f3f00341abc9d431a8370c1b4dd264d186b37abbda0bf",
+      "bytes": 2572
     },
     {
       "path": "qto-components-points/agents/openai.yaml",
@@ -441,8 +507,8 @@
     },
     {
       "path": "qto-coordinator/SKILL.md",
-      "sha256": "fa17534bf2dc50d6eb88249d1456fe7f2e9b8db12e50c61a0e4299a46581fb23",
-      "bytes": 7990
+      "sha256": "2b6f4730cd06e90a062e984fe2382cfd29305f41f17369a9e330741e8552ef02",
+      "bytes": 8154
     },
     {
       "path": "qto-duct-air-systems/agents/openai.yaml",

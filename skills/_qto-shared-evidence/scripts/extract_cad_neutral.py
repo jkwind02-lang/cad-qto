@@ -25,7 +25,7 @@ except ImportError as exc:  # pragma: no cover - exercised by deployment checks
 
 from qto_cad_geometry import GEOMETRY_SCHEMA, entity_geometry as extract_geometry_facts, read_dxf_with_diagnostics, resolve_underlay_dependency
 
-VERSION = "qto-cad-neutral-extractor/1.3.0"
+VERSION = "qto-cad-neutral-extractor/1.4.0"
 CURVE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "CIRCLE", "ELLIPSE", "SPLINE"}
 UNIT_NAMES = {
     0: "Unitless",
@@ -134,7 +134,7 @@ def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: 
             str(get_dxf(item, "tag", "")): str(get_dxf(item, "text", ""))
             for item in entity.attribs
         }
-    return {
+    record = {
         "row_type": "entity",
         "layout": layout,
         "parent_block": parent_block,
@@ -177,6 +177,10 @@ def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: 
         "length_error_estimate": geometry["length_error_estimate"],
         "external_reference": resolve_underlay_dependency(geometry["external_reference"], dependency_context) if geometry.get("external_reference") else None,
     }
+    if geometry.get('native_data') is not None:
+        record['native_data']=geometry['native_data']
+        record['geometry_method']='tianzheng_native_fields/0.5.1'
+    return record
 
 
 def failed_record(entity, layout, parent_block, source_hash, raw_unit, sequence, error):
@@ -258,12 +262,12 @@ def write_stream(path: Path, groups: Iterable[tuple[str, str | None, Iterable[An
     return count, types, failures
 
 
-def main() -> int:
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="从DXF交换副本生成专业无关的CAD中性取证包")
     parser.add_argument("--source-dxf", required=True, type=Path)
     parser.add_argument("--source-dwg", type=Path, help="可选：作为权威来源绑定的原DWG")
     parser.add_argument("--output-dir", required=True, type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         dxf_path = args.source_dxf.resolve()
         if not dxf_path.is_file() or dxf_path.suffix.lower() != ".dxf":
@@ -309,6 +313,16 @@ def main() -> int:
         failure_path = output / "CAD提取失败对象.json"
         coverage_path = output / "CAD读取覆盖与待补读.json"
         manifest_path = output / "CAD中性取证清单.json"
+        native_path = output / "CAD原生构件基础数据.json"
+        from cad_native import read_document
+        native = read_document(document)
+        native['input']={'exchange_path':str(dxf_path),'exchange_sha256':sha256(dxf_path),
+            'original_dwg':str(dwg_path) if dwg_path else None,'original_sha256':primary_hash if dwg_path else None,
+            'dxf_version':document.dxfversion,'insunits_original':unit_code,'primary_source_sha256':primary_hash}
+        native['source_diagnostics']=source_diagnostics
+        native['conversion']=conversion
+        native['purpose']='CAD basic-data reading; no engineering quantity calculation'
+        native_path.write_text(json.dumps(native,ensure_ascii=False,indent=2,allow_nan=False)+'\n',encoding='utf8')
 
         layout_groups = [(layout.name, None, layout) for layout in document.layouts]
         block_groups = [
@@ -317,6 +331,7 @@ def main() -> int:
             if not block.is_any_layout
         ]
         coverage = new_coverage()
+        coverage['native_read_coverage']=native['summary']
         layout_count, layout_types, layout_failures = write_stream(layout_path, layout_groups, primary_hash, raw_unit, coverage=coverage, dependency_context=dependency_context)
         block_count, block_types, block_failures = write_stream(block_path, block_groups, primary_hash, raw_unit, coverage=coverage, dependency_context=dependency_context)
         failures = layout_failures + block_failures
@@ -359,6 +374,8 @@ def main() -> int:
             "neutral_extraction_status": "PASS" if not failures else "PARTIAL",
             "read_coverage": {key: coverage[key] for key in ("entity_count", "capability_counts", "status_counts", "read_failed_count", "pending_object_count", "external_reference_count", "source_identity_issue_count", "source_identity_advisory_count", "source_read_warning_count", "quantity_coverage_proven")},
             "professional_classification_performed": False,
+            "native_decoder_baseline": "0.5.1-native-fields-inline",
+            "native_read_coverage": native['summary'],
             "authoritative_source": {"path": str(primary_path), "sha256": primary_hash, "bytes": primary_path.stat().st_size},
             "exchange_dxf": {"path": str(dxf_path), "sha256": sha256(dxf_path), "bytes": dxf_path.stat().st_size},
             "exchange_conversion": conversion,
@@ -372,6 +389,7 @@ def main() -> int:
                 "block_definitions": {"path": str(block_path), "sha256": sha256(block_path), "count": block_count, "entity_type_counts": dict(sorted(block_types.items()))},
                 "failures": {"path": str(failure_path), "sha256": sha256(failure_path), "count": len(failures)},
                 "read_coverage": {"path": str(coverage_path), "sha256": sha256(coverage_path), "count": len(coverage["pending_objects"])},
+                "native_basic_data": {"path": str(native_path), "sha256": sha256(native_path), "count": len(native['objects'])},
             },
             "layouts": [layout.name for layout in document.layouts],
             "blocks": block_rows,

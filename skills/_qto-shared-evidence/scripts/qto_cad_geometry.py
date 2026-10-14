@@ -701,6 +701,9 @@ def transform_row(row, matrix, instance_path, target_layout):
 
 
 def entity_geometry(entity: Any):
+    if entity.dxftype() in ('ACAD_PROXY_ENTITY','ACAD_PROXY_OBJECT') or entity.dxftype().startswith('TCH_'):
+        from cad_native import native_geometry_facts
+        return native_geometry_facts(entity)
     """Extract full curves in WCS without exploding the source drawing."""
     from ezdxf.math import Vec3
     kind = entity.dxftype()

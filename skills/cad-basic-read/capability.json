@@ -1,0 +1,11 @@
+{
+  "schema_version": "cad-basic-read-capability/1.0",
+  "skill": "cad-basic-read",
+  "decoder_baseline": "0.5.1-native-fields-inline",
+  "purpose": "CAD构件基础数据读取",
+  "automatic_scope": ["普通CAD图元事实", "已支持版本的天正参数、文字、原生几何字段与引用", "活动实例、嵌套图块及阵列变换", "未知记录与缺失状态保留"],
+  "runtime_dependencies": ["Python", "ezdxf", "仅DWG转换需要本机现有CAD引擎"],
+  "tianzheng_runtime_required": false,
+  "quantity_calculation_performed": false,
+  "known_limitations": ["0.5.1尚未读通配置记录和所有类别或版本", "部分曲线类型码与偏移字段的工程语义未核明", "原生载荷已经丢失的普通图元不能还原专用参数"]
+}
