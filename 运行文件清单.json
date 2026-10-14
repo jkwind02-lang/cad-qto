@@ -2,7 +2,7 @@
   "schema_version": "cad-qto-runtime-manifest/1.0",
   "professional_skills": 13,
   "coordinator_skills": 1,
-  "runtime_file_count": 279,
+  "runtime_file_count": 280,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -36,8 +36,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/CAD中性事实提取.md",
-      "sha256": "2037880c3a7a0e5938f4ade1b03c1e07f7b705b480a313a48bb98ad158f5faa4",
-      "bytes": 7497
+      "sha256": "ec85d56f5bcd7aefda92f27aaa4d8a9c2c6ac6ebc49577bdbd9df7c9d76ef75a",
+      "bytes": 9598
     },
     {
       "path": "_qto-shared-evidence/references/CAD图样观察与模型识图.md",
@@ -283,6 +283,11 @@
       "path": "_qto-shared-evidence/scripts/qto_spatial.py",
       "sha256": "d228ad667878b54244414844df23562feb9ca6471b183d1f4302124e83a84a25",
       "bytes": 6283
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_viewport_evidence.py",
+      "sha256": "0311b89e78f4b1e26d577636523a7e10d9110a99cf7ccfc3fde642918afd1d3c",
+      "bytes": 29009
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_workflow_dependencies.py",
