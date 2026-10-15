@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 285,
+  "runtime_file_count": 286,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -57,8 +57,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
-      "sha256": "3ac397c77095073bd810200d0d52a8a8a43956042918b9b7217acedfbc393435",
-      "bytes": 15383
+      "sha256": "2b1142d7c52d9c76e8394b2ab749c5f49eb01b6f3a226d2a2ce9cca0e023c956",
+      "bytes": 20168
     },
     {
       "path": "_qto-shared-evidence/references/PDF图片与表格提取.md",
@@ -187,8 +187,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/build_review_scenes_from_tables.py",
-      "sha256": "4f8269338ac9422c9ddd171400f1bfd6ebd05a0273c5a6cf6b298eec0dee3b25",
-      "bytes": 38683
+      "sha256": "b2440772f8bbbd118c4ab8f81f8173675d037deed9083a4dc600fda83dc8b835",
+      "bytes": 39632
     },
     {
       "path": "_qto-shared-evidence/scripts/cad_native/__init__.py",
@@ -722,8 +722,8 @@
     },
     {
       "path": "qto-electrical-routes/references/复核页审核视图接入.md",
-      "sha256": "684df5e582bdc9053cd072de9f2706de77dc22dc3fce7f4c54da90352cacecad",
-      "bytes": 8100
+      "sha256": "39f888a4f7af1f1b7e9f459c7d2656aea3aee068e6e6d3f7a53fdd17fd72b0fc",
+      "bytes": 11798
     },
     {
       "path": "qto-electrical-routes/references/常规计算逻辑.md",
@@ -734,6 +734,11 @@
       "path": "qto-electrical-routes/references/案例与接入清单.md",
       "sha256": "6d4a9647f0669a71154a1bcf79584f59591b49eb801774e278b22f7f149d9da2",
       "bytes": 657
+    },
+    {
+      "path": "qto-electrical-routes/references/电气图面映射样例.json",
+      "sha256": "411f215e87d3aa71d053b8fabc19d17a934a298fd5a09b1095aaed03f4e5649c",
+      "bytes": 1978
     },
     {
       "path": "qto-electrical-routes/references/电气审核视图映射样例.json",

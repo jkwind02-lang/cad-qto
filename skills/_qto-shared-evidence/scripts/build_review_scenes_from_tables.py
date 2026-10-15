@@ -21,7 +21,7 @@ OBJECT_FIELDS = SPEC_FIELDS | {'key', 'filter', 'geometry', 'transform', 'coords
 GROUP_KEYS = ('id', 'title', 'category', 'status', 'proposal', 'reason')
 GROUP_FIELDS = SPEC_FIELDS | {'members'}
 DRAWING_FIELDS = {'id', 'neutral_dir', 'coordinate_unit', 'precision', 'title', 'background'}
-SCENE_FIELDS = {'id', 'drawing', 'title', 'base', 'overlays', 'background'}
+SCENE_FIELDS = {'id', 'drawing', 'title', 'base', 'dx', 'dy', 'overlays', 'background'}
 OVERLAY_FIELDS = {'sheet', 'dx', 'dy', 'layers_include', 'layers_exclude'}
 BG_FIELDS = {'layers_include', 'layers_exclude', 'text_max_len', 'include_types'}
 NUMBER_KEYS = {'x', 'y', 'x1', 'y1', 'x2', 'y2'}
@@ -236,7 +236,7 @@ def build(m, base, neutral_root, problems, files):
   drawings[d['id']] = {'id': d['id'], 'unit': unit, 'precision': d.get('precision', 0 if unit == 'mm' else 3), 'layout': layout, 'sha256': src['sha256'].lower(),
                        'title': d.get('title') or f"{d['id']}（{Path(str(src.get('path', ''))).name}）", 'background': d.get('background') or {}}
  # Sheets (contract 4).
- sheets = {}
+ sheets, conflicts, sheet_rows, used_conflicts = {}, {}, {}, set()
  for spec in m.get('sheets') or []:
   rows, _ = read_rows(spec, SHEET_KEYS, base, problems, files, 'sheets')
   for r in rows:
@@ -249,8 +249,9 @@ def build(m, base, neutral_root, problems, files):
    if bounds and (bounds[2] <= bounds[0] or bounds[3] <= bounds[1]): problems.append({'check': 'S-0', 'where': r['_where'], 'message': '图框范围无效'}); continue
    rec = {'sheet_id': sid, 'drawing': dr, 'title': opt(r, 'title') or sid, 'floor': opt(r, 'floor'), 'sheet_kind': opt(r, 'sheet_kind'), 'bounds': bounds, 'raster_path': opt(r, 'raster_path')}
    key = (dr, sid)
-   if key in sheets and sheets[key] != rec: problems.append({'check': 'S-0', 'where': r['_where'], 'message': f'图页 {dr}|{sid} 在几张图页表里内容不同'}); continue
-   sheets[key] = rec
+   # A repeated sheet id with different content only matters when an object uses it (contract 4).
+   if key in sheets and sheets[key] != rec: conflicts.setdefault(key, [sheet_rows[key]]).append(r['_where']); continue
+   sheets[key] = rec; sheet_rows.setdefault(key, r['_where'])
  by_sid = defaultdict(set)
  for dr, sid in sheets: by_sid[sid].add(dr)
  # Composite scenes (contract 5): which sheet goes into which scene, with the declared offset.
@@ -262,11 +263,13 @@ def build(m, base, neutral_root, problems, files):
    problems.append({'check': 'S-0', 'where': where, 'message': '叠图须有 id、已声明的 drawing 和图页表里的 base'}); continue
   scene_id = f"{s['drawing']}|{s['id']}"
   if scene_id in composites: problems.append({'check': 'S-0', 'where': where, 'message': '叠图编号重复：' + scene_id}); continue
-  members = [(s['base'], 0.0, 0.0, {})] + [(o.get('sheet'), o.get('dx', 0), o.get('dy', 0), o) for o in s.get('overlays') or [] if isinstance(o, dict)]
+  # The scene's own dx, dy move the base sheet (several floors brought into one coordinate system, contract 5).
+  members = [(s['base'], s.get('dx', 0), s.get('dy', 0), {})] + [(o.get('sheet'), o.get('dx', 0), o.get('dy', 0), o) for o in s.get('overlays') or [] if isinstance(o, dict)]
   for sid, dx, dy, o in members:
    key = (s['drawing'], sid)
    if key not in sheets or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (dx, dy)): problems.append({'check': 'S-0', 'where': where, 'message': f'叠图图页 {sid} 不在图页表里，或 dx、dy 不是数字'}); continue
    if key in home: problems.append({'check': 'S-0', 'where': where, 'message': f'图页 {sid} 已属于叠图 {home[key][0]}，一张图页只能属于一个场景'}); continue
+   if key in conflicts: used_conflicts.add(key); continue
    if sheets[key]['bounds'] is None: problems.append({'check': 'S-0', 'where': where, 'message': f'叠图图页 {sid} 须有图框范围'}); continue
    home[key] = (scene_id, float(dx), float(dy), o)
   composites[scene_id] = s
@@ -340,6 +343,7 @@ def build(m, base, neutral_root, problems, files):
   sid = opt(first, 'sheet'); dr = opt(first, 'drawing')
   if dr is None and sid is not None and len(by_sid.get(sid, ())) == 1: dr = next(iter(by_sid[sid]))
   sheet = sheets.get((dr, sid)) if sid is not None else None
+  if (dr, sid) in conflicts: used_conflicts.add((dr, sid)); continue
   reason, note, polys, kind, notes, hids = opt(first, 'unlocated_reason'), opt(first, 'unlocated_note'), [], None, [], []
   for x in rows:
    if x['use'] == 'handle':
@@ -420,7 +424,8 @@ def build(m, base, neutral_root, problems, files):
  for scene_id, objs in sorted(used.items()):
   if scene_id in composites:
    s = composites[scene_id]; base_sheet = sheets[(s['drawing'], s['base'])]; dr = s['drawing']
-   bounds, basis, title = base_sheet['bounds'], None, s.get('title') or base_sheet['title']
+   _, bdx, bdy, _ = home.get((dr, s['base']), (None, 0.0, 0.0, None)); b = base_sheet['bounds']
+   bounds, basis, title = [b[0] + bdx, b[1] + bdy, b[2] + bdx, b[3] + bdy], None, s.get('title') or base_sheet['title']
    parts = [(sid, dx, dy, o) for (d0, sid), (sc, dx, dy, o) in home.items() if sc == scene_id]
   else:
    dr, sid = scene_id.split('|', 1); sh = sheets[(dr, sid)]
@@ -510,12 +515,16 @@ def build(m, base, neutral_root, problems, files):
    if x['use'] == 'handle': hcount[x.get('reason') or 'found'] += 1
  checks['S-4'] = {'handle_rows': sum(hcount.values()), **hcount, 'duplicate_top_level_handles': resolve_counter['handle_duplicates'], 'pass': True}
  checks['S-5'] = {'scenes': len(scenes), 'pass': all(k in background_sets for s in scenes for k in s.get('background_refs', []))}
+ for key in sorted(used_conflicts):
+  problems.append({'check': 'S-0', 'where': '；'.join(conflicts[key]), 'message': f'图页 {key[0]}|{key[1]} 在图页表里有几行且内容不同，对象或叠图用到了它，须先在图页表里改正'})
  for o in draws: o.pop('_rows'); o.pop('_bounds_known')
  info = {'tables': [{**{k: v for k, v in t.items() if k not in ('skipped', 'unlocated')}, 'skipped': dict(t['skipped']), 'unlocated': dict(t['unlocated'])} for t in report_tables],
          'scenes': [{'id': s['id'], 'title': s['title'], 'objects': dict(Counter(o['kind'] for o in used.get(s['id'], []))), **dict(scene_meta[s['id']]['stats']),
                      **({'bounds_basis': s['bounds_basis']} if s.get('bounds_basis') else {}), 'background_key': scene_meta[s['id']]['key'], 'background_filters': scene_meta[s['id']]['filters']} for s in scenes],
          'objects': dict(Counter(o['kind'] for o in draws)), 'unlocated': dict(Counter(o.get('unlocated_reason') for o in draws if o['kind'] == 'unlocated')),
          'checks': checks}
+ unused = [{'sheet': f'{k[0]}|{k[1]}', 'rows': v} for k, v in sorted(conflicts.items()) if k not in used_conflicts]
+ if unused: info['sheet_conflicts_unused'] = unused
  return view, info
 
 

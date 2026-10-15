@@ -1,0 +1,23 @@
+{
+ "schema": "qto-review-scene-mapping/1.0",
+ "view": {"project_id": "填项目业务名称", "review_id": "电气 <包号> <范围>", "title": "<包号> 图面复核", "revision": "r1",
+          "professional": "qto-components-points",
+          "scope_notes": ["灯具点位取 fix.csv（原图坐标），走线取 x/wire.csv，同一句柄的多段按 [sheet, handle] 合并。"]},
+ "drawings": [{"id": "D006"}],
+ "background": {"layers_exclude": ["^WIRE-", "^E-CABL-TRAY", "(?i)^defpoints$"]},
+ "sheets": [{"path": "../../../共享事实/D006_图页台账.csv",
+             "columns": {"sheet_id": "图页编号", "title": "图名", "floor": "楼层区域", "sheet_kind": "状态", "x1": "x1", "y1": "y1", "x2": "x2", "y2": "y2"},
+             "constants": {"drawing": "D006"},
+             "value_maps": {"sheet_kind": {"系统图/原理图": "系统图", "说明/图例/材料表": "表与说明", "详图": "详图", "目录": "表与说明", "现行": "平面", "待核": "平面"}}}],
+ "objects": [
+  {"key": "fix", "path": "../fix.csv",
+   "columns": {"object_id": "handle", "sheet": "sheet", "category": "layer", "x": "x", "y": "y"},
+   "constants": {"catalog_key": "灯具点位|{sheet}|{handle}", "title": "{attrA}（句柄 {handle}）", "status": "待复核"},
+   "value_maps": {"category": {"EQUIP-照明": "灯具点位·照明", "EQUIP-应急": "灯具点位·应急", "EQUIP-插座": "插座点位", "EQUIP-动力": "动力点位"}},
+   "attributes": {"块名": "block", "楼层": "floor", "图块属性 A": "attrA"}},
+  {"key": "wire", "path": "../x/wire.csv", "professional": "qto-electrical-routes",
+   "group_by": ["sheet", "handle"],
+   "columns": {"object_id": "handle", "sheet": "sheet", "category": "layer", "x1": "x1", "y1": "y1", "x2": "x2", "y2": "y2"},
+   "constants": {"catalog_key": "走线|{sheet}|{handle}", "title": "{layer} 走线（句柄 {handle}）", "status": "待复核"},
+   "attributes": {"段长 mm": "len", "楼层": "floor"}}]
+}

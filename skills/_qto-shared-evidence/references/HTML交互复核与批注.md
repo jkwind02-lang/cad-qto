@@ -55,6 +55,7 @@
 - `source_sha256`由生成器按项目、复核范围和排序后的来源文件SHA计算。换原图/项目/范围后不能沿用旧身份。多个DWG/PDF可以分别成为`sources`，图页通过`source_id`引用。
 - 图页`coordinate_unit`与数量`unit`独立；CAD可以用mm，PDF用px。`y_axis`为`up`或`down`，不能混用未校准坐标。三维对象提供可定位平面/剖面/详图投影，原三维数据保留在属性中，不把三维量按二维投影重算。
 - 对象`kind`支持`point`、`line`、`polygon`及`unlocated`。面域可带`holes`孔洞环。没有可靠定位时使用`unlocated`并说明原因，不生成假坐标，也不隐藏该项数量或未决。
+- 一条线由几段不相接的折线组成时（例如炸开的多段线），写`parts`（折线列表，每段至少两点），`points`等于第一段；页面逐段画、逐段点选。未定位对象可写`unlocated_reason`：`no_geometry`（没有坐标）、`handle_not_found`（句柄查不到）、`handle_in_block`（在块内，回不到）、`sheet_unknown`（图页不在图页表里）、`outside_sheet`（落在图页范围外）、`estimated`（估算，没有图面路径），另可写`unlocated_note`；页面在对象详情和成员表里显示。
 - 图页`background`为`line/polygon`的`points`或`text`的`point/text/rotation/height`。可用`raster_path`嵌入原图PNG/JPEG；生成时转成内嵌图片，不依赖旁边文件、临时服务或外网。已有SVG用可信几何或原图栅格，不接受可执行外部SVG。
 - 多图页共用底图时，放入顶层`background_sets`，图页以`background_refs`引用，避免重复嵌入；窗口只绘制当前可见范围。可用`default_category`指定初始待补资料类别，已解决对象仍在其他类别保留。
 - `catalog_key`唯一对应复核记录；同一实物可以有不同问题记录，`id`应保持同一物理身份。跨专业应有不冲突的稳定编号。对象模式按专业、类别和物理ID去重显示，原记录与分组关联完整保留。
@@ -126,6 +127,42 @@ python ../_qto-shared-evidence/scripts/migrate_cad_review_view.py --input 旧复
 复核页就是最终成果页：显示本次算出的全部总量，按楼栋、分部、品类分类，能查明细组成并溯源到最初依据；重点是成果中没有依据或无法判断的内容，按问题性质分组，用共性问题答一类、解决一片；第三方数量只作对比，偏差按本次依据是否充分归因，清单的问题按类型整组答复。1.1 视图在 1.0 全部字段之外加可选的 `comparison` 节：条目（本次各层级量、明细行含已定不计、成员，可带第三方来源段）、个别问题和共性问题（性质、做法及影响量）。页面默认打开“成果”，另有“待解决问题”“对照审核”“图面复核”；可以没有图页，有图页时成员回图高亮。批注写 `qto-review-feedback/2.1`：共性问题答复对整个适用范围生效，个别处只写例外；读取时多出 `common_issue_actions`、`item_actions`、`issue_actions`、`conflicts`、`overlaps`。不带 `comparison` 的视图，页面与原来完全一致。
 
 字段、表格输入脚本和检查规则见 [复核页：成果、待解决问题与对照审核](复核页待解决与对照审核.md)；运行实现另有 [表格输入](../scripts/build_comparison_view_from_tables.py)、[对照校验](../scripts/qto_review_comparison.py)。
+
+## 7. 用项目表格生成图面（qto-review-scene-mapping/1.0）
+
+项目已有点位、走线、图页这类表，又有图纸的中性事实（`CAD中性取证清单.json`、`中性布局图元.ndjson`）时，不用自己写图面脚本，写一份映射交给 [图面视图生成](../scripts/build_review_scenes_from_tables.py)：
+
+~~~text
+python build_review_scenes_from_tables.py --mapping 图面映射.json --neutral-root <中性事实根目录> --output <包>_图面视图_r1.json --report 图面转换检查.json [--estimate]
+~~~
+
+~~~json
+{
+  "schema": "qto-review-scene-mapping/1.0",
+  "view": {"project_id": "本项目业务名称", "review_id": "本包范围", "title": "图面复核", "revision": "r1", "professional": "qto-components-points"},
+  "drawings": [{"id": "D001"}],
+  "background": {"layers_exclude": ["^WIRE-"]},
+  "sheets": [{"path": "图页台账.csv", "constants": {"drawing": "D001"},
+              "columns": {"sheet_id": "图页编号", "title": "图名", "floor": "楼层", "x1": "x1", "y1": "y1", "x2": "x2", "y2": "y2"}}],
+  "objects": [
+    {"key": "fix", "path": "fix.csv", "columns": {"object_id": "handle", "sheet": "sheet", "x": "x", "y": "y"},
+     "constants": {"catalog_key": "点位|{sheet}|{handle}", "title": "{attrA}（句柄 {handle}）", "category": "灯具点位", "status": "待复核"}},
+    {"key": "wire", "path": "wire.csv", "professional": "qto-electrical-routes", "group_by": ["sheet", "handle"],
+     "columns": {"object_id": "handle", "sheet": "sheet", "x1": "x1", "y1": "y1", "x2": "x2", "y2": "y2"},
+     "constants": {"catalog_key": "走线|{sheet}|{handle}", "title": "走线（句柄 {handle}）", "category": "走线", "status": "待复核"},
+     "attributes": {"段长": "len"}}]
+}
+~~~
+
+- 图纸 `drawings`：`id` 是中性事实目录名；原图 SHA256 由脚本从取证清单取，不要抄。米制图写 `coordinate_unit: "m"`。
+- 图页 `sheets`：图页编号、图纸、图框范围。场景编号为 `<图纸>|<图页>`；只给用到的图页出场景；没有图框时按对象外包框推定并标出。同一图页编号有几行而图框不同：被用到就报错，没用到只在报告里列出。
+- 叠图 `scenes`（可选）：`base` 加 `overlays`，平移量 `dx, dy` 由项目声明，插件不求配准；叠图自身的 `dx, dy` 平移 `base`，用于把几层换到同一坐标系。
+- 对象 `objects`：几何按“坐标列（`x, y`；`x1…y2`；`points` JSON）→ 句柄 `handle`（在中性布局里回取）→ 无”取第一种；`constants` 可写 `{列名}` 模板；`coords: "scene"` 表示坐标已是场景坐标；米制或局部原点的表声明 `transform: {scale, dx, dy}`，不声明就不用坐标列。
+- `group_by` 只用于线：同键几行，首尾相接的连成一条，不相接的成为 `parts`；合并的表不带数量，各段的值列进属性。没写 `group_by` 而 `catalog_key` 重复的报错。
+- 不造坐标：句柄查不到、在块内、图页不明、落在图页外的，都成为未定位对象并写原因；项目可在表里声明 `estimated` 或 `no_geometry`。
+- 底图：按图页范围从中性布局流式抽取模型空间顶层图元，整个落在图页里的才取；块内不展开，只计数；填充、尺寸标注缺省不取；文字限 30 字；按图层正则过滤。几个场景过滤条件相同时共用一份底图。
+- 检查：S-1 每个表行进了对象或列为跳过；S-2 `catalog_key` 唯一、每个对象都有来源行；S-3 定位对象在场景范围内；S-4 句柄回取结果计数；S-5 底图引用齐全；S-6 视图契约。报 `INPUT_REQUIRED` 时 `problems` 列出全部问题，视图不写出；输出文件已存在时拒绝覆盖。
+- 生成的视图可直接出页面，也可作 `build_comparison_view_from_tables.py` 的 `--base-view`：几包引用同一图页时，内容相同的场景合为一页。对照审核里，有计数的对象用成员挂接表（`member_links`）核“图上个数 = 明细数量”；按长度的走线、桥架用定位挂接表 `member_refs`（`catalog_key`、`detail_id`），只把对象挂到明细上回图，不核数量，所挂明细行的汇总方式须为 `declared`。
 
 ## 2026-09-20 成果快照绑定（优先于旧版回执说明）
 

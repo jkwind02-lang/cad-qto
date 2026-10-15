@@ -194,6 +194,33 @@ def test_scene_composite_overlay_shifts_handles_and_background(tmp_path):
     assert {f['sheet']: (f['dx'], f['dy']) for f in next(s for s in report['scenes'] if s['id'] == 'D1|C1')['background_filters']} == {'P1': (0.0, 0.0), 'P2': (-20000.0, 0.0)}
 
 
+def test_scene_base_shift_moves_base_sheet_objects_bounds_and_background(tmp_path):
+    scenes = [{'id': 'C1', 'drawing': 'D1', 'base': 'P1', 'dx': 500, 'dy': -300, 'overlays': [{'sheet': 'P2', 'dx': -20000, 'dy': 0}]}]
+    fix = FIX + [['G1', 'P2', 'Q1', '右半走线', 'WL5', '']]
+    code, _, report, out = convert(tmp_path, scenes=scenes, fix=fix)
+    assert code == 0, report
+    v = json.loads(out.read_text(encoding='utf-8')); o = by_id(v)
+    c1 = next(s for s in v['scenes'] if s['id'] == 'D1|C1')
+    assert c1['bounds'] == [500.0, -300.0, 10500.0, 7700.0] and c1['title'] == '一层照明'
+    assert o['F1']['points'] == [[2500.0, 1700.0]] and o['G1']['points'] == [[1000.0, 1000.0], [2000.0, 1000.0]]
+    lines = [i['points'] for i in v['background_sets'][c1['background_refs'][0]] if i['kind'] == 'line']
+    assert [[1500, 700], [3500, 700]] in lines and [[1000, 1000], [2000, 1000]] in lines
+
+
+def test_scene_repeated_sheet_with_different_frames_fails_only_when_used(tmp_path):
+    global SHEETS
+    saved = SHEETS
+    try:
+        SHEETS = saved + [['P2', '一层照明（右半）', '1F', '平面', '40000', '0', '50000', '8000']]
+        code, _, report, _ = convert(tmp_path / 'a')
+        assert code == 0, report
+        assert report['sheet_conflicts_unused'] == [{'sheet': 'D1|P2', 'rows': ['tables/sheets.csv 第 3 行', 'tables/sheets.csv 第 6 行']}]
+        code, _, report, out = convert(tmp_path / 'b', fix=FIX + [['G1', 'P2', 'Q1', '右半走线', 'WL5', '']])
+        assert code == 2 and not out.exists() and any('改正' in p['message'] and p['where'].endswith('第 6 行') for p in report['problems'])
+    finally:
+        SHEETS = saved
+
+
 def test_scene_estimate_writes_no_view(tmp_path):
     nroot = neutral(tmp_path); m, _ = mapping(tmp_path)
     code, summary, _ = run(SCRIPT, '--mapping', m, '--neutral-root', nroot, '--estimate', '--report', tmp_path / 'r.json')
