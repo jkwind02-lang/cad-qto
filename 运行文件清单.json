@@ -22,13 +22,13 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-audit.js",
-      "sha256": "a5172aca71bf91ef981a972058b9c6b74c0c8f7e2e34deedd2c4ebafd44cfafd",
-      "bytes": 59742
+      "sha256": "f415ee5921c9eb61a0376dee8e9ecb662c363599052cf74fb9f48cdd63890cb1",
+      "bytes": 60764
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-core.js",
-      "sha256": "0aa1a970bdb523ca3772c7a5737af05c9853a245f48762764d72bece35add689",
-      "bytes": 15435
+      "sha256": "1bf1951f00da9b390606248bb115a2d5cfe5174424cb6b941930189cd75ff39b",
+      "bytes": 16973
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-shell.html",
@@ -87,8 +87,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/复核页待解决与对照审核.md",
-      "sha256": "5158cf7c08375f259836ba7cf347540796618396f31ccf6d19101d62be576b25",
-      "bytes": 16403
+      "sha256": "74af32232fc3491baacb31c9c3184c5c53014bac1c0b67f0891754375cf69ec5",
+      "bytes": 16812
     },
     {
       "path": "_qto-shared-evidence/references/尺寸指向与尺寸链复核.md",
@@ -312,13 +312,13 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
-      "sha256": "69e2039500538662a1dffc3d8fa55035b531c98334664446f606b10aaddadd1c",
-      "bytes": 17293
+      "sha256": "bf463ec5b2e2edbf370d41a607522b92d0cf1a25e5cd3a93b95505c908aeb321",
+      "bytes": 17720
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_revision.py",
-      "sha256": "7a4b8e758527315121773c3d6b5643602e659ed16333d5738ffe8e864030d48e",
-      "bytes": 9451
+      "sha256": "4203751c73c825dcd0ec975eaaa4c81b6750a6ac795a0caed45fbedb94627146",
+      "bytes": 11054
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_spatial.py",
@@ -332,8 +332,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/read_qto_review_feedback.py",
-      "sha256": "014cd9d95779a68a870ac24881eb69aeddd2d49a921ab94f1b356208e233bd39",
-      "bytes": 5882
+      "sha256": "9a2a6190112a608e4b6822b6b7c16af97df481d11cdc4645e6c62026d051c049",
+      "bytes": 6645
     },
     {
       "path": "_qto-shared-evidence/scripts/recompute_qto_dependencies.py",

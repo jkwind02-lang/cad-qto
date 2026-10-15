@@ -5,8 +5,10 @@ its replacement. Presentation titles and document revision labels are excluded.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+from datetime import datetime
 
 OBJECT_FIELDS = (
     "id", "catalog_key", "professional", "scene_id", "kind", "points", "holes",
@@ -147,6 +149,41 @@ def assess_record(record, view):
     if not record.get("result_fingerprint") or record["result_fingerprint"] != target.get("result_fingerprint"):
         return "stale", "意见未绑定当前成果版本，须重新确认；不得自动继承旧数字确认"
     return "current", "已绑定当前成果快照；仍须所属专业复核，不自动改量"
+
+
+def _opinion(record):
+    return (record.get("verdict") or "", record.get("option_id") or "", record.get("exception_of") or "")
+
+
+def _stamp(record):
+    try:
+        return datetime.fromisoformat(str(record.get("updated_at")).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0
+
+
+def settle_merge_conflict(record, view):
+    """Contract 9.1 (review-core.js settleCandidates mirrors this): only current opinions conflict. The candidates are judged on this view;
+    stale or unmatched ones become history, two or more different current opinions stay a conflict, otherwise the latest current one is kept."""
+    def live(candidate):
+        try:
+            return assess_record(candidate, view)[0] == "current"
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return False
+    cands = [copy.deepcopy(c) for c in record["merge_conflict"]["candidates"]]
+    cur = [c for c in cands if live(c)]
+    distinct = len({_opinion(c) for c in cur})
+    keep = None
+    for c in cur or cands:
+        if keep is None or _stamp(c) >= _stamp(keep):
+            keep = c
+    bare = lambda c: {k: v for k, v in c.items() if k not in ("history", "merge_conflict")}
+    rest = [c for c in cands if c is not keep and (distinct < 2 or c not in cur)]
+    out = {**copy.deepcopy(keep), "history": [*copy.deepcopy(record.get("history") or []), *({**bare(c), "conflict_from_merge": True} for c in rest)]}
+    out.pop("merge_conflict", None)
+    if distinct > 1:
+        out["merge_conflict"] = {"candidates": cur}
+    return out
 
 
 def classify_feedback(package, view, unmatched):

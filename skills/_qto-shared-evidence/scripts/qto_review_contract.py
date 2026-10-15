@@ -1,7 +1,7 @@
 """Shared offline review data contract. Does not recognize objects or alter quantities."""
 import base64, copy, gzip, hashlib, json, math, re
 from pathlib import Path
-from qto_review_revision import bind_result_versions, classify_feedback
+from qto_review_revision import bind_result_versions, classify_feedback, settle_merge_conflict
 from qto_review_comparison import normalize_comparison, VERDICTS, CONCLUSIONS, BAND_CLASSES
 
 VIEW_SCHEMA = 'qto-review-view/1.0'
@@ -149,6 +149,10 @@ def validate_feedback(raw, view):
  for field in ['annotations','drafts']:
   for key,r in p[field].items():
    require(key not in ['__proto__','constructor','prototype'] and isinstance(r,dict),'批注键或结构无效')
+   # A merge conflict is re-judged on this view first: candidates that went stale no longer conflict (contract 9.1).
+   mc=r.get('merge_conflict')
+   if any(r.get(k) is not None for k in AUDIT_SNAPSHOTS) and isinstance(mc,dict) and isinstance(mc.get('candidates'),list) and len(mc['candidates'])>=2 and all(isinstance(x,dict) for x in mc['candidates']):
+    r=p[field][key]=settle_merge_conflict(r,view)
    require(isinstance(r.get('confirmed_result',''),str) and isinstance(r.get('reason',''),str),'批注结果和原因必须是文字')
    audit=any(r.get(k) is not None for k in AUDIT_SNAPSHOTS)
    if audit:require(r.get('verdict') in (None,'',*VERDICTS),'快捷结论只能是同意、要改、待定')

@@ -167,6 +167,7 @@ if(art.comparison_html){
  x['audit-verdict'].value='同意';x['audit-verdict'].onchange();x['audit-reason'].value='同上';x['audit-reason'].oninput();x['audit-save'].click();assert.match(x['audit-entry-status'].textContent,/与共性答复相同，不必单独写/);
  x['audit-verdict'].value='要改';x['audit-verdict'].onchange();x['audit-result'].value='此处接线盒在墙内已计';x['audit-result'].oninput();x['audit-save'].click();
  cpkg=cached();assert.equal(cpkg.annotations['对照条目|I2'].exception_of,'清单的问题|清单多计');assert.match(row('对照条目|I2').textContent,/有例外/);
+ row('对照条目|I2').click();assert.match(x['audit-inherit'].textContent,/此处已设例外，不按 清单多计 的答复（本处：要改）/);assert.doesNotMatch(x['audit-inherit'].textContent,/已按共性答复（清单多计/);
  checks.push('清单的问题整组答复一次；组内条目只能设例外，与共性答复相同时不保存；还没答的共性问题提示待答');
  const pf=path.join(path.dirname(art.comparison_html),'UI对照批注.json');fs.writeFileSync(pf,JSON.stringify(cpkg));const handoff=path.join(path.dirname(art.comparison_html),'UI对照交接.json');
  const rd=spawnSync('python',[path.resolve(root,'_qto-shared-evidence/scripts/read_qto_review_feedback.py'),'--view',art.comparison_view,'--feedback',pf,'--output',handoff],{encoding:'utf8',stdio:['ignore','pipe','pipe']});assert.equal(rd.status,0,rd.stdout+rd.stderr);
@@ -222,12 +223,20 @@ if(art.comparison_html){
  let vpkg=vcached();const g1=vpkg.annotations['共性问题|G1'];assert.equal(g1.option_id,'O2');assert.deepEqual(g1.common_issue_snapshot.scope,{issue_ids:['Q1'],item_ids:['I1','E1']});
  va.show('Q1');assert.match(vx['audit-inherit'].textContent,/已按共性答复（G1：不按现做法，不计出桥架段）/);vx['audit-exception'].value='G1';vx['audit-exception'].onchange();vx['audit-verdict'].value='要改';vx['audit-verdict'].onchange();vx['audit-reason'].value='同上';vx['audit-reason'].oninput();vx['audit-save'].click();assert.match(vx['audit-entry-status'].textContent,/与共性答复相同/);
  vx['audit-verdict'].value='同意';vx['audit-verdict'].onchange();vx['audit-reason'].value='此处出桥架段要单列';vx['audit-reason'].oninput();vx['audit-save'].click();vpkg=vcached();assert.equal(vpkg.annotations['问题|Q1'].exception_of,'G1');
+ va.show('Q1');assert.match(vx['audit-inherit'].textContent,/此处已设例外，不按 G1 的答复（本处：按现做法）/);
  checks.push('共性问题并排列做法及影响、可选做法答复；挂在下面的个别问题显示待答或已按共性答复，只能设例外，与共性答复相同时不保存');
  vx['save-html'].click();const vsaved=await vh.downloads.at(-1).blob.text();c3.common_issues[0].item_ids.push('I6');
  const ah=harness(withData(vsaved,normalize(raw3)));await ah.start();ah.ctx.QtoReviewAudit.active.show('G1');assert.match(ah.ids['audit-detail'].textContent,/答复后新增 1 处/);assert.match(ah.ids['audit-detail'].textContent,/答复后新增（请抽查）/);
  const ck=JSON.parse(JSON.stringify(vpkg)),base=ck.annotations['共性问题|G1'];delete base.history;ck.annotations['共性问题|G1']={...base,merge_conflict:{candidates:[{...base},{...base,verdict:'同意',option_id:''}]}};
  const mh=harness(vh.ctx.QtoReviewCore.embed(withData(chtml,v3),ck));await mh.start();const ma=mh.ctx.QtoReviewAudit.active;ma.show('G1');assert.match(mh.ids['audit-entry-status'].textContent,/意见冲突/);assert.match(mh.ids['audit-detail'].textContent,/答复状态：意见冲突/);assert.match(find(mh.ids['audit-list'],n=>n.dataset?.key==='共性问题|G1').textContent,/意见冲突/);
- ma.show('Q1');assert.match(mh.ids['audit-inherit'].textContent,/待共性答复（G1）/);
+ ma.show('E1');assert.match(mh.ids['audit-inherit'].textContent,/待共性答复（G1）/);ma.show('Q1');assert.match(mh.ids['audit-inherit'].textContent,/此处已设例外，不按 G1 的答复/);
+ // Exceptions as they stand (contract 9.1): kept after reopening, a conflicting exception holds the answer back, an expired one follows it again.
+ ah.ctx.QtoReviewAudit.active.show('Q1');assert.match(ah.ids['audit-inherit'].textContent,/此处已设例外，不按 G1 的答复（本处：按现做法）/);
+ const ek=JSON.parse(JSON.stringify(vpkg)),q1n=ek.annotations['问题|Q1'];delete q1n.history;ek.annotations['问题|Q1']={...q1n,merge_conflict:{candidates:[{...q1n},{...q1n,verdict:'待定'}]}};
+ const eh=harness(vh.ctx.QtoReviewCore.embed(withData(chtml,v3),ek));await eh.start();eh.ctx.QtoReviewAudit.active.show('Q1');assert.match(eh.ids['audit-inherit'].textContent,/例外意见冲突（G1）：两份意见不同/);assert.doesNotMatch(eh.ids['audit-inherit'].textContent,/已按共性答复/);
+ c3.issues.find(q=>q.id==='Q1').text+='（下一轮改了正文）';const xh=harness(withData(vsaved,normalize(raw3)));await xh.start();xh.ctx.QtoReviewAudit.active.show('Q1');
+ assert.match(xh.ids['audit-inherit'].textContent,/此处原设的例外已过期，须重新核对；现已按共性答复（G1：不按现做法/);
+ checks.push('设了例外的条目和个别问题显示“此处已设例外”及本处意见，重开页面仍在；例外意见冲突时不按共性答复，例外过期后重新按共性答复并提示核对');
  checks.push('共性问题适用范围变了不过期，标“答复后新增 N 处”；合并冲突的意见标“意见冲突”，未采用前不向下继承');
 }
 const result={status:'PASS',count:checks.length,checks,scope:'无浏览器DOM模拟，非原生浏览器视觉验收',saved_feedback:packageFile};fs.writeFileSync(path.join(path.dirname(arg('--report')),'交互核验.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));

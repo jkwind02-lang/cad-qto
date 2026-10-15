@@ -384,6 +384,79 @@ def test_merge_keeps_both_opinions_until_the_user_resaves_one():
     assert 'merge_conflict' not in saved and saved['history']
 
 
+# Codex cross-retest 2026-10-15 (R1-M01, R1-M02): only current opinions conflict, and a conflicting exception holds the common answer back there.
+MERGE = 'QtoReviewCore.parse(QtoReviewCore.mergePackages(QtoReviewCore.parse(p.a,p.view),QtoReviewCore.parse(p.b,p.view)),p.view)'
+
+
+def renewed_view():
+    v = answered_view(); v['comparison']['common_issues'][0]['question'] = '新一轮问法：另选做法'
+    return v
+
+
+def issue_note(n, qid, **extra):
+    q = next(x for x in n['comparison']['issues'] if x['id'] == qid)
+    r = {'issue_snapshot': {'issue_id': qid, 'result_fingerprint': q['result_fingerprint']}, 'result_fingerprint': q['result_fingerprint'],
+         'verdict': '要改', 'confirmed_result': '', 'reason': '合成：这一处不同', 'updated_at': '2026-10-15T21:00:00Z', 'history': []}
+    r.update(extra)
+    return r
+
+
+@pytest.mark.parametrize('old_time', ['2026-10-15T21:00:00Z', '2026-10-15T23:00:00Z'])   # the stale answer may even be newer by the clock
+@pytest.mark.parametrize('order', ['old_first', 'new_first'])
+def test_stale_answer_never_conflicts_with_or_hides_the_current_one(order, old_time):
+    n0, n1 = norm(answered_view()), norm(renewed_view())
+    old = feedback(n0, {'共性问题|G1': common_note(n0, updated_at=old_time)})
+    new = feedback(n1, {'共性问题|G1': common_note(n1, verdict='要改', option_id='O2', reason='合成：新问法改选', updated_at='2026-10-15T22:00:00Z')})
+    a, b = (old, new) if order == 'old_first' else (new, old)
+    rec = js(MERGE, {'a': a, 'b': b, 'view': n1})['annotations']['共性问题|G1']
+    assert 'merge_conflict' not in rec and rec['applicability_state'] == 'current' and (rec['verdict'], rec['option_id']) == ('要改', 'O2')
+    assert any(x.get('conflict_from_merge') and x.get('verdict') == '同意' for x in rec['history'])    # the stale answer is kept as history
+    h = handoff(n1, {'共性问题|G1': rec})
+    assert h['conflicts'] == [] and [(x['common_issue_id'], x['option_id']) for x in h['common_issue_actions']] == [('G1', 'O2')]
+
+
+def test_a_merge_conflict_is_rejudged_on_the_current_view_on_both_sides():
+    n0, n1 = norm(answered_view()), norm(renewed_view())
+    a = common_note(n0); b = common_note(n1, verdict='要改', option_id='O2', reason='合成：新问法改选', updated_at='2026-10-15T22:00:00Z')
+    rec = {**b, 'merge_conflict': {'candidates': [a, b]}}          # merged while both were current, read after one went stale
+    for view, want in ((n1, ('要改', 'O2')), (n0, ('同意', 'O1'))):
+        fb = feedback(view, {'共性问题|G1': rec})
+        py = c.validate_feedback(fb, view)[0]['annotations']['共性问题|G1']
+        jr = js("QtoReviewCore.parse(p.fb,p.view).annotations['共性问题|G1']", {'fb': fb, 'view': view})
+        for r in (py, jr):
+            assert 'merge_conflict' not in r and r['applicability_state'] == 'current' and (r['verdict'], r['option_id']) == want
+            assert [x.get('conflict_from_merge') for x in r['history']] == [True]
+
+
+@pytest.mark.parametrize('key, make, others', [
+    ('对照条目|E1', lambda n, **k: item_note(n, 'E1', **k), {('issue', 'Q1'), ('item', 'I1')}),
+    ('问题|Q1', lambda n, **k: issue_note(n, 'Q1', **k), {('item', 'I1'), ('item', 'E1')}),
+])
+def test_a_conflicting_exception_holds_back_the_common_answer_there(key, make, others):
+    n = norm(answered_view()); kind, tid = ('item' if key.startswith('对照条目') else 'issue'), key.split('|')[1]
+    a = make(n, exception_of='G1', verdict='要改'); b = make(n, exception_of='G1', verdict='待定', updated_at='2026-10-15T22:00:00Z')
+    rec = {**b, 'merge_conflict': {'candidates': [a, b]}}
+    h = handoff(n, {'共性问题|G1': common_note(n), key: rec})
+    inherited = {(k, x[k + '_id']) for k in ('item', 'issue') for x in h[k + '_actions'] if x.get('via') == 'G1'}
+    ca = h['common_issue_actions'][0]
+    assert [x['annotation_key'] for x in h['conflicts']] == [key] and inherited == others
+    assert tid not in ca['scope'][kind + '_ids'] and ca['held_by_conflict'][kind + '_ids'] == [tid]
+    saved = js("QtoReviewCore.saveRecord(p.old,p.next,p.key,'2026-10-15T22:10:00Z')", {'old': rec, 'next': {**a, 'reason': '合成：最终不按共性答复'}, 'key': key})
+    h = handoff(n, {'共性问题|G1': common_note(n), key: saved})
+    assert h['conflicts'] == [] and 'held_by_conflict' not in h['common_issue_actions'][0]
+    assert [x.get('exception_of') for x in h[kind + '_actions'] if x[kind + '_id'] == tid] == ['G1']
+
+
+def test_a_conflict_between_exceptions_of_two_commons_holds_both_back():
+    v = answered_view()
+    v['comparison']['common_issues'].append({'id': 'G2', 'nature': 'assumption', 'question': '估算方法是否接受', 'handler': 'assumed', 'item_ids': ['E1']})
+    n = norm(v)
+    a = item_note(n, 'E1', exception_of='G1'); b = item_note(n, 'E1', exception_of='G2', verdict='待定', updated_at='2026-10-15T22:00:00Z')
+    h = handoff(n, {'共性问题|G1': common_note(n), '共性问题|G2': common_note(n, 'G2', option_id=None), '对照条目|E1': {**b, 'merge_conflict': {'candidates': [a, b]}}})
+    assert not [x for x in h['item_actions'] if x['item_id'] == 'E1'] and h['overlaps'] == []
+    assert {x['common_issue_id']: x['held_by_conflict']['item_ids'] for x in h['common_issue_actions']} == {'G1': ['E1'], 'G2': ['E1']}
+
+
 def test_reader_cli_reports_common_actions_and_conflicts(tmp_path):
     v = answered_view(); n = norm(v)
     view_file = tmp_path / '视图.json'; view_file.write_text(json.dumps(v, ensure_ascii=False), encoding='utf-8')

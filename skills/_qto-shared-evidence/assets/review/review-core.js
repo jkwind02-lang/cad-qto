@@ -104,7 +104,8 @@ function parse(input,view){
   const records=p[field]||{},result=Object.create(null);ensure(typeof records==='object'&&!Array.isArray(records),'草稿或批注无效');
   for(const [k,r] of Object.entries(records)){
    ensure(!['__proto__','constructor','prototype'].includes(k),'批注键无效');
-   const q=cleanRecord(r,k,field==='annotations');
+   // A merge conflict is re-judged on this view first: candidates that went stale no longer conflict (contract 9.1).
+   const q=cleanRecord(isAudit(r)&&r.merge_conflict&&Array.isArray(r.merge_conflict.candidates)&&r.merge_conflict.candidates.length>=2&&r.merge_conflict.candidates.every(plain)?settleOnView(r,view):r,k,field==='annotations');
    if(q.item_snapshot&&auditItems.has(q.item_snapshot.item_id)){const rows=new Set(auditItems.get(q.item_snapshot.item_id).detail_rows.map(x=>x.id));ensure(q.excluded_detail_row_ids.every(x=>rows.has(x)),'例外明细行不属于该条目');}
    if(q.object_snapshot){const obj=view.objects.find(o=>o.catalog_key===q.object_snapshot.catalog_key);ensure(!obj||obj.id===q.object_snapshot.object_id,'单对象快照与当前对象身份不一致');}
    if(q.group_id&&groups.has(q.group_id)){
@@ -129,17 +130,34 @@ function saveRecord(previous,next,key,now){
 // The opinion of an audit comment: quick verdict, chosen option and exception target (contract 9.1).
 const opinion=r=>JSON.stringify([r.verdict||'',r.option_id||'',r.exception_of||'']);
 const bare=r=>{const x=clone(r);delete x.history;delete x.merge_conflict;return x;};
+const later=(a,b)=>(Date.parse(b.updated_at)||0)>=(Date.parse(a.updated_at)||0)?b:a;
+// Contract 9.1: only current opinions can conflict (qto_review_revision.settle_candidates mirrors this). Stale or unmatched candidates
+// become history; two or more different current opinions stay a conflict, otherwise the latest current one (or the latest) is kept.
+function settleCandidates(history,cands,isLive){
+ const cur=cands.filter(isLive),distinct=new Set(cur.map(opinion)).size,keep=(cur.length?cur:cands).reduce(later);
+ const rest=cands.filter(x=>x!==keep&&(distinct<2||!isLive(x)));
+ const out={...clone(keep),history:[...clone(history||[]),...rest.map(x=>({...bare(x),conflict_from_merge:true}))]};
+ if(distinct>1)out.merge_conflict={candidates:clone(cur)};else delete out.merge_conflict;
+ return out;
+}
+// Records not judged against a view yet count as current.
+const judged=x=>!x.applicability_state||x.applicability_state==='current';
+function settleOnView(r,view){
+ const isLive=x=>{try{return assessRecord(x,view).state==='current';}catch(e){return false;}};
+ return settleCandidates(r.history,r.merge_conflict.candidates.map(clone),isLive);
+}
 function mergeRecords(local,incoming){
  const annotations=Object.assign(Object.create(null),local);let conflicts=0;
  for(const [k,r] of Object.entries(incoming)){
   const old=annotations[k];if(!old){annotations[k]=r;continue;}
   if(JSON.stringify(old)===JSON.stringify(r))continue;
-  // Two different current opinions are not settled by time: both are kept until the user re-saves one.
-  const cands=[...(old.merge_conflict?.candidates||[bare(old)]),...(r.merge_conflict?.candidates||[bare(r)])];
-  const distinct=cands.filter((x,n)=>cands.findIndex(y=>JSON.stringify(y)===JSON.stringify(x))===n);
-  if(isAudit(old)&&isAudit(r)&&new Set(distinct.map(opinion)).size>1){
-   const keep=(Date.parse(r.updated_at)||0)>=(Date.parse(old.updated_at)||0)?r:old;
-   annotations[k]={...keep,history:[...(keep.history||[])],merge_conflict:{candidates:distinct}};conflicts++;continue;
+  // Two different current opinions are not settled by time: both are kept until the user re-saves one. A stale one never blocks or hides a current one.
+  if(isAudit(old)&&isAudit(r)){
+   const mine=old.merge_conflict?.candidates||[bare(old)],theirs=r.merge_conflict?.candidates||[bare(r)],cands=[...mine,...theirs];
+   const distinct=cands.filter((x,n)=>cands.findIndex(y=>JSON.stringify(y)===JSON.stringify(x))===n);
+   const owner=x=>mine.some(y=>JSON.stringify(y)===JSON.stringify(x))?old:r;
+   const keep=(distinct.filter(judged).length?distinct.filter(judged):distinct).reduce(later);
+   annotations[k]=settleCandidates(owner(keep).history,distinct,judged);conflicts++;continue;
   }
   const keep=(Date.parse(r.updated_at)||0)>=(Date.parse(old.updated_at)||0)?r:old;
   const other=clone(keep===r?old:r);delete other.history;

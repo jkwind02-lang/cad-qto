@@ -13,14 +13,19 @@ def comparison_actions(view,current):
  item_actions=[{**base(k,r),'item_id':r['item_snapshot']['item_id'],'excluded_detail_row_ids':r.get('excluded_detail_row_ids',[]),'page_view':r.get('page_view'),**({'exception_of':r['exception_of']} if r.get('exception_of') else {})} for k,r in live.items() if r.get('item_snapshot') is not None]
  issue_actions=[{**base(k,r),'issue_id':r['issue_snapshot']['issue_id'],'nature':nature.get(r['issue_snapshot']['issue_id']),**({'exception_of':r['exception_of']} if r.get('exception_of') else {})} for k,r in live.items() if r.get('issue_snapshot') is not None]
  exc={(a.get('exception_of'),'item',a['item_id']) for a in item_actions}|{(a.get('exception_of'),'issue',a['issue_id']) for a in issue_actions}
+ # A place whose exception is still in conflict does not take the common answer until the user re-saves one opinion (contract 9.1).
+ target=lambda r:('item',r['item_snapshot']['item_id']) if r.get('item_snapshot') is not None else ('issue',r['issue_snapshot']['issue_id']) if r.get('issue_snapshot') is not None else None
+ held={(x.get('exception_of'),*target(r)) for r in current.values() if r.get('merge_conflict') and target(r) for x in r['merge_conflict']['candidates'] if x.get('exception_of')}
  common_actions=[];covered={}
  for k,r in live.items():
   snap=r.get('common_issue_snapshot')
   if snap is None:continue
   gid=snap['common_issue_id'];scope=commons[gid]['scope'];old=snap.get('scope') or {}
-  qids=[x for x in scope['issue_ids'] if (gid,'issue',x) not in exc];iids=[x for x in scope['item_ids'] if (gid,'item',x) not in exc]
+  qids=[x for x in scope['issue_ids'] if (gid,'issue',x) not in exc|held];iids=[x for x in scope['item_ids'] if (gid,'item',x) not in exc|held]
   added={'issue_ids':[x for x in scope['issue_ids'] if x not in old.get('issue_ids',[])],'item_ids':[x for x in scope['item_ids'] if x not in old.get('item_ids',[])]}
-  common_actions.append({**base(k,r),'common_issue_id':gid,'nature':nature.get(gid),'scope':{'issue_ids':qids,'item_ids':iids},'added_since_answer':added})
+  hold={'issue_ids':[x for x in scope['issue_ids'] if (gid,'issue',x) in held],'item_ids':[x for x in scope['item_ids'] if (gid,'item',x) in held]}
+  common_actions.append({**base(k,r),'common_issue_id':gid,'nature':nature.get(gid),'scope':{'issue_ids':qids,'item_ids':iids},'added_since_answer':added,
+                         **({'held_by_conflict':hold} if hold['issue_ids'] or hold['item_ids'] else {})})
   # Inherited actions name the common answer they come from (via); the professional still re-checks each one.
   issue_actions+=[{**base(k,r),'issue_id':x,'nature':nature.get(x),'via':gid} for x in qids]
   item_actions+=[{**base(k,r),'item_id':x,'excluded_detail_row_ids':[],'page_view':None,'via':gid} for x in iids]

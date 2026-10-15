@@ -60,11 +60,18 @@ function attach(api){
  const savedOf=x=>feedback().annotations[keyOf(x)];
  const answerOf=x=>{const r=savedOf(x);return r&&r.applicability_state!=='stale'&&r.applicability_state!=='unmatched'&&!r.merge_conflict?r:null;};
  const optionText=(x,id)=>(x.options||[]).find(o=>o.id===id)?.text||id;
- const answerText=(x,a)=>(a.verdict?VERDICT_LABELS.issue[a.verdict]:'已答复')+(a.option_id?'，'+optionText(x,a.option_id):'')+(!a.verdict&&a.confirmed_result?'：'+a.confirmed_result:'');
+ const answerText=(x,a)=>(a.verdict?VERDICT_LABELS[kindOf(x)==='item'?'item':'issue'][a.verdict]:'已答复')+(a.option_id?'，'+optionText(x,a.option_id):'')+(!a.verdict&&a.confirmed_result?'：'+a.confirmed_result:'');
  // Commons covering a target: an issue's own common; for an item every common whose scope holds it, including list-issue groups.
  const covering=x=>{const k=kindOf(x);if(k==='common')return [];if(k==='issue')return x.common_issue_id&&commonMap.has(x.common_issue_id)?[commonMap.get(x.common_issue_id)]:[];return [...x.common_issue_ids,...x.list_issue_ids].map(id=>commonMap.get(id)).filter(Boolean);};
- const inheritText=x=>covering(x).map(g=>{const a=answerOf(g);return a?'已按共性答复（'+shortOf(g)+'：'+answerText(g,a)+'）':'待共性答复（'+shortOf(g)+'）';}).join('；');
- const answered=x=>!!answerOf(x)||covering(x).some(g=>answerOf(g));
+ // How a covered place stands towards one common answer (contract 9.1): its exception is in conflict (held), it has its own exception,
+ // its exception expired, or it takes the answer (inherited) / waits for it. Only inherited and expired places follow the common answer.
+ const standing=(x,g)=>{const r=savedOf(x);if(r?.merge_conflict&&r.merge_conflict.candidates.some(c=>c.exception_of===g.id))return 'held';
+  if(answerOf(x)?.exception_of===g.id)return 'exception';if(r?.exception_of===g.id)return 'expired';return answerOf(g)?'inherited':'waiting';};
+ const follows=(x,g)=>['inherited','expired'].includes(standing(x,g))&&!!answerOf(g);
+ const inheritText=x=>covering(x).map(g=>{const s=standing(x,g),a=answerOf(g),take=a?'已按共性答复（'+shortOf(g)+'：'+answerText(g,a)+'）':'待共性答复（'+shortOf(g)+'）';
+  return s==='held'?'例外意见冲突（'+shortOf(g)+'）：两份意见不同，重新保存一条前这里不按共性答复':s==='exception'?'此处已设例外，不按 '+shortOf(g)+' 的答复（本处：'+answerText(x,answerOf(x))+'）':
+   s==='expired'?'此处原设的例外已过期，须重新核对；现'+take:take;}).join('；');
+ const answered=x=>!!answerOf(x)||covering(x).some(g=>follows(x,g));
  const addedSince=(g,a)=>{const old=a?.common_issue_snapshot?.scope||{};return {issue_ids:g.scope.issue_ids.filter(x=>!(old.issue_ids||[]).includes(x)),item_ids:g.scope.item_ids.filter(x=>!(old.item_ids||[]).includes(x))};};
  function commonState(g){
   const r=savedOf(g);if(r?.merge_conflict)return '意见冲突';if(r&&(r.applicability_state==='stale'||r.applicability_state==='unmatched'))return '答复已过期，须重答';
@@ -72,7 +79,7 @@ function attach(api){
   return '已答复：'+answerText(g,a)+(added?' · 答复后新增 '+added+' 处':'');
  }
  // Two answered commons over one item, one keeping and one changing the practice, are only flagged (contract 9.1 overlaps).
- const overlap=i=>{const v=new Set(covering(i).map(answerOf).filter(Boolean).map(a=>a.verdict));return v.has('同意')&&v.has('要改');};
+ const overlap=i=>{const v=new Set(covering(i).filter(g=>follows(i,g)).map(g=>answerOf(g).verdict));return v.has('同意')&&v.has('要改');};
 
  // ---------- what still lacks a basis ----------
  const hasPending=i=>(i.uncertain||[]).includes('有未决量'),estOf=i=>i.ours.levels['方案暂估量']||0;
