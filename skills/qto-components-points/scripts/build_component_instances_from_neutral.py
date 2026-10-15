@@ -25,7 +25,7 @@ from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_
 import qto_cad_geometry as cad_geometry
 from qto_actor_identity import is_model_identity
 
-VERSION = "qto-component-neutral-adapter/1.2.0"
+VERSION = "qto-component-neutral-adapter/1.2.1"
 PROFILE_SCHEMA = "qto-component-recognition-profile/1.0"
 LEDGER_SCHEMA = "qto-project-adjudication-ledger/1.0"
 CONFIRMATION_SOURCES = {
@@ -575,11 +575,18 @@ def main() -> int:
         }
         count_input_path = output / "点位唯一实例计数输入.json"
         count_input_path.write_text(json.dumps(count_input, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        # 模型识别台账列出、块适配器却没有承接的对象（非块图符、范围外等）是来源缺口：
+        # 主报告与端点交接用同一个完整性判定，缺口 ID 随交接传给消费方。
+        model_object_ids = {oid for entry in entries.values() if entry.get("decision_origin") == "model" for oid in entry["object_ids"]}
+        missing_model_objects = sorted(model_object_ids - {item["physical_id"] for item in dispositions})
+        source_complete = bool(rules) and not disposition_counts.get("unresolved", 0) and not failures and not missing_model_objects
         endpoint_input = {
             "schema_version": "qto-network-endpoint-handoff-input/1.1",
             "recognition_basis": recognition_basis(ledger, ledger_path),
-            "source_workpackage_complete": bool(rules) and not disposition_counts.get("unresolved", 0) and not failures,
+            "source_workpackage_complete": source_complete,
             "source_unresolved_instance_count": disposition_counts.get("unresolved", 0),
+            "source_unmatched_recognition_object_ids": missing_model_objects,
+            "source_block_expansion_failure_count": len(failures),
             "handoff_id": f"HANDOFF-{profile_id}-{profile_version}",
             "source_id": f"{profile_id}@{profile_version}:{sha256(profile_path)}",
             "consumer_skill": str(profile.get("consumer_skill") or "qto-pipe-networks"),
@@ -598,8 +605,8 @@ def main() -> int:
         if handoff_run.returncode != 0:
             fail(f"端点交接生成失败: {handoff_run.stderr.strip() or handoff_run.stdout.strip()}")
         handoff_result = load_json(endpoint_output_path)
-        model_object_ids = {oid for entry in entries.values() if entry.get("decision_origin") == "model" for oid in entry["object_ids"]}
-        missing_model_objects = sorted(model_object_ids - {item["physical_id"] for item in dispositions})
+        if handoff_result.get("source_workpackage_complete") is not source_complete:
+            fail("端点交接的来源完整性与点位主报告不一致")
 
         artifacts: dict[str, Any] = {
             "neutral_instance_dispositions": str(disposition_path),
@@ -680,7 +687,7 @@ def main() -> int:
                 "disposition_closure_count": len(dispositions),
             },
             "disposition_closure_complete": sum(disposition_counts.values()) == len(dispositions),
-            "point_workpackage_complete": bool(rules) and not disposition_counts.get("unresolved", 0) and not failures and not missing_model_objects,
+            "point_workpackage_complete": source_complete,
             "unmatched_recognition_object_ids": missing_model_objects,
             "endpoint_unresolved_count": handoff_result.get("unresolved_count", 0),
             "unresolved_groups_top15": unresolved_groups,

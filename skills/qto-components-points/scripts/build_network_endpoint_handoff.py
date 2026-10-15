@@ -65,8 +65,20 @@ def main() -> int:
         if not isinstance(data, dict):
             fail("输入 JSON 顶层必须是对象")
         validate_working_basis(data.get("recognition_basis"))
-        if not isinstance(data.get("source_workpackage_complete", True), bool):
+        source_complete = data.get("source_workpackage_complete", True)
+        if not isinstance(source_complete, bool):
             fail("source_workpackage_complete 必须是布尔值")
+        unmatched_ids = data.get("source_unmatched_recognition_object_ids", [])
+        if not isinstance(unmatched_ids, list) or any(not isinstance(item, str) or not item.strip() for item in unmatched_ids):
+            fail("source_unmatched_recognition_object_ids 必须是非空文本数组")
+        source_counts = {}
+        for key in ("source_unresolved_instance_count", "source_block_expansion_failure_count"):
+            value = data.get(key, 0)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                fail(f"{key} 必须是非负整数")
+            source_counts[key] = value
+        if source_complete and (unmatched_ids or any(source_counts.values())):
+            fail("来源有未承接识别对象、未决实例或块展开失败时，source_workpackage_complete 不得为 true")
         if data.get("schema_version") not in {
             "qto-network-endpoint-handoff-input/1.0",
             "qto-network-endpoint-handoff-input/1.1",
@@ -181,10 +193,18 @@ def main() -> int:
             "handoff_id": handoff_id,
             "provider_skill": "qto-components-points",
             "consumer_skill": consumer_skill,
-            "status": "READY" if not unresolved_count and data.get("source_workpackage_complete", True) else "REVIEW_REQUIRED",
+            "status": "READY" if not unresolved_count and source_complete else "REVIEW_REQUIRED",
             "recognition_basis": data.get("recognition_basis"),
-            "source_workpackage_complete": data.get("source_workpackage_complete", True),
-            "source_unresolved_instance_count": data.get("source_unresolved_instance_count", 0),
+            "source_workpackage_complete": source_complete,
+            # 来源未决实例与端口未决分开计；未承接对象逐个保留 ID，消费方不能把它们当已处置
+            "source_unresolved_instance_count": source_counts["source_unresolved_instance_count"],
+            "source_block_expansion_failure_count": source_counts["source_block_expansion_failure_count"],
+            "source_unmatched_recognition_object_ids": unmatched_ids,
+            "source_gaps": [
+                {"object_id": object_id, "kind": "unmatched_recognition_object",
+                 "reason": "模型工作识别台账列出但本交接来源未承接（非块对象、范围外或未匹配规则）；须经独立计数与交接接入"}
+                for object_id in unmatched_ids
+            ],
             "required": bool(port_count),
             "reason": None if port_count else "本交接尚无可输出端口；是否已完成识别须同时检查 source_workpackage_complete，不表示端口工程量为零",
             "source_physical_instance_count": len(raw_instances),
