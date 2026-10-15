@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-eviden
 
 import build_pipe_inference_input as adapter
 
-VERSION = "qto-pipe-batch-frame-adapter/1.2.0"
+VERSION = "qto-pipe-batch-frame-adapter/1.3.0"
 MAPPING_SCHEMA = "qto-pipe-batch-family-mapping/1.0"
 FRAMES_SCHEMA = "qto-pipe-batch-frames/1.0"
 SUMMARY_SCHEMA = "qto-pipe-batch-conversion-summary/1.0"
@@ -334,6 +334,31 @@ def best_family(matches: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, l
     return best[0], []
 
 
+def classify_review_row(entity_type: str, layer: str, block_name: str, active, families: dict[str, list[dict[str, Any]]]):
+    """Family decision for a reviewable row: (matched, conflicts, reason); reason None means a clean match.
+
+    `active` holds the family ids that apply where the row lies (a frame, or the whole
+    drawing for rows that cannot be located), so both paths share one rule.
+    """
+    if entity_type in {"CIRCLE", "INSERT"}:
+        roots = [fam for fam in families["root"] if fam["family_id"] in active and entity_type in fam["entity_types"]
+                 and fam["layer_re"].search(layer) and fam["block_re"].search(block_name)]
+        matched, conflicts = best_family(roots)
+        if matched is None and not conflicts and entity_type == "INSERT":
+            blocks = [fam for fam in families["block"] if fam["family_id"] in active and fam["layer_re"].search(layer) and fam["block_re"].search(block_name)]
+            matched, conflicts = best_family(blocks)
+    else:
+        layers = [fam for fam in families["layer"] if fam["family_id"] in active and fam["layer_re"].search(layer)]
+        matched, conflicts = best_family(layers)
+        if matched is not None and entity_type not in matched["entity_types"]:
+            return matched, [], "entity_type_not_covered"
+    if conflicts:
+        return None, conflicts, "family_conflict"
+    if matched is None:
+        return None, [], "unmatched_circle" if entity_type == "CIRCLE" else "no_family"
+    return matched, [], None
+
+
 def family_applies(family: dict[str, Any], frame: dict[str, Any]) -> bool:
     return family["frame_re"] is None or bool(family["frame_re"].search(frame["frame_id"]))
 
@@ -421,10 +446,12 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
     handles = {frame_id: state["body"].open("w", encoding="utf-8") for frame_id, state in per_frame.items()}
     expansion_failures: list[dict[str, Any]] = []
     families = mapping["families"]
-    layer_families = [fam for fam in families if fam["kind"] == "layer"]
-    block_families = [fam for fam in families if fam["kind"] == "block"]
-    root_families = [fam for fam in families if fam["kind"] == "root"]
+    by_kind = {kind: [fam for fam in families if fam["kind"] == kind] for kind in ("layer", "block", "root")}
     text_families = [fam for fam in families if fam["kind"] == "text"]
+    # rows that cannot be placed in a frame only meet families that are not frame-specific
+    drawing_families = {fam["family_id"] for fam in families if fam["frame_re"] is None}
+    drawing_excluded: Counter = Counter()
+    drawing_owned: set[str] = set()
     context_ids = unit_context_ids(mapping)
     context_rows: dict[str, str] = {}
     insert_index: dict[str, str] = {}   # path key -> serialized INSERT row (strings keep the index small)
@@ -451,9 +478,25 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
             owners, location_basis = located_frame_ids(row, frames, insert_index, frame_bounds)
             if owners is None:
                 if entity_type in REVIEW_TYPES:
-                    drawing_pending.append({'object_id': record_id, 'entity_type': entity_type, 'layer': layer,
-                                            'block_name': row.get('block_name'), 'instance_path': row.get('instance_path'),
-                                            'reason': 'unlocated_object', 'location_basis': location_basis, 'family_ids': []})
+                    # same family rule as inside a frame: what the mapping excludes is not pending anywhere
+                    matched, conflicts, reason = classify_review_row(entity_type, layer, block_name, drawing_families, by_kind)
+                    item = {'object_id': record_id, 'entity_type': entity_type, 'layer': layer,
+                            'block_name': row.get('block_name'), 'instance_path': row.get('instance_path'),
+                            'location_basis': location_basis}
+                    if reason is None and matched.get('decision') == 'exclude':
+                        drawing_excluded[matched['family_id']] += 1
+                        if entity_type == 'INSERT':
+                            drawing_owned.add(path_key(record_id))
+                    elif reason is None:
+                        drawing_pending.append({**item, 'reason': 'unlocated_family_member', 'family_ids': [matched['family_id']]})
+                        if entity_type == 'INSERT' and matched.get('decision') == 'include':
+                            drawing_owned.add(path_key(record_id))
+                    elif reason == 'entity_type_not_covered':
+                        drawing_pending.append({**item, 'reason': 'unlocated_entity_type_not_covered', 'family_ids': [matched['family_id']]})
+                    elif reason == 'family_conflict':
+                        drawing_pending.append({**item, 'reason': 'unlocated_family_conflict', 'family_ids': conflicts})
+                    else:
+                        drawing_pending.append({**item, 'reason': 'unlocated_object', 'family_ids': []})
                 continue
             for frame in frames:
                 frame_id = frame["frame_id"]
@@ -479,27 +522,16 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
                     continue
                 item = {"object_id": record_id, "entity_type": entity_type, "layer": layer, "block_name": row.get("block_name"),
                         "instance_path": row.get("instance_path"), "location_basis": location_basis}
-                matched: dict[str, Any] | None = None
-                conflicts: list[str] = []
-                if entity_type in {"CIRCLE", "INSERT"}:
-                    roots = [fam for fam in root_families if fam["family_id"] in active and entity_type in fam["entity_types"]
-                             and fam["layer_re"].search(layer) and fam["block_re"].search(block_name)]
-                    matched, conflicts = best_family(roots)
-                    if matched is None and not conflicts and entity_type == "INSERT":
-                        blocks = [fam for fam in block_families if fam["family_id"] in active and fam["layer_re"].search(layer) and fam["block_re"].search(block_name)]
-                        matched, conflicts = best_family(blocks)
-                else:
-                    layers = [fam for fam in layer_families if fam["family_id"] in active and fam["layer_re"].search(layer)]
-                    matched, conflicts = best_family(layers)
-                    if matched is not None and entity_type not in matched["entity_types"]:
-                        state["pending"].append({**item, "reason": "entity_type_not_covered", "family_ids": [matched["family_id"]]})
-                        continue
-                if conflicts:
+                matched, conflicts, reason = classify_review_row(entity_type, layer, block_name, active, by_kind)
+                if reason == "entity_type_not_covered":
+                    state["pending"].append({**item, "reason": "entity_type_not_covered", "family_ids": [matched["family_id"]]})
+                    continue
+                if reason == "family_conflict":
                     state["pending"].append({**item, "reason": "family_conflict", "family_ids": conflicts})
                     continue
-                if matched is None:
-                    if entity_type == "CIRCLE":
-                        continue  # the adapter treats an unmatched circle as unresolved; it stays visible in its disposition list
+                if reason == "unmatched_circle":
+                    continue  # the adapter treats an unmatched circle as unresolved; it stays visible in its disposition list
+                if reason == "no_family":
                     state["pending"].append({**item, "reason": "no_family", "family_ids": []})
                     continue
                 active[matched["family_id"]].append(record_id)
@@ -537,6 +569,7 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
         state["text_hits"] = dict(sorted(state["text_hits"].items()))
     return {"frames": per_frame, "total_rows": total_rows, "expansion_failures": len(expansion_failures),
             "drawing_level_failures": drawing_level, "drawing_level_pending": drawing_pending,
+            "drawing_level_excluded": dict(sorted(drawing_excluded.items())), "drawing_level_owned": drawing_owned,
             "insert_index": insert_index, "context_rows": context_rows}
 
 
@@ -878,8 +911,9 @@ def main(argv: list[str] | None = None) -> int:
             "count": len(drawing_level), "by_kind": dict(sorted(Counter(str(item.get("kind")) for item in drawing_level).items())),
             "meaning": "图框外或无定位的块实例展开失败；不影响任何图框的范围内对象，只在此处列一次", "items": drawing_level}
 
-        unlocated_state = {'pending': scan['drawing_level_pending'], 'owned_insert_keys': set()}
-        unlocated_detail, unlocated_groups, _ = group_pending(unlocated_state, scan['insert_index'])
+        unlocated_state = {'pending': scan['drawing_level_pending'], 'owned_insert_keys': scan['drawing_level_owned']}
+        unlocated_detail, unlocated_groups, unlocated_suppressed = group_pending(unlocated_state, scan['insert_index'])
+        excluded = scan['drawing_level_excluded']
         unlocated_path, unlocated_detail_path = output / '未定位对象待办.jsonl', output / '未定位对象明细.jsonl'
         for path, rows in ((unlocated_path, unlocated_groups), (unlocated_detail_path, unlocated_detail)):
             with path.open('w', encoding='utf-8') as handle:
@@ -888,9 +922,14 @@ def main(argv: list[str] | None = None) -> int:
         summary['drawing_level_unlocated_objects'] = {
             'count': len(unlocated_detail), 'groups': len(unlocated_groups),
             'by_entity_type': dict(sorted(Counter(item['entity_type'] for item in unlocated_detail).items())),
+            'by_reason': dict(sorted(Counter(item['reason'] for item in unlocated_detail).items())),
+            'excluded_by_family': excluded, 'excluded_count': sum(excluded.values()),
+            'suppressed_by_owner': unlocated_suppressed,
             'pending_list': str(unlocated_path), 'pending_detail': str(unlocated_detail_path),
             'top_level_summary': top_level_summary(unlocated_groups, 20),
-            'meaning': '自身与祖先均无法定位的对象只在全图列一次；不灌入各框待办或pending_line_objects。已定位框外对象不属于此项。'}
+            'meaning': ('自身与祖先均无法定位的对象只在全图列一次；不灌入各框待办或pending_line_objects。已定位框外对象不属于此项。'
+                        '与图框内相同按不限图框的族匹配：被 exclude 族排除的只计数（excluded_by_family），不列待办；'
+                        'include 族成员因无法归框仍列待办（unlocated_family_member）。')}
 
         all_groups: list[dict[str, Any]] = []
         with pending_path.open("w", encoding="utf-8") as pending_handle, detail_path.open("w", encoding="utf-8") as detail_handle:
@@ -961,6 +1000,7 @@ def main(argv: list[str] | None = None) -> int:
                          "pending_groups": sum(f.get("pending_groups", 0) for f in summary["frames"]),
                          "pending_objects": sum(f.get("pending_count", 0) for f in summary["frames"]),
                          "unlocated_objects": len(unlocated_detail), 'unlocated_groups': len(unlocated_groups),
+                         "unlocated_excluded": sum(excluded.values()),
                          "diagnostics": len(diagnostics)}
     produced = statuses.get("READY", 0) + statuses.get("REVIEW_REQUIRED", 0)
     if statuses.get("FAILED") or statuses.get("SKIPPED"):

@@ -22,7 +22,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from qto_cad_source_contract import canonical_scale
 
-VERSION = "qto-duct-fitting-vertical/1.2.0"
+VERSION = "qto-duct-fitting-vertical/1.3.0"
 INPUT_SCHEMA = "qto-duct-fitting-vertical-input/1.0"
 RESULT_SCHEMA = "qto-duct-fitting-vertical-result/1.0"
 FITTING_KINDS = {"elbow", "tee", "cross", "reducer", "rect_to_round", "tap", "offset", "unknown"}
@@ -51,6 +51,8 @@ POLICY_PARAMETERS = {
 ELEVATION_ORIGIN_LABELS = {"tag": "本段标高标注", "host_propagated": "宿主传播标高", "system_diagram": "系统图标高", "section": "剖面标高"}
 ELEVATION_ORIGINS = set(ELEVATION_ORIGIN_LABELS)
 VERTICAL_LINK_KINDS = {"segment_to_segment", "single_end_to_segment"}
+LENGTH_PENDING_KINDS = {"fitting_unconnected", "fitting_system_ambiguous", "single_end_plane_unresolved", "single_end_turn_plane_unknown",
+                        "single_end_horizontal_destination_unknown", "single_end_destination_unknown"}
 
 
 class InputError(ValueError):
@@ -125,10 +127,14 @@ def single_end_plane(net, fitting, sid, which):
     e, od = net.end_point(sid, which), net.outward(sid, which)
     x1, y1, x2, y2 = fitting['bbox']
     ext = max((x-e[0])*od[0] + (y-e[1])*od[1] for x in (x1,x2) for y in (y1,y2))
+    # The bbox is axis-aligned: its far corner is the block's far face along the pipe only
+    # when the pipe runs parallel to a drawing axis. Otherwise it is merely an upper bound.
+    axis_aligned = min(abs(od[0]), abs(od[1])) <= net.params['collinear_cross_limit']
     half_width = (segment.get('width') if segment.get('width') is not None else segment.get('diameter'))
     half_width = half_width / 2. if half_width is not None else None
     scenarios = {'extension_full': max(0.,ext), 'extension_minus_half_width': max(0.,ext-half_width) if half_width is not None else None}
-    result = {'length': None, 'method': None, 'scenarios': scenarios, 'extension': ext, 'half_width': half_width}
+    result = {'length': None, 'method': None, 'scenarios': scenarios, 'extension': ext, 'half_width': half_width,
+              'extension_basis': 'axis_aligned_bbox' if axis_aligned else 'rotated_bbox_upper_bound'}
     g = fitting.get('single_end_geometry')
     if g is None:
         return {**result, 'reason': '缺 single_end_geometry：块外包框不能证明管件中心或本体端点；旧整段/减半宽读法只作诊断'}
@@ -139,16 +145,26 @@ def single_end_plane(net, fitting, sid, which):
     if relation in {'reversed', 'unknown'}:
         return {**result, 'reason': '块方向相反或管段端点与管件的关系未明，须核对连接点与中心线，不按外包框给数'}
     tol = net.params['fitting_end_tolerance']
+    snap = net.params['end_snap_tolerance']
+    extent = ext if axis_aligned else None   # block far face along the pipe, when known
+    if 'extent_along_pipe' in g:
+        given = finite(g['extent_along_pipe'], label+'.extent_along_pipe', 0.)
+        if given <= 0 or given > ext + tol or (axis_aligned and abs(given - ext) > tol):
+            return {**result, 'reason': 'extent_along_pipe 与块范围不符：轴向管须与外包框伸出一致，斜向管不能超过外包框上限'}
+        extent = given
+        result.update(extension=given, extension_basis='host_measured_along_pipe')
+    bound = extent if extent is not None else ext
     candidates = {}
     if 'centerline_point' in g:
         c = point2(g['centerline_point'], label+'.centerline_point')
         along = (c[0]-e[0])*od[0] + (c[1]-e[1])*od[1]
         perp = abs((c[0]-e[0])*od[1] - (c[1]-e[1])*od[0])
-        if perp > tol or along < 0 or along > ext + tol or not (x1-tol <= c[0] <= x2+tol and y1-tol <= c[1] <= y2+tol):
+        # a centre within the end snap tolerance behind the drawn end is drawing noise, not a reversal
+        if perp > tol or along < -snap or along > bound + tol or not (x1-tol <= c[0] <= x2+tol and y1-tol <= c[1] <= y2+tol):
             return {**result, 'reason': '所给中心/本体端点不在管向前方、块范围或中心线上，须核对方向与已伸入长度'}
-        candidates['centerline_point'] = along
+        candidates['centerline_point'] = max(0., along)
     if relation == 'already_at_center':
-        if 'centerline_point' not in candidates or candidates['centerline_point'] > net.params['end_snap_tolerance']:
+        if 'centerline_point' not in candidates or candidates['centerline_point'] > snap:
             return {**result, 'reason': 'already_at_center 必须有与管段端点吻合的 centerline_point，不能仅声明后置零'}
         candidates = {'centerline_point': 0.}
     elif fitting['kind'] in {'reducer', 'rect_to_round'}:
@@ -156,7 +172,7 @@ def single_end_plane(net, fitting, sid, which):
             fail(f'{label}: 变径/天圆地方是在线本体，不套用立管半高或竖向转弯读法')
         if 'body_length' in g:
             length = finite(g['body_length'], label+'.body_length', 0.)
-            if length <= 0 or length > ext + tol:
+            if length <= 0 or length > bound + tol:
                 return {**result, 'reason': '本体长度必须为正且不超出连接点前方的本体范围'}
             candidates['body_length'] = length
     else:
@@ -167,7 +183,7 @@ def single_end_plane(net, fitting, sid, which):
             if not isinstance(span, list) or len(span) != 2:
                 fail(f'{label}.riser_projection 必须是沿来向的两条立管投影边距离 [近边,远边]')
             near, far = [finite(v, label+'.riser_projection', 0.) for v in span]
-            if far <= near or far > ext + tol:
+            if far <= near or far > bound + tol:
                 return {**result, 'reason': '立管投影两边次序或范围不符，须核对块方向'}
             candidates['riser_projection_midpoint'] = (near+far)/2.
         if 'flange_allowance' in g:
@@ -178,7 +194,9 @@ def single_end_plane(net, fitting, sid, which):
                 return {**result, 'reason': '缺转弯后立管沿来向的尺寸 riser_depth/管高，不能用管宽代替'}
             depth = finite(depth, label+'.riser_depth', 0.)
             flange = finite(g['flange_allowance'], label+'.flange_allowance', 0.)
-            length = ext - depth/2. - flange
+            if extent is None:
+                return {**result, 'reason': '管段不平行于坐标轴，外包框伸出不等于沿管向伸出；外皮扣减须给 extent_along_pipe（沿管向量得的块远端距离）'}
+            length = extent - depth/2. - flange
             if depth <= 0 or length < 0:
                 return {**result, 'reason': '伸出长度不足以扣除半管高和远端法兰，方向或端点关系待核；不能裁成零'}
             candidates['outer_face_minus_half_depth'] = length
@@ -394,18 +412,27 @@ def build_connections(net: Network, result: dict[str, Any]) -> None:
     ends = [(sid, which) for sid in net.segments for which in ("start", "end")]
     end_state: dict[tuple[str, str], str] = {}
     # 1. direct joints
-    joints = []
+    joints, contacts = [], []
     for i in range(len(ends)):
         for j in range(i + 1, len(ends)):
             a, b = ends[i], ends[j]
-            if (a[0] == b[0] or net.segments[a[0]]["floor_id"] != net.segments[b[0]]["floor_id"]
-                or net.segments[a[0]]["system"] != net.segments[b[0]]["system"]):
+            if a[0] == b[0] or net.segments[a[0]]["floor_id"] != net.segments[b[0]]["floor_id"]:
                 continue
             d = dist(net.end_point(*a), net.end_point(*b))
-            if d <= p["end_snap_tolerance"]:
-                joints.append({"a": list(a), "b": list(b), "distance": d})
-                end_state[a] = end_state[b] = "joint"
+            if d > p["end_snap_tolerance"]:
+                continue
+            sa, sb = net.segments[a[0]]["system"], net.segments[b[0]]["system"]
+            if sa != sb:
+                # never linked, but a coincident end of another system may be a mislabelled system
+                contacts.append({"a": list(a), "b": list(b), "distance": d, "systems": [sa, sb]})
+                continue
+            joints.append({"a": list(a), "b": list(b), "distance": d})
+            end_state[a] = end_state[b] = "joint"
     result["joints"] = joints
+    result["cross_system_contacts"] = contacts
+    for item in contacts:
+        result["pending"].append({"kind": "cross_system_contact", "a": item["a"], "b": item["b"], "systems": item["systems"],
+                                  "reason": "不同风系统的端点重合：不自动连接、不传播标高；核对系统归属是否写错，确属同一管路须改为同系统"})
     # 2. fitting membership and duplicates
     duplicates = []
     kept: list[dict[str, Any]] = []
@@ -423,34 +450,43 @@ def build_connections(net: Network, result: dict[str, Any]) -> None:
         systems = {net.segments[s]['system'] for s,_ in candidates}
         if fitting['explicit_ends'] is not None and (len(systems) > 1 or (fitting['system'] and systems and systems != {fitting['system']})):
             fail(f"{fitting['fitting_id']}: 显式管件端口跨风系统，不能自动连通")
-        if len(systems) > 1:
-            fitting['status'] = 'system_ambiguous'
-            fitting['plane_length_unresolved'] = True
-            for key in candidates:
-                end_state.setdefault(key, 'ambiguous_fitting')
-            result['pending'].append({'kind':'fitting_system_ambiguous','fitting_id':fitting['fitting_id'],
-                                      'systems':sorted(systems),'reason':'块范围覆盖不同风系统；须声明管件system或同系统显式端口'})
-            kept.append(fitting)
-            continue
-        fitting['ends'] = candidates
-        fitting['system'] = fitting['system'] or next(iter(systems), None)
+        ambiguous = len(systems) > 1
+        if not ambiguous:
+            fitting['ends'] = candidates
+            fitting['system'] = fitting['system'] or next(iter(systems), None)
+        # Duplicates only within the same system; ambiguous copies of one block (Revit exports)
+        # collapse into one pending item instead of one per copy.
+        group_key = 'ambiguous' if ambiguous else fitting['system']
         area = max((x2 - x1) * (y2 - y1), 1e-9)
         duplicate_of = None
         for other in kept:
-            if (other["kind"] != fitting["kind"] or other["floor_id"] != fitting["floor_id"]
-                or fitting['system'] is None or other['system'] != fitting['system']):
+            other_key = 'ambiguous' if other['status'] == 'system_ambiguous' else other['system']
+            if other["kind"] != fitting["kind"] or other["floor_id"] != fitting["floor_id"] or other_key != group_key:
                 continue
             ox1, oy1, ox2, oy2 = other["bbox"]
             ix = max(0.0, min(x2, ox2) - max(x1, ox1))
             iy = max(0.0, min(y2, oy2) - max(y1, oy1))
             if ix * iy / min(area, max((ox2 - ox1) * (oy2 - oy1), 1e-9)) >= p["fitting_overlap_duplicate"]:
-                duplicate_of = other["fitting_id"]
+                duplicate_of = other
                 break
         if duplicate_of:
             fitting["status"] = "duplicate"
-            fitting["duplicate_of"] = duplicate_of
-            fitting["notes"].append(f"与 {duplicate_of} 同类且范围重合，按同一物理管件只计一次")
+            fitting["duplicate_of"] = duplicate_of["fitting_id"]
+            fitting["notes"].append(f"与 {duplicate_of['fitting_id']} 同类且范围重合，按同一物理管件只计一次")
+            if ambiguous:
+                duplicate_of['ambiguous_pending']['duplicate_fitting_ids'].append(fitting['fitting_id'])
             duplicates.append(fitting)
+            continue
+        if ambiguous:
+            fitting['status'] = 'system_ambiguous'
+            fitting['plane_length_unresolved'] = True
+            for key in candidates:
+                end_state.setdefault(key, 'ambiguous_fitting')
+            fitting['ambiguous_pending'] = {'kind':'fitting_system_ambiguous','fitting_id':fitting['fitting_id'],
+                                            'systems':sorted(systems),'duplicate_fitting_ids':[],
+                                            'reason':'块范围覆盖不同风系统；须声明管件system或同系统显式端口'}
+            result['pending'].append(fitting['ambiguous_pending'])
+            kept.append(fitting)
             continue
         kept.append(fitting)
         for key in fitting["ends"]:
@@ -548,6 +584,7 @@ def fitting_arms(net: Network, result: dict[str, Any]) -> None:
                                  'single_end' if g.get('turn_plane') == 'vertical' else
                                  'single_end_horizontal' if g.get('turn_plane') == 'horizontal' else 'single_end_unresolved')
             fitting['plane_extension'] = measured['extension']
+            fitting['plane_extension_basis'] = measured['extension_basis']
             fitting['plane_scenarios'] = measured['scenarios']
             if measured['length'] is None:
                 fitting['plane_length_unresolved'] = True
@@ -558,7 +595,7 @@ def fitting_arms(net: Network, result: dict[str, Any]) -> None:
                 fitting['arms'].append({'segment_id':sid,'end':which,'length':measured['length'],
                                         'evidence_level':'规则推算','basis':f"单端几何 {measured['method']}：{g['source_id']}；{g['basis']}",
                                         'plane_scenarios':measured['scenarios'],'plane_policy':measured['method'],
-                                        'half_width':measured['half_width']})
+                                        'half_width':measured['half_width'],'extension_basis':measured['extension_basis']})
             if fitting['status'] == 'single_end_unresolved':
                 result['pending'].append({'kind':'single_end_turn_plane_unknown','fitting_id':fitting['fitting_id'],
                                           'reason':'单端件转弯平面未声明为vertical，不按邻近或跨层位置猜竖向连接'})
@@ -752,6 +789,11 @@ def vertical_items(net: Network, elevations: dict[str, dict[str, Any]], result: 
             sa, sb = link["segment_id"], link["to_segment_id"]
         else:
             fitting = fittings_by_id[link["fitting_id"]]
+            if fitting["status"] in {"single_end_unresolved", "single_end_horizontal"}:
+                fail(f"{link['link_id']}: 单端管件 {fitting['fitting_id']} 未声明竖向转弯（状态 {fitting['status']}）；"
+                     "须在该管件 single_end_geometry 中写 turn_plane: vertical 及中心点、立管投影或法兰外伸等几何依据后再声明竖向连接")
+            if fitting["status"] == "single_end_inline":
+                fail(f"{link['link_id']}: 管件 {fitting['fitting_id']} 是单端变径/天圆地方（在线本体），不能作为竖向弯头声明竖向连接")
             if fitting["status"] != "single_end":
                 fail(f"{link['link_id']}: 管件 {fitting['fitting_id']} 状态为 {fitting['status']}，不是单端管件，不能按单端竖向连接")
             if fitting.get("vertical_id"):
@@ -920,6 +962,7 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
                 plane_totals['extension_minus_half_width'] += minus * f
                 plane_totals['minus_half_width_zero'] += int(minus == 0)
             plane_totals['unresolved'] += int(bool(fitting.get('plane_length_unresolved')))
+            plane_totals['rotated_bbox'] += int(fitting.get('plane_extension_basis') == 'rotated_bbox_upper_bound')
         fittings_out.append({"fitting_id": fitting["fitting_id"], "kind": fitting["kind"], "floor_id": fitting["floor_id"], "status": fitting["status"],
                              "block_name": fitting.get("block_name"), "source_id": fitting.get("source_id"),
                              "ends": [{"segment_id": s, "end": w} for s, w in fitting["ends"]], "junction": fitting.get("junction"),
@@ -927,6 +970,7 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
                              'system': fitting.get('system'),
                              'single_end_geometry': fitting.get('single_end_geometry'),
                              'plane_center': fitting.get('plane_center'),
+                             'plane_extension_basis': fitting.get('plane_extension_basis'),
                              'plane_scenarios': {k: v*f if v is not None else None for k,v in fitting.get('plane_scenarios',{}).items()},
                              "centerline_length": None if fitting.get('plane_length_unresolved') else sum(a["length"] for a in arms),
                              "vertical_id": fitting.get("vertical_id"), "notes": fitting["notes"]})
@@ -935,8 +979,13 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
                                       "reason": "管件块范围内没有中心线端点；核对块位置、图层或中心线是否缺绘"})
     result["fittings"] = fittings_out
     # Preserve both legacy readings for diagnosis; only evidenced geometry supplies quantity.
+    requested = net.params["single_end_plane_policy"]
     result["single_end_plane_scenarios"] = {
-        "policy": net.params["single_end_plane_policy"],
+        "policy": "geometry_evidence",
+        # a legacy reading asked for in parameters is echoed here but never applied
+        "legacy_policy_requested": requested if requested != "geometry_evidence" else None,
+        "legacy_policy_applied": False,
+        "rotated_bbox_count": int(plane_totals["rotated_bbox"]),
         "fitting_count": int(plane_totals["fittings"]),
         "extension_minus_half_width": plane_totals["extension_minus_half_width"],
         "extension_full": plane_totals["extension_full"],
@@ -947,7 +996,8 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
         'geometry_evidence': None if plane_totals['unresolved'] else plane_totals['geometry_evidence'],
         'known_geometry_subtotal': plane_totals['geometry_evidence'],
         'legacy_readings_diagnostic_only': True,
-        "meaning": '按single_end_geometry的中心/投影/半管高含法兰/在线本体证据计量；旧整段及减半宽只作诊断，不能靠切换参数采用。未决为null，已知小计另列。',
+        "meaning": '按single_end_geometry的中心/投影/半管高含法兰/在线本体证据计量；旧整段及减半宽只作诊断，不能靠切换参数采用。未决为null，已知小计另列。'
+                   '斜向管段（rotated_bbox_count）的外包框伸出只是上限，旧读法诊断值偏大。',
     }
     for tap in result["open_taps"]:
         segment = net.segments[tap["segment_id"]]
@@ -973,7 +1023,12 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
     result["length_summary"] = {system: {level: dict(sorted(specs.items())) for level, specs in levels.items()} for system, levels in summary.items()}
     result["theoretical_surface_summary"] = {system: {level: dict(sorted(specs.items())) for level, specs in levels.items()} for system, levels in surface.items()}
     result["part_totals"] = {part: dict(levels) for part, levels in part_totals.items()}
+    # Totals below add only the known parts; these pending kinds leave a length out of them.
+    length_gaps = sum(1 for item in result["pending"] if item["kind"] in LENGTH_PENDING_KINDS
+                      or (item["kind"].startswith("vertical_") and item["kind"].endswith("_unresolved")))
     result["metrics"] = {
+        "totals_complete": length_gaps == 0,
+        "length_unresolved_items": length_gaps,
         "straight_length": part_totals["straight"]["确认"],
         "fitting_length_rule": part_totals["fitting"]["规则推算"],
         "fitting_length_scenario": part_totals["fitting"]["方案暂估"],
@@ -1008,10 +1063,12 @@ def infer(data: dict[str, Any]) -> dict[str, Any]:
     result["counts"] = {"segments": len(net.segments), "fittings": len(net.fittings), "duplicate_fittings": len(result["duplicate_fittings"]),
                         "joints": len(result["joints"]), "accessory_gaps": len(result["accessory_gaps"]), "open_taps": len(result["open_taps"]),
                         "vertical_items": len(result["vertical_items"]), "pending": len(result["pending"]),
+                        "cross_system_contacts": len(result["cross_system_contacts"]),
                         "fitting_status": dict(sorted(Counter(f["status"] for f in result["fittings"]).items()))}
     result["business_adoption_allowed"] = False
     result["meaning"] = ("直管为已绘中心线确认量；管件中心线与竖向为按块几何、端口和标高标注的规则推算量，含假定者为方案暂估；"
-                         "单端去向不明和缺标高的部分列待办，不以零或经验比例代替。参考值须经专业复核后才能进入成果。")
+                         "单端去向不明和缺标高的部分列待办，不以零或经验比例代替。metrics 各合计只含已知部分，"
+                         "totals_complete 为 false 时不得当作完整量。参考值须经专业复核后才能进入成果。")
     return result
 
 
