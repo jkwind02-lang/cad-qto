@@ -53,10 +53,16 @@ def codex_env(home):
     return dict(os.environ, CODEX_HOME=str(home))
 
 
-def codex(arguments, home):
-    result = subprocess.run([*cli_prefix(), *arguments], env=codex_env(home),
-                            stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                            encoding='utf-8', errors='replace', timeout=120)
+QUERY_TIMEOUT = 60  # read-only listings; 0.162.1 answers a market-scoped list in under a second
+
+
+def codex(arguments, home, timeout=120, step=None):
+    try:
+        result = subprocess.run([*cli_prefix(), *arguments], env=codex_env(home),
+                                stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                encoding='utf-8', errors='replace', timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise ReleaseError(f"{step or 'Codex CLI 调用'}超时（{timeout} 秒）：codex {' '.join(arguments)}") from exc
     if result.returncode:
         raise ReleaseError(f"codex {' '.join(arguments[:3])} 失败：{(result.stderr or result.stdout)[:1200]}")
     try:
@@ -79,8 +85,12 @@ def context(args, section):
 
 
 def state(home, market):
-    listing = codex(['plugin', 'list', '--json'], home)
-    markets = codex(['plugin', 'marketplace', 'list', '--json'], home).get('marketplaces', [])
+    # An unscoped `plugin list` also queries every remote marketplace and timed out (registration 20261016-0005).
+    # A scoped list of an unregistered market returns empty lists, so first install still reaches `marketplace add`.
+    listing = codex(['plugin', 'list', '--marketplace', market, '--json'], home, QUERY_TIMEOUT,
+                    f'安装状态查询（插件列表，限 {market} 市场）')
+    markets = codex(['plugin', 'marketplace', 'list', '--json'], home, QUERY_TIMEOUT,
+                    '安装状态查询（市场列表；CLI 不支持按名称筛选，为全量）').get('marketplaces', [])
     installed = [p for p in listing.get('installed', []) if p.get('pluginId') == f'{PLUGIN}@{market}']
     roots = [m for m in markets if m.get('name') == market]
     if len(installed) > 1 or len(roots) > 1:

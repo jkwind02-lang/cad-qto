@@ -88,3 +88,50 @@ def test_rollback_checks_partial_install_when_cli_response_was_lost(tmp_path, mo
     assert result['status']=='PASS'
     assert calls == [['plugin','remove','cad-qto@test','--json'],
                      ['plugin','marketplace','remove','test','--json']]
+
+
+# Fake CLI: an unscoped `plugin list` hangs like the remote-market query in registration 20261016-0005;
+# a scoped list still returns foreign entries so the pluginId filter is exercised too.
+FAKE_CODEX = '''import json, os, sys, time
+args = sys.argv[1:]
+with open(os.environ['FAKE_CODEX_LOG'], 'a', encoding='utf-8') as f: f.write(json.dumps(args) + '\\n')
+if args[:2] == ['plugin', 'list']:
+    if '--marketplace' not in args or os.environ.get('FAKE_CODEX_SLOW'): time.sleep(20)
+    m = args[args.index('--marketplace') + 1]
+    items = [{'pluginId': 'cad-qto@other', 'version': '9.9.9'}, {'pluginId': 'tool@personal', 'version': '1.0.0'},
+             {'pluginId': 'cad-qto@' + m, 'version': '0.3.7'}] if m == 'personal' else []
+    print(json.dumps({'installed': items, 'available': []}))
+elif args[:3] == ['plugin', 'marketplace', 'list']:
+    print(json.dumps({'marketplaces': [{'name': 'personal', 'root': 'C:/u'}, {'name': 'other', 'root': 'C:/o'}]}))
+'''
+
+
+@pytest.fixture
+def fake_codex(tmp_path, monkeypatch):
+    script, log = tmp_path/'fake_codex.py', tmp_path/'calls.jsonl'
+    script.write_text(FAKE_CODEX, encoding='utf-8')
+    monkeypatch.setattr(ci, 'cli_prefix', lambda:[sys.executable, str(script)])
+    monkeypatch.setenv('FAKE_CODEX_LOG', str(log))
+    monkeypatch.setattr(ci, 'QUERY_TIMEOUT', 5)
+    return lambda:[json.loads(line) for line in log.read_text(encoding='utf-8').splitlines()]
+
+
+def test_state_scopes_plugin_list_to_target_market_and_filters_foreign_entries(tmp_path, fake_codex):
+    current = ci.state(tmp_path, 'personal')
+    assert current == {'plugins': [{'pluginId': 'cad-qto@personal', 'version': '0.3.7'}],
+                       'marketplace': {'name': 'personal', 'root': 'C:/u'}}
+    assert fake_codex() == [['plugin', 'list', '--marketplace', 'personal', '--json'],
+                            ['plugin', 'marketplace', 'list', '--json']]
+
+
+def test_state_of_unregistered_market_is_empty_so_install_registers_it(tmp_path, fake_codex):
+    # Legal contrast: codex-cli 0.162.1 answers a scoped list of an unknown market with empty lists (exit 0).
+    assert ci.state(tmp_path, 'fresh') == {'plugins': [], 'marketplace': None}
+    assert fake_codex()[0] == ['plugin', 'list', '--marketplace', 'fresh', '--json']
+
+
+def test_query_timeout_names_the_step(tmp_path, fake_codex, monkeypatch):
+    monkeypatch.setenv('FAKE_CODEX_SLOW', '1')
+    monkeypatch.setattr(ci, 'QUERY_TIMEOUT', 1)
+    with pytest.raises(ReleaseError, match=r'安装状态查询（插件列表，限 personal 市场）超时（1 秒）'):
+        ci.state(tmp_path, 'personal')
