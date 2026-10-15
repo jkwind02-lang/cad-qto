@@ -207,3 +207,46 @@ def test_registration_never_overwrites_and_requires_template_fields(tmp_path):
     assert not list((tmp_path/'问题登记/待处理').glob('*.tmp'))
     with pytest.raises(ValueError,match='缺少字段'):
         register(tmp_path,'Claude','管网','t','---\n类型: x\n---\n',when)
+
+
+# ---------- issue writeback (M1, 登记 20261015-1407 维护流程) ----------
+
+import triage_issues
+
+
+def writeback_section(**overrides):
+    fields={'处理版本':'main 提交 abc1234，未发布（拟 0.3.6）','处理状态':'代码已修复','需复跑':'宁波众芯: E-B-2、E-B-1',
+            '复跑状态':'未发布，待复跑','复跑记录':'无'}
+    fields.update(overrides)
+    return '\n## 维护回写（2026-10-15，Claude，claude-opus-5-5）\n\n'+''.join(f'- {k}: {v}\n' for k,v in fields.items() if v is not None)
+
+
+def test_writeback_requires_fixed_fields_and_known_states():
+    assert triage_issues.writeback(BODY)['problems']==['缺少维护回写节']
+    assert triage_issues.writeback(BODY+writeback_section())['problems']==[]
+    missing=triage_issues.writeback(BODY+writeback_section(需复跑=None))['problems']
+    assert missing==['缺少字段：需复跑']
+    bad=triage_issues.writeback(BODY+writeback_section(复跑状态='已复跑过一部分',处理状态='修好了'))['problems']
+    assert '复跑状态取值无效：已复跑过一部分' in bad and '处理状态取值无效：修好了' in bad
+    # 后写的回写节覆盖先写的；中文冒号也能读
+    later=BODY+writeback_section(复跑状态='已复跑过一部分')+writeback_section(复跑状态='未能复跑：原项目已归档').replace('- 复跑状态: ','- 复跑状态：')
+    assert triage_issues.writeback(later)['problems']==[]
+    assert triage_issues.writeback(later)['fields']['复跑状态']=='未能复跑：原项目已归档'
+
+
+def test_resolve_moves_only_released_complete_entries(tmp_path,capsys):
+    doing=tmp_path/'问题登记/处理中';doing.mkdir(parents=True)
+    (doing/'a.md').write_text(BODY+writeback_section(),encoding='utf-8')
+    (doing/'b.md').write_text(BODY+writeback_section(处理状态='双侧发布完成',复跑状态='已发布，待复跑'),encoding='utf-8')
+    (doing/'c.md').write_text(BODY,encoding='utf-8')
+    assert triage_issues.main(['--maint-dir',str(tmp_path),'--resolve','a.md','b.md'])==1
+    assert '代码已修复' in capsys.readouterr().err
+    assert (doing/'a.md').exists() and (doing/'b.md').exists()   # 整批拒绝，不部分移动
+    assert triage_issues.main(['--maint-dir',str(tmp_path),'--resolve','b.md'])==0
+    assert (tmp_path/'问题登记/已处理/b.md').exists() and not (doing/'b.md').exists()
+    assert triage_issues.main(['--maint-dir',str(tmp_path),'--resolve','c.md'])==1
+    capsys.readouterr()
+    assert triage_issues.main(['--maint-dir',str(tmp_path),'--audit'])==0
+    report=json.loads(capsys.readouterr().out)
+    assert report['处理中']['total']==2 and report['处理中']['complete']==1
+    assert report['已处理']=={'total':1,'complete':1,'incomplete':[]}
