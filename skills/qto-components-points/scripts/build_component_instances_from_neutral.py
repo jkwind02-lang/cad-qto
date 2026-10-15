@@ -25,7 +25,7 @@ from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_
 import qto_cad_geometry as cad_geometry
 from qto_actor_identity import is_model_identity
 
-VERSION = "qto-component-neutral-adapter/1.3.0"
+VERSION = "qto-component-neutral-adapter/1.3.1"
 PROFILE_SCHEMA = "qto-component-recognition-profile/1.0"
 LEDGER_SCHEMA = "qto-project-adjudication-ledger/1.0"
 CONFIRMATION_SOURCES = {
@@ -457,6 +457,7 @@ def review_colocated_instances(dispositions, adopted, endpoint_instances, geomet
         fail("duplicate_resolutions 必须是数组")
     by_members = {tuple(group["physical_ids"]): group for group in groups}
     dropped: set[str] = set()
+    resolved_at: dict[str, int] = {}
     for index, raw in enumerate(resolutions):
         if not isinstance(raw, dict):
             fail(f"duplicate_resolutions[{index}] 必须是对象")
@@ -467,11 +468,16 @@ def review_colocated_instances(dispositions, adopted, endpoint_instances, geomet
         group = by_members.get(tuple(sorted(ids)))
         if group is None:
             fail(f"duplicate_resolutions[{index}] 引用的重复候选组不存在：{sorted(ids)}")
+        if group["group_id"] in resolved_at:
+            # one decision per group: a second entry would silently stack drops onto the first
+            fail(f"duplicate_resolutions[{index}] 与 duplicate_resolutions[{resolved_at[group['group_id']]}] "
+                 f"处置同一重复候选组 {group['group_id']}；每组只能写一条处置")
+        resolved_at[group["group_id"]] = index
         if not set(keep) <= set(ids):
             fail(f"duplicate_resolutions[{index}].keep 必须是该组成员")
         basis = text(raw.get("basis"), f"duplicate_resolutions[{index}].basis")
         drop = sorted(set(ids) - set(keep))
-        group.update({"resolution": "keep_all" if not drop else "drop", "keep": sorted(keep), "drop": drop, "basis": basis})
+        group.update({"resolution": "keep_all" if not drop else "drop", "keep": sorted(set(keep)), "drop": drop, "basis": basis})
         for physical_id in drop:
             dropped.add(physical_id)
             by_id[physical_id].update({"disposition": "duplicate_excluded", "duplicate_group_id": group["group_id"],
@@ -479,6 +485,10 @@ def review_colocated_instances(dispositions, adopted, endpoint_instances, geomet
     if dropped:
         adopted[:] = [item for item in adopted if item["physical_id"] not in dropped]
         endpoint_instances[:] = [item for item in endpoint_instances if item["physical_id"] not in dropped]
+    adopted_ids = {item["physical_id"] for item in adopted}
+    for group in groups:
+        if group["resolution"] != "pending" and not set(group["keep"]) <= adopted_ids:
+            fail(f"重复候选组 {group['group_id']} 声明保留 {group['keep']}，但采用实例中缺少其中的成员")
     pending = [group for group in groups if group["resolution"] == "pending"]
     return {"exact_tolerance": exact, "near_tolerance": near, "angle_tolerance_deg": angle_tolerance,
             "tolerance_basis": check.get("tolerance_basis") or "默认值：完全重合 1e-6、近似重合 0.05（输出坐标单位）",

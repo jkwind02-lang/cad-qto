@@ -215,3 +215,29 @@ def test_configurable_tolerance_and_invalid_configs(tmp_path):
     assert result.returncode == 2 and 'anchor_tolerance' in result.stderr
     _, result, _ = build(tmp_path / 'badref', duplicate_resolutions=[{'physical_ids': ['PT-CAD-NOPE', 'PT-CAD-NOPE2'], 'keep': ['PT-CAD-NOPE'], 'basis': 'x'}])
     assert result.returncode == 2 and '不存在' in result.stderr
+
+
+# P1-H01（Codex 交叉复测 2026-10-15）：同一候选组写两条处置时，旧码把两条的剔除叠加，
+# 两盏重合灯都被剔除，组里却声明保留一盏。每组只能有一条处置，第二条无论同决还是相反都报错。
+@pytest.mark.parametrize('keeps', [((0,), (1,)), ((1,), (0,)), ((0,), (0, 1)), ((0,), (0,))],
+                         ids=['相反保留', '相反保留_换序', '剔除后改全保留', '重复同决'])
+def test_one_resolution_per_duplicate_group(tmp_path, keeps):
+    probe_ids, _, _ = build(tmp_path / 'probe')
+    entries = [{'physical_ids': [probe_ids[0], probe_ids[1]], 'keep': [probe_ids[k] for k in keep], 'basis': f'决定{n}'}
+               for n, keep in enumerate(keeps)]
+    _, result, out = build(tmp_path / 'twice', duplicate_resolutions=entries)
+    assert result.returncode == 2 and '每组只能写一条处置' in result.stderr
+    assert not (out / '点位识别报告.json').exists()
+
+
+def test_single_resolution_keeps_exactly_the_declared_instance(tmp_path):
+    probe_ids, _, _ = build(tmp_path / 'probe')
+    ids, result, out = build(tmp_path / 'once', duplicate_resolutions=[
+        {'physical_ids': [probe_ids[1], probe_ids[0]], 'keep': [probe_ids[1]], 'basis': '同一盏灯画了两次'}])
+    assert result.returncode == 0, result.stderr
+    report, _, _ = outputs(out)
+    group = groups_by_members(report, ids)[(0, 1)]
+    assert group['resolution'] == 'drop' and group['keep'] == [ids[1]] and group['drop'] == [ids[0]]
+    adopted = {row['physical_id'] for row in json.loads((out / '点位唯一实例计数输入.json').read_text(encoding='utf-8'))['reconciled_instances']}
+    assert ids[1] in adopted and ids[0] not in adopted
+    assert report['counts']['adopted_physical_instance_count'] == 12   # 13 个插入减去剔除的 1 个
