@@ -121,11 +121,11 @@ python ../_qto-shared-evidence/scripts/migrate_cad_review_view.py --input 旧复
 
 运行实现：[生成器](../scripts/build_qto_review_html.py)、[数据契约](../scripts/qto_review_contract.py)、[批注读取](../scripts/read_qto_review_feedback.py)、[旧版视图适配器](../scripts/migrate_cad_review_view.py)。
 
-## 6. 成果、欠缺条件与对照审核（qto-review-view/1.1，可选扩展）
+## 6. 成果、待解决问题与对照审核（qto-review-view/1.1，可选扩展）
 
-复核页就是最终成果页：显示本次算出的全部总量，按维度汇总分类，能查明细组成并溯源到最初依据；第三方数量只作对比；还从成果反推准确计算欠缺的条件和资料。1.1 视图在 1.0 全部字段之外加可选的 `comparison` 节：条目（本次各层级量、明细行、成员，可带第三方来源段）和问题条目（定口径、补资料确认、按假设计入、已处理）。页面默认打开“成果”，另有“欠缺条件与资料”“对照审核”“图面复核”；可以没有图页，有图页时成员回图高亮。批注写 `qto-review-feedback/2.1`，读取时多出 `item_actions`、`issue_actions`。不带 `comparison` 的视图，页面与原来完全一致。
+复核页就是最终成果页：显示本次算出的全部总量，按楼栋、分部、品类分类，能查明细组成并溯源到最初依据；重点是成果中没有依据或无法判断的内容，按问题性质分组，用共性问题答一类、解决一片；第三方数量只作对比，偏差按本次依据是否充分归因，清单的问题按类型整组答复。1.1 视图在 1.0 全部字段之外加可选的 `comparison` 节：条目（本次各层级量、明细行含已定不计、成员，可带第三方来源段）、个别问题和共性问题（性质、做法及影响量）。页面默认打开“成果”，另有“待解决问题”“对照审核”“图面复核”；可以没有图页，有图页时成员回图高亮。批注写 `qto-review-feedback/2.1`：共性问题答复对整个适用范围生效，个别处只写例外；读取时多出 `common_issue_actions`、`item_actions`、`issue_actions`、`conflicts`、`overlaps`。不带 `comparison` 的视图，页面与原来完全一致。
 
-字段、表格输入脚本和检查规则见 [复核页：成果、欠缺条件与对照审核](复核页待解决与对照审核.md)；运行实现另有 [表格输入](../scripts/build_comparison_view_from_tables.py)、[对照校验](../scripts/qto_review_comparison.py)。
+字段、表格输入脚本和检查规则见 [复核页：成果、待解决问题与对照审核](复核页待解决与对照审核.md)；运行实现另有 [表格输入](../scripts/build_comparison_view_from_tables.py)、[对照校验](../scripts/qto_review_comparison.py)。
 
 ## 2026-09-20 成果快照绑定（优先于旧版回执说明）
 

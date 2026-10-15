@@ -48,6 +48,7 @@ def bind_result_versions(view):
         bind_comparison_versions(comparison, bykey)
         total["items"] = sorted((i["id"], i["result_fingerprint"]) for i in comparison["items"])
         total["issues"] = sorted((q["id"], q["result_fingerprint"]) for q in comparison["issues"])
+        total["common_issues"] = sorted((g["id"], g["result_fingerprint"]) for g in comparison.get("common_issues", []))
     view["result_fingerprint"] = fingerprint(total)
     view["result_version_schema"] = "qto-review-result-version/1.0"
     return view
@@ -60,9 +61,13 @@ SEGMENT_FIELDS = (
 )
 DETAIL_FIELDS = (
     "id", "level", "quantity", "unit", "basis", "aggregation", "aggregation_reason", "member_keys",
-    "member_quantity_name", "shared_member_split", "dimensions",
+    "member_quantity_name", "shared_member_split", "dimensions", "excluded",
 )
-ISSUE_FIELDS = ("id", "handler", "title", "text", "impact", "impact_text", "current_practice", "item_ids")
+ISSUE_FIELDS = ("id", "handler", "nature", "common_issue_id", "title", "text", "impact", "impact_text", "options", "current_option",
+                "current_practice", "item_ids")
+# Contract 9.1: the scope is kept in the answer snapshot (for "added since answer"), never in the fingerprint.
+COMMON_FIELDS = ("id", "nature", "question", "text", "options", "current_option", "handler")
+IMPLIED_FIELDS = ("id", "list_type", "question")
 
 
 def bind_comparison_versions(comparison, bykey):
@@ -84,24 +89,48 @@ def bind_comparison_versions(comparison, bykey):
         })
     for issue in comparison["issues"]:
         issue["result_fingerprint"] = fingerprint({key: issue.get(key) for key in ISSUE_FIELDS})
+    for common in comparison.get("common_issues", []):
+        fields = IMPLIED_FIELDS if common.get("implied") else COMMON_FIELDS
+        common["result_fingerprint"] = fingerprint({key: common.get(key) for key in fields})
+
+
+SNAPSHOTS = (
+    ("item_snapshot", "item_id", "items", "对照条目"),
+    ("issue_snapshot", "issue_id", "issues", "问题"),
+    ("common_issue_snapshot", "common_issue_id", "common_issues", "共性问题"),
+)
+
+
+def audit_target(record):
+    """(snapshot, id key, comparison pool, label) of a comparison comment, or None for a drawing comment."""
+    for field, ident, pool, label in SNAPSHOTS:
+        if record.get(field) is not None:
+            return record[field], ident, pool, label
+    return None
 
 
 def assess_record(record, view):
     """Called after structural validation; Python/JS parity has golden tests."""
     objects = {o["catalog_key"]: o for o in view["objects"]}
     groups = {g["id"]: g for g in view["groups"]}
-    audit_snapshot = record.get("item_snapshot") or record.get("issue_snapshot")
-    if audit_snapshot is not None:
+    target = audit_target(record)
+    if target is not None:
+        audit_snapshot, ident_key, pool_key, label = target
         comparison = view.get("comparison") or {}
-        if record.get("item_snapshot") is not None:
-            pool, ident, label = comparison.get("items", []), audit_snapshot.get("item_id"), "对照条目"
-        else:
-            pool, ident, label = comparison.get("issues", []), audit_snapshot.get("issue_id"), "问题"
-        current = next((x for x in pool if x["id"] == ident), None)
+        ident = audit_snapshot.get(ident_key)
+        current = next((x for x in comparison.get(pool_key, []) if x["id"] == ident), None)
         if current is None:
             return "unmatched", label + "已不在当前成果中，须由所属专业重新对应"
+        if record.get("exception_of"):
+            common = next((g for g in comparison.get("common_issues", []) if g["id"] == record["exception_of"]), None)
+            scope = (common or {}).get("scope") or {}
+            if ident not in scope.get("issue_ids" if pool_key == "issues" else "item_ids", []):
+                return "unmatched", "例外所指的共性问题已不覆盖本处，例外不再适用，须重新核对"
         if audit_snapshot.get("result_fingerprint") != current["result_fingerprint"] or record.get("result_fingerprint") != current["result_fingerprint"]:
-            return "stale", label + "的第三方量、本次量、结论或明细已变化；旧意见仅保留为历史参考"
+            what = "的问法、正文、性质、做法或处理方" if pool_key == "common_issues" else "的第三方量、本次量、结论或明细"
+            return "stale", label + what + "已变化；旧意见仅保留为历史参考"
+        if record.get("option_id") and record["option_id"] not in {o["id"] for o in current.get("options") or []}:
+            raise ValueError("所选做法不在该问题的做法里：" + record["option_id"])
         return "current", "已绑定当前成果快照；仍须所属专业复核，不自动改量"
     target = groups.get(record.get("group_id")) if record.get("group_id") else objects.get((record.get("object_snapshot") or {}).get("catalog_key"))
     if target is None:

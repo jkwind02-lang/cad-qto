@@ -52,8 +52,9 @@ def test_valid_view_normalizes_and_fills_only_rule_based_fields():
     for i in n['comparison']['items']:     # quantities are carried, never recomputed
         assert i['ours']['levels'] == fx.item(before, i['id'])['ours']['levels']
     gc = n['comparison']['generation_check']
-    assert gc['counts'] == {'items': 6, 'extra_items': 1, 'detail_rows': 5, 'issues': 2, 'open_issues': 1, 'sources': 2, 'source_rows': 8,
-                            'member_objects': 3, 'uncertain_items': 2, 'uncertain_without_issue': 2, 'search_incomplete': 0}
+    expect = {'items': 6, 'extra_items': 1, 'detail_rows': 5, 'issues': 2, 'open_issues': 1, 'sources': 2, 'source_rows': 8,
+              'member_objects': 3, 'uncertain_items': 2, 'uncertain_without_issue': 2, 'search_incomplete': 0}
+    assert {k: gc['counts'][k] for k in expect} == expect   # fifth-modification counts: test_review_fifth_20261015.py
     assert {e['kind'] for e in gc['exceptions']} >= {'第三方条目有误已修正'}
     assert n['comparison']['handler_labels']['confirm'] == '需设计或业主确认' and n['comparison']['handler_labels']['decide'] == '需要你定口径'
 

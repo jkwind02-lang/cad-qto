@@ -8,7 +8,10 @@ const clone=x=>JSON.parse(JSON.stringify(x));
 function ensure(ok,message){if(!ok)throw Error(message);}
 function text(x){return typeof x==='string'?x:'';}
 const schemaFor=view=>view.schema==='qto-review-view/1.1'?comparisonSchema:schema;
-const isAudit=r=>r&&typeof r==='object'&&(r.item_snapshot!=null||r.issue_snapshot!=null);
+const SNAPSHOTS=[['item_snapshot','item_id','items','对照条目'],['issue_snapshot','issue_id','issues','问题'],['common_issue_snapshot','common_issue_id','common_issues','共性问题']];
+const isAudit=r=>r&&typeof r==='object'&&SNAPSHOTS.some(([k])=>r[k]!=null);
+const auditTarget=r=>SNAPSHOTS.find(([k])=>r[k]!=null);
+const strList=x=>Array.isArray(x)&&x.every(v=>typeof v==='string');
 const conclusions=['一致','多算','少算','第三方无量','图上无','缺图','归入他项'],bandClasses=['计量','计数'];
 const nonneg=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0,plain=v=>v&&typeof v==='object'&&!Array.isArray(v);
 // What the reviewer saw under the page tolerance (contract 9); never used for staleness.
@@ -18,11 +21,18 @@ function cleanAudit(r,key,complete){
  ensure(typeof r.confirmed_result==='string'&&typeof r.reason==='string','结果和原因须为文字');
  ensure([undefined,null,'',...verdicts].includes(r.verdict),'快捷结论只能是同意、要改、待定');
  if(complete)ensure(r.reason.trim()&&(r.confirmed_result.trim()||verdicts.includes(r.verdict)),'已保存审核意见须有原因，以及快捷结论或结论文字');
- ensure(!r.group_id&&!r.object_snapshot&&(r.item_snapshot==null||r.issue_snapshot==null),'审核意见只能指向一个对照条目或问题');
+ ensure(!r.group_id&&!r.object_snapshot&&SNAPSHOTS.filter(([k])=>r[k]!=null).length===1,'审核意见只能指向一个对照条目、问题或共性问题');
  const ex=r.excluded_detail_row_ids||[];ensure(Array.isArray(ex)&&ex.every(x=>typeof x==='string')&&new Set(ex).size===ex.length,'例外明细行须为不重复的编号');
  if(r.page_view!=null)ensure(r.item_snapshot!=null&&pageViewOk(r.page_view),'page_view 须为 {consistent_band, conclusions}，只用于对照条目批注');
- if(r.item_snapshot!=null)ensure(typeof r.item_snapshot.item_id==='string'&&r.item_snapshot.item_id&&key==='对照条目|'+r.item_snapshot.item_id,'对照条目批注键与快照不一致');
- else ensure(typeof r.issue_snapshot.issue_id==='string'&&r.issue_snapshot.issue_id&&key==='问题|'+r.issue_snapshot.issue_id,'问题批注键与快照不一致');
+ const filled=x=>typeof x==='string'&&x.trim()!=='';
+ ensure([undefined,null,''].includes(r.option_id)||(filled(r.option_id)&&r.item_snapshot==null),'option_id 须为做法编号，只用于问题和共性问题批注');
+ // Contract 9.1: an exception says why this place does not follow the common answer.
+ ensure([undefined,null,''].includes(r.exception_of)||(filled(r.exception_of)&&r.common_issue_snapshot==null),'exception_of 须为共性问题编号，只用于个别问题和条目批注');
+ const mc=r.merge_conflict;ensure(mc==null||(plain(mc)&&Array.isArray(mc.candidates)&&mc.candidates.length>=2&&mc.candidates.every(plain)),'merge_conflict 须为 {candidates: [两条以上意见]}');
+ const [field,ident,,label]=auditTarget(r),snap=r[field];
+ ensure(plain(snap)&&typeof snap[ident]==='string'&&snap[ident]&&key===(field==='item_snapshot'?'对照条目|':label+'|')+snap[ident],label+'批注键与快照不一致');
+ if(field!=='item_snapshot')ensure(!ex.length,label+'批注没有明细行例外');
+ if(field==='common_issue_snapshot')ensure(plain(snap.scope)&&strList(snap.scope.issue_ids)&&strList(snap.scope.item_ids),'共性问题快照须记答复时的适用范围 scope: {issue_ids, item_ids}');
  return {...clone(r),annotation_id:key,verdict:r.verdict||'',excluded_detail_row_ids:ex,history:r.history||[]};
 }
 function cleanRecord(r,key,complete=true){
@@ -49,10 +59,13 @@ function cleanRecord(r,key,complete=true){
 }
 function assessRecord(record,view){
  if(isAudit(record)){
-  const item=record.item_snapshot!=null,snap=item?record.item_snapshot:record.issue_snapshot,label=item?'对照条目':'问题';
-  const current=((item?view.comparison?.items:view.comparison?.issues)||[]).find(x=>x.id===(item?snap.item_id:snap.issue_id));
+  const [field,ident,pool,label]=auditTarget(record),snap=record[field],c=view.comparison||{};
+  const current=(c[pool]||[]).find(x=>x.id===snap[ident]);
   if(!current)return {state:'unmatched',reason:label+'已不在当前成果中，须由所属专业重新对应'};
-  if(snap.result_fingerprint!==current.result_fingerprint||record.result_fingerprint!==current.result_fingerprint)return {state:'stale',reason:label+'的第三方量、本次量、结论或明细已变化；旧意见仅保留为历史参考'};
+  if(record.exception_of){const g=(c.common_issues||[]).find(x=>x.id===record.exception_of),scope=g?.scope||{};
+   if(!(scope[pool==='issues'?'issue_ids':'item_ids']||[]).includes(snap[ident]))return {state:'unmatched',reason:'例外所指的共性问题已不覆盖本处，例外不再适用，须重新核对'};}
+  if(snap.result_fingerprint!==current.result_fingerprint||record.result_fingerprint!==current.result_fingerprint)return {state:'stale',reason:label+(pool==='common_issues'?'的问法、正文、性质、做法或处理方':'的第三方量、本次量、结论或明细')+'已变化；旧意见仅保留为历史参考'};
+  ensure(!record.option_id||(current.options||[]).some(o=>o.id===record.option_id),'所选做法不在该问题的做法里：'+record.option_id);
   return {state:'current',reason:'已绑定当前成果快照；仍须所属专业复核，不自动改量'};
  }
  const objects=new Map(view.objects.map(o=>[o.catalog_key,o])),groups=new Map(view.groups.map(g=>[g.id,g]));
@@ -108,16 +121,26 @@ function parse(input,view){
  return p;
 }
 function saveRecord(previous,next,key,now){
- const q=cleanRecord(next,key,true);q.updated_at=now;q.entry_origin='用户在HTML保存';
+ const q=cleanRecord(next,key,true);q.updated_at=now;q.entry_origin='用户在HTML保存';delete q.merge_conflict;   // re-saving one opinion settles a merge conflict
  q.history=clone(previous?.history||[]);
  if(previous){const old=clone(previous);delete old.history;q.history.push(old);}
  return q;
 }
+// The opinion of an audit comment: quick verdict, chosen option and exception target (contract 9.1).
+const opinion=r=>JSON.stringify([r.verdict||'',r.option_id||'',r.exception_of||'']);
+const bare=r=>{const x=clone(r);delete x.history;delete x.merge_conflict;return x;};
 function mergeRecords(local,incoming){
  const annotations=Object.assign(Object.create(null),local);let conflicts=0;
  for(const [k,r] of Object.entries(incoming)){
   const old=annotations[k];if(!old){annotations[k]=r;continue;}
   if(JSON.stringify(old)===JSON.stringify(r))continue;
+  // Two different current opinions are not settled by time: both are kept until the user re-saves one.
+  const cands=[...(old.merge_conflict?.candidates||[bare(old)]),...(r.merge_conflict?.candidates||[bare(r)])];
+  const distinct=cands.filter((x,n)=>cands.findIndex(y=>JSON.stringify(y)===JSON.stringify(x))===n);
+  if(isAudit(old)&&isAudit(r)&&new Set(distinct.map(opinion)).size>1){
+   const keep=(Date.parse(r.updated_at)||0)>=(Date.parse(old.updated_at)||0)?r:old;
+   annotations[k]={...keep,history:[...(keep.history||[])],merge_conflict:{candidates:distinct}};conflicts++;continue;
+  }
   const keep=(Date.parse(r.updated_at)||0)>=(Date.parse(old.updated_at)||0)?r:old;
   const other=clone(keep===r?old:r);delete other.history;
   annotations[k]={...keep,history:[...(keep.history||[]),{...other,conflict_from_merge:true}]};conflicts++;
@@ -134,5 +157,5 @@ function mergePackages(local,incoming){
 function embed(html,pkg){const json=JSON.stringify(pkg,null,1).replace(/^[ \t]+/gm,'').replace(/</g,'\\u003c');ensure(/id="feedback-seed"/.test(html),'页面缺少批注嵌入块');return html.replace(/(<script id="feedback-seed" type="application\/json">)[\s\S]*?(<\/script>)/,(_,a,b)=>a+json+b);}
 function readFileText(text){if(text.trimStart().startsWith('<')){const m=text.match(/<script id="feedback-seed" type="application\/json">([\s\S]*?)<\/script>/);ensure(m,'HTML没有批注数据块');return JSON.parse(m[1]);}return JSON.parse(text);}
 function receiptState(receipt,annotation){return receipt&&annotation&&annotation.result_fingerprint&&annotation.applicability_state!=='stale'&&annotation.applicability_state!=='unmatched'&&receipt.source_annotation_updated_at===annotation.updated_at&&receipt.source_result_fingerprint===annotation.result_fingerprint?'current':receipt?'stale':'none';}
-root.QtoReviewCore={schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord};
+root.QtoReviewCore={schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord,isAudit,opinion};
 })(globalThis);

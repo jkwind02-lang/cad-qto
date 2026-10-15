@@ -20,6 +20,8 @@ PROFESSIONALS = {
  'qto-earthwork-terrain':'土方地形', 'qto-piles-groundwork':'桩基地基',
  'qto-roads-siteworks':'道路场地'}
 
+AUDIT_SNAPSHOTS = ('item_snapshot', 'issue_snapshot', 'common_issue_snapshot')
+
 def require(ok, message):
  if not ok: raise ValueError(message)
 
@@ -136,7 +138,7 @@ def validate_feedback(raw, view):
  p.setdefault('drafts',{});p.setdefault('custom_markers',[])
  require(isinstance(p['drafts'],dict) and isinstance(p['custom_markers'],list),'草稿或新增标记无效')
  scene_ids={s['id'] for s in view['scenes']};keys={o['catalog_key'] for o in view['objects']};groups={g['id']:g for g in view['groups']};unmatched=[]
- comparison=view.get('comparison') or {};items={i['id']:i for i in comparison.get('items',[])};issues={q['id']:q for q in comparison.get('issues',[])}
+ comparison=view.get('comparison') or {};items={i['id']:i for i in comparison.get('items',[])};issues={q['id']:q for q in comparison.get('issues',[])};commons={g['id']:g for g in comparison.get('common_issues',[])}
  for m in p['custom_markers']:
   if legacy and not m.get('scene_id'):
    m['scene_id']=view.get('legacy_scene_map',{}).get(m.get('plan_side','supply'));m['professional']=view.get('legacy_professional')
@@ -148,25 +150,35 @@ def validate_feedback(raw, view):
   for key,r in p[field].items():
    require(key not in ['__proto__','constructor','prototype'] and isinstance(r,dict),'批注键或结构无效')
    require(isinstance(r.get('confirmed_result',''),str) and isinstance(r.get('reason',''),str),'批注结果和原因必须是文字')
-   audit=r.get('item_snapshot') is not None or r.get('issue_snapshot') is not None
+   audit=any(r.get(k) is not None for k in AUDIT_SNAPSHOTS)
    if audit:require(r.get('verdict') in (None,'',*VERDICTS),'快捷结论只能是同意、要改、待定')
    if field=='annotations':
     if audit:require(string(r.get('reason')) and (string(r.get('confirmed_result')) or r.get('verdict') in VERDICTS),'已保存审核意见须有原因，以及快捷结论或结论文字')
     else:require(string(r.get('confirmed_result')) and string(r.get('reason')),'已保存批注须有结果及原因')
    if audit:
-    require(not r.get('group_id') and not r.get('object_snapshot') and (r.get('item_snapshot') is None or r.get('issue_snapshot') is None),'审核意见只能指向一个对照条目或问题')
-    require(r.get('verdict') in (None,'',*VERDICTS),'快捷结论只能是同意、要改、待定')
+    require(not r.get('group_id') and not r.get('object_snapshot') and sum(r.get(k) is not None for k in AUDIT_SNAPSHOTS)==1,'审核意见只能指向一个对照条目、问题或共性问题')
     ex=r.get('excluded_detail_row_ids',[]);require(isinstance(ex,list) and all(isinstance(x,str) for x in ex) and len(set(ex))==len(ex),'例外明细行须为不重复的编号')
     if r.get('page_view') is not None:require(r.get('item_snapshot') is not None and page_view_ok(r['page_view']),'page_view 须为 {consistent_band, conclusions}，只用于对照条目批注')
+    require(r.get('option_id') in (None,'') or (string(r['option_id']) and r.get('item_snapshot') is None),'option_id 须为做法编号，只用于问题和共性问题批注')
+    # Contract 9.1: an exception says why this place does not follow the common answer.
+    require(r.get('exception_of') in (None,'') or (string(r['exception_of']) and r.get('common_issue_snapshot') is None),'exception_of 须为共性问题编号，只用于个别问题和条目批注')
+    mc=r.get('merge_conflict')
+    require(mc is None or (isinstance(mc,dict) and isinstance(mc.get('candidates'),list) and len(mc['candidates'])>=2 and all(isinstance(x,dict) for x in mc['candidates'])),'merge_conflict 须为 {candidates: [两条以上意见]}')
     if r.get('item_snapshot') is not None:
      snap=r['item_snapshot'];require(isinstance(snap,dict) and string(snap.get('item_id')) and key=='对照条目|'+snap['item_id'],'对照条目批注键与快照不一致')
      item=items.get(snap['item_id'])
      if item is None:unmatched.append({'annotation_key':key,'reason':'对照条目已不在当前视图，不自动应用'})
      else:require(set(ex)<={x['id'] for x in item.get('detail_rows',[])},'例外明细行不属于该条目')
-    else:
+    elif r.get('issue_snapshot') is not None:
      require(not ex,'问题批注没有明细行例外')
      snap=r['issue_snapshot'];require(isinstance(snap,dict) and string(snap.get('issue_id')) and key=='问题|'+snap['issue_id'],'问题批注键与快照不一致')
      if snap['issue_id'] not in issues:unmatched.append({'annotation_key':key,'reason':'问题已不在当前视图，不自动应用'})
+    else:
+     require(not ex,'共性问题批注没有明细行例外')
+     snap=r['common_issue_snapshot'];sc=snap.get('scope') if isinstance(snap,dict) else None
+     require(isinstance(snap,dict) and string(snap.get('common_issue_id')) and key=='共性问题|'+snap['common_issue_id'],'共性问题批注键与快照不一致')
+     require(isinstance(sc,dict) and all(isinstance(sc.get(k),list) and all(isinstance(x,str) for x in sc[k]) for k in ('issue_ids','item_ids')),'共性问题快照须记答复时的适用范围 scope: {issue_ids, item_ids}')
+     if snap['common_issue_id'] not in commons:unmatched.append({'annotation_key':key,'reason':'共性问题已不在当前视图，不自动应用'})
    elif r.get('group_id'):
     snaps=r.get('member_snapshot',[]);sm={s['catalog_key']:s for s in snaps};sel=r.get('selected_object_keys',[]);ex=r.get('excluded_object_keys',[])
     require(len(sm)==len(snaps) and len(set(sel))==len(sel) and len(set(ex))==len(ex),'批注成员重复')

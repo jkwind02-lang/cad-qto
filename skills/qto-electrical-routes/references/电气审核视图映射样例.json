@@ -29,10 +29,14 @@
   "dimensions": [
    {"id": "building", "title": "楼栋", "role": "overview", "values_from": {"table": "buildings", "id": "楼栋", "merged_from": "单位工程"}},
    {"id": "division", "title": "分部", "role": "section", "values_from": "data"},
-   {"id": "package", "title": "分包", "role": "filter", "values_from": "data"},
-   {"id": "system", "title": "系统", "role": "filter", "values_from": "data"}
+   {"id": "category", "title": "品类", "role": "category", "values_from": "data"},
+   {"id": "system", "title": "系统", "role": "filter", "values_from": "data"},
+   {"id": "package", "title": "计算包号", "role": "technical", "values_from": "data"}
   ],
-  "member_tables": []
+  "member_tables": [{"id": "circuit", "title": "逐回路台账",
+                     "columns": [{"key": "attributes.包号", "title": "包号"}, {"key": "attributes.箱号", "title": "箱号"}, {"key": "attributes.回路号", "title": "回路号"},
+                                 {"key": "attributes.规格", "title": "规格"}, {"key": "attributes.起点楼层", "title": "起点"}, {"key": "attributes.终点楼层", "title": "终点"},
+                                 {"key": "status", "title": "状态"}]}]
  },
  "tables": {
   "items": [
@@ -43,28 +47,52 @@
                 "third_party_corrected": "清单有误已修正", "ours_note": "说明", "missing_drawing_note": "缺图说明", "correction_note": "修正说明",
                 "search_drawings": "检索图纸", "search_targets": "检索对象", "search_method": "检索方法", "search_hits": "检索命中数",
                 "search_unread": "未能读取", "search_uncovered": "未覆盖", "search_record_ref": "检索记录", "search_note": "检索说明",
-                "dim.building": "楼栋", "dim.division": "分部", "dim.package": "包号", "dim.system": "系统"},
+                "dim.building": "楼栋", "dim.division": "分部", "dim.category": "项目名称", "dim.package": "包号", "dim.system": "系统"},
     "value_maps": {"conclusion": {"清单无量": "第三方无量"}},
     "list_separators": {"search_drawings": "；", "search_targets": "；"}},
    {"path": "review_data/extra.csv", "constants": {"kind": "extra"},
     "columns": {"id": "extra_id", "name": "项目名称", "features": "项目特征", "unit": "单位", "确认量": "确认", "规则推算量": "规则推算", "方案暂估量": "方案暂估",
-                "total": "本次合计", "dim.building": "楼栋", "dim.package": "包号", "dim.system": "系统"}}
+                "total": "本次合计", "dim.building": "楼栋", "dim.category": "项目名称", "dim.package": "包号", "dim.system": "系统"}}
   ],
   "detail_rows": [
    {"path": "review_data/members.csv",
     "columns": {"id": "member_id", "item_id": "挂接", "level": "数量层级", "quantity": "工程量", "unit": "单位", "basis": "计算式或依据", "area": "楼层区域",
-                "drawing": "图纸", "locator": "定位", "relation": "清单关系", "note": "备注", "dim.building": "楼栋", "dim.package": "包号", "dim.system": "系统"},
+                "drawing": "图纸", "locator": "定位", "relation": "清单关系", "note": "备注", "dim.building": "楼栋", "dim.package": "包号", "dim.system": "系统",
+                "excluded": "不计", "excluded_rule_ref": "不计口径", "excluded_issue_id": "不计问题", "excluded_note": "不计说明"},
     "value_maps": {"level": {"确认": "确认量", "规则推算": "规则推算量", "方案暂估": "方案暂估量", "未决": "未决量"}}}
   ],
   "redirects": [{"path": "review_data/targets.csv", "columns": {"item_id": "from_item", "target_item_id": "to_item"}}],
   "issues": [
    {"path": "review_data/issues.csv",
-    "columns": {"id": "编号", "handler": "类别", "title": "标题", "text": "情况", "impact_text": "影响", "current_practice": "现做法", "dim.building": "楼栋"},
-    "value_maps": {"handler": {"需要你定口径（会改数量）": "decide", "需设计、业主或清单编制方确认": "confirm", "已按假设或判断计入，可抽查": "assumed", "已处理，仅留记录": "closed"}},
+    "columns": {"id": "编号", "handler": "类别", "title": "标题", "text": "情况", "impact_text": "影响", "current_practice": "现做法", "dim.building": "楼栋",
+                "nature": "问题性质", "common_issue_id": "共性问题编号", "rule_ref": "口径决定单编号", "plugin_issue_ref": "插件登记编号", "current_option": "现做法编号"},
+    "value_maps": {"handler": {"需要你定口径（会改数量）": "decide", "需设计、业主或清单编制方确认": "confirm", "已按假设或判断计入，可抽查": "assumed", "已处理，仅留记录": "closed"},
+                   "nature": {"现行规则无法判断": "rule_gap", "有多种判断方式": "multi_method", "缺图纸或资料": "missing_info", "图纸矛盾或不清": "drawing_conflict",
+                              "范围、分期或专业界面不清": "scope", "按假设或估算计入": "assumption", "工具或方法限制": "tool_limit", "清单的问题": "list_issue"}},
     "list_separators": {"dim.building": "、"}}
   ],
   "issue_links": [{"path": "review_data/issue_links.csv"}],
   "issue_sources": [{"path": "review_data/issue_sources.csv", "columns": {"ref": "原条目", "text": "原文"}}],
+  "common_issues": [
+   {"path": "review_data/common_issues.csv",
+    "columns": {"id": "编号", "nature": "性质", "question": "问法", "text": "情况", "handler": "处理方", "current_option": "现做法编号",
+                "rule_ref": "口径决定单编号", "status": "状态", "dim.building": "楼栋"},
+    "value_maps": {"handler": {"需要你定口径（会改数量）": "decide", "需设计、业主或清单编制方确认": "confirm", "已按假设或判断计入，可抽查": "assumed", "已处理，仅留记录": "closed"},
+                   "nature": {"现行规则无法判断": "rule_gap", "有多种判断方式": "multi_method", "缺图纸或资料": "missing_info", "图纸矛盾或不清": "drawing_conflict",
+                              "范围、分期或专业界面不清": "scope", "按假设或估算计入": "assumption", "工具或方法限制": "tool_limit", "清单的问题": "list_issue"}},
+    "list_separators": {"dim.building": "、"}}
+  ],
+  "issue_options": [{"path": "review_data/issue_options.csv",
+                     "columns": {"issue_id": "问题编号", "option_id": "做法编号", "text": "做法", "value": "影响数值", "unit": "单位", "note": "说明"}}],
+  "common_issue_links": [{"path": "review_data/common_issue_links.csv", "columns": {"common_issue_id": "共性问题编号", "item_id": "条目编号"}}],
+  "members": [{"path": "review_data/ledger_members.csv", "constants": {"professional": "qto-electrical-routes", "category": "回路"},
+               "columns": {"catalog_key": "catalog_key", "title": "回路号", "status": "层级", "source": "图纸"},
+               "attributes": {"包号": "包号", "箱号": "箱号", "回路号": "回路号", "规格": "规格", "起点楼层": "起点楼层", "终点楼层": "终点楼层", "依据": "依据"}}],
+  "member_links": [{"path": "review_data/ledger_links.csv",
+                    "columns": {"catalog_key": "catalog_key", "detail_id": "detail_id", "quantity_name": "数量名", "level": "层级", "quantity": "数量"},
+                    "value_maps": {"level": {"确认": "确认量", "规则推算": "规则推算量", "方案暂估": "方案暂估量", "未决": "未决量"}}}],
+  "detail_aggregation": [{"path": "review_data/ledger_detail_agg.csv", "constants": {"member_table": "circuit"},
+                          "columns": {"detail_id": "detail_id", "aggregation": "aggregation", "aggregation_reason": "aggregation_reason", "member_quantity_name": "member_quantity_name"}}],
   "buildings": [{"path": "review_data/buildings.csv"}]
  }
 }

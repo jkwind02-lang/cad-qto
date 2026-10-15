@@ -5,7 +5,9 @@ directions (item <-> detail rows <-> member objects, source rows <-> items).
 It never computes, rounds or rewrites an engineering quantity. The values it
 fills follow fixed rules in the contract: the display total, the
 estimate-dominant flag, the default-band conclusion with its band_check
-ratio, and the uncertain and search_incomplete markers.
+ratio, the uncertain and search_incomplete markers, the excluded-row totals,
+the scope of each common issue, the deviation attribution and the implied
+list-issue groups (contract 5.5, 6.2).
 """
 import math, re
 
@@ -14,7 +16,18 @@ TOTAL_LEVELS = LEVELS[:3]
 CONCLUSIONS = ('一致', '多算', '少算', '第三方无量', '图上无', '缺图', '归入他项')
 SIGNED = ('一致', '多算', '少算')
 HANDLERS = {'decide': '需要你定口径', 'confirm': '需补资料或确认', 'assumed': '已按假设计入', 'closed': '已处理，仅留记录'}
-ROLES = ('overview', 'section', 'filter')
+ROLES = ('overview', 'section', 'category', 'filter', 'technical')
+# Why the result is uncertain (contract 6.1); decides what kind of answer the user gives.
+NATURES = {'rule_gap': '现行规则无法判断', 'multi_method': '有多种判断方式', 'missing_info': '缺图纸或资料', 'drawing_conflict': '图纸矛盾或不清',
+           'scope': '范围、分期或专业界面不清', 'assumption': '按假设或估算计入', 'tool_limit': '工具或方法限制', 'list_issue': '清单的问题'}
+# Deviation attribution (contract 5.5): which conclusions are deviations and which list-issue type each becomes.
+DEVIATIONS = ('多算', '少算', '第三方无量', '图上无')
+LIST_TYPES = {'多算': '清单少计', '少算': '清单多计', '第三方无量': '清单漏量', '图上无': '清单列了图上没有的'}
+CORRECTED_TYPE = '清单规格写错'
+LIST_PREFIX = '清单的问题|'
+LIST_QUESTION = '本次依据充分、与清单不符的，按本次计，差异交清单编制方核对？'
+LIST_OPTION = {'id': 'O1', 'text': '按本次计，差异交清单编制方核对', 'impact': None}
+ATTRIBUTIONS = ('list', 'ours', 'both')
 SOURCE_KINDS = ('审计清单', '招标清单', '对方报量', '甲方核定量', '其他')
 AGGREGATIONS = ('leaf', 'sum_members', 'declared')
 VERDICTS = ('同意', '要改', '待定')
@@ -46,6 +59,11 @@ def close(a, b):
 def total_of(values):
  present = [v for v in values if v is not None]
  return sum(present) if present else None
+def impact_ok(s):
+ if not isinstance(s, dict) or not num_or_none(s.get('value')) or any(s.get(k) is not None and not isinstance(s[k], str) for k in ('unit', 'note')): return False
+ return text(s.get('unit')) if s.get('value') is not None else text(s.get('note'))
+def impact_parts(imp): return imp if isinstance(imp, list) else [] if imp is None else [imp]
+IMPACT_RULE = 'impact 须为 null、一段 {value, unit, note} 或多段数组；有数字时须有 unit，value 为 null 时须有 note'
 
 
 def normalize_comparison(view, object_keys):
@@ -54,7 +72,7 @@ def normalize_comparison(view, object_keys):
  def bad(check, where, message): problems.append({'check': check, 'where': where, 'message': message})
  def note(kind, where, detail): exceptions.append({'kind': kind, 'where': where, 'detail': detail})
  if not isinstance(c, dict): raise ComparisonError([{'check': 'C3-0', 'where': 'comparison', 'message': '须为对象'}])
- for k in ('dimensions', 'sources', 'items', 'issues', 'member_tables'):
+ for k in ('dimensions', 'sources', 'items', 'common_issues', 'issues', 'member_tables'):
   c.setdefault(k, [])
   if not isinstance(c[k], list): bad('C3-0', 'comparison.' + k, '须为数组'); c[k] = []
  terms = c.setdefault('display_terms', {})
@@ -63,6 +81,9 @@ def normalize_comparison(view, object_keys):
  labels = c.setdefault('handler_labels', {})
  if not isinstance(labels, dict) or not all(k in HANDLERS and text(v) for k, v in labels.items()): bad('C3-0', 'handler_labels', '键只能是 decide/confirm/assumed/closed，值为文字'); labels = c['handler_labels'] = {}
  c['handler_labels'] = {k: labels.get(k, v) for k, v in HANDLERS.items()}
+ nlabels = c.setdefault('nature_labels', {})
+ if not isinstance(nlabels, dict) or not all(k in NATURES and text(v) for k, v in nlabels.items()): bad('C3-0', 'nature_labels', '键只能是问题性质八个代码，值为文字'); nlabels = {}
+ c['nature_labels'] = {k: nlabels.get(k, v) for k, v in NATURES.items()}
  th = c.setdefault('thresholds', {})
  if not isinstance(th, dict): bad('C3-0', 'thresholds', '须为对象'); th = c['thresholds'] = {}
  th.setdefault('difference_rate_alert', 0.2)
@@ -90,7 +111,7 @@ def normalize_comparison(view, object_keys):
   if not isinstance(dim, dict) or not text(dim.get('id')): bad('C3-0', where, '维度须有 id'); continue
   if dim['id'] in dimvals: bad('C3-0', where, '维度编号重复：' + dim['id']); continue
   if not text(dim.get('title')): bad('C3-0', where, '维度须有 title')
-  if dim.get('role') not in ROLES: bad('C3-0', where, 'role 只能是 overview/section/filter')
+  if dim.get('role') not in ROLES: bad('C3-0', where, 'role 只能是 ' + '/'.join(ROLES))
   else: roles[dim['role']] += 1
   ids = {}
   for j, v in enumerate(dim.get('values') if isinstance(dim.get('values'), list) else []):
@@ -103,6 +124,7 @@ def normalize_comparison(view, object_keys):
   dimvals[dim['id']] = set(ids)
  if c['dimensions'] and roles['overview'] != 1: bad('C3-0', 'dimensions', 'overview 维度须恰好一个')
  if roles['section'] > 1: bad('C3-0', 'dimensions', 'section 维度最多一个')
+ if roles['category'] > 1: bad('C3-0', 'dimensions', 'category 维度最多一个')
 
  def check_dims(dims, where, allow_list=False):
   if dims is None: return {}
@@ -143,7 +165,7 @@ def normalize_comparison(view, object_keys):
   if 'dimensions' in o: check_dims(o['dimensions'], '对象 ' + o['catalog_key'])
 
  # Items, segments and detail rows.
- items = {}; row_seen = {}; detail_ids = set(); member_rows = {}
+ items = {}; row_seen = {}; detail_ids = set(); member_rows = {}; excluded_refs = []
  for i, it in enumerate(c['items']):
   where = f'items[{i}]'
   if not isinstance(it, dict) or not text(it.get('id')) or it['id'] in items: bad('C3-0', where, '条目编号缺失或重复'); continue
@@ -266,7 +288,7 @@ def normalize_comparison(view, object_keys):
   # Detail rows: item -> rows (C3-1), rows -> members (C3-2).
   rows = it.get('detail_rows', [])
   if not isinstance(rows, list): bad('C3-0', where, 'detail_rows 须为数组'); rows = it['detail_rows'] = []
-  by_level = {k: [] for k in LEVELS}
+  by_level = {k: [] for k in LEVELS}; counted = 0; dropped = []
   for j, r in enumerate(rows):
    rw = f'{where} 明细[{j}]'
    if not isinstance(r, dict) or not text(r.get('id')) or r['id'] in detail_ids: bad('C3-0', rw, '明细行编号缺失或全视图重复'); continue
@@ -277,7 +299,16 @@ def normalize_comparison(view, object_keys):
    for k in ('basis', 'area', 'drawing', 'locator', 'relation', 'note'):
     if k in r and r[k] is not None and not isinstance(r[k], str): bad('C3-0', rw, k + ' 须为文字')
    r['dimensions'] = check_dims(r.get('dimensions'), rw)
-   by_level[r['level']].append(r.get('quantity'))
+   # Decided not counted (contract 5.1): kept for reference, outside the levels and the total.
+   ex = r.get('excluded')
+   if ex is not None:
+    if not (isinstance(ex, dict) and set(ex) <= {'rule_ref', 'issue_id', 'note'} and text(ex.get('note')) and all(ex.get(k) is None or text(ex[k]) for k in ('rule_ref', 'issue_id')) and (text(ex.get('rule_ref')) or text(ex.get('issue_id')))):
+     bad('C3-12', rw, 'excluded 须为 {rule_ref, issue_id, note}：note 必填，rule_ref 和 issue_id 至少写一个'); ex = None
+    else:
+     dropped.append(r.get('quantity'))
+     if text(ex.get('issue_id')): excluded_refs.append((rw, ex['issue_id']))
+     note('已定不计', rw, '；'.join(x for x in (ex.get('rule_ref'), ex.get('issue_id'), ex['note']) if x))
+   if ex is None: by_level[r['level']].append(r.get('quantity')); counted += 1
    members = r.setdefault('member_keys', [])
    if not isinstance(members, list) or not all(isinstance(k, str) for k in members) or len(set(members)) != len(members): bad('C3-2', rw, 'member_keys 须为不重复的文字数组'); continue
    missing = [k for k in members if k not in object_keys]
@@ -320,6 +351,13 @@ def normalize_comparison(view, object_keys):
    expect = total_of(vals) if vals else None
    if vals and not close(got, expect): bad('C3-1', where, f'{lvl} {got} 与明细合计 {expect} 不符')
    if not vals and got not in (None, 0): bad('C3-1', where, f'{lvl} 为 {got}，但没有该层级的明细行')
+  present = [q for q in dropped if q is not None]; exq = sum(present) if present else None; exn = len(dropped)
+  if ('excluded_quantity' in ours and not (num_or_none(ours['excluded_quantity']) and close(ours['excluded_quantity'], exq))) or ('excluded_rows' in ours and ours['excluded_rows'] != exn):
+   bad('C3-12', where, f'excluded_quantity、excluded_rows 由生成器补，数据里带的与重算（{exq}，{exn} 行）不同')
+  if exn:
+   ours['excluded_quantity'] = exq; ours['excluded_rows'] = exn
+   if not counted and not (ours['levels']['确认量'] == 0 and all(ours['levels'][k] is None for k in LEVELS[1:])): bad('C3-12', where, '明细全部已定不计：确认量须写 0（本期为 0），其余层级为 null')
+  else: ours.pop('excluded_quantity', None); ours.pop('excluded_rows', None)
 
  # One quantity of a member object feeds at most one detail row unless split explicitly (C3-4).
  for (k, qname), uses in member_rows.items():
@@ -344,22 +382,63 @@ def normalize_comparison(view, object_keys):
     if t not in items: bad('C3-5', f'条目 {iid}', '去向条目不存在：' + t)
     elif items[t].get('ours', {}).get('total') in (None, 0): note('去向条目无本次量', f'条目 {iid} → {t}', '去向条目本次合计为空或 0')
 
+ # Common issues (C3-10) come first: individual issues under them take their nature (contract 6.1).
+ def check_options(x, where, check, need_two):
+  opts = x.setdefault('options', [])
+  if not isinstance(opts, list): bad(check, where, 'options 须为数组'); opts = x['options'] = []
+  ids = set()
+  for k, o in enumerate(opts):
+   if not isinstance(o, dict) or not text(o.get('id')) or not text(o.get('text')) or o['id'] in ids: bad(check, where, f'做法[{k}] 须有不重复的 id 和 text'); continue
+   ids.add(o['id']); o.setdefault('impact', None)
+   if not all(impact_ok(s) for s in impact_parts(o['impact'])): bad(check, where, f"做法 {o['id']} 的 " + IMPACT_RULE)
+  if need_two and len(opts) < 2: bad(check, where, '“有多种判断方式”须列出至少两种做法（options）')
+  x.setdefault('current_option', None)
+  if opts and x['current_option'] not in ids: bad(check, where, '有做法时 current_option 须是其中之一')
+  if not opts and x['current_option'] is not None: bad(check, where, '没有做法时不能写 current_option')
+ # Implied list-issue groups are regenerated on every pass, so a normalized view can be normalized again.
+ c['common_issues'] = [g for g in c['common_issues'] if not (isinstance(g, dict) and g.get('implied') is True and str(g.get('id', '')).startswith(LIST_PREFIX))]
+ commons = {}
+ for i, g in enumerate(c['common_issues']):
+  where = f'common_issues[{i}]'
+  if not isinstance(g, dict) or not text(g.get('id')) or g['id'] in commons: bad('C3-10', where, '共性问题编号缺失或重复'); continue
+  gid = g['id']; where = '共性问题 ' + gid; commons[gid] = g
+  if gid.startswith(LIST_PREFIX): bad('C3-10', where, '编号不能以“清单的问题|”开头，这个前缀留给生成器归出的清单问题')
+  if g.get('nature') not in NATURES: bad('C3-10', where, 'nature 必填，只能是：' + '、'.join(NATURES))
+  if not text(g.get('question')): bad('C3-10', where, 'question 必填，写一般问法')
+  if g.get('handler') not in HANDLERS: bad('C3-10', where, 'handler 只能是 decide/confirm/assumed/closed')
+  for k in ('text', 'rule_ref', 'status'):
+   if k in g and g[k] is not None and not isinstance(g[k], str): bad('C3-10', where, k + ' 须为文字')
+  check_options(g, where, 'C3-10', g.get('nature') == 'multi_method')
+  ids = g.setdefault('item_ids', [])
+  if not isinstance(ids, list) or len(set(ids)) != len(ids): bad('C3-10', where, 'item_ids 须为不重复的数组'); ids = g['item_ids'] = []
+  for t in ids:
+   if t not in items: bad('C3-10', where, '直接挂接的条目不存在：' + str(t))
+  g['dimensions'] = check_dims(g.get('dimensions'), where, allow_list=True)
+  g['implied'] = False
+
  # Issues -> items (C3-6).
- issues = {}; groups = {g['id'] for g in view.get('groups', [])}; issue_index = {}
+ issues = {}; groups = {g['id'] for g in view.get('groups', [])}; issue_index = {}; unnatured = 0
  for i, q in enumerate(c['issues']):
   where = f'issues[{i}]'
   if not isinstance(q, dict) or not text(q.get('id')) or q['id'] in issues: bad('C3-6', where, '问题编号缺失或重复'); continue
   qid = q['id']; where = '问题 ' + qid; issues[qid] = q
+  if qid in commons: bad('C3-10', where, '个别问题与共性问题重号')
   if q.get('handler') not in HANDLERS: bad('C3-6', where, 'handler 只能是 decide/confirm/assumed/closed')
   if not text(q.get('title')) or not text(q.get('text')): bad('C3-6', where, 'title 和 text 必填')
-  for k in ('impact_text', 'current_practice', 'status'):
+  for k in ('impact_text', 'current_practice', 'status', 'rule_ref', 'plugin_issue_ref'):
    if k in q and q[k] is not None and not isinstance(q[k], str): bad('C3-6', where, k + ' 须为文字')
-  imp = q.get('impact')
-  parts = imp if isinstance(imp, list) else [] if imp is None else [imp]
-  def impact_ok(s):
-   if not isinstance(s, dict) or not num_or_none(s.get('value')) or any(s.get(k) is not None and not isinstance(s[k], str) for k in ('unit', 'note')): return False
-   return text(s.get('unit')) if s.get('value') is not None else text(s.get('note'))
-  if not all(impact_ok(s) for s in parts): bad('C3-6', where, 'impact 须为 null、一段 {value, unit, note} 或多段数组；有数字时须有 unit，value 为 null 时须有 note')
+  if not all(impact_ok(s) for s in impact_parts(q.get('impact'))): bad('C3-6', where, IMPACT_RULE)
+  cid = q.setdefault('common_issue_id', None); nat = q.get('nature')
+  if nat is not None and nat not in NATURES: bad('C3-6', where, 'nature 只能是：' + '、'.join(NATURES)); nat = None
+  if cid is not None:
+   if cid not in commons: bad('C3-6', where, '所属共性问题不存在：' + str(cid))
+   elif nat is not None and nat != commons[cid].get('nature'): bad('C3-6', where, f"性质 {nat} 与所属共性问题 {cid} 的 {commons[cid].get('nature')} 不同")
+   else: q['nature'] = commons[cid].get('nature')
+  else:
+   q['nature'] = nat
+   # Closed issues are only kept as records, so an unnatured closed issue is not reminded (contract 16).
+   if nat is None and q.get('handler') != 'closed': unnatured += 1; note('问题未分性质', where, '单独成立的个别问题没写 nature，页面放进“未分类”')
+  check_options(q, where, 'C3-6', nat == 'multi_method' and cid is None)
   ids = q.setdefault('item_ids', [])
   if not isinstance(ids, list) or len(set(ids)) != len(ids): bad('C3-6', where, 'item_ids 须为不重复的数组'); ids = q['item_ids'] = []
   for t in ids:
@@ -371,24 +450,86 @@ def normalize_comparison(view, object_keys):
   if q.get('group_id') is not None and q['group_id'] not in groups: bad('C3-6', where, '问题组不存在：' + str(q['group_id']))
  for iid, it in items.items(): it['issue_ids'] = issue_index.get(iid, [])
 
+ # Scope of a common issue (contract 6.2) = its individual issues, their items and its own item_ids.
+ cindex = {}
+ for gid, g in commons.items():
+  qids = [qid for qid, q in issues.items() if q.get('common_issue_id') == gid]
+  iids = list(dict.fromkeys([t for qid in qids for t in issues[qid]['item_ids'] if t in items] + [t for t in g['item_ids'] if t in items]))
+  g['scope'] = {'issue_ids': qids, 'item_ids': iids}
+  for t in iids: cindex.setdefault(t, []).append(gid)
+ for iid, it in items.items(): it['common_issue_ids'] = cindex.get(iid, []); it['list_issue_ids'] = []
+
+ # A decided-not-counted row must rest on a decision that is already closed (C3-12).
+ for rw, ref in excluded_refs:
+  target = issues.get(ref) or commons.get(ref)
+  if target is None: bad('C3-12', rw, '已定不计引用的问题不存在：' + ref)
+  elif target.get('handler') != 'closed': bad('C3-12', rw, f'已定不计引用的问题 {ref} 还没关闭：口径没定的仍是未决，应挂在该问题上')
+
  # Uncertain content should reach an open issue (C3-9, reminder only; contract 0 and 14: resolving it is the page's first job).
  open_issues = {qid for qid, q in issues.items() if q.get('handler') != 'closed'}
+ open_commons = {gid for gid, g in commons.items() if g.get('handler') != 'closed'}
+ linked = lambda it: any(q in open_issues for q in it['issue_ids']) or any(g in open_commons for g in it['common_issue_ids'])
+ # An open "list issue" says the list is wrong, not that our basis is weak: it does not count for attribution (still counts as linked for C3-9).
+ linked_basis = lambda it: any(q in open_issues and issues[q].get('nature') != 'list_issue' for q in it['issue_ids']) or any(g in open_commons and commons[g].get('nature') != 'list_issue' for g in it['common_issue_ids'])
  uncertain = 0; unlinked = 0
  for iid, it in items.items():
   if not isinstance(it.get('ours'), dict) or not isinstance(it['ours'].get('levels'), dict): continue
   rows = it.get('detail_rows') if isinstance(it.get('detail_rows'), list) else []
   tags = []
-  if it['ours']['levels'].get('未决量') not in (None, 0) or any(isinstance(r, dict) and r.get('level') == '未决量' for r in rows): tags.append('有未决量')
+  if it['ours']['levels'].get('未决量') not in (None, 0) or any(isinstance(r, dict) and r.get('level') == '未决量' and not r.get('excluded') for r in rows): tags.append('有未决量')
   if it.get('estimate_dominant') is True: tags.append('以暂估为主')
   if any(isinstance(s, dict) and s.get('conclusion') == '缺图' for s in it.get('third_parties') or []): tags.append('缺图')
   it['uncertain'] = tags
-  it['uncertain_unlinked'] = bool(tags) and not any(q in open_issues for q in it['issue_ids'])
+  it['uncertain_unlinked'] = bool(tags) and not linked(it)
   if tags: uncertain += 1
   if it['uncertain_unlinked']: unlinked += 1; note('不确定条目未挂问题', f'条目 {iid}', '、'.join(tags) + '；没有挂在未关闭的问题上')
+
+ # Deviation attribution (contract 5.5, C3-11): a fixed rule on the data, never an engineering quantity.
+ types = {t: [] for t in (*LIST_TYPES.values(), CORRECTED_TYPE)}; attributed = {k: 0 for k in (*ATTRIBUTIONS, 'none')}; weak_unlinked = 0
+ for iid, it in items.items():
+  if not isinstance(it.get('ours'), dict) or not isinstance(it['ours'].get('levels'), dict): continue
+  lv = it['ours']['levels']; total = it['ours'].get('total')
+  weak = (lv.get('方案暂估量') or 0) > 0 or '有未决量' in it.get('uncertain', []) or linked_basis(it)
+  unc = (lv.get('方案暂估量') or 0) + (lv.get('未决量') or 0)
+  for seg in it.get('third_parties') or []:
+   if not isinstance(seg, dict): continue
+   con = seg.get('conclusion'); att = exc = None; kinds = []
+   if con in DEVIATIONS and seg.get('unit') == it['ours'].get('unit'):
+    mine = (0.0 if total is None else total) if con == '图上无' else total
+    theirs = (0.0 if seg.get('quantity') is None else seg['quantity']) if con == '第三方无量' else seg.get('quantity')
+    if number(mine) and number(theirs):
+     d = abs(mine - theirs)
+     if not weak: att = 'list'
+     elif d <= unc or close(d, unc): att = 'ours'
+     else: att, exc = 'both', d - unc
+   if att in ('list', 'both'): kinds.append(LIST_TYPES[con])
+   if seg.get('third_party_corrected') is True: kinds.append(CORRECTED_TYPE)
+   sw = f"条目 {iid} 来源 {seg.get('source_id')}"
+   if 'attribution' in seg and seg['attribution'] != att: bad('C3-11', sw, f"归因 {seg['attribution']} 与重算 {att} 不同；归因由生成器补，可以不写")
+   if 'excess' in seg and not (num_or_none(seg['excess']) and close(seg['excess'], exc)): bad('C3-11', sw, f"excess {seg['excess']} 与重算 {exc} 不同；由生成器补，可以不写")
+   seg['attribution'] = att; seg['excess'] = exc; seg['list_issue_types'] = kinds
+   if con in DEVIATIONS: attributed[att or 'none'] += 1
+   for k in kinds: types[k].append({'item_id': iid, 'source_id': seg.get('source_id')})
+   if att in ('ours', 'both') and not linked(it): weak_unlinked += 1; note('依据不足的偏差未挂问题', sw, f'归因 {att}；条目没挂未关闭的问题')
+ # Each non-empty list-issue type becomes one implied common issue, answered once for the whole group.
+ over = next((d['id'] for d in c['dimensions'] if isinstance(d, dict) and d.get('role') == 'overview' and d.get('id') in dimvals), None)
+ implied = []
+ for k, segs in types.items():
+  if not segs: continue
+  iids = list(dict.fromkeys(s['item_id'] for s in segs)); gid = LIST_PREFIX + k
+  dims = {over: list(dict.fromkeys(items[t]['dimensions'][over] for t in iids if items[t]['dimensions'].get(over)))} if over else {}
+  implied.append({'id': gid, 'implied': True, 'list_type': k, 'nature': 'list_issue', 'handler': 'confirm', 'question': LIST_QUESTION,
+                  'text': f'{k}：来源段 {len(segs)} 处，涉及条目 {len(iids)} 条。', 'options': [dict(LIST_OPTION)], 'current_option': LIST_OPTION['id'],
+                  'item_ids': iids, 'dimensions': dims, 'segments': segs, 'scope': {'issue_ids': [], 'item_ids': iids}})
+  for t in iids: items[t]['list_issue_ids'].append(gid)
+ c['common_issues'] = [*commons.values(), *implied]
 
  if problems: raise ComparisonError(problems)
  counts = {'items': sum(1 for it in items.values() if it.get('kind') == 'third_party'), 'extra_items': sum(1 for it in items.values() if it.get('kind') == 'extra'),
            'detail_rows': len(detail_ids), 'issues': len(issues), 'open_issues': len(open_issues), 'sources': len(sources),
            'source_rows': sum(len(v) for v in row_seen.values()), 'member_objects': len({k for k, _ in member_rows}),
-           'uncertain_items': uncertain, 'uncertain_without_issue': unlinked, 'search_incomplete': search_incomplete}
+           'uncertain_items': uncertain, 'uncertain_without_issue': unlinked, 'search_incomplete': search_incomplete,
+           'common_issues': len(commons), 'open_common_issues': len(open_commons), 'implied_common_issues': len(implied), 'issues_without_nature': unnatured,
+           'attribution': attributed, 'list_issue_segments': {k: len(v) for k, v in types.items() if v}, 'weak_deviation_without_issue': weak_unlinked,
+           'excluded_rows': sum(it['ours'].get('excluded_rows', 0) for it in items.values()), 'excluded_items': sum(1 for it in items.values() if it['ours'].get('excluded_rows'))}
  return {'counts': counts, 'exceptions': exceptions}

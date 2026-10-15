@@ -3,14 +3,17 @@
 Only moves and renames values (contract docs/维护/复核页审核视图契约.md, section 12); it never
 computes an engineering quantity. The result is checked by the shared contract before it is written.
 """
-import argparse, copy, csv, hashlib, json
+import argparse, copy, csv, hashlib, json, os
 from pathlib import Path
 from qto_review_contract import normalize_view, VIEW_SCHEMA_COMPARISON
-from qto_review_comparison import ComparisonError, LEVELS
+from qto_review_comparison import ComparisonError, LEVELS, close
 
 MAPPING_SCHEMA = 'qto-comparison-table-mapping/1.0'
 TRUE, FALSE = {'是', 'true', 'True', 'TRUE', '1', 'Y', 'y'}, {'', '否', 'false', 'False', 'FALSE', '0', 'N', 'n'}
-ROLES = ('items', 'source_rows', 'detail_rows', 'redirects', 'issues', 'issue_links', 'issue_sources', 'issue_impacts', 'members')
+ROLES = ('items', 'source_rows', 'detail_rows', 'redirects', 'issues', 'issue_links', 'issue_sources', 'issue_impacts', 'members',
+         'common_issues', 'issue_options', 'common_issue_links', 'member_links', 'detail_aggregation')
+EXCLUDED_KEYS = ('excluded_rule_ref', 'excluded_issue_id', 'excluded_note')
+AGG_KEYS = ('aggregation', 'aggregation_reason', 'member_quantity_name', 'member_table')   # member_table names the ledger whose title the drill-down shows
 ITEM_KEYS = ('id', 'kind', 'source_id', 'name', 'features', 'unit', 'quantity_name', 'ours_note', *LEVELS, 'total', 'estimate_dominant',
              'row_id', 'seq', 'code', 'row_name', 'row_features', 'row_unit', 'row_quantity', 'tp_quantity', 'tp_unit', 'difference', 'difference_rate',
              'conclusion', 'disposition_note', 'third_party_corrected', 'correction_note', 'unit_mismatch_note', 'quantity_note', 'missing_drawing_note',
@@ -19,13 +22,19 @@ ITEM_LEVEL_KEYS = ('kind', 'name', 'features', 'unit', 'quantity_name', 'ours_no
 KEYS = {'items': ITEM_KEYS,
         'source_rows': ('item_id', 'source_id', 'row_id', 'seq', 'code', 'row_name', 'row_features', 'row_unit', 'row_quantity'),
         'detail_rows': ('id', 'item_id', 'level', 'quantity', 'unit', 'basis', 'area', 'drawing', 'locator', 'relation', 'note', 'aggregation',
-                        'aggregation_reason', 'member_keys', 'member_quantity_name', 'member_table'),
+                        'aggregation_reason', 'member_keys', 'member_quantity_name', 'member_table', 'excluded', *EXCLUDED_KEYS),
         'redirects': ('item_id', 'target_item_id', 'source_id'),
-        'issues': ('id', 'handler', 'title', 'text', 'impact_text', 'current_practice', 'source_refs', 'status', 'group_id', 'item_ids'),
+        'issues': ('id', 'handler', 'nature', 'common_issue_id', 'rule_ref', 'plugin_issue_ref', 'title', 'text', 'impact_text', 'current_practice',
+                   'current_option', 'source_refs', 'status', 'group_id', 'item_ids'),
         'issue_links': ('issue_id', 'item_id'), 'issue_sources': ('issue_id', 'ref', 'text'), 'issue_impacts': ('issue_id', 'value', 'unit', 'note'),
-        'members': ('catalog_key', 'object_id', 'detail_id', 'title', 'category', 'status', 'professional', 'detail', 'source')}
+        'members': ('catalog_key', 'object_id', 'detail_id', 'title', 'category', 'status', 'professional', 'detail', 'source'),
+        'common_issues': ('id', 'nature', 'question', 'text', 'handler', 'current_option', 'rule_ref', 'status', 'item_ids'),
+        'issue_options': ('issue_id', 'option_id', 'text', 'value', 'unit', 'note'),
+        'common_issue_links': ('common_issue_id', 'item_id'),
+        'member_links': ('catalog_key', 'detail_id', 'quantity_name', 'level', 'quantity'),
+        'detail_aggregation': ('detail_id', *AGG_KEYS)}
 NUMBERS = {*LEVELS, 'total', 'row_quantity', 'tp_quantity', 'difference', 'difference_rate', 'search_hits', 'quantity', 'value'}
-BOOLEANS = {'estimate_dominant', 'third_party_corrected'}
+BOOLEANS = {'estimate_dominant', 'third_party_corrected', 'excluded'}
 LISTS = {'redirect_to', 'member_keys', 'source_refs', 'item_ids'}
 
 
@@ -167,7 +176,17 @@ def build_view(mapping, base, base_view):
   row = {'id': opt(rec, 'id'), 'level': opt(rec, 'level'), 'quantity': rec.get('quantity'), 'unit': opt(rec, 'unit'), 'dimensions': dimset(rec), 'member_keys': list(rec.get('member_keys') or [])}
   for k in ('basis', 'area', 'drawing', 'locator', 'relation', 'note', 'aggregation', 'aggregation_reason', 'member_quantity_name', 'member_table'):
    if opt(rec, k) is not None: row[k] = rec[k]
+  # Decided not counted (contract 5.1, 12.2): the flag column plus three basis columns form one object.
+  if rec.get('excluded'): row['excluded'] = {k[9:]: rec[k] for k in EXCLUDED_KEYS if opt(rec, k) is not None}
+  elif any(opt(rec, k) is not None for k in EXCLUDED_KEYS): problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': 'excluded 为假或空时不能写 excluded_rule_ref、excluded_issue_id、excluded_note'})
   it['detail_rows'].append(row); details[row['id']] = row
+ for rec in data['detail_aggregation']:
+  row = details.get(opt(rec, 'detail_id'))
+  if row is None: problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': '汇总方式对应的明细行不存在：' + str(rec.get('detail_id'))}); continue
+  for k in AGG_KEYS:
+   if opt(rec, k) is None: continue
+   if k in row and row[k] != rec[k]: problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': f'明细 {row["id"]} 的 {k} 在明细表里是“{row[k]}”，汇总方式表写“{rec[k]}”'})
+   else: row[k] = rec[k]
 
  # Member ledger rows become unlocated objects unless the base view already has that object.
  objects = copy.deepcopy(base_view.get('objects', [])) if base_view else []
@@ -192,6 +211,17 @@ def build_view(mapping, base, base_view):
   if did is not None:
    if did not in details: problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': '成员挂接的明细行不存在：' + did})
    elif key not in details[did]['member_keys']: details[did]['member_keys'].append(key)
+ # Member links (contract 12.2): "this quantity of this member feeds this detail row"; level and quantity come from the link.
+ bykey = {o['catalog_key']: o for o in objects}
+ for rec in data['member_links']:
+  key, did, name, level = (opt(rec, k) for k in ('catalog_key', 'detail_id', 'quantity_name', 'level'))
+  o, row = bykey.get(key), details.get(did)
+  if o is None or row is None or name is None or level is None:
+   problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': '挂接须有已存在的成员 catalog_key、明细行 detail_id、quantity_name 和 level' + (f'（成员 {key} 不存在）' if key and o is None else f'（明细 {did} 不存在）' if did and row is None else '')}); continue
+  hit = [q for q in o.setdefault('quantities', []) if q.get('name') == name and q.get('level') == level]
+  if not hit: o['quantities'].append({'name': name, 'value': rec.get('quantity'), 'unit': row.get('unit'), 'level': level})
+  elif not close(hit[0].get('value'), rec.get('quantity')): problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': f'成员 {key} 已有数量项 {name}（{level}）为 {hit[0].get("value")}，挂接表写 {rec.get("quantity")}，不猜'}); continue
+  if key not in row['member_keys']: row['member_keys'].append(key)
 
  # Issues.
  issues, iorder = {}, []
@@ -200,9 +230,32 @@ def build_view(mapping, base, base_view):
   if qid is None or qid in issues: problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': '问题编号缺失或重复'}); continue
   q = {'id': qid, 'handler': opt(rec, 'handler'), 'title': opt(rec, 'title'), 'text': opt(rec, 'text'), 'item_ids': list(rec.get('item_ids') or []),
        'dimensions': {d: rec['dim.' + d] for d in dims if opt(rec, 'dim.' + d) is not None}, 'source_refs': list(rec.get('source_refs') or [])}
-  for k in ('impact_text', 'current_practice', 'status', 'group_id'):
+  for k in ('impact_text', 'current_practice', 'status', 'group_id', 'nature', 'common_issue_id', 'rule_ref', 'plugin_issue_ref', 'current_option'):
    if opt(rec, k) is not None: q[k] = rec[k]
   issues[qid] = q; iorder.append(qid)
+ # Common issues (contract 6.2, 12.2): one row each; options and direct item links come from their own tables.
+ commons, corder = {}, []
+ for rec in data['common_issues']:
+  gid = opt(rec, 'id')
+  if gid is None or gid in commons or gid in issues: problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': '共性问题编号缺失、重复或与个别问题重号'}); continue
+  g = {'id': gid, 'item_ids': list(rec.get('item_ids') or []), 'dimensions': {d: rec['dim.' + d] for d in dims if opt(rec, 'dim.' + d) is not None}}
+  for k in ('nature', 'question', 'text', 'handler', 'current_option', 'rule_ref', 'status'):
+   if opt(rec, k) is not None: g[k] = rec[k]
+  commons[gid] = g; corder.append(gid)
+ for rec in data['common_issue_links']:
+  g = commons.get(opt(rec, 'common_issue_id'))
+  if g is None: problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': '挂接的共性问题不存在：' + str(rec.get('common_issue_id'))})
+  elif opt(rec, 'item_id') is not None and rec['item_id'] not in g['item_ids']: g['item_ids'].append(rec['item_id'])
+ for rec in data['issue_options']:
+  owner = issues.get(opt(rec, 'issue_id')) or commons.get(opt(rec, 'issue_id'))
+  if owner is None or opt(rec, 'option_id') is None or opt(rec, 'text') is None: problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': '做法须有已存在的问题编号（个别或共性问题）、option_id 和 text'}); continue
+  options = owner.setdefault('options', []); o = next((x for x in options if x['id'] == rec['option_id']), None)
+  if o is None: o = {'id': rec['option_id'], 'text': rec['text'], 'impact': None}; options.append(o)
+  elif o['text'] != rec['text']: problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': f"做法 {o['id']} 各行的 text 须相同"}); continue
+  # One row is one impact segment; a row with no value and no note only declares the option.
+  if rec.get('value') is not None or opt(rec, 'note') is not None:
+   part = {'value': rec.get('value'), **{k: rec[k] for k in ('unit', 'note') if opt(rec, k) is not None}}
+   o['impact'] = [*(o['impact'] or []), part]
  for rec in data['issue_links']:
   q = issues.get(opt(rec, 'issue_id'))
   if q is None: problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': '关联的问题不存在：' + str(rec.get('issue_id'))})
@@ -225,7 +278,8 @@ def build_view(mapping, base, base_view):
   if src is None: continue
   values = {}
   if src == 'data':
-   pools = [*(i['dimensions'] for i in items.values()), *(r['dimensions'] for i in items.values() for r in i['detail_rows']), *(q['dimensions'] for q in issues.values()), *(o.get('dimensions', {}) for o in objects)]
+   pools = [*(i['dimensions'] for i in items.values()), *(r['dimensions'] for i in items.values() for r in i['detail_rows']), *(q['dimensions'] for q in issues.values()),
+            *(g['dimensions'] for g in commons.values()), *(o.get('dimensions', {}) for o in objects)]
    for dd in pools:
     v = dd.get(d['id'])
     for x in (v if isinstance(v, list) else [v]):
@@ -248,6 +302,10 @@ def build_view(mapping, base, base_view):
  # Sources: row ids from an independent table, or (weaker) from the items themselves.
  for s in comp_map.get('sources', []):
   origin = s.pop('row_ids_from', None); table = s.pop('row_ids_table', None)
+  # Contract 12.1: {"path", "column"} is the standard form; a bare path string means column row_id.
+  if isinstance(table, str) and table.strip(): table = {'path': table}
+  elif table is not None and not (isinstance(table, dict) and isinstance(table.get('path'), str) and table['path'].strip() and isinstance(table.get('column', 'row_id'), str)):
+   problems.append({'check': 'TABLE', 'where': 'sources.' + str(s.get('id')), 'message': 'row_ids_table 写成 {"path": "表路径", "column": "row_id"}（column 可省），或直接写表路径文字'}); table = None
   if table:
    path = (base / table['path']).resolve(); files.append({'role': 'row_ids:' + s['id'], 'path': table['path'], 'sha256': sha_file(path)})
    with open(path, encoding='utf-8-sig', newline='') as f:
@@ -274,23 +332,62 @@ def build_view(mapping, base, base_view):
   view['sources'] = list(have.values())
  comp_map['items'] = [items[i] for i in order]
  comp_map['issues'] = [issues[q] for q in iorder]
+ if commons: comp_map['common_issues'] = [commons[g] for g in corder]
  view['comparison'] = comp_map
  return view, {'tables': files, 'rows_read': {r: len(data[r]) for r in ROLES if data[r]}}
 
 
+def merge_base_views(paths, out_dir):
+ """Several existing views (contract 12.1): scenes, objects and groups are only moved; any id clash stops the merge.
+ Raster paths are rewritten relative to the output view so the merged view still finds its images."""
+ merged = {'scenes': [], 'objects': [], 'groups': [], 'background_sets': {}, 'receipts': {}, 'sources': [], 'renamed_groups': [], 'base_views': []}
+ seen = {'scenes': {}, 'objects': {}, 'groups': {}}; src = {}
+ for path in paths:
+  base = json.loads(path.read_text(encoding='utf-8-sig')); name = path.name
+  merged['base_views'].append({'view': name, **{f: len(base.get(f, [])) for f in ('scenes', 'objects', 'groups')}})
+  for field, ident, label in (('scenes', 'id', '图页编号'), ('objects', 'catalog_key', '对象 catalog_key'), ('groups', 'id', '问题组编号')):
+   for x in base.get(field, []):
+    x = copy.deepcopy(x)
+    # Each package numbers its own problem groups from G01, so a clashing group of a later view is renamed "<file stem>|<id>", content unchanged.
+    if field == 'groups' and x[ident] in seen[field]:
+     new = path.stem + '|' + x[ident]
+     if new in seen[field]: raise ValueError(f'几份基础视图的{label}相同，改名后仍重复：{new}')
+     merged['renamed_groups'].append({'view': name, 'from': x[ident], 'to': new}); x[ident] = new
+    if x[ident] in seen[field]: raise ValueError(f'几份基础视图的{label}相同：{x[ident]}（{seen[field][x[ident]]} 与 {name}）')
+    seen[field][x[ident]] = name
+    if field == 'scenes' and x.get('raster_path'):
+     target = (path.resolve().parent / x['raster_path']).resolve()
+     try: x['raster_path'] = os.path.relpath(target, out_dir)
+     except ValueError: x['raster_path'] = str(target)
+    merged[field].append(x)
+  for field in ('background_sets', 'receipts'):
+   for k, v in base.get(field, {}).items():
+    if k in merged[field] and merged[field][k] != v: raise ValueError(f'几份基础视图的 {field} 键相同而内容不同：{k}（{name}）')
+    merged[field][k] = copy.deepcopy(v)
+  for s in base.get('sources', []):
+   if s['id'] in src and src[s['id']]['sha256'].lower() != s['sha256'].lower(): raise ValueError('几份基础视图的来源编号相同但哈希不同：' + s['id'])
+   src.setdefault(s['id'], s)
+  if 'default_category' in base: merged.setdefault('default_category', base['default_category'])
+ merged['sources'] = list(src.values())
+ return merged
+
+
 def main():
  p = argparse.ArgumentParser(); p.add_argument('--mapping', required=True, type=Path); p.add_argument('--output', required=True, type=Path)
- p.add_argument('--base-view', type=Path); p.add_argument('--report', type=Path); a = p.parse_args()
+ p.add_argument('--base-view', type=Path, action='append', default=[], help='可以写多次，并入几份已有视图'); p.add_argument('--report', type=Path); a = p.parse_args()
  report = {'status': 'INPUT_REQUIRED', 'quantity_changes': 0}
  try:
   if a.output.exists(): raise ValueError('输出视图已存在，请用新的版本名')
-  if a.report and a.report.resolve() in {x.resolve() for x in (a.mapping, a.output, a.base_view) if x}: raise ValueError('检查报告路径不能覆盖映射、视图或基础视图')
+  if a.report and a.report.resolve() in {x.resolve() for x in (a.mapping, a.output, *a.base_view) if x}: raise ValueError('检查报告路径不能覆盖映射、视图或基础视图')
   mapping = json.loads(a.mapping.read_text(encoding='utf-8-sig'))
   if mapping.get('schema') != MAPPING_SCHEMA: raise ValueError('映射文件 schema 须为 ' + MAPPING_SCHEMA)
   if not isinstance(mapping.get('view'), dict) or not isinstance(mapping.get('tables'), dict): raise ValueError('映射文件须有 view 和 tables')
-  base_view = json.loads(a.base_view.read_text(encoding='utf-8-sig')) if a.base_view else None
+  out_dir = a.output.resolve().parent
+  base_view = merge_base_views(a.base_view, out_dir) if a.base_view else None
   view, info = build_view(mapping, a.mapping.resolve().parent, base_view)
-  normalized = normalize_view(view, a.base_view.resolve().parent if a.base_view else None)
+  if base_view: info['base_views'] = base_view['base_views']
+  if base_view and base_view['renamed_groups']: info['renamed_groups'] = base_view['renamed_groups']
+  normalized = normalize_view(view, out_dir if a.base_view else None)
   a.output.parent.mkdir(parents=True, exist_ok=True)
   with a.output.open('x', encoding='utf-8', newline='\n') as f: json.dump(view, f, ensure_ascii=False, indent=1)
   check = normalized['comparison']['generation_check']
