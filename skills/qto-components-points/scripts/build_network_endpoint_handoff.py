@@ -72,13 +72,14 @@ def main() -> int:
         if not isinstance(unmatched_ids, list) or any(not isinstance(item, str) or not item.strip() for item in unmatched_ids):
             fail("source_unmatched_recognition_object_ids 必须是非空文本数组")
         source_counts = {}
-        for key in ("source_unresolved_instance_count", "source_block_expansion_failure_count"):
+        for key in ("source_unresolved_instance_count", "source_block_expansion_failure_count",
+                    "source_pending_duplicate_instance_count", "source_unresolved_grouping_count"):
             value = data.get(key, 0)
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 fail(f"{key} 必须是非负整数")
             source_counts[key] = value
         if source_complete and (unmatched_ids or any(source_counts.values())):
-            fail("来源有未承接识别对象、未决实例或块展开失败时，source_workpackage_complete 不得为 true")
+            fail("来源有未承接识别对象、未决实例、块展开失败、待处置重复或未合并子块时，source_workpackage_complete 不得为 true")
         if data.get("schema_version") not in {
             "qto-network-endpoint-handoff-input/1.0",
             "qto-network-endpoint-handoff-input/1.1",
@@ -199,6 +200,8 @@ def main() -> int:
             # 来源未决实例与端口未决分开计；未承接对象逐个保留 ID，消费方不能把它们当已处置
             "source_unresolved_instance_count": source_counts["source_unresolved_instance_count"],
             "source_block_expansion_failure_count": source_counts["source_block_expansion_failure_count"],
+            "source_pending_duplicate_instance_count": source_counts["source_pending_duplicate_instance_count"],
+            "source_unresolved_grouping_count": source_counts["source_unresolved_grouping_count"],
             "source_unmatched_recognition_object_ids": unmatched_ids,
             "source_gaps": [
                 {"object_id": object_id, "kind": "unmatched_recognition_object",

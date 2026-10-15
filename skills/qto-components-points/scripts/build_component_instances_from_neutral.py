@@ -25,7 +25,7 @@ from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_
 import qto_cad_geometry as cad_geometry
 from qto_actor_identity import is_model_identity
 
-VERSION = "qto-component-neutral-adapter/1.2.1"
+VERSION = "qto-component-neutral-adapter/1.3.0"
 PROFILE_SCHEMA = "qto-component-recognition-profile/1.0"
 LEDGER_SCHEMA = "qto-project-adjudication-ledger/1.0"
 CONFIRMATION_SOURCES = {
@@ -266,6 +266,227 @@ def bbox_intersects(row: dict[str, Any], bounds: dict[str, float] | None) -> boo
     )
 
 
+def orientation(matrix: tuple[float, ...]) -> tuple[float, bool]:
+    """World angle (degrees) of the block X axis and whether the insert is mirrored."""
+    origin = transform_point([0.0, 0.0, 0.0], matrix)
+    x_axis = [a - b for a, b in zip(transform_point([1.0, 0.0, 0.0], matrix), origin)]
+    y_axis = [a - b for a, b in zip(transform_point([0.0, 1.0, 0.0], matrix), origin)]
+    angle = math.degrees(math.atan2(x_axis[1], x_axis[0])) % 360.0
+    return angle, x_axis[0] * y_axis[1] - x_axis[1] * y_axis[0] < 0
+
+
+def tolerance_value(raw: Any, label: str, default: float) -> float:
+    value = default if raw is None else finite(raw, label)
+    if value < 0:
+        fail(f"{label} 不能为负")
+    return value
+
+
+def merge_instance_groups(dispositions, adopted, endpoint_instances, geometry, raw_groups) -> dict[str, Any]:
+    """Merge the sub-blocks of one exploded object (e.g. 天正分解块 Body/Cent/Hand) into the primary member's instance.
+
+    Sub-blocks are often offset from the primary's insertion point (blade symbols inside the body, an actuator on its
+    edge). A non-primary sub-block joins the primary of the same stem and orientation whose transformed outline, widened
+    by anchor_tolerance, contains its insertion point; without a measurable outline the insertion points must lie within
+    anchor_tolerance. Sub-blocks that fit no primary or several, and primaries that would take two sub-blocks of the same
+    role, stay unmerged and are reported. Only groups declared in the profile are merged.
+    """
+    if raw_groups is None:
+        return {"declared": False, "groups": [], "merged_member_count": 0, "unresolved_groups": []}
+    if not isinstance(raw_groups, list):
+        fail("instance_grouping 必须是数组")
+    by_id = {item["physical_id"]: item for item in dispositions}
+    merged_ids: set[str] = set()
+    groups, unresolved = [], []
+    for index, raw in enumerate(raw_groups):
+        if not isinstance(raw, dict):
+            fail(f"instance_grouping[{index}] 必须是对象")
+        rule_id = text(raw.get("group_rule_id"), f"instance_grouping[{index}].group_rule_id")
+        pattern = compile_pattern(raw.get("block_pattern"), f"{rule_id}.block_pattern")
+        if not {"stem", "role"} <= set(pattern.groupindex):
+            fail(f"{rule_id}.block_pattern 必须含命名组 stem 与 role")
+        primary_role = text(raw.get("primary_role"), f"{rule_id}.primary_role")
+        if raw.get("anchor_tolerance") is None:
+            fail(f"{rule_id}.anchor_tolerance 必须按本图声明（输出坐标单位）")
+        tolerance = tolerance_value(raw.get("anchor_tolerance"), f"{rule_id}.anchor_tolerance", 0.0)
+        angle_tolerance = tolerance_value(raw.get("angle_tolerance_deg"), f"{rule_id}.angle_tolerance_deg", 0.5)
+        basis = text(raw.get("basis"), f"{rule_id}.basis")
+        primaries: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        others = []
+        for item in sorted(dispositions, key=lambda value: value["physical_id"]):
+            match = pattern.search(item["block_name"])
+            if not match or item["physical_id"] in merged_ids or item["disposition"] in {"merged", "not_applicable"}:
+                continue
+            if match.group("role") == primary_role:
+                primaries[match.group("stem")].append(item)
+            else:
+                others.append((match.group("stem"), match.group("role"), item))
+
+        def holds(primary, item):
+            a, b = geometry[primary["physical_id"]], geometry[item["physical_id"]]
+            # Compare axes, not directions: sub-blocks are often inserted mirrored (negative X scale).
+            if abs((a["angle"] - b["angle"] + 90.0) % 180.0 - 90.0) > angle_tolerance:
+                return False
+            box, (x, y) = a.get("world_box"), item["point"][:2]
+            if box:
+                return box[0] - tolerance <= x <= box[2] + tolerance and box[1] - tolerance <= y <= box[3] + tolerance
+            return math.dist(primary["point"][:2], (x, y)) <= tolerance
+
+        parts: dict[str, list[tuple[str, dict[str, Any]]]] = defaultdict(list)
+        orphans: list[list[tuple[str, dict[str, Any]]]] = []
+        for stem, role, item in others:
+            hits = [primary for primary in primaries.get(stem, []) if holds(primary, item)]
+            if len(hits) == 1:
+                parts[hits[0]["physical_id"]].append((role, item))
+            elif hits:
+                unresolved.append({"group_rule_id": rule_id, "stem": stem,
+                                   "physical_ids": sorted([item["physical_id"]] + [hit["physical_id"] for hit in hits]),
+                                   "reason": f"子块落在 {len(hits)} 个主角色 {primary_role} 实例范围内，不合并"})
+            else:
+                for cluster in orphans:
+                    if cluster[0][0] == stem and math.dist(cluster[0][1]["point"][:2], item["point"][:2]) <= tolerance:
+                        cluster.append((stem, item))
+                        break
+                else:
+                    orphans.append([(stem, item)])
+        for cluster in orphans:
+            unresolved.append({"group_rule_id": rule_id, "stem": cluster[0][0],
+                               "physical_ids": [item["physical_id"] for _, item in cluster],
+                               "reason": f"附近没有主角色 {primary_role} 实例，不合并"})
+        for primary_id, members in sorted(parts.items()):
+            primary = by_id[primary_id]
+            stem = pattern.search(primary["block_name"]).group("stem")
+            member_ids = [primary_id] + [item["physical_id"] for _, item in members]
+            repeated = sorted(role for role, count in Counter(role for role, _ in members).items() if count > 1)
+            if repeated:
+                unresolved.append({"group_rule_id": rule_id, "stem": stem, "physical_ids": member_ids,
+                                   "reason": f"同一主角色实例下角色 {'、'.join(repeated)} 不止一个，疑似多个对象重叠，不合并"})
+                continue
+            boxes = [geometry[pid]["world_box"] for pid in member_ids if geometry.get(pid, {}).get("world_box")]
+            merged_box = [min(box[0] for box in boxes), min(box[1] for box in boxes),
+                          max(box[2] for box in boxes), max(box[3] for box in boxes)] if boxes else None
+            for _, item in members:
+                merged_ids.add(item["physical_id"])
+                item.update({"disposition": "merged", "merged_into": primary_id,
+                             "basis": f"实例归并规则 {rule_id}：{basis}"})
+            primary["merged_member_ids"] = member_ids[1:]
+            primary["merged_geometry_bbox"] = merged_box
+            groups.append({"group_rule_id": rule_id, "stem": stem, "primary_id": primary_id,
+                           "member_ids": member_ids, "merged_geometry_bbox": merged_box})
+    if merged_ids:
+        adopted[:] = [item for item in adopted if item["physical_id"] not in merged_ids]
+        endpoint_instances[:] = [item for item in endpoint_instances if item["physical_id"] not in merged_ids]
+        for item in adopted:
+            if by_id[item["physical_id"]].get("merged_member_ids"):
+                item["merged_member_ids"] = by_id[item["physical_id"]]["merged_member_ids"]
+    return {"declared": True, "groups": groups, "merged_member_count": len(merged_ids), "unresolved_groups": unresolved}
+
+
+def review_colocated_instances(dispositions, adopted, endpoint_instances, geometry, raw_check, raw_resolutions) -> dict[str, Any]:
+    """Flag adopted instances that coincide or nearly coincide; never drop one without a declared resolution.
+
+    Same block + same orientation within tolerance -> duplicate candidate; same category with a different block, or the
+    same block turned or mirrored, at the same place -> suspected same physical object. Tolerances are in output
+    coordinate units.
+    """
+    check = raw_check if isinstance(raw_check, dict) else {}
+    if raw_check is not None and not isinstance(raw_check, dict):
+        fail("duplicate_check 必须是对象")
+    exact = tolerance_value(check.get("exact_tolerance"), "duplicate_check.exact_tolerance", 1e-6)
+    near = tolerance_value(check.get("near_tolerance"), "duplicate_check.near_tolerance", 0.05)
+    angle_tolerance = tolerance_value(check.get("angle_tolerance_deg"), "duplicate_check.angle_tolerance_deg", 0.5)
+    if near < exact:
+        fail("duplicate_check.near_tolerance 不能小于 exact_tolerance")
+    radius = max(near, exact)
+    by_id = {item["physical_id"]: item for item in dispositions}
+    rows = [item for item in adopted]
+    cell = radius if radius > 0 else 1.0
+    buckets: dict[tuple[int, int], list[int]] = defaultdict(list)
+    for index, item in enumerate(rows):
+        buckets[(math.floor(item["point"][0] / cell), math.floor(item["point"][1] / cell))].append(index)
+    parent = list(range(len(rows)))
+
+    def root(index):
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    kinds: dict[tuple[int, int], str] = {}
+    for index, item in enumerate(rows):
+        gx, gy = math.floor(item["point"][0] / cell), math.floor(item["point"][1] / cell)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for other in buckets.get((gx + dx, gy + dy), []):
+                    if other <= index:
+                        continue
+                    peer = rows[other]
+                    distance = math.dist(item["point"][:2], peer["point"][:2])
+                    if distance > radius:
+                        continue
+                    a, b = geometry[item["physical_id"]], geometry[peer["physical_id"]]
+                    angle_gap = abs((a["angle"] - b["angle"] + 180.0) % 360.0 - 180.0)
+                    if item["block_name"] == peer["block_name"] and a["mirrored"] == b["mirrored"] and angle_gap <= angle_tolerance:
+                        kind = "coincident_duplicate" if distance <= exact else "near_offset_duplicate"
+                    elif item["category"] == peer["category"]:
+                        # different block, or the same block turned/mirrored: maybe one object drawn twice
+                        kind = "colocated_same_category"
+                    else:
+                        continue
+                    kinds[(index, other)] = kind
+                    parent[root(other)] = root(index)
+    clusters: dict[int, list[int]] = defaultdict(list)
+    for index in range(len(rows)):
+        clusters[root(index)].append(index)
+    order = ("coincident_duplicate", "near_offset_duplicate", "colocated_same_category")
+    groups = []
+    for members in clusters.values():
+        if len(members) < 2:
+            continue
+        ids = sorted(rows[index]["physical_id"] for index in members)
+        pair_kinds = {kind for (i, j), kind in kinds.items() if i in members and j in members}
+        points = [rows[index]["point"][:2] for index in members]
+        groups.append({"group_id": "DUP-" + hashlib.sha256("|".join(ids).encode("utf-8")).hexdigest()[:12],
+                       "kind": next(kind for kind in reversed(order) if kind in pair_kinds),
+                       "pair_kinds": sorted(pair_kinds),
+                       "physical_ids": ids, "block_names": sorted({rows[index]["block_name"] for index in members}),
+                       "max_distance": max(math.dist(p, q) for p in points for q in points), "resolution": "pending"})
+    groups.sort(key=lambda group: group["physical_ids"])
+    resolutions = raw_resolutions if raw_resolutions is not None else []
+    if not isinstance(resolutions, list):
+        fail("duplicate_resolutions 必须是数组")
+    by_members = {tuple(group["physical_ids"]): group for group in groups}
+    dropped: set[str] = set()
+    for index, raw in enumerate(resolutions):
+        if not isinstance(raw, dict):
+            fail(f"duplicate_resolutions[{index}] 必须是对象")
+        ids = raw.get("physical_ids")
+        keep = raw.get("keep")
+        if not isinstance(ids, list) or not isinstance(keep, list) or not keep:
+            fail(f"duplicate_resolutions[{index}] 须有 physical_ids 与非空 keep")
+        group = by_members.get(tuple(sorted(ids)))
+        if group is None:
+            fail(f"duplicate_resolutions[{index}] 引用的重复候选组不存在：{sorted(ids)}")
+        if not set(keep) <= set(ids):
+            fail(f"duplicate_resolutions[{index}].keep 必须是该组成员")
+        basis = text(raw.get("basis"), f"duplicate_resolutions[{index}].basis")
+        drop = sorted(set(ids) - set(keep))
+        group.update({"resolution": "keep_all" if not drop else "drop", "keep": sorted(keep), "drop": drop, "basis": basis})
+        for physical_id in drop:
+            dropped.add(physical_id)
+            by_id[physical_id].update({"disposition": "duplicate_excluded", "duplicate_group_id": group["group_id"],
+                                       "basis": f"重复候选处置：{basis}"})
+    if dropped:
+        adopted[:] = [item for item in adopted if item["physical_id"] not in dropped]
+        endpoint_instances[:] = [item for item in endpoint_instances if item["physical_id"] not in dropped]
+    pending = [group for group in groups if group["resolution"] == "pending"]
+    return {"exact_tolerance": exact, "near_tolerance": near, "angle_tolerance_deg": angle_tolerance,
+            "tolerance_basis": check.get("tolerance_basis") or "默认值：完全重合 1e-6、近似重合 0.05（输出坐标单位）",
+            "candidate_group_count": len(groups), "pending_group_count": len(pending),
+            "pending_instance_count": sum(len(group["physical_ids"]) for group in pending),
+            "duplicate_excluded_count": len(dropped), "groups": groups}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="从CAD中性块事实构建点位实例、数量输入与端点交接")
     parser.add_argument("--cad-manifest", required=True, type=Path)
@@ -340,6 +561,7 @@ def main() -> int:
         endpoint_instances: list[dict[str, Any]] = []
         failures: list[dict[str, Any]] = []
         block_boxes: dict[str, list[float] | None] = {}
+        geometry: dict[str, dict[str, Any]] = {}
 
         def transformed_box(box, matrix):
             return cad_geometry.transform_bounds(box, matrix)
@@ -385,6 +607,9 @@ def main() -> int:
                 return
             physical_id = f"PT-{path}"
             next_suppressed = suppressed_by
+            angle, mirrored = orientation(matrix)
+            geometry[physical_id] = {"angle": angle, "mirrored": mirrored,
+                                     "world_box": [value * factor for value in world_box] if world_box else None}
 
             if in_scope:
                 base = {
@@ -558,6 +783,15 @@ def main() -> int:
         physical_ids = [item["physical_id"] for item in adopted]
         if len(physical_ids) != len(set(physical_ids)):
             fail("点位识别结果出现重复 physical_id")
+        # 先按声明合并同位置子块，再对剩余采用实例做同位置重复审查；未处置的重复候选使工作包不完整
+        grouping = merge_instance_groups(dispositions, adopted, endpoint_instances, geometry, profile.get("instance_grouping"))
+        duplicate_review = review_colocated_instances(dispositions, adopted, endpoint_instances, geometry,
+                                                      profile.get("duplicate_check"), profile.get("duplicate_resolutions"))
+        disposition_by_id = {item["physical_id"]: item for item in dispositions}
+        for group in duplicate_review["groups"]:
+            for physical_id in group["physical_ids"]:
+                disposition_by_id[physical_id].setdefault("duplicate_group_id", group["group_id"])
+        pending_duplicates = duplicate_review["pending_instance_count"]
         disposition_counts = Counter(item["disposition"] for item in dispositions)
         if sum(disposition_counts.values()) != len(dispositions):
             fail("点位实例处置数量不守恒")
@@ -579,7 +813,8 @@ def main() -> int:
         # 主报告与端点交接用同一个完整性判定，缺口 ID 随交接传给消费方。
         model_object_ids = {oid for entry in entries.values() if entry.get("decision_origin") == "model" for oid in entry["object_ids"]}
         missing_model_objects = sorted(model_object_ids - {item["physical_id"] for item in dispositions})
-        source_complete = bool(rules) and not disposition_counts.get("unresolved", 0) and not failures and not missing_model_objects
+        source_complete = (bool(rules) and not disposition_counts.get("unresolved", 0) and not failures and not missing_model_objects
+                           and not pending_duplicates and not grouping["unresolved_groups"])
         endpoint_input = {
             "schema_version": "qto-network-endpoint-handoff-input/1.1",
             "recognition_basis": recognition_basis(ledger, ledger_path),
@@ -587,6 +822,8 @@ def main() -> int:
             "source_unresolved_instance_count": disposition_counts.get("unresolved", 0),
             "source_unmatched_recognition_object_ids": missing_model_objects,
             "source_block_expansion_failure_count": len(failures),
+            "source_pending_duplicate_instance_count": pending_duplicates,
+            "source_unresolved_grouping_count": len(grouping["unresolved_groups"]),
             "handoff_id": f"HANDOFF-{profile_id}-{profile_version}",
             "source_id": f"{profile_id}@{profile_version}:{sha256(profile_path)}",
             "consumer_skill": str(profile.get("consumer_skill") or "qto-pipe-networks"),
@@ -657,7 +894,7 @@ def main() -> int:
         report = {
             "schema_version": "qto-component-recognition-report/1.0",
             "adapter_version": VERSION,
-            "status": "RECOGNITION_REQUIRED" if not rules else ("READY" if not disposition_counts.get("unresolved", 0) and not failures and not handoff_result.get("unresolved_count", 0) and not missing_model_objects else "REVIEW_REQUIRED"),
+            "status": "RECOGNITION_REQUIRED" if not rules else ("READY" if source_complete and not handoff_result.get("unresolved_count", 0) else "REVIEW_REQUIRED"),
             "profile": {
                 "path": str(profile_path),
                 "sha256": sha256(profile_path),
@@ -685,7 +922,13 @@ def main() -> int:
                 "block_expansion_failure_count": len(failures),
                 "object_dispositions": dict(sorted(disposition_counts.items())),
                 "disposition_closure_count": len(dispositions),
+                "merged_member_count": grouping["merged_member_count"],
+                "duplicate_candidate_group_count": duplicate_review["candidate_group_count"],
+                "duplicate_pending_instance_count": pending_duplicates,
+                "duplicate_excluded_count": duplicate_review["duplicate_excluded_count"],
             },
+            "instance_grouping": grouping,
+            "duplicate_review": duplicate_review,
             "disposition_closure_complete": sum(disposition_counts.values()) == len(dispositions),
             "point_workpackage_complete": source_complete,
             "unmatched_recognition_object_ids": missing_model_objects,
