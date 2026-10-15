@@ -567,8 +567,8 @@
     },
     {
       "path": "qto-duct-air-systems/references/管件中心线与竖向段推算.md",
-      "sha256": "a0feeeba7a978df4f16b32db3ebb132a8d8b7db98cd7b98971e4e0bfe586e35c",
-      "bytes": 15662
+      "sha256": "0e40b99379b2add6b4eefb1686c554d7ad60b940815f131137df78d7aa6c49fe",
+      "bytes": 18010
     },
     {
       "path": "qto-duct-air-systems/references/结果检查与输出.md",
@@ -592,8 +592,8 @@
     },
     {
       "path": "qto-duct-air-systems/scripts/infer_duct_fittings_vertical.py",
-      "sha256": "511f480971dc03b5cf7547bd59b2811a60fe6ca0d50d6f3aaaa10427295ab887",
-      "bytes": 68611
+      "sha256": "a562d7716d92b8f39622a19fc90f45e136a8ad9c193ab1f3fe7805de9ff875b3",
+      "bytes": 75894
     },
     {
       "path": "qto-duct-air-systems/SKILL.md",

@@ -22,7 +22,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from qto_cad_source_contract import canonical_scale
 
-VERSION = "qto-duct-fitting-vertical/1.3.1"
+VERSION = "qto-duct-fitting-vertical/1.4.0"
 INPUT_SCHEMA = "qto-duct-fitting-vertical-input/1.0"
 RESULT_SCHEMA = "qto-duct-fitting-vertical-result/1.0"
 FITTING_KINDS = {"elbow", "tee", "cross", "reducer", "rect_to_round", "tap", "offset", "unknown"}
@@ -148,7 +148,21 @@ def single_end_plane(net, fitting, sid, which):
     if relation not in {'at_connection', 'already_at_center', 'reversed', 'unknown'}:
         fail(f'{label}.endpoint_relation 必须明确为 at_connection/already_at_center/reversed/unknown')
     if relation in {'reversed', 'unknown'}:
-        return {**result, 'reason': '块方向相反或管段端点与管件的关系未明，须核对连接点与中心线，不按外包框给数'}
+        out = {**result, 'reason': '块方向相反或管段端点与管件的关系未明，须核对连接点与中心线，不按外包框给数'}
+        if relation == 'reversed' and 'riser_projection' in g:
+            # A reversed block may still show where the riser stands; that locates a riser pairing
+            # (scenario only), never a plane length.
+            if g.get('turn_plane') != 'vertical':
+                fail(f'{label}: riser_projection 必须声明 turn_plane=vertical')
+            span = g['riser_projection']
+            if not isinstance(span, list) or len(span) != 2:
+                fail(f'{label}.riser_projection 必须是沿来向的两条立管投影边距离 [近边,远边]')
+            near, far = [finite(v, label+'.riser_projection', 0.) for v in span]
+            if far <= near or far > ext + net.params['fitting_end_tolerance']:
+                out['reason'] += '；所给立管投影两边次序或范围不符，不能用于配对'
+            else:
+                out['pairing_offset'] = (near+far)/2.
+        return out
     tol = net.params['fitting_end_tolerance']
     snap = net.params['end_snap_tolerance']
     extent = ext if axis_aligned else None   # block far face along the pipe, when known
@@ -596,6 +610,9 @@ def fitting_arms(net: Network, result: dict[str, Any]) -> None:
             fitting['plane_scenarios'] = measured['scenarios']
             if measured['length'] is None:
                 fitting['plane_length_unresolved'] = True
+                fitting['single_end_block_reasons'] = [measured['reason']]
+                if measured.get('pairing_offset') is not None:
+                    fitting['pairing_center'] = [e[0]+od[0]*measured['pairing_offset'], e[1]+od[1]*measured['pairing_offset']]
                 result['pending'].append({'kind':'single_end_plane_unresolved','fitting_id':fitting['fitting_id'],
                                           'segment_id':sid,'reason':measured['reason']})
             else:
@@ -605,6 +622,7 @@ def fitting_arms(net: Network, result: dict[str, Any]) -> None:
                                         'plane_scenarios':measured['scenarios'],'plane_policy':measured['method'],
                                         'half_width':measured['half_width'],'extension_basis':measured['extension_basis']})
             if fitting['status'] == 'single_end_unresolved':
+                fitting.setdefault('single_end_block_reasons', []).append('转弯平面未声明为 vertical')
                 result['pending'].append({'kind':'single_end_turn_plane_unknown','fitting_id':fitting['fitting_id'],
                                           'reason':'单端件转弯平面未声明为vertical，不按邻近或跨层位置猜竖向连接'})
             elif fitting['status'] == 'single_end_horizontal':
@@ -908,16 +926,85 @@ def vertical_items(net: Network, elevations: dict[str, dict[str, Any]], result: 
                           "system": net.segments[su]["system"], "spec": spec_of(net.segments[su]), "length": length, "evidence_level": level,
                           "basis": f"{upper['floor_id']} {su} 中心 {eu['value']} + 层标高 {upper['level']} / {lower['floor_id']} {sl} 中心 {el['value']} + 层标高 {lower['level']}；平面错位 {best[0]:.0f}"})
             fitting["vertical_id"] = candidate["vertical_id"] = vid
+    # 3b. stacked candidates where one end's single-end geometry is unresolved (reversed or unknown
+    #     relation, conflicting evidence, turn plane not declared). They never enter the rule quantity.
+    #     The pair is reported against both ends and as one combined item; where every blocked end
+    #     shows a riser projection the riser is listed as a scenario outside the totals.
+    blocked = [f for f in net.fittings if len(f["ends"]) == 1 and not f.get("vertical_id")
+               and (f["status"] == "single_end_unresolved" or (f["status"] == "single_end" and f.get("plane_length_unresolved")))]
+    blocked_ids = {f["fitting_id"] for f in blocked}
+    open_ends = [f for f in singles if not f.get("vertical_id")] + blocked
+
+    def locate(fitting):
+        if fitting.get("plane_center") and not fitting.get("plane_length_unresolved"):
+            return fitting["plane_center"], "plane_center"
+        if fitting.get("pairing_center"):
+            return fitting["pairing_center"], "reversed_riser_projection"
+        return net.end_point(*fitting["ends"][0]), "segment_end_approximation"
+
+    blocked_pairs = []
+    for lower, upper in zip(floors, floors[1:]):
+        for a in [f for f in open_ends if f["floor_id"] == lower["floor_id"]]:
+            for b in [f for f in open_ends if f["floor_id"] == upper["floor_id"]]:
+                if a["fitting_id"] not in blocked_ids and b["fitting_id"] not in blocked_ids:
+                    continue
+                sa, sb = a["ends"][0][0], b["ends"][0][0]
+                if net.segments[sa]["system"] != net.segments[sb]["system"]:
+                    continue
+                (pa, basis_a), (pb, basis_b) = locate(a), locate(b)
+                d = dist([pa[0] - lower["plan_offset"][0], pa[1] - lower["plan_offset"][1]],
+                         [pb[0] - upper["plan_offset"][0], pb[1] - upper["plan_offset"][1]])
+                if d <= p["riser_match_distance"]:
+                    blocked_pairs.append((d, lower, upper, a, b, {a["fitting_id"]: basis_a, b["fitting_id"]: basis_b}))
+    scenarios, partners, scenario_used = [], defaultdict(list), set()
+    for d, lower, upper, a, b, bases in sorted(blocked_pairs, key=lambda pair: pair[0]):
+        ids = [a["fitting_id"], b["fitting_id"]]
+        sa, sb = a["ends"][0][0], b["ends"][0][0]
+        partners[ids[0]].append(ids[1]); partners[ids[1]].append(ids[0])
+        stuck = [f for f in (a, b) if f["fitting_id"] in blocked_ids]
+        why = "；".join(f"{f['fitting_id']}：{'、'.join(f.get('single_end_block_reasons') or ['单端几何未决'])}" for f in stuck)
+        entry = {"kind": "inter_floor_riser_blocked_by_single_end_geometry", "floor_id": f"{lower['floor_id']}-{upper['floor_id']}",
+                 "fitting_ids": ids, "segment_ids": [sa, sb], "system": net.segments[sb]["system"], "plan_distance": d,
+                 "blocked_fitting_ids": [f["fitting_id"] for f in stuck], "position_basis": bases,
+                 "reason": f"层间立管候选被单端几何未决阻断：{lower['floor_id']} {ids[0]} 与 {upper['floor_id']} {ids[1]} 平面错位 {d:.0f}，"
+                           f"未配对、不计入规则推算。{why}。核对块方向和连接点后补单端几何重跑，或由宿主在 vertical_links 判定"}
+        can_scenario = (all(f["status"] == "single_end" for f in (a, b)) and "segment_end_approximation" not in bases.values()
+                        and not scenario_used & set(ids))
+        if can_scenario:
+            el, eu = elevations[sa], elevations[sb]
+            levels = [el["evidence_level"], eu["evidence_level"], upper["level_evidence_level"], lower["level_evidence_level"], "方案暂估"]
+            if upper["level"] is None or lower["level"] is None:
+                levels.append("未决")
+            level = combine(levels)
+            sid_ = f"VSCN-{len(scenarios) + 1:03d}"
+            scenarios.append({"scenario_id": sid_, "kind": "inter_floor_riser_scenario", "floor_id": entry["floor_id"], "fitting_ids": ids,
+                              "segment_ids": [sa, sb], "system": entry["system"], "spec": spec_of(net.segments[sb]),
+                              "length": abs((upper["level"] + eu["value"]) - (lower["level"] + el["value"])) if level != "未决" else None,
+                              "evidence_level": level, "position_basis": bases,
+                              "basis": f"反向件按立管投影定位配对，只作方案：不出平面长度，不并入规则推算与 metrics；"
+                                       f"{upper['floor_id']} {sb} 中心 {eu['value']} + 层标高 {upper['level']} / {lower['floor_id']} {sa} 中心 {el['value']} + 层标高 {lower['level']}；平面错位 {d:.0f}"})
+            scenario_used |= set(ids)
+            entry["scenario_id"] = sid_
+        pending.append(entry)
+    for item in pending:
+        if item.get("fitting_id") in partners and item["kind"] in {"single_end_plane_unresolved", "single_end_turn_plane_unknown"}:
+            item["possible_riser_partners"] = partners[item["fitting_id"]]
+            item["reason"] += f"；相邻层可能对应的单端件：{'、'.join(partners[item['fitting_id']])}（见 inter_floor_riser_blocked_by_single_end_geometry）"
+    result["vertical_scenarios"] = scenarios
     # 4. single ends with unknown destination are pending, never estimated
     for fitting in singles:
         if fitting.get("vertical_id"):
             continue
         sid, which = fitting["ends"][0]
         segment = net.segments[sid]
+        near_blocked = partners.get(fitting["fitting_id"], [])
+        reason = ("单端管件去向不明：无同层主管带宽、无相邻层对应弯头；竖向长度待查系统图/剖面" if not near_blocked else
+                  f"单端管件去向不明：相邻层有候选单端件 {'、'.join(near_blocked)}，因其单端几何未决未配对"
+                  "（见 inter_floor_riser_blocked_by_single_end_geometry）；无同层主管带宽；竖向长度待补齐该件几何后重跑或查系统图/剖面")
         pending.append({"kind": "single_end_destination_unknown", "fitting_id": fitting["fitting_id"], "segment_id": sid, "end": which,
                         "floor_id": fitting["floor_id"], "system": segment["system"], "spec": spec_of(segment),
                         "center_elevation": elevations[sid]["value"], "plane_extension": fitting.get("plane_extension"),
-                        "reason": "单端管件去向不明：无同层主管带宽、无相邻层对应弯头；竖向长度待查系统图/剖面"})
+                        **({"blocked_riser_candidates": near_blocked} if near_blocked else {}), "reason": reason})
     for item in items:
         if item["evidence_level"] == "未决":
             pending.append({"kind": f"vertical_{item['kind']}_unresolved", "vertical_id": item["vertical_id"], "fitting_ids": item["fitting_ids"],
@@ -1072,12 +1159,14 @@ def infer(data: dict[str, Any]) -> dict[str, Any]:
     result["parameters"] = {**net.params, "parameter_basis": data["parameters"]["parameter_basis"]}
     result["counts"] = {"segments": len(net.segments), "fittings": len(net.fittings), "duplicate_fittings": len(result["duplicate_fittings"]),
                         "joints": len(result["joints"]), "accessory_gaps": len(result["accessory_gaps"]), "open_taps": len(result["open_taps"]),
-                        "vertical_items": len(result["vertical_items"]), "pending": len(result["pending"]),
+                        "vertical_items": len(result["vertical_items"]), "vertical_scenarios": len(result["vertical_scenarios"]),
+                        "pending": len(result["pending"]),
                         "cross_system_contacts": len(result["cross_system_contacts"]),
                         "fitting_status": dict(sorted(Counter(f["status"] for f in result["fittings"]).items()))}
     result["business_adoption_allowed"] = False
     result["meaning"] = ("直管为已绘中心线确认量；管件中心线与竖向为按块几何、端口和标高标注的规则推算量，含假定者为方案暂估；"
-                         "单端去向不明和缺标高的部分列待办，不以零或经验比例代替。metrics 各合计只含已知部分，"
+                         "单端去向不明和缺标高的部分列待办，不以零或经验比例代替；vertical_scenarios 是被单端几何未决阻断的层间立管方案，"
+                         "不计入任何合计。metrics 各合计只含已知部分，"
                          "totals_complete 为 false 时不得当作完整量。参考值须经专业复核后才能进入成果。")
     return result
 
