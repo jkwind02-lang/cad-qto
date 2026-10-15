@@ -12,7 +12,9 @@ try{
  const scenes=new Map(data.scenes.map(s=>[s.id,s])),objects=new Map(data.objects.map(o=>[o.catalog_key,o]));
  const backgrounds=new Map(data.scenes.map(s=>[s.id,[...(s.background_refs||[]).flatMap(k=>data.background_sets[k]),...s.background]])),boundsCache=new WeakMap();
  function pointBounds(points){const b=[Infinity,Infinity,-Infinity,-Infinity];for(const p of points){b[0]=Math.min(b[0],p[0]);b[1]=Math.min(b[1],p[1]);b[2]=Math.max(b[2],p[0]);b[3]=Math.max(b[3],p[1]);}return b;}
- function within(r,view){let b=boundsCache.get(r);if(!b){b=pointBounds(r.points);boundsCache.set(r,b);}return b[0]<=view[2]&&b[2]>=view[0]&&b[1]<=view[3]&&b[3]>=view[1];}
+ // A line may carry several parts (scene mapping contract 13); points stays its first part for older pages.
+ const partsOf=o=>o.kind==='line'&&o.parts?.length?o.parts:[o.points],allPts=o=>partsOf(o).flat();
+ function within(r,view){let b=boundsCache.get(r);if(!b){b=pointBounds(allPts(r));boundsCache.set(r,b);}return b[0]<=view[2]&&b[2]>=view[0]&&b[1]<=view[3]&&b[3]>=view[1];}
  function installMarkers(){for(const m of feedback.custom_markers){if(!objects.has(m.catalog_key)){data.objects.push(m);objects.set(m.catalog_key,m);}}}
  installMarkers();
  let mode=data.groups.length?'groups':'objects',selected=null,focused=null,checked=new Set(),items=[],page=0,memberPage=0;
@@ -102,8 +104,8 @@ try{
  function changeScene(id,fitPage=true){if(!scenes.has(id))return;scene=scenes.get(id);$('scene').value=id;if(fitPage)fit();draw();}
  function focus(i){
   focused=i;if(i.scene_id)changeScene(i.scene_id,false);showFacts(i);
-  $('unlocated').hidden=i.kind!=='unlocated';$('unlocated').textContent='本对象尚无可靠图面定位。保留数量、来源及文字批注，不用虚构坐标代替回图。';
-  if(i.kind==='unlocated')fit();else{const pts=[...i.points,...(i.holes||[]).flat()],xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);const min=(scene.bounds[2]-scene.bounds[0])*.04;fitBounds([Math.min(...xs)-min,Math.min(...ys)-min,Math.max(...xs)+min,Math.max(...ys)+min]);}
+  const why=core.unlocatedText(i);$('unlocated').hidden=i.kind!=='unlocated';$('unlocated').textContent='本对象尚无可靠图面定位'+(why?'（'+why+'）':'')+'。保留数量、来源及文字批注，不用虚构坐标代替回图。';
+  if(i.kind==='unlocated')fit();else{const pts=[...allPts(i),...(i.holes||[]).flat()],xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);const min=(scene.bounds[2]-scene.bounds[0])*.04;fitBounds([Math.min(...xs)-min,Math.min(...ys)-min,Math.max(...xs)+min,Math.max(...ys)+min]);}
   const ms=selected?.member_keys?members(selected):[i],index=ms.indexOf(i);
   $('member-position').textContent=(selected?.member_keys?'第 '+(index+1)+' / '+ms.length+'处 · ':'')+i.id+' · '+(scenes.get(i.scene_id)?.title||'未定位');
   if(selected?.member_keys&&Math.floor(index/MEMBER_PAGE)!==memberPage){memberPage=Math.floor(index/MEMBER_PAGE);renderMembers();}
@@ -111,11 +113,11 @@ try{
  }
  function fitBounds(b){cx=(b[0]+b[2])/2;cy=(b[1]+b[3])/2;scale=Math.min(Math.max(1,cw-55)/Math.max(1e-9,b[2]-b[0]),Math.max(1,ch-55)/Math.max(1e-9,b[3]-b[1]));draw();}
  function fit(){if(scene)fitBounds(scene.bounds);}
- function groupFit(){const pts=members(selected).filter(visible).flatMap(o=>o.points);if(!pts.length){fit();return;}const pad=(scene.bounds[2]-scene.bounds[0])*.015;fitBounds([Math.min(...pts.map(p=>p[0]))-pad,Math.min(...pts.map(p=>p[1]))-pad,Math.max(...pts.map(p=>p[0]))+pad,Math.max(...pts.map(p=>p[1]))+pad]);}
+ function groupFit(){const pts=members(selected).filter(visible).flatMap(allPts);if(!pts.length){fit();return;}const pad=(scene.bounds[2]-scene.bounds[0])*.015;fitBounds([Math.min(...pts.map(p=>p[0]))-pad,Math.min(...pts.map(p=>p[1]))-pad,Math.max(...pts.map(p=>p[0]))+pad,Math.max(...pts.map(p=>p[1]))+pad]);}
  function resize(){const b=cv.getBoundingClientRect();cw=b.width;ch=b.height;cv.width=Math.round(cw*devicePixelRatio);cv.height=Math.round(ch*devicePixelRatio);draw();}
  function mapItems(){return external?external:selected?.member_keys?members(selected):mode==='objects'?items:selected?[selected]:[];}
  // Comparison modes highlight an item's member objects (contract 5.1/8); returns false when the object has no drawing position.
- function locate(list,obj){external=list;focused=obj||null;if(!obj||obj.kind==='unlocated'||!scenes.has(obj.scene_id)){draw();return false;}changeScene(obj.scene_id,false);const pts=obj.points,min=(scene.bounds[2]-scene.bounds[0])*.04;fitBounds([Math.min(...pts.map(p=>p[0]))-min,Math.min(...pts.map(p=>p[1]))-min,Math.max(...pts.map(p=>p[0]))+min,Math.max(...pts.map(p=>p[1]))+min]);return true;}
+ function locate(list,obj){external=list;focused=obj||null;if(!obj||obj.kind==='unlocated'||!scenes.has(obj.scene_id)){draw();return false;}changeScene(obj.scene_id,false);const pts=allPts(obj),min=(scene.bounds[2]-scene.bounds[0])*.04;fitBounds([Math.min(...pts.map(p=>p[0]))-min,Math.min(...pts.map(p=>p[1]))-min,Math.max(...pts.map(p=>p[0]))+min,Math.max(...pts.map(p=>p[1]))+min]);return true;}
  function path(points,close=false){ctx.beginPath();points.forEach((p,n)=>n?ctx.lineTo(...screen(p)):ctx.moveTo(...screen(p)));if(close)ctx.closePath();}
  function draw(){
   if(!cw||!ch||!scene)return;ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.fillStyle='#fffefb';ctx.fillRect(0,0,cw,ch);
@@ -129,7 +131,7 @@ try{
    if(!visible(i)||!within(i,view))continue;const active=i===focused,allowed=!selected?.member_keys||checked.has(i.catalog_key),color=!allowed?'#b6bec5':i.color||(/排除|暂缓|不计/.test(i.status)?'#8f9ca5':active?'#d36b17':'#237ba1');
    ctx.strokeStyle=color;ctx.lineWidth=active?4:2;
    if(i.kind==='polygon'){path(i.points,true);for(const h of i.holes||[]){ctx.moveTo(...screen(h[0]));h.slice(1).forEach(p=>ctx.lineTo(...screen(p)));ctx.closePath();}ctx.fillStyle=allowed?'#2d91b92a':'#bac2c72a';ctx.fill('evenodd');ctx.stroke();}
-   else if(i.kind==='line'){path(i.points);ctx.stroke();}
+   else if(i.kind==='line'){for(const q of partsOf(i)){path(q);ctx.stroke();}}
    const p=screen(midpoint(i));if(p[0]<-30||p[0]>cw+30||p[1]<-30||p[1]>ch+30)continue;ctx.beginPath();ctx.arc(...p,active?7:4,0,2*Math.PI);ctx.fillStyle='white';ctx.fill();ctx.stroke();
    if(active){ctx.font='bold 12px Microsoft YaHei';const label=i.id,width=ctx.measureText(label).width,x=Math.max(5,Math.min(cw-width-10,p[0]+12)),y=Math.max(20,p[1]-12);ctx.fillStyle='white';ctx.fillRect(x-3,y-14,width+8,20);ctx.fillStyle=color;ctx.fillText(label,x,y);}
   }
@@ -170,7 +172,7 @@ try{
  $('scene').onchange=()=>changeScene($('scene').value);$('fit').onclick=fit;$('group-fit').onclick=groupFit;$('plus').onclick=()=>{scale*=1.4;draw();};$('minus').onclick=()=>{scale/=1.4;draw();};
  function segmentDistance(p,a,b){const u=[b[0]-a[0],b[1]-a[1]],den=u[0]**2+u[1]**2,t=den?Math.max(0,Math.min(1,((p[0]-a[0])*u[0]+(p[1]-a[1])*u[1])/den)):0;return Math.hypot(p[0]-a[0]-t*u[0],p[1]-a[1]-t*u[1]);}
  function inside(p,points){let yes=false;for(let i=0,j=points.length-1;i<points.length;j=i++){const a=points[i],b=points[j];if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])yes=!yes;}return yes;}
- function hitDistance(o,p){const ps=o.points.map(screen);if(o.kind==='polygon'&&inside(p,ps)&&!(o.holes||[]).some(h=>inside(p,h.map(screen))))return 0;let best=Math.hypot(ps[0][0]-p[0],ps[0][1]-p[1]);for(let i=1;i<ps.length;i++)best=Math.min(best,segmentDistance(p,ps[i-1],ps[i]));if(o.kind==='polygon')best=Math.min(best,segmentDistance(p,ps.at(-1),ps[0]));return best;}
+ function hitDistance(o,p){const ps=o.points.map(screen);if(o.kind==='polygon'&&inside(p,ps)&&!(o.holes||[]).some(h=>inside(p,h.map(screen))))return 0;let best=Infinity;for(const q of partsOf(o)){const s=q.map(screen);best=Math.min(best,Math.hypot(s[0][0]-p[0],s[0][1]-p[1]));for(let i=1;i<s.length;i++)best=Math.min(best,segmentDistance(p,s[i-1],s[i]));}if(o.kind==='polygon')best=Math.min(best,segmentDistance(p,ps.at(-1),ps[0]));return best;}
  cv.onwheel=e=>{e.preventDefault();if(!scene)return;const r=cv.getBoundingClientRect(),p=[e.clientX-r.left,e.clientY-r.top],before=world(p);scale*=Math.exp(-Math.max(-500,Math.min(500,e.deltaY))*.0014);const after=world(p);cx+=before[0]-after[0];cy+=before[1]-after[1];draw();};
  cv.onpointerdown=e=>{cv.setPointerCapture(e.pointerId);drag=[e.clientX,e.clientY,cx,cy];moved=0;};
  cv.onpointermove=e=>{if(!drag||!scene)return;moved=Math.max(moved,Math.hypot(e.clientX-drag[0],e.clientY-drag[1]));cx=drag[2]-(e.clientX-drag[0])/scale;cy=drag[3]-(e.clientY-drag[1])/scale*sign();draw();};

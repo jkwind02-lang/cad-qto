@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 284,
+  "runtime_file_count": 285,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -17,18 +17,18 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
-      "sha256": "720c257593c5c603e1bec3a46c7c3917dcff89edc080752103b65f982eacade0",
-      "bytes": 28410
+      "sha256": "4141d341d8fbc444bfcfcfad087a75e3d6229bacbfcfa4389a555ef7fb655e15",
+      "bytes": 28771
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-audit.js",
-      "sha256": "f415ee5921c9eb61a0376dee8e9ecb662c363599052cf74fb9f48cdd63890cb1",
-      "bytes": 60764
+      "sha256": "78b862acf76b6e44d3b6e8f2e5cde4dd727d65f756bc47830b94af9e0949404a",
+      "bytes": 61091
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-core.js",
-      "sha256": "1bf1951f00da9b390606248bb115a2d5cfe5174424cb6b941930189cd75ff39b",
-      "bytes": 16973
+      "sha256": "ab94c0a9fe4c3eb2351cee5264a0efa643644842293921f1829a8d757bc69e39",
+      "bytes": 17478
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-shell.html",
@@ -177,13 +177,18 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/build_comparison_view_from_tables.py",
-      "sha256": "665ec2cbc6e70d39cc6f7afff7de5d4560a7a712001a5402de3e6be92dcbd752",
-      "bytes": 31559
+      "sha256": "6d7b3abd506ba2fb7a67e1e412a71179be3ace5072cd87abc19ef958ecae768a",
+      "bytes": 33741
     },
     {
       "path": "_qto-shared-evidence/scripts/build_qto_review_html.py",
       "sha256": "21fd12ac0a6d9d9a45e20f1b24ab912b7ae2d6a3ae3cba8706a564d2bb84ff94",
       "bytes": 7666
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/build_review_scenes_from_tables.py",
+      "sha256": "4f8269338ac9422c9ddd171400f1bfd6ebd05a0273c5a6cf6b298eec0dee3b25",
+      "bytes": 38683
     },
     {
       "path": "_qto-shared-evidence/scripts/cad_native/__init__.py",
@@ -307,13 +312,13 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_comparison.py",
-      "sha256": "caf6ca15acc2473fce61ba81c3d2b582c2d6a3090a67f93cf2d96364100ebbd7",
-      "bytes": 42621
+      "sha256": "4c0491981908e35a1048bcffdb71bcf07d7f286386b058deb84829a91ff27a28",
+      "bytes": 43185
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
-      "sha256": "bf463ec5b2e2edbf370d41a607522b92d0cf1a25e5cd3a93b95505c908aeb321",
-      "bytes": 17720
+      "sha256": "661cb6c12ddb244600013ec70d6b3e0a10f708dadc715556e2082c7d8cdeee36",
+      "bytes": 18428
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_revision.py",

@@ -175,5 +175,8 @@ function mergePackages(local,incoming){
 function embed(html,pkg){const json=JSON.stringify(pkg,null,1).replace(/^[ \t]+/gm,'').replace(/</g,'\\u003c');ensure(/id="feedback-seed"/.test(html),'页面缺少批注嵌入块');return html.replace(/(<script id="feedback-seed" type="application\/json">)[\s\S]*?(<\/script>)/,(_,a,b)=>a+json+b);}
 function readFileText(text){if(text.trimStart().startsWith('<')){const m=text.match(/<script id="feedback-seed" type="application\/json">([\s\S]*?)<\/script>/);ensure(m,'HTML没有批注数据块');return JSON.parse(m[1]);}return JSON.parse(text);}
 function receiptState(receipt,annotation){return receipt&&annotation&&annotation.result_fingerprint&&annotation.applicability_state!=='stale'&&annotation.applicability_state!=='unmatched'&&receipt.source_annotation_updated_at===annotation.updated_at&&receipt.source_result_fingerprint===annotation.result_fingerprint?'current':receipt?'stale':'none';}
-root.QtoReviewCore={schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord,isAudit,opinion};
+// Why an object has no drawing position (scene mapping contract 8); unknown codes are shown as written.
+const UNLOCATED={no_geometry:'没有坐标',handle_not_found:'句柄查不到',handle_in_block:'在块内，回不到',sheet_unknown:'图页不在图页表里',outside_sheet:'落在图页范围外',estimated:'估算，没有图面路径'};
+const unlocatedText=o=>o&&o.unlocated_reason?(UNLOCATED[o.unlocated_reason]||o.unlocated_reason)+(o.unlocated_note?'：'+o.unlocated_note:''):'';
+root.QtoReviewCore={schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord,isAudit,opinion,unlocatedText};
 })(globalThis);

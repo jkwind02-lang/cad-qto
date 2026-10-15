@@ -11,7 +11,7 @@ from qto_review_comparison import ComparisonError, LEVELS, close
 MAPPING_SCHEMA = 'qto-comparison-table-mapping/1.0'
 TRUE, FALSE = {'是', 'true', 'True', 'TRUE', '1', 'Y', 'y'}, {'', '否', 'false', 'False', 'FALSE', '0', 'N', 'n'}
 ROLES = ('items', 'source_rows', 'detail_rows', 'redirects', 'issues', 'issue_links', 'issue_sources', 'issue_impacts', 'members',
-         'common_issues', 'issue_options', 'common_issue_links', 'member_links', 'detail_aggregation')
+         'common_issues', 'issue_options', 'common_issue_links', 'member_links', 'member_refs', 'detail_aggregation')
 EXCLUDED_KEYS = ('excluded_rule_ref', 'excluded_issue_id', 'excluded_note')
 AGG_KEYS = ('aggregation', 'aggregation_reason', 'member_quantity_name', 'member_table')   # member_table names the ledger whose title the drill-down shows
 ITEM_KEYS = ('id', 'kind', 'source_id', 'name', 'features', 'unit', 'quantity_name', 'ours_note', *LEVELS, 'total', 'estimate_dominant',
@@ -32,6 +32,7 @@ KEYS = {'items': ITEM_KEYS,
         'issue_options': ('issue_id', 'option_id', 'text', 'value', 'unit', 'note'),
         'common_issue_links': ('common_issue_id', 'item_id'),
         'member_links': ('catalog_key', 'detail_id', 'quantity_name', 'level', 'quantity'),
+        'member_refs': ('catalog_key', 'detail_id'),
         'detail_aggregation': ('detail_id', *AGG_KEYS)}
 NUMBERS = {*LEVELS, 'total', 'row_quantity', 'tp_quantity', 'difference', 'difference_rate', 'search_hits', 'quantity', 'value'}
 BOOLEANS = {'estimate_dominant', 'third_party_corrected', 'excluded'}
@@ -243,6 +244,14 @@ def build_view(mapping, base, base_view):
   if not hit: o['quantities'].append({'name': name, 'value': rec.get('quantity'), 'unit': row.get('unit'), 'level': level})
   elif not close(hit[0].get('value'), rec.get('quantity')): problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': f'成员 {key} 已有数量项 {name}（{level}）为 {hit[0].get("value")}，挂接表写 {rec.get("quantity")}，不猜'}); continue
   if key not in row['member_keys']: row['member_keys'].append(key)
+ # Member refs (scene mapping contract 10, user 2026-10-16): routes and trays are only located, never counted, so the row must be declared.
+ for rec in data['member_refs']:
+  key, did = opt(rec, 'catalog_key'), opt(rec, 'detail_id'); row = details.get(did)
+  if key not in bykey or row is None:
+   problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': '定位挂接须有已存在的对象 catalog_key 和明细行 detail_id' + (f'（对象 {key} 不存在）' if key and key not in bykey else f'（明细 {did} 不存在）' if did else '')}); continue
+  if key not in row['member_keys']: row['member_keys'].append(key)
+  refs = row.setdefault('locate_only_keys', [])
+  if key not in refs: refs.append(key)
 
  # Issues.
  issues, iorder = {}, []
@@ -355,13 +364,22 @@ def build_view(mapping, base, base_view):
  comp_map['issues'] = [issues[q] for q in iorder]
  if commons: comp_map['common_issues'] = [commons[g] for g in corder]
  view['comparison'] = comp_map
- return view, {'tables': files, 'rows_read': {r: len(data[r]) for r in ROLES if data[r]}}
+ info = {'tables': files, 'rows_read': {r: len(data[r]) for r in ROLES if data[r]}}
+ if data['member_refs']:
+  # Scene mapping contract 10: how many objects the locate-only links placed, and which declared rows still have none.
+  info['member_refs'] = {'objects': len({k for r in details.values() for k in r.get('locate_only_keys', [])}),
+                         'rows': [r['id'] for r in details.values() if r.get('locate_only_keys')],
+                         'declared_rows_without_members': [r['id'] for r in details.values() if r.get('aggregation') == 'declared' and not r['member_keys']]}
+ return view, info
+
+
+SCENE_SAME = ('title', 'source_id', 'coordinate_unit', 'y_axis', 'bounds', 'background', 'background_refs', 'raster_path', 'raster_data_uri')
 
 
 def merge_base_views(paths, out_dir):
  """Several existing views (contract 12.1): scenes, objects and groups are only moved; any id clash stops the merge.
  Raster paths are rewritten relative to the output view so the merged view still finds its images."""
- merged = {'scenes': [], 'objects': [], 'groups': [], 'background_sets': {}, 'receipts': {}, 'sources': [], 'renamed_groups': [], 'base_views': []}
+ merged = {'scenes': [], 'objects': [], 'groups': [], 'background_sets': {}, 'receipts': {}, 'sources': [], 'renamed_groups': [], 'base_views': [], 'merged_scenes': []}
  seen = {'scenes': {}, 'objects': {}, 'groups': {}}; src = {}
  for path in paths:
   base = json.loads(path.read_text(encoding='utf-8-sig')); name = path.name
@@ -374,12 +392,19 @@ def merge_base_views(paths, out_dir):
      new = path.stem + '|' + x[ident]
      if new in seen[field]: raise ValueError(f'几份基础视图的{label}相同，改名后仍重复：{new}')
      merged['renamed_groups'].append({'view': name, 'from': x[ident], 'to': new}); x[ident] = new
-    if x[ident] in seen[field]: raise ValueError(f'几份基础视图的{label}相同：{x[ident]}（{seen[field][x[ident]]} 与 {name}）')
-    seen[field][x[ident]] = name
     if field == 'scenes' and x.get('raster_path'):
      target = (path.resolve().parent / x['raster_path']).resolve()
      try: x['raster_path'] = os.path.relpath(target, out_dir)
      except ValueError: x['raster_path'] = str(target)
+    # Packages that use the same sheet emit the same scene (scene mapping contract 10): identical ones become one page.
+    if field == 'scenes' and x[ident] in seen[field]:
+     first = next(s for s in merged['scenes'] if s['id'] == x[ident])
+     diff = [k for k in SCENE_SAME if first.get(k) != x.get(k)]
+     if not diff:
+      merged['merged_scenes'].append({'scene': x[ident], 'views': [seen[field][x[ident]], name]}); continue
+     raise ValueError(f'几份基础视图的图页编号相同而内容不同：{x[ident]}（{seen[field][x[ident]]} 与 {name}，不同的是 {"、".join(diff)}）')
+    if x[ident] in seen[field]: raise ValueError(f'几份基础视图的{label}相同：{x[ident]}（{seen[field][x[ident]]} 与 {name}）')
+    seen[field][x[ident]] = name
     merged[field].append(x)
   for field in ('background_sets', 'receipts'):
    for k, v in base.get(field, {}).items():
@@ -410,6 +435,7 @@ def main():
   view, info = build_view(mapping, a.mapping.resolve().parent, base_view)
   if base_view: info['base_views'] = base_view['base_views']
   if base_view and base_view['renamed_groups']: info['renamed_groups'] = base_view['renamed_groups']
+  if base_view and base_view['merged_scenes']: info['merged_scenes'] = base_view['merged_scenes']
   normalized = normalize_view(view, out_dir if a.base_view else None)
   a.output.parent.mkdir(parents=True, exist_ok=True)
   with a.output.open('x', encoding='utf-8', newline='\n') as f: json.dump(view, f, ensure_ascii=False, indent=1)

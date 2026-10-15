@@ -323,7 +323,12 @@ def normalize_comparison(view, object_keys):
    if r.get('member_quantity_name') is not None and not text(r['member_quantity_name']): bad('C3-2', rw, 'member_quantity_name 须为文字')
    # C3-4 counts one use per (object, quantity name): a circuit may feed cable, head, conduit and wire rows.
    qname = r.get('member_quantity_name') if agg == 'sum_members' else (r.get('member_quantity_name') or ours.get('quantity_name') or '')
-   for k in members: member_rows.setdefault((k, qname or ''), []).append((r['id'], share.get(k)))
+   # Locate-only members (scene mapping contract 10) show where the row is on the drawing; they feed no quantity, so C3-4 skips them.
+   located_only = r.get('locate_only_keys', [])
+   if not isinstance(located_only, list) or not set(located_only) <= set(members) or len(set(located_only)) != len(located_only): bad('C3-2', rw, 'locate_only_keys 须为本行成员的不重复子集'); located_only = []
+   elif located_only and agg != 'declared': bad('C3-2', rw, '只定位的成员（member_refs）只能挂在 declared 明细上')
+   for k in members:
+    if k not in located_only: member_rows.setdefault((k, qname or ''), []).append((r['id'], share.get(k)))
    if agg == 'leaf' and members: bad('C3-2', rw, 'leaf 明细不能有成员')
    if agg == 'declared':
     if not text(r.get('aggregation_reason')): bad('C3-2', rw, 'declared 明细须写 aggregation_reason')

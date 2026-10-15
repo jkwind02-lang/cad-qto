@@ -597,9 +597,14 @@ def test_tables_merge_several_base_views_and_stop_on_clashes(tmp_path):
     v = json.loads(out.read_text(encoding='utf-8'))
     assert [s['id'] for s in v['scenes']] == ['P1', 'P2'] and {o['scene_id'] for o in v['objects']} == {'P1', 'P2'} and len(v['objects']) == 3
     assert report['base_views'] == [{'view': 'a.json', 'scenes': 1, 'objects': 2, 'groups': len(fx.view()['groups'])}, {'view': 'b.json', 'scenes': 1, 'objects': 1, 'groups': len(fx.view()['groups'])}]
-    clash = base_view_file(tmp_path, 'c.json', 'P1', {'WL3'})
-    code, report, _ = build(tmp_path, mapping, '--base-view', a, '--base-view', clash)
-    assert code == 2 and '图页编号相同' in report['error']
+    # Same sheet from two packages (scene mapping contract 10): an identical scene becomes one page, a different one stops the merge.
+    same = base_view_file(tmp_path, 'c.json', 'P1', {'WL3'})
+    code, report, out = build(tmp_path, mapping, '--base-view', a, '--base-view', same)
+    assert code == 0, report
+    assert [s['id'] for s in json.loads(out.read_text(encoding='utf-8'))['scenes']] == ['P1'] and report['merged_scenes'] == [{'scene': 'P1', 'views': ['a.json', 'c.json']}]
+    v = json.loads(same.read_text(encoding='utf-8')); v['scenes'][0]['title'] += '（改）'; same.write_text(json.dumps(v, ensure_ascii=False), encoding='utf-8')
+    code, report, _ = build(tmp_path, mapping, '--base-view', a, '--base-view', same)
+    assert code == 2 and '图页编号相同而内容不同：P1' in report['error'] and 'title' in report['error']
     # Problem groups are numbered per package: a clashing group of the later view is renamed "<file stem>|<id>" and reported.
     for f, key in ((a, '成员|WL1'), (b, '成员|WL3')):
         v = json.loads(f.read_text(encoding='utf-8')); v['groups'] = [{'id': 'G01', 'title': '合成组', 'category': '合成', 'proposal': '合成', 'reason': '合成', 'status': '待复核', 'member_keys': [key]}]

@@ -348,7 +348,7 @@ function attach(api){
   memberBox.replaceChildren();const spec=c.member_tables.find(t=>t.id===r.member_table),cols=spec?spec.columns:[{key:'id',title:'编号'},{key:'title',title:'名称'},{key:'status',title:'状态'},{key:'source',title:'来源'}];
   const val=(o,k)=>k.startsWith('attributes.')?o.attributes?.[k.slice(11)]:k.startsWith('quantities.')?(o.quantities.find(q=>q.name===k.slice(11))||{}).value:o[k];
   memberBox.append(el('h3',null,(spec?.title||'成员')+'（'+ms.length+'）'+(r.aggregation==='sum_members'?' · 本行 = 成员“'+r.member_quantity_name+'”之和':r.aggregation==='declared'?' · '+(r.aggregation_reason||''):'')));
-  memberBox.append(table([...cols.map(x=>x.title),'回图'],ms.map(o=>[...cols.map(x=>{const v=val(o,x.key);return v==null?'':typeof v==='number'?num(v):String(v);}),o.kind!=='unlocated'&&hasScenes?btn('回图',()=>{at=Math.max(0,located.indexOf(o));mapState='open';map();},'link'):'未定位'])));
+  memberBox.append(table([...cols.map(x=>x.title),'回图'],ms.map(o=>[...cols.map(x=>{const v=val(o,x.key);return v==null?'':typeof v==='number'?num(v):String(v);}),o.kind!=='unlocated'&&hasScenes?btn('回图',()=>{at=Math.max(0,located.indexOf(o));mapState='open';map();},'link'):'未定位'+(core.unlocatedText(o)?'：'+core.unlocatedText(o):'')])));
  }
  const involved=ids=>table(['条目',...(overDim?[overDim.title]:[]),'单位',...LEVELS.map(x=>x.replace('量','')),'合计',tp+'量','结论'],ids.map(id=>itemMap.get(id)).filter(Boolean).map(i=>{const s=i.kind==='third_party'?seg(i)||i.third_parties[0]:null;return [itemLink(i.id),...(overDim?[vals(i,overDim).map(v=>dimTitle(overDim,v)).join('、')]:[]),i.ours.unit,...LEVELS.map(x=>num(i.ours.levels[x])),num(i.ours.total),s?num(s.quantity)+(s.unit!==i.ours.unit?' '+s.unit:''):'清单外',s?conclusionText(s):''];}));
  function optionsTable(x){return table(['做法','影响（专业算好的，与现做法差多少；不求和）',''],x.options.map(o=>[o.id+' '+o.text,impactText(o.impact)||'—',o.id===x.current_option?'现做法':'']));}
@@ -390,16 +390,19 @@ function attach(api){
  }
 
  // ---------- map (contract 8): auto / open / close; no scenes -> never shown ----------
- function targets(x){
+ function memberObjects(x){
   if(!x)return [];const k=kindOf(x),ids=k==='item'?[x.id]:k==='issue'?x.item_ids:x.scope.item_ids;
-  return Array.from(new Set(ids.map(id=>itemMap.get(id)).filter(Boolean).flatMap(i=>i.detail_rows.flatMap(r=>r.member_keys)))).map(k=>objects.get(k)).filter(o=>o&&o.kind!=='unlocated'&&o.scene_id);
+  return Array.from(new Set(ids.map(id=>itemMap.get(id)).filter(Boolean).flatMap(i=>i.detail_rows.flatMap(r=>r.member_keys)))).map(k=>objects.get(k)).filter(Boolean);
  }
+ const targets=x=>memberObjects(x).filter(o=>o.kind!=='unlocated'&&o.scene_id);
  function map(){
   const slot=byId('audit-map-slot'),bar=byId('audit-mapbar');bar.hidden=!hasScenes;
   for(const [id,s] of [['map-auto','auto'],['map-open','open'],['map-close','close']])byId(id).classList.toggle('on',mapState===s);
   located=targets(current);at=Math.min(at,Math.max(0,located.length-1));
   const visible=hasScenes&&(mapState==='open'||(mapState==='auto'&&located.length>0));slot.hidden=!visible;
-  byId('map-note').textContent=!hasScenes?'':located.length?'可定位成员 '+located.length+' 处 · 第 '+(at+1)+' 处':current?'当前目标没有可定位成员'+(mapState==='auto'?'，图面已自动收起':''):'';
+  // Scene mapping contract 8: say how many members can be shown on the drawing and how many cannot.
+  const lost=current?memberObjects(current).length-located.length:0,lostText=lost?' · 未定位 '+lost:'';
+  byId('map-note').textContent=!hasScenes?'':located.length?'可回图 '+located.length+lostText+' · 第 '+(at+1)+' 处':current?'当前目标没有可定位成员'+lostText+(mapState==='auto'?'，图面已自动收起':''):'';
   byId('member-prev2').disabled=byId('member-next2').disabled=located.length<2;
   if(visible){api.resize();api.locate(located,located[at]);}
  }

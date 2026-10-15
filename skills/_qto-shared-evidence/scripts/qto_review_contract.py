@@ -21,6 +21,8 @@ PROFESSIONALS = {
  'qto-roads-siteworks':'道路场地'}
 
 AUDIT_SNAPSHOTS = ('item_snapshot', 'issue_snapshot', 'common_issue_snapshot')
+# Scene mapping contract 8: why an object has no drawing position.
+UNLOCATED_REASONS = ('no_geometry', 'handle_not_found', 'handle_in_block', 'sheet_unknown', 'outside_sheet', 'estimated')
 
 def require(ok, message):
  if not ok: raise ValueError(message)
@@ -91,6 +93,9 @@ def normalize_view(raw, base_dir=None):
    require(isinstance(pts,list) and len(pts)>=minimum and all(xy(p) for p in pts),'对象几何无效')
    for ring in o.get('holes',[]):require(isinstance(ring,list) and len(ring)>=3 and all(xy(p) for p in ring),'面域孔洞无效')
   else:require(o.get('scene_id') in scene_ids or o.get('scene_id') is None,'未定位对象图页无效')
+  if 'parts' in o:
+   parts=o['parts'];require(o['kind']=='line' and isinstance(parts,list) and bool(parts) and all(isinstance(q,list) and len(q)>=2 and all(xy(p) for p in q) for q in parts) and parts[0]==o['points'],'对象'+str(o['id'])+'的parts须为line的折线列表（每段至少两点），points为其第一段')
+  if o.get('unlocated_reason') is not None:require(o['kind']=='unlocated' and o['unlocated_reason'] in UNLOCATED_REASONS,'对象'+str(o['id'])+'的未定位原因无效或不是unlocated对象')
   o.setdefault('quantities',[])
   for q in o['quantities']:
    require(string(q.get('name')) and string(q.get('unit')) and string(q.get('level')),'数量须含名称、单位和证据层级')
