@@ -130,7 +130,7 @@ python ../_qto-shared-evidence/scripts/migrate_cad_review_view.py --input 旧复
 
 ## 7. 用项目表格生成图面（qto-review-scene-mapping/1.0）
 
-项目已有点位、走线、图页这类表，又有图纸的中性事实（`CAD中性取证清单.json`、`中性布局图元.ndjson`）时，不用自己写图面脚本，写一份映射交给 [图面视图生成](../scripts/build_review_scenes_from_tables.py)：
+项目已有点位、走线、图页这类表，又有图纸的中性事实（`CAD中性取证清单.json`、`中性布局图元.ndjson`，取证清单登记了交换 DXF `exchange_dxf`）时，不用自己写图面脚本，写一份映射交给 [图面视图生成](../scripts/build_review_scenes_from_tables.py)。验收标准：审核人只看页面、不打开原图，就能判断漏计、重复、识别错、走线和楼层、比例这些问题；页面还原不了的，逐页写“本页看不出 n 处，须回原图”。
 
 ~~~text
 python build_review_scenes_from_tables.py --mapping 图面映射.json --neutral-root <中性事实根目录> --output <包>_图面视图_r1.json --report 图面转换检查.json [--estimate]
@@ -141,11 +141,11 @@ python build_review_scenes_from_tables.py --mapping 图面映射.json --neutral-
   "schema": "qto-review-scene-mapping/1.0",
   "view": {"project_id": "本项目业务名称", "review_id": "本包范围", "title": "图面复核", "revision": "r1", "professional": "qto-components-points"},
   "drawings": [{"id": "D001"}],
-  "background": {"layers_exclude": ["^WIRE-"]},
+  "background": {"source": "dxf", "layers_exclude": ["^WIRE-"]},
   "sheets": [{"path": "图页台账.csv", "constants": {"drawing": "D001"},
               "columns": {"sheet_id": "图页编号", "title": "图名", "floor": "楼层", "x1": "x1", "y1": "y1", "x2": "x2", "y2": "y2"}}],
   "objects": [
-    {"key": "fix", "path": "fix.csv", "columns": {"object_id": "handle", "sheet": "sheet", "x": "x", "y": "y"},
+    {"key": "fix", "path": "fix.csv", "columns": {"object_id": "handle", "handle": "handle", "sheet": "sheet", "x": "x", "y": "y"},
      "constants": {"catalog_key": "点位|{sheet}|{handle}", "title": "{attrA}（句柄 {handle}）", "category": "灯具点位", "status": "待复核"}},
     {"key": "wire", "path": "wire.csv", "professional": "qto-electrical-routes", "group_by": ["sheet", "handle"],
      "columns": {"object_id": "handle", "sheet": "sheet", "x1": "x1", "y1": "y1", "x2": "x2", "y2": "y2"},
@@ -157,11 +157,12 @@ python build_review_scenes_from_tables.py --mapping 图面映射.json --neutral-
 - 图纸 `drawings`：`id` 是中性事实目录名；原图 SHA256 由脚本从取证清单取，不要抄。米制图写 `coordinate_unit: "m"`。
 - 图页 `sheets`：图页编号、图纸、图框范围。场景编号为 `<图纸>|<图页>`；只给用到的图页出场景；没有图框时按对象外包框推定并标出。同一图页编号有几行而图框不同：被用到就报错，没用到只在报告里列出。
 - 叠图 `scenes`（可选）：`base` 加 `overlays`，平移量 `dx, dy` 由项目声明，插件不求配准；叠图自身的 `dx, dy` 平移 `base`，用于把几层换到同一坐标系。
-- 对象 `objects`：几何按“坐标列（`x, y`；`x1…y2`；`points` JSON）→ 句柄 `handle`（在中性布局里回取）→ 无”取第一种；`constants` 可写 `{列名}` 模板；`coords: "scene"` 表示坐标已是场景坐标；米制或局部原点的表声明 `transform: {scale, dx, dy}`，不声明就不用坐标列。
-- `group_by` 只用于线：同键几行，首尾相接的连成一条，不相接的成为 `parts`；合并的表不带数量，各段的值列进属性。没写 `group_by` 而 `catalog_key` 重复的报错。
+- 对象 `objects`：几何按“坐标列（`x, y`；`x1…y2`；`points` JSON）→ 句柄 `handle`（在中性布局里回取）→ 无”取第一种；`constants` 可写 `{列名}` 模板；`coords: "scene"` 表示坐标已是场景坐标；米制或局部原点的表声明 `transform: {scale, dx, dy}`（缺项按 1、0、0），不声明就不用坐标列。按坐标定位的计数表也要映射 `handle` 列，符号对账靠它认出哪些符号已计。
+- `group_by` 只用于两行以上的线：同键几行各按自己的图页定位和平移，首尾相接的连成一条，不相接的成为 `parts`；落在不同场景的报错；组里任一行定位不到，整条标未定位并写明哪几行。合并的表不带数量，各段的值列进属性。唯一性以 `catalog_key` 为准，没写 `group_by` 而它重复的报错。
 - 不造坐标：句柄查不到、在块内、图页不明、落在图页外的，都成为未定位对象并写原因；项目可在表里声明 `estimated` 或 `no_geometry`。
-- 底图：按图页范围从中性布局流式抽取模型空间顶层图元，整个落在图页里的才取；块内不展开，只计数；填充、尺寸标注缺省不取；文字限 30 字；按图层正则过滤。几个场景过滤条件相同时共用一份底图。
-- 检查：S-1 每个表行进了对象或列为跳过；S-2 `catalog_key` 唯一、每个对象都有来源行；S-3 定位对象在场景范围内；S-4 句柄回取结果计数；S-5 底图引用齐全；S-6 视图契约。报 `INPUT_REQUIRED` 时 `problems` 列出全部问题，视图不写出；输出文件已存在时拒绝覆盖。
+- 底图（`source: "dxf"`，缺省）：从交换 DXF 还原，先核 SHA256；取外包框与图页相交的图元（插入点在图外、内容在图内的图框和箭头也取）。计数符号块（句柄在对象表里）和小块全展开，大块（建筑底图等，展开后超过 `large_block_points`，缺省 2000 点）只画墙柱、轴线、门窗、楼梯、房间、尺寸、图框图名这些图层（`large_block_layers` 可改）。保留字高、对齐、颜色、实心填充、线型虚线和可见属性；不可见属性、关闭冻结和不打印的图层不画。大块里没画的图层、大块的填充图案、图片、OLE、代理对象、缺外部参照按页计数，页面写“本页看不出 n 处，须回原图”并列主要图层。没有交换 DXF 时报 `INPUT_REQUIRED`；确要用中性布局顶层图元，在映射写 `source: "neutral"`，页面写明缺什么。几个场景过滤条件相同时共用一份底图。
+- 符号对账：每页按块名列本页个数、已计（句柄在对象表里）、未计、同位置重复（同块名插入点相距小于 1 mm）；页面图面工具栏“符号对账”，点“未计”“同位置”在图上标红圈。只对账，不改数量。
+- 检查：S-1 每个表行进了对象或列为跳过；S-2 `catalog_key` 唯一、每个对象都有来源行；S-3 定位对象在场景范围内；S-4 句柄回取结果计数，并反查定位失败的行不在已定位对象里；S-5 交换 DXF 哈希、底图引用齐全、对象表有没有句柄；S-6 视图契约。报 `INPUT_REQUIRED` 时 `problems` 列出全部问题，视图不写出；输出文件已存在时拒绝覆盖。
 - 生成的视图可直接出页面，也可作 `build_comparison_view_from_tables.py` 的 `--base-view`：几包引用同一图页时，内容相同的场景合为一页。对照审核里，有计数的对象用成员挂接表（`member_links`）核“图上个数 = 明细数量”；按长度的走线、桥架用定位挂接表 `member_refs`（`catalog_key`、`detail_id`），只把对象挂到明细上回图，不核数量，所挂明细行的汇总方式须为 `declared`。
 
 ## 2026-09-20 成果快照绑定（优先于旧版回执说明）

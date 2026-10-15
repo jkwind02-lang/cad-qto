@@ -18,7 +18,7 @@ try{
  function installMarkers(){for(const m of feedback.custom_markers){if(!objects.has(m.catalog_key)){data.objects.push(m);objects.set(m.catalog_key,m);}}}
  installMarkers();
  let mode=data.groups.length?'groups':'objects',selected=null,focused=null,checked=new Set(),items=[],page=0,memberPage=0;
- let scene=data.scenes[0],cx=0,cy=0,scale=1,cw=0,ch=0,drag=null,moved=0,placing=false,wide=false,external=null;
+ let scene=data.scenes[0],cx=0,cy=0,scale=1,cw=0,ch=0,drag=null,moved=0,placing=false,wide=false,external=null,marks=[];
  const PAGE=60,MEMBER_PAGE=80,cv=$('cad'),ctx=cv.getContext('2d'),images=new Map();
  const key=i=>i.member_keys?'问题组|'+i.id:i.annotation_key||i.catalog_key;
  const members=g=>(g?.member_keys||[]).map(k=>objects.get(k)).filter(Boolean);
@@ -101,7 +101,32 @@ try{
   box.textContent=(i.adoption_result?'当前采用：'+i.adoption_result+'\n'+(i.adoption_reason||'')+'\n'+(i.adoption_note||''):'')+(rc?'\n处理回执：'+rc.status+'\n'+rc.assistant_response+(state==='stale'?'\n意见或成果版本已变化，旧回执不能证明当前结果已复核。':''):'');
   if(rc?.member_results){const row=rc.member_results.find(r=>r.object_id===i.id||r['对象编号']===i.id);if(row)box.textContent+='\n本成员处理：'+JSON.stringify(row,null,2);}
  }
- function changeScene(id,fitPage=true){if(!scenes.has(id))return;scene=scenes.get(id);$('scene').value=id;if(fitPage)fit();draw();}
+ function changeScene(id,fitPage=true){if(!scenes.has(id))return;const swap=scene!==scenes.get(id);scene=scenes.get(id);$('scene').value=id;if(swap){marks=[];renderSymbols();}if(fitPage)fit();draw();}
+ // What this page cannot show is counted per scene; the reviewer must go back to the original for those (scene mapping contract 7.4).
+ const NOT_SHOWN={other_layers:'大块里未画的图层',pattern_hatch:'填充图案',image:'图片',ole:'OLE 对象',proxy:'代理对象',xref_missing:'缺外部参照'};
+ function restorationText(s){const r=s?.restoration;if(!r)return '';if(r.source==='neutral')return ' · '+(r.note||'底图只有模型空间顶层图元');if(!r.not_shown_total)return ' · 底图已按原图还原';const top=(r.other_layers_top||[]).slice(0,3).map(e=>e[0]).join('、');return ' · 本页看不出 '+r.not_shown_total+' 处，须回原图（'+Object.entries(r.not_shown||{}).filter(e=>e[1]).map(e=>(NOT_SHOWN[e[0]]||e[0])+' '+e[1]+(e[0]==='other_layers'&&top?'，多为 '+top:'')).join('；')+'）';}
+ // Symbol reconciliation (contract 7.5): one row per block; "未计" and "同位置" ring the points on the map. Never changes quantities.
+ // The panel folds away so it does not cover the rings; the toolbar button opens it again (closing it there clears the rings).
+ function showMarks(pts,what){marks=pts||[];if(!marks.length){draw();return;}$('symbols-panel').hidden=true;$('symbols').classList.remove('on');const b=pointBounds(marks),pad=Math.max((scene.bounds[2]-scene.bounds[0])*.03,1);fitBounds([b[0]-pad,b[1]-pad,b[2]+pad,b[3]+pad]);status(what+'：'+marks.length+' 处，已在图上标红圈。');}
+ function renderSymbols(){
+  const rows=scene?.symbol_reconciliation||[],panel=$('symbols-panel');$('symbols').hidden=!rows.length;panel.replaceChildren();
+  if(!rows.length){panel.hidden=true;$('symbols').classList.remove('on');return;}
+  const total=k=>rows.reduce((a,r)=>a+(r[k]||0),0),head=document.createElement('div');
+  head.textContent='符号对账（只对账，不改数量）：本页 '+total('on_sheet')+' 个，已计 '+total('counted')+'，未计 '+total('uncounted')+'，同位置 '+total('duplicates');
+  const table=document.createElement('table'),tr=document.createElement('tr');
+  for(const h of ['符号','图层','本页','已计','未计','同位置']){const th=document.createElement('th');th.textContent=h;tr.append(th);}table.append(tr);
+  for(const r of rows){
+   const row=document.createElement('tr'),name=(r.label||r.block)+(r.sheet?'（'+r.sheet+'）':'');
+   for(const [v,pts,what] of [[name],[r.layer||''],[r.on_sheet],[r.counted],[r.uncounted,r.uncounted_points,'未计'],[r.duplicates,r.duplicate_points,'同位置']]){
+    const td=document.createElement('td');
+    if(pts&&v){const b=document.createElement('button');b.className='link';b.textContent=v;b.title='在图上标出'+what+'的位置';b.onclick=()=>showMarks(pts,name+' '+what);td.append(b);}else td.textContent=v??'';
+    row.append(td);
+   }
+   row.children[0].title='块名 '+r.block;table.append(row);
+  }
+  panel.append(head,table);
+ }
+ $('symbols').onclick=()=>{const p=$('symbols-panel');p.hidden=!p.hidden;$('symbols').classList.toggle('on',!p.hidden);if(p.hidden){marks=[];draw();}};
  function focus(i){
   focused=i;if(i.scene_id)changeScene(i.scene_id,false);showFacts(i);
   const why=core.unlocatedText(i);$('unlocated').hidden=i.kind!=='unlocated';$('unlocated').textContent='本对象尚无可靠图面定位'+(why?'（'+why+'）':'')+'。保留数量、来源及文字批注，不用虚构坐标代替回图。';
@@ -124,8 +149,9 @@ try{
   if(scene.raster_data_uri){let im=images.get(scene.id);if(!im){im=new Image();images.set(scene.id,im);im.onload=draw;im.src=scene.raster_data_uri;}if(im.complete&&im.naturalWidth){const a=screen([scene.bounds[0],scene.y_axis==='down'?scene.bounds[1]:scene.bounds[3]]),b=screen([scene.bounds[2],scene.y_axis==='down'?scene.bounds[3]:scene.bounds[1]]);ctx.drawImage(im,a[0],a[1],b[0]-a[0],b[1]-a[1]);}}
   const view=pointBounds([world([0,0]),world([cw,ch])]);
   for(const r of backgrounds.get(scene.id)){
-   if(r.kind==='text'){const p=screen(r.point);if(p[0]<-150||p[0]>cw+100||p[1]<-30||p[1]>ch+30)continue;ctx.save();ctx.translate(...p);ctx.rotate((r.rotation||0)*Math.PI/180*sign());ctx.font=Math.max(8,Math.min(15,(r.height||0)*scale||10))+'px Microsoft YaHei';ctx.fillStyle=r.color||'#7c909c';ctx.fillText(r.text,0,0);ctx.restore();}
-   else{if(!within(r,view))continue;path(r.points,r.kind==='polygon');ctx.strokeStyle=r.color||'#b4c1ca';ctx.lineWidth=r.width||.7;ctx.stroke();}
+   // Text with a drawing height scales with zoom like the original (scene mapping contract 7.3); too small to read is skipped.
+   if(r.kind==='text'){const fs=r.height?r.height*scale*1.25:10;if(r.height&&fs<2.5)continue;const p=screen(r.point),m=(r.height?fs*(r.text||'').length:150)+150;if(p[0]<-m||p[0]>cw+m||p[1]<-m||p[1]>ch+m)continue;ctx.save();ctx.translate(...p);ctx.rotate((r.rotation||0)*Math.PI/180*sign());if(r.width_factor)ctx.scale(r.width_factor,1);ctx.font=fs+'px Microsoft YaHei';ctx.textAlign=r.align||'left';ctx.textBaseline=r.baseline||'alphabetic';ctx.fillStyle=r.color||'#7c909c';ctx.fillText(r.text,0,0);ctx.restore();}
+   else{if(!within(r,view))continue;path(r.points,r.kind==='polygon');if(r.fill){ctx.fillStyle=r.fill;ctx.fill();}ctx.strokeStyle=r.color||'#b4c1ca';ctx.lineWidth=r.width||.7;const dl=r.dash?r.dash.reduce((a,b)=>a+b,0)*scale:0;if(dl>=4)ctx.setLineDash(r.dash.map(v=>Math.max(1,v*scale)));ctx.stroke();if(dl>=4)ctx.setLineDash([]);}
   }
   for(const i of mapItems()){
    if(!visible(i)||!within(i,view))continue;const active=i===focused,allowed=!selected?.member_keys||checked.has(i.catalog_key),color=!allowed?'#b6bec5':i.color||(/排除|暂缓|不计/.test(i.status)?'#8f9ca5':active?'#d36b17':'#237ba1');
@@ -135,9 +161,10 @@ try{
    const p=screen(midpoint(i));if(p[0]<-30||p[0]>cw+30||p[1]<-30||p[1]>ch+30)continue;ctx.beginPath();ctx.arc(...p,active?7:4,0,2*Math.PI);ctx.fillStyle='white';ctx.fill();ctx.stroke();
    if(active){ctx.font='bold 12px Microsoft YaHei';const label=i.id,width=ctx.measureText(label).width,x=Math.max(5,Math.min(cw-width-10,p[0]+12)),y=Math.max(20,p[1]-12);ctx.fillStyle='white';ctx.fillRect(x-3,y-14,width+8,20);ctx.fillStyle=color;ctx.fillText(label,x,y);}
   }
+  for(const q of marks){const p=screen(q);if(p[0]<-20||p[0]>cw+20||p[1]<-20||p[1]>ch+20)continue;ctx.beginPath();ctx.arc(...p,11,0,2*Math.PI);ctx.strokeStyle='#d21f1f';ctx.lineWidth=2.5;ctx.stroke();}
   const target=100/scale,power=10**Math.floor(Math.log10(Math.max(target,1e-12))),L=[1,2,5,10].map(n=>n*power).find(n=>n>=target)||power*10;
   ctx.strokeStyle='#35556b';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cw-20-L*scale,ch-22);ctx.lineTo(cw-20,ch-22);ctx.stroke();ctx.font='11px Microsoft YaHei';ctx.fillStyle='#35556b';ctx.fillText(Number(L.toPrecision(4))+' '+scene.coordinate_unit,cw-20-L*scale,ch-30);
-  $('mapstatus').textContent=scene.title+' · 坐标单位 '+scene.coordinate_unit+(selected?.member_keys?' · 勾选 '+checked.size+'/'+selected.member_keys.length+'处':'');
+  $('mapstatus').textContent=scene.title+' · 坐标单位 '+scene.coordinate_unit+(selected?.member_keys?' · 勾选 '+checked.size+'/'+selected.member_keys.length+'处':'')+restorationText(scene);
  }
  function form(){
   const old=feedback.annotations[key(selected)]||{},isGroup=!!selected.member_keys;
@@ -186,7 +213,7 @@ try{
  $('scope-notes').textContent=data.scope_notes.join('\n');
  for(const q of data.summary){const chip=document.createElement('span');chip.className='summary-chip';chip.textContent=q.scope+'｜'+q.label+' '+(q.value===null?'待定':q.value)+' '+q.unit;$('summary-strip').append(chip);}
  $('professional').replaceChildren();option($('professional'),'全部','全部专业');for(const p of Array.from(new Set(data.objects.map(o=>o.professional))))option($('professional'),p,data.professional_labels[p]);$('professional').value='全部';
- $('scene').replaceChildren();for(const s of data.scenes)option($('scene'),s.id,s.title);$('scene').value=scene?.id||'';
+ $('scene').replaceChildren();for(const s of data.scenes)option($('scene'),s.id,s.title);$('scene').value=scene?.id||'';$('symbols-panel').hidden=true;renderSymbols();
  if(!scene){$('map-section').hidden=true;$('review-splitter').hidden=true;$('layout').classList.add('no-map');}
  new ResizeObserver(resize).observe(cv.parentElement);resize();fit();setMode(mode);status();
  const audit=globalThis.QtoReviewAudit?.attach({data,core,getFeedback:()=>feedback,backup,status,draw,resize,locate,

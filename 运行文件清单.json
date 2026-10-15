@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 286,
+  "runtime_file_count": 287,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -17,8 +17,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
-      "sha256": "4141d341d8fbc444bfcfcfad087a75e3d6229bacbfcfa4389a555ef7fb655e15",
-      "bytes": 28771
+      "sha256": "d01628db2b945e99b4fd289eb14d4b12b83e0b0f743bdc427063867524800826",
+      "bytes": 32639
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-audit.js",
@@ -32,8 +32,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-shell.html",
-      "sha256": "2388629a0f42e529760bb8a2610cdc6bcbbe6a72daebfbee2fe2ad6a39bbbf9b",
-      "bytes": 22135
+      "sha256": "5c0a677208a7160e3648fd14ddcf5c01d824ab5520b8d04b742e5c436b2dfa57",
+      "bytes": 22848
     },
     {
       "path": "_qto-shared-evidence/assets/插件问题登记模板.md",
@@ -57,8 +57,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
-      "sha256": "2b1142d7c52d9c76e8394b2ab749c5f49eb01b6f3a226d2a2ce9cca0e023c956",
-      "bytes": 20168
+      "sha256": "a018c7d15b7874c6473d9df25a03ef0527712fcf36609a75dd9085626e1690fd",
+      "bytes": 21834
     },
     {
       "path": "_qto-shared-evidence/references/PDF图片与表格提取.md",
@@ -187,8 +187,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/build_review_scenes_from_tables.py",
-      "sha256": "b2440772f8bbbd118c4ab8f81f8173675d037deed9083a4dc600fda83dc8b835",
-      "bytes": 39632
+      "sha256": "9822a8ccef949b0ccc0eb21d1887ef819a70dffb80471f09dbd94ce13bfbcbd2",
+      "bytes": 46564
     },
     {
       "path": "_qto-shared-evidence/scripts/cad_native/__init__.py",
@@ -276,6 +276,11 @@
       "bytes": 35637
     },
     {
+      "path": "_qto-shared-evidence/scripts/qto_dxf_background.py",
+      "sha256": "d5be795dad46aef539147fb42bf613739d1158eaf0f01181ee58c58aac561f85",
+      "bytes": 17237
+    },
+    {
       "path": "_qto-shared-evidence/scripts/qto_elevation_facts.py",
       "sha256": "783a955729e4f63408de0d2bce4e3158ef135e0c1ec9e4490ecc0a92175803a8",
       "bytes": 26117
@@ -317,8 +322,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
-      "sha256": "661cb6c12ddb244600013ec70d6b3e0a10f708dadc715556e2082c7d8cdeee36",
-      "bytes": 18428
+      "sha256": "2a05ccfd451a5cd8d351705195bfa3a5ada2bb97790230c0a7393d42d52c5994",
+      "bytes": 20413
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_revision.py",
@@ -722,8 +727,8 @@
     },
     {
       "path": "qto-electrical-routes/references/复核页审核视图接入.md",
-      "sha256": "39f888a4f7af1f1b7e9f459c7d2656aea3aee068e6e6d3f7a53fdd17fd72b0fc",
-      "bytes": 11798
+      "sha256": "f7115e102d71a87c57cd13a5adb0e1c7bab89a1312bac82edb31b4353b79ebdb",
+      "bytes": 12651
     },
     {
       "path": "qto-electrical-routes/references/常规计算逻辑.md",
@@ -737,8 +742,8 @@
     },
     {
       "path": "qto-electrical-routes/references/电气图面映射样例.json",
-      "sha256": "411f215e87d3aa71d053b8fabc19d17a934a298fd5a09b1095aaed03f4e5649c",
-      "bytes": 1978
+      "sha256": "66275d40e335921115722ae335bdac9563be4e678a3fc388f4634d2fb1f760c9",
+      "bytes": 1996
     },
     {
       "path": "qto-electrical-routes/references/电气审核视图映射样例.json",

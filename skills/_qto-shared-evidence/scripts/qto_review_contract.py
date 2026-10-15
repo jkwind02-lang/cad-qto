@@ -73,6 +73,25 @@ def normalize_view(raw, base_dir=None):
    require(p.get('kind') in ['line','polygon','text'],'底图图元kind无效')
    if p['kind']=='text':require(xy(p.get('point')) and isinstance(p.get('text'),str),'底图文字定位无效')
    else:require(isinstance(p.get('points'),list) and len(p['points'])>=2 and all(xy(x) for x in p['points']),'底图几何无效')
+   # Display fields restored from the original (scene mapping contract 7.3); all optional.
+   if p.get('height') is not None:require(number(p['height']) and p['height']>0,'底图文字字高无效')
+   if p.get('align') is not None:require(p['align'] in ['left','center','right'],'底图文字对齐无效')
+   if p.get('baseline') is not None:require(p['baseline'] in ['alphabetic','middle','top','bottom'],'底图文字基线无效')
+   if p.get('width_factor') is not None:require(number(p['width_factor']) and p['width_factor']>0,'底图文字宽度系数无效')
+   if p.get('fill') is not None:require(p['kind']=='polygon' and isinstance(p['fill'],str) and re.fullmatch('#[0-9a-fA-F]{6}',p['fill']) is not None,'底图填充只用于面，颜色写 #rrggbb')
+   if p.get('dash') is not None:require(p['kind']!='text' and isinstance(p['dash'],list) and bool(p['dash']) and all(number(v) and v>=0 for v in p['dash']),'底图虚线无效')
+  # What the page cannot show (contract 7.4) and the symbol reconciliation (7.5): counts must add up.
+  rs=s.get('restoration')
+  if rs is not None:
+   require(isinstance(rs,dict) and rs.get('source') in ['dxf','neutral'],'图页还原说明无效')
+   if rs['source']=='dxf':ns=rs.get('not_shown');require(isinstance(ns,dict) and all(isinstance(v,int) and v>=0 for v in ns.values()) and rs.get('not_shown_total')==sum(ns.values()),'须回原图计数无效')
+  sym=s.get('symbol_reconciliation')
+  if sym is not None:
+   require(isinstance(sym,list),'符号对账须为列表')
+   for r in sym:
+    require(isinstance(r,dict) and string(r.get('block')) and all(isinstance(r.get(k),int) and r[k]>=0 for k in ('on_sheet','counted','uncounted','duplicates')),'符号对账行无效')
+    up,dp=r.get('uncounted_points') or [],r.get('duplicate_points') or []
+    require(r['counted']+r['uncounted']==r['on_sheet'] and len(up)==r['uncounted'] and len(dp)==r['duplicates'] and all(xy(p) for p in [*up,*dp]),'符号对账行计数与点位不符')
   if s.get('raster_path'):
    require(base_dir is not None,'raster_path需要输入文件目录')
    path=(Path(base_dir)/s['raster_path']).resolve();raw_image=path.read_bytes()

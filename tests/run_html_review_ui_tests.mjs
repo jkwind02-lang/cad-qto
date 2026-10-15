@@ -240,4 +240,20 @@ if(art.comparison_html){
  checks.push('设了例外的条目和个别问题显示“此处已设例外”及本处意见，重开页面仍在；例外意见冲突时不按共性答复，例外过期后重新按共性答复并提示核对');
  checks.push('共性问题适用范围变了不过期，标“答复后新增 N 处”；合并冲突的意见标“意见冲突”，未采用前不向下继承');
 }
+// Background restored from the exchange DXF (scene mapping contract 7.3-7.5): "须回原图" hint, symbol reconciliation panel and red rings.
+{
+ const findIn=(n,p)=>{if(p(n))return n;for(const ch of n.children||[])if(ch&&typeof ch==='object'){const r=findIn(ch,p);if(r)return r;}return null;};
+ const d=structuredClone(data),s0=d.scenes[0],b=s0.bounds,p=[b[0]+(b[2]-b[0])/3,b[1]+(b[3]-b[1])/3];
+ s0.restoration={source:'dxf',not_shown_total:11,not_shown:{other_layers:10,pattern_hatch:1,image:0,ole:0,proxy:0,xref_missing:0},other_layers_top:[['PIPE',10]]};
+ s0.symbol_reconciliation=[{block:'LAMP',label:'吸顶灯',layer:'E-LIGHT',on_sheet:3,counted:2,uncounted:1,duplicates:1,uncounted_points:[p],duplicate_points:[p]}];
+ s0.background=[...(s0.background||[]),{kind:'text',point:p,text:'轴',height:350,align:'center',baseline:'bottom',width_factor:.8},{kind:'polygon',points:[p,[p[0]+1,p[1]],[p[0]+1,p[1]+1]],color:'#112233',fill:'#112233'},{kind:'line',points:[p,[p[0]+5,p[1]]],dash:[5,2]}];
+ const sh=harness(withData(sourceHTML,d));await sh.start();const se=sh.ids;se.scene.value=s0.id;se.scene.onchange();
+ assert.equal(se.symbols.hidden,false);assert.match(se.mapstatus.textContent,/本页看不出 11 处，须回原图（大块里未画的图层 10，多为 PIPE；填充图案 1）/);
+ se.symbols.click();assert.equal(se['symbols-panel'].hidden,false);assert.match(se['symbols-panel'].textContent,/本页 3 个，已计 2，未计 1，同位置 1/);
+ findIn(se['symbols-panel'],n=>n.className==='link'&&/未计/.test(n.title||'')).click();assert.match(se['action-message'].textContent,/吸顶灯 未计：1 处，已在图上标红圈/);assert.equal(se['symbols-panel'].hidden,true);
+ const other=d.scenes.find(s=>s.id!==s0.id);se.scene.value=other.id;se.scene.onchange();assert.equal(se.symbols.hidden,true);assert.equal(se['symbols-panel'].hidden,true);
+ const nd=structuredClone(data);nd.scenes[0].restoration={source:'neutral',note:'底图只有模型空间顶层图元，块内内容、字高、填充都没有'};const nh=harness(withData(sourceHTML,nd));await nh.start();nh.ids.scene.value=nd.scenes[0].id;nh.ids.scene.onchange();
+ assert.match(nh.ids.mapstatus.textContent,/底图只有模型空间顶层图元/);assert.equal(nh.ids.symbols.hidden,true);
+ checks.push('交换DXF底图：图面状态写“本页看不出 n 处，须回原图”及类别和主要图层，中性底图写明缺什么；符号对账列本页计数，点“未计”标红圈并提示，换到没有对账的图页面板收起');
+}
 const result={status:'PASS',count:checks.length,checks,scope:'无浏览器DOM模拟，非原生浏览器视觉验收',saved_feedback:packageFile};fs.writeFileSync(path.join(path.dirname(arg('--report')),'交互核验.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));

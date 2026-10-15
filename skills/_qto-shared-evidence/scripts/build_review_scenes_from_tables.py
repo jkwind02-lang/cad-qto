@@ -10,6 +10,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from qto_review_contract import normalize_view, VIEW_SCHEMA_COMPARISON, PROFESSIONALS
 from qto_cad_geometry import conic_point
+from qto_dxf_background import build_dxf_backgrounds, restoration_summary, DxfBackgroundError, LARGE_BLOCK_LAYERS, DEFAULTS as DXF_DEFAULTS
 
 MAPPING_SCHEMA = 'qto-review-scene-mapping/1.0'
 TOP_FIELDS = {'schema', 'view', 'drawings', 'sheets', 'scenes', 'background', 'objects', 'groups'}
@@ -23,7 +24,9 @@ GROUP_FIELDS = SPEC_FIELDS | {'members'}
 DRAWING_FIELDS = {'id', 'neutral_dir', 'coordinate_unit', 'precision', 'title', 'background'}
 SCENE_FIELDS = {'id', 'drawing', 'title', 'base', 'dx', 'dy', 'overlays', 'background'}
 OVERLAY_FIELDS = {'sheet', 'dx', 'dy', 'layers_include', 'layers_exclude'}
-BG_FIELDS = {'layers_include', 'layers_exclude', 'text_max_len', 'include_types'}
+BG_FIELDS = {'source', 'layers_include', 'layers_exclude', 'text_max_len', 'include_types', 'large_block_points', 'large_block_layers', 'symbol_layers',
+             'duplicate_tolerance', 'flatten'}
+NEUTRAL_NOTE = '底图只有模型空间顶层图元，块内内容、字高、填充都没有'
 NUMBER_KEYS = {'x', 'y', 'x1', 'y1', 'x2', 'y2'}
 SHEET_KINDS = ('平面', '系统图', '表与说明', '图例', '详图', '其他')
 SKIP_TYPES = {'HATCH', 'DIMENSION', 'OLE2FRAME'}
@@ -217,6 +220,21 @@ def regexes(v, where, problems):
  return out
 
 
+def dxf_config(cfg, where, problems):
+ """Block expansion settings for the restored background (contract 7, table and 7.2); lengths are given in mm."""
+ out = {'large_block_points': cfg.get('large_block_points', DXF_DEFAULTS['large_block_points']),
+        'large_block_layers': cfg.get('large_block_layers', LARGE_BLOCK_LAYERS),
+        'flatten_mm': cfg.get('flatten', DXF_DEFAULTS['flatten_mm']), 'duplicate_tolerance_mm': cfg.get('duplicate_tolerance', DXF_DEFAULTS['duplicate_tolerance_mm'])}
+ if not (isinstance(out['large_block_points'], int) and not isinstance(out['large_block_points'], bool) and out['large_block_points'] > 0):
+  problems.append({'check': 'S-0', 'where': where, 'message': 'large_block_points 须为正整数'})
+ for k in ('flatten_mm', 'duplicate_tolerance_mm'):
+  if not (isinstance(out[k], (int, float)) and not isinstance(out[k], bool) and out[k] > 0): problems.append({'check': 'S-0', 'where': where, 'message': f"{k.replace('_mm', '')} 须为正数（毫米）"})
+ if not (isinstance(out['large_block_layers'], list) and all(isinstance(p, str) for p in out['large_block_layers'])):
+  problems.append({'check': 'S-0', 'where': where, 'message': 'large_block_layers 须为正则列表'}); out['large_block_layers'] = []
+ regexes(out['large_block_layers'], where, problems)
+ return out
+
+
 # ---------- build ----------
 def build(m, base, neutral_root, problems, files):
  view_cfg = m.get('view') if isinstance(m.get('view'), dict) else {}
@@ -231,10 +249,14 @@ def build(m, base, neutral_root, problems, files):
   if unit not in UNIT_MM: problems.append({'check': 'S-0', 'where': f'drawings[{n}]', 'message': 'coordinate_unit 只能是 mm 或 m'}); continue
   folder = neutral_root / (d.get('neutral_dir') or d['id']); manifest = folder / 'CAD中性取证清单.json'; layout = folder / '中性布局图元.ndjson'
   if not manifest.is_file() or not layout.is_file(): problems.append({'check': 'S-0', 'where': f'drawings[{n}]', 'message': f'中性事实不全：{folder}'}); continue
-  src = json.loads(manifest.read_text(encoding='utf-8-sig')).get('authoritative_source') or {}
+  mf = json.loads(manifest.read_text(encoding='utf-8-sig'))
+  src = mf.get('authoritative_source') or {}
   if not re.fullmatch('[0-9a-fA-F]{64}', str(src.get('sha256', ''))): problems.append({'check': 'S-0', 'where': f'drawings[{n}]', 'message': '中性取证清单没有原图 SHA256'}); continue
+  # The exchange DXF the neutral facts were read from; the review background is restored from it (contract 7.1).
+  ex = mf.get('exchange_dxf') or {}
+  dxf = {'path': folder / ex['path'], 'sha256': ex['sha256']} if text(ex.get('path')) and re.fullmatch('[0-9a-fA-F]{64}', str(ex.get('sha256', ''))) else None
   drawings[d['id']] = {'id': d['id'], 'unit': unit, 'precision': d.get('precision', 0 if unit == 'mm' else 3), 'layout': layout, 'sha256': src['sha256'].lower(),
-                       'title': d.get('title') or f"{d['id']}（{Path(str(src.get('path', ''))).name}）", 'background': d.get('background') or {}}
+                       'title': d.get('title') or f"{d['id']}（{Path(str(src.get('path', ''))).name}）", 'background': d.get('background') or {}, 'dxf': dxf}
  # Sheets (contract 4).
  sheets, conflicts, sheet_rows, used_conflicts = {}, {}, {}, set()
  for spec in m.get('sheets') or []:
@@ -327,7 +349,7 @@ def build(m, base, neutral_root, problems, files):
     if dr in drawings: pending[dr].add(handle)
   for gkey, g in groups.items():
    kinds = {x['kind'] for x in g['rows'] if x['kind']} | ({'?'} if any(x['use'] == 'handle' for x in g['rows']) else set())
-   if group_by and kinds - {'line', '?'}: problems.append({'check': 'S-0', 'where': f"{spec['key']} 合并组 {gkey}", 'message': 'group_by 只用于线；点和面不能合并'}); continue
+   if group_by and len(g['rows']) > 1 and kinds - {'line', '?'}: problems.append({'check': 'S-0', 'where': f"{spec['key']} 合并组 {gkey}", 'message': 'group_by 只用于线；点和面不能合并'}); continue
    drafts.append(g)
  # Handle lookups: one pass per drawing, shared with the background pass below when possible (contract 6, 7).
  resolve_counter = Counter()
@@ -343,12 +365,19 @@ def build(m, base, neutral_root, problems, files):
   sid = opt(first, 'sheet'); dr = opt(first, 'drawing')
   if dr is None and sid is not None and len(by_sid.get(sid, ())) == 1: dr = next(iter(by_sid[sid]))
   sheet = sheets.get((dr, sid)) if sid is not None else None
-  if (dr, sid) in conflicts: used_conflicts.add((dr, sid)); continue
   reason, note, polys, kind, notes, hids = opt(first, 'unlocated_reason'), opt(first, 'unlocated_note'), [], None, [], []
+  # Every row is placed by its own sheet: a merged line may cross the sheets of one composite scene, each with its own shift.
+  clash = False
   for x in rows:
+   xs, xd = opt(x['rec'], 'sheet'), opt(x['rec'], 'drawing')
+   if xd is None and xs is not None and len(by_sid.get(xs, ())) == 1: xd = next(iter(by_sid[xs]))
+   if (xd, xs) in conflicts: used_conflicts.add((xd, xs)); clash = True; continue
+   xsh = sheets.get((xd, xs)) if xs is not None else None
+   hk = (xsh['drawing'], xsh['sheet_id']) if xsh else None
+   x['scene'], x['dx'], x['dy'] = (home[hk][:3] if hk in home else (f'{hk[0]}|{hk[1]}', 0.0, 0.0)) if xsh else (None, 0.0, 0.0)
+   if xsh is None: x['reason'] = 'sheet_unknown'; continue
    if x['use'] == 'handle':
-    if sheet is None: x['reason'] = 'sheet_unknown'; continue
-    d = found.get(dr, {}).get(x['handle'])
+    d = found.get(xd, {}).get(x['handle'])
     if d is None: x['reason'] = 'handle_not_found'; continue
     hids.append(d.get('record_id') or d.get('entity_handle'))
     if d.get('parent_block'): x['reason'] = 'handle_in_block'; continue
@@ -357,29 +386,34 @@ def build(m, base, neutral_root, problems, files):
     x['kind'], x['polys'] = k, ps
     if nt: notes.append(nt)
    elif x['kind'] is None: x['reason'] = 'no_geometry'
-  have = [x for x in rows if x['kind']]
+  if clash: continue
+  have = [x for x in rows if x['kind'] and not x.get('reason')]
+  failed = [x for x in rows if x.get('reason')]
   if reason is not None and reason not in ('estimated', 'no_geometry'):
    problems.append({'check': 'S-0', 'where': first['_where'], 'message': 'unlocated_reason 只能由项目声明 estimated 或 no_geometry，其余由脚本判定'}); continue
   if len(rows) > 1 and any(x['kind'] != 'line' for x in have):
    problems.append({'check': 'S-0', 'where': first['_where'], 'message': 'group_by 只用于线；合并组里有句柄回取到点或面的行'}); continue
+  in_scenes = sorted({x['scene'] for x in rows if x.get('scene')})
+  if len(in_scenes) > 1:
+   problems.append({'check': 'S-0', 'where': first['_where'], 'message': f"合并组的行落在不同场景（{'、'.join(in_scenes)}），不能合成一个对象：按图页分组，或用叠图把这些图页合到一个场景"}); continue
   # Declared reason first, then an unknown sheet, then whatever the geometry lookup found.
   if reason is None and sheet is None: reason = 'sheet_unknown'
+  # A merged line with a row that cannot be placed is unlocated as a whole: the part found must not pass for the full line.
+  if reason is None and failed and len(rows) > 1:
+   reason = Counter(x['reason'] for x in failed).most_common(1)[0][0]
+   note = note or (f"合并的 {len(rows)} 行中 {len(failed)} 行定位不到（" + '、'.join(f"第 {x['rec']['_n']} 行 {x['reason']}" for x in failed[:5])
+                   + ('等' if len(failed) > 5 else '') + '）；找到的部分不单独画，免得当成整条线')
   if reason is None and have:
    kind = 'line' if len(rows) > 1 or have[0]['kind'] == 'line' else have[0]['kind']
-   polys = [q for x in have for q in x['polys']]
+   # Overlay shift per row for drawing coordinates (handles are always drawing coordinates), then join.
+   polys = [[[p[0] + x['dx'], p[1] + x['dy']] for p in q] if (g['coords'] == 'drawing' or x['use'] == 'handle') else q for x in have for q in x['polys']]
    if kind == 'line': polys = chain(polys)
    if kind == 'line' and not polys: kind = None
   if kind is None and reason is None:
    reasons = [x.get('reason') for x in rows if x.get('reason')]
    reason = Counter(reasons).most_common(1)[0][0] if reasons else 'no_geometry'
-  # Placement: overlay shift for drawing coordinates (handles are always drawing coordinates).
-  scene_id, dx, dy = None, 0.0, 0.0
-  if sheet is not None:
-   hk = (sheet['drawing'], sheet['sheet_id'])
-   if hk in home: scene_id, dx, dy, _ = home[hk]
-   else: scene_id = f"{sheet['drawing']}|{sheet['sheet_id']}"
-  if kind and (g['coords'] == 'drawing' or any(x['use'] == 'handle' for x in have)) and (dx or dy):
-   polys = [[[p[0] + dx, p[1] + dy] for p in q] for q in polys]
+  scene_id = rows[0].get('scene')
+  g['located'] = bool(kind)
   oid = opt(first, 'object_id')
   if oid is None: problems.append({'check': 'S-0', 'where': first['_where'], 'message': '缺少 object_id'}); continue
   ckey = opt(first, 'catalog_key') or f"{spec['key']}|{sid or '-'}|{oid}"
@@ -420,7 +454,7 @@ def build(m, base, neutral_root, problems, files):
  used = {}
  for o in draws:
   if o['scene_id']: used.setdefault(o['scene_id'], []).append(o)
- scenes, targets_by_drawing, scene_meta = [], defaultdict(list), {}
+ scenes, targets_by_drawing, scene_meta, dxf_targets = [], defaultdict(list), {}, defaultdict(list)
  for scene_id, objs in sorted(used.items()):
   if scene_id in composites:
    s = composites[scene_id]; base_sheet = sheets[(s['drawing'], s['base'])]; dr = s['drawing']
@@ -455,24 +489,52 @@ def build(m, base, neutral_root, problems, files):
   if basis: sc['bounds_basis'] = basis
   if scene_id not in composites and sheets[(dr, scene_id.split('|', 1)[1])]['sheet_kind']: sc['sheet_kind'] = sheets[(dr, scene_id.split('|', 1)[1])]['sheet_kind']
   if scene_id not in composites and sheets[(dr, scene_id.split('|', 1)[1])]['raster_path']: sc['raster_path'] = str((base / sheets[(dr, scene_id.split('|', 1)[1])]['raster_path']).resolve())
-  items, filters_desc = [], []
+  items, filters_desc, scene_dxf_targets = [], [], []
   for sid, dx, dy, ov in parts:
    cfg = {**{k: v for k, v in global_bg.items()}, **(drw['background'] or {}), **((composites.get(scene_id) or {}).get('background') or {}), **{k: v for k, v in ov.items() if k in ('layers_include', 'layers_exclude')}}
    where = f'{scene_id} 底图（{sid}）'
    flt = {'include': regexes(cfg.get('layers_include'), where, problems), 'exclude': regexes(cfg.get('layers_exclude'), where, problems),
           'types': set(cfg.get('include_types') or []), 'text_max_len': int(cfg.get('text_max_len', 30))}
    sb = sheets[(dr, sid)]['bounds'] or bounds
-   targets_by_drawing[dr].append({'sheet_bounds': sb, 'dx': dx, 'dy': dy, 'precision': drw['precision'], 'filter': flt, 'items': items, 'stats': stats})
-   filters_desc.append({'sheet': sid, 'bounds': sb, 'dx': dx, 'dy': dy, 'layers_include': cfg.get('layers_include') or [], 'layers_exclude': cfg.get('layers_exclude') or [],
-                        'include_types': sorted(flt['types']), 'text_max_len': flt['text_max_len']})
-  scene_meta[scene_id] = {'scene': sc, 'items': items, 'stats': stats, 'filters': filters_desc, 'drawing': dr}
+   source = cfg.get('source', 'dxf')
+   desc = {'sheet': sid, 'bounds': sb, 'dx': dx, 'dy': dy, 'source': source, 'layers_include': cfg.get('layers_include') or [], 'layers_exclude': cfg.get('layers_exclude') or []}
+   if source == 'dxf':
+    bcfg = dxf_config(cfg, where, problems)
+    t = {'scene_id': scene_id, 'sheet': sid, 'sheet_bounds': sb, 'dx': dx, 'dy': dy, 'cfg': bcfg, 'include': flt['include'], 'exclude': flt['exclude'],
+         'symbol_layers': regexes(cfg.get('symbol_layers'), where, problems), 'items': items, 'stats': stats}
+    dxf_targets[dr].append(t); scene_dxf_targets.append(t)
+    desc.update(bcfg, symbol_layers=cfg.get('symbol_layers') or [])
+   elif source == 'neutral':
+    targets_by_drawing[dr].append({'sheet_bounds': sb, 'dx': dx, 'dy': dy, 'precision': drw['precision'], 'filter': flt, 'items': items, 'stats': stats})
+    desc.update(include_types=sorted(flt['types']), text_max_len=flt['text_max_len'])
+   else: problems.append({'check': 'S-0', 'where': where, 'message': 'background.source 只能是 dxf 或 neutral'})
+   filters_desc.append(desc)
+  scene_meta[scene_id] = {'scene': sc, 'items': items, 'stats': stats, 'filters': filters_desc, 'drawing': dr, 'dxf_targets': scene_dxf_targets}
   scenes.append(sc)
  for dr, ts in targets_by_drawing.items():
   scan_layout(drawings[dr]['layout'], set(), ts, resolve_counter)
+ # Restored background from the exchange DXF (contract 7.1-7.5); any handle in an object table marks its block as a counted symbol.
+ object_handles = {x['handle'] for g in drafts for x in g['rows'] if x.get('handle')}
+ dxf_ok = {}
+ for dr, ts in dxf_targets.items():
+  d = drawings[dr]['dxf']
+  if d is None: problems.append({'check': 'S-5', 'where': dr, 'message': '中性取证清单没有交换 DXF（exchange_dxf）；要用中性底图，须在映射写 background.source: "neutral"'}); continue
+  if not d['path'].is_file(): problems.append({'check': 'S-5', 'where': dr, 'message': f"交换 DXF 不存在：{d['path']}"}); continue
+  try: build_dxf_backgrounds(d['path'], d['sha256'], ts, object_handles, UNIT_MM[drawings[dr]['unit']], drawings[dr]['precision'])
+  except DxfBackgroundError as e: problems.append({'check': 'S-5', 'where': dr, 'message': str(e)}); continue
+  except (ImportError, OSError) as e: problems.append({'check': 'S-5', 'where': dr, 'message': f'读交换 DXF 失败：{e}'}); continue
+  dxf_ok[dr] = d['sha256'].lower()
  background_sets = {}
  for scene_id, meta in scene_meta.items():
-  key = hashlib.sha256(json.dumps([drawings[meta['drawing']]['sha256'], meta['filters']], ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:16]
-  background_sets[key] = meta['items']; meta['scene']['background_refs'] = [key]; meta['key'] = key
+  sc, ts = meta['scene'], meta['dxf_targets']
+  if ts:
+   sc['restoration'] = restoration_summary(ts)
+   rows = [{**r, 'sheet': t['sheet']} if len(ts) > 1 else r for t in ts for r in t.get('symbol_reconciliation') or []]
+   if rows: sc['symbol_reconciliation'] = rows
+   meta['dropped_layers'] = sum((t.get('dropped_layers') or Counter() for t in ts), Counter())
+  else: sc['restoration'] = {'source': 'neutral', 'note': NEUTRAL_NOTE}
+  key = hashlib.sha256(json.dumps([drawings[meta['drawing']]['sha256'], dxf_ok.get(meta['drawing']) if ts else None, meta['filters']], ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:16]
+  background_sets[key] = meta['items']; sc['background_refs'] = [key]; meta['key'] = key
  used_drawings = sorted({s['source_id'] for s in scenes} | {o['scene_id'].split('|', 1)[0] for o in draws if o['scene_id']})
  # Groups (contract 9).
  groups = []
@@ -513,14 +575,24 @@ def build(m, base, neutral_root, problems, files):
  for g in drafts:
   for x in g['rows']:
    if x['use'] == 'handle': hcount[x.get('reason') or 'found'] += 1
- checks['S-4'] = {'handle_rows': sum(hcount.values()), **hcount, 'duplicate_top_level_handles': resolve_counter['handle_duplicates'], 'pass': True}
- checks['S-5'] = {'scenes': len(scenes), 'pass': all(k in background_sets for s in scenes for k in s.get('background_refs', []))}
+ # Reverse check: no row that failed to locate may sit inside an object drawn as located.
+ failed_in_located = [x['rec']['_where'] for g in drafts if g.get('located') for x in g['rows'] if x.get('reason')]
+ checks['S-4'] = {'handle_rows': sum(hcount.values()), **hcount, 'duplicate_top_level_handles': resolve_counter['handle_duplicates'],
+                  'failed_rows_in_located_objects': len(failed_in_located), 'pass': not failed_in_located}
+ if failed_in_located: problems.append({'check': 'S-4', 'where': '；'.join(failed_in_located[:5]), 'message': '定位失败的行进了已定位对象'})
+ checks['S-5'] = {'scenes': len(scenes), 'dxf_checked': dxf_ok, 'scenes_neutral_background': sum(1 for s in scenes if s.get('restoration', {}).get('source') == 'neutral'),
+                  'object_handles': len(object_handles),
+                  **({'symbol_note': '对象表没有映射 handle：符号对账认不出哪些符号已计，只列 symbol_layers 图层上的块；按坐标定位的表也请映射 handle 列'} if dxf_targets and not object_handles else {}),
+                  'pass': all(k in background_sets for s in scenes for k in s.get('background_refs', [])) and all(dr in dxf_ok for dr in dxf_targets)}
  for key in sorted(used_conflicts):
   problems.append({'check': 'S-0', 'where': '；'.join(conflicts[key]), 'message': f'图页 {key[0]}|{key[1]} 在图页表里有几行且内容不同，对象或叠图用到了它，须先在图页表里改正'})
  for o in draws: o.pop('_rows'); o.pop('_bounds_known')
  info = {'tables': [{**{k: v for k, v in t.items() if k not in ('skipped', 'unlocated')}, 'skipped': dict(t['skipped']), 'unlocated': dict(t['unlocated'])} for t in report_tables],
          'scenes': [{'id': s['id'], 'title': s['title'], 'objects': dict(Counter(o['kind'] for o in used.get(s['id'], []))), **dict(scene_meta[s['id']]['stats']),
-                     **({'bounds_basis': s['bounds_basis']} if s.get('bounds_basis') else {}), 'background_key': scene_meta[s['id']]['key'], 'background_filters': scene_meta[s['id']]['filters']} for s in scenes],
+                     **({'bounds_basis': s['bounds_basis']} if s.get('bounds_basis') else {}), 'background_key': scene_meta[s['id']]['key'], 'background_filters': scene_meta[s['id']]['filters'],
+                     'restoration': s.get('restoration'), 'dropped_layers': dict((scene_meta[s['id']].get('dropped_layers') or Counter()).most_common(40)),
+                     'symbols': {'blocks': len(s.get('symbol_reconciliation') or []), **{k: sum(r[k] for r in s.get('symbol_reconciliation') or []) for k in ('on_sheet', 'counted', 'uncounted', 'duplicates')}}}
+                    for s in scenes],
          'objects': dict(Counter(o['kind'] for o in draws)), 'unlocated': dict(Counter(o.get('unlocated_reason') for o in draws if o['kind'] == 'unlocated')),
          'checks': checks}
  unused = [{'sheet': f'{k[0]}|{k[1]}', 'rows': v} for k, v in sorted(conflicts.items()) if k not in used_conflicts]

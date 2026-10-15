@@ -86,7 +86,7 @@ def mapping(tmp_path, *, fix=FIX, wire=WIRE, **override):
     m = {'schema': 'qto-review-scene-mapping/1.0',
          'view': {'project_id': '合成图面', 'review_id': 'V1', 'title': '合成图面视图', 'revision': 'r1', 'professional': 'qto-components-points'},
          'drawings': [{'id': 'D1'}],
-         'background': {'layers_exclude': ['^DEFPOINTS$']},
+         'background': {'source': 'neutral', 'layers_exclude': ['^DEFPOINTS$']},
          'sheets': [{'path': 'tables/sheets.csv', 'constants': {'drawing': 'D1'},
                      'columns': {'sheet_id': '图页', 'title': '图名', 'floor': '楼层', 'sheet_kind': '类型', 'x1': 'x1', 'y1': 'y1', 'x2': 'x2', 'y2': 'y2'}}],
          'objects': [
@@ -378,3 +378,181 @@ def test_same_scene_id_with_different_content_stops_the_merge(tmp_path):
         for s in b['scenes']: s['bounds'] = [s['bounds'][0] + 1, *s['bounds'][1:]]
     code, report, out = refs_convert(tmp_path, [['走线|R1', 'I1#2']], second=shift)
     assert code == 2 and not out.exists() and '图页编号相同而内容不同：P1' in report['error'] and 'bounds' in report['error']
+
+
+# ---------- merged lines: every row placed by its own sheet, a row not found makes the whole object unlocated ----------
+
+def probe(tmp_path, rows, scenes=None):
+    nroot = neutral(tmp_path); p, m = mapping(tmp_path)
+    write_csv(tmp_path / 'tables' / 'probe.csv', ['编号', '图页', '句柄'], rows)
+    m['objects'] = [{'key': 'probe', 'path': 'tables/probe.csv', 'group_by': ['编号'], 'columns': {'object_id': '编号', 'sheet': '图页', 'handle': '句柄'},
+                     'constants': {'title': '合并线', 'category': '走线', 'status': '待复核'}}]
+    if scenes: m['scenes'] = scenes
+    p.write_text(json.dumps(m, ensure_ascii=False), encoding='utf-8')
+    out, rep = tmp_path / 'v.json', tmp_path / 'r.json'
+    code, _, err = run(SCRIPT, '--mapping', p, '--neutral-root', nroot, '--output', out, '--report', rep)
+    assert rep.exists(), err
+    return code, json.loads(rep.read_text(encoding='utf-8')), json.loads(out.read_text(encoding='utf-8')) if out.exists() else None
+
+
+def test_merged_line_with_a_row_not_located_is_unlocated_as_a_whole(tmp_path):
+    code, r, v = probe(tmp_path / 'ok', [['G1', 'P1', 'A1'], ['G1', 'P1', 'A2']])
+    assert code == 0 and v['objects'][0]['points'] == [[1000.0, 1000.0], [3000.0, 1000.0], [3000.0, 3000.0], [5000.0, 3000.0]]
+    assert r['checks']['S-4']['failed_rows_in_located_objects'] == 0
+    for name, bad, why in (('nf', 'ZZ', 'handle_not_found'), ('blk', 'B2', 'handle_in_block'), ('none', '', 'no_geometry')):
+        code, r, v = probe(tmp_path / name, [['G1', 'P1', 'A1'], ['G1', 'P1', bad]])
+        o = v['objects'][0]
+        assert code == 0 and o['kind'] == 'unlocated' and o['points'] == [] and 'parts' not in o and o['unlocated_reason'] == why, (name, o)
+        assert f'第 3 行 {why}' in o['unlocated_note'] and '不单独画' in o['unlocated_note']
+        assert r['checks']['S-1']['rows_in_objects'] == 2 and r['checks']['S-4']['failed_rows_in_located_objects'] == 0 and r['checks']['S-4']['pass']
+
+
+def test_merged_line_across_overlay_sheets_shifts_each_row(tmp_path):
+    scenes = [{'id': 'C1', 'drawing': 'D1', 'base': 'P1', 'overlays': [{'sheet': 'P2', 'dx': -20000, 'dy': 0}]}]
+    code, r, v = probe(tmp_path / 'a', [['G1', 'P1', 'A1'], ['G1', 'P2', 'Q1']], scenes)
+    o = v['objects'][0]
+    assert code == 0 and o['scene_id'] == 'D1|C1' and o['kind'] == 'line'
+    assert o['parts'] == [[[1000.0, 1000.0], [3000.0, 1000.0]], [[1000.0, 1000.0], [2000.0, 1000.0]]]
+    code, r, v = probe(tmp_path / 'b', [['G1', 'P1', 'A1'], ['G1', 'P3', 'L9']])
+    assert code == 2 and v is None and any('落在不同场景' in p['message'] for p in r['problems'])
+
+
+# ---------- restored background from the exchange DXF (contract 7.1-7.5) ----------
+
+def make_dxf(path, pipes=10):
+    """Synthetic exchange DXF: a counted lamp symbol twice at one point and once not counted, a small switch block with a solid,
+    a large building block (walls kept, pipes dropped, its pattern hatch counted), a frame inserted outside the sheet, hidden,
+    Defpoints and non-plotting layers, aligned TEXT, two-line MTEXT and a dashed line."""
+    import ezdxf
+    from ezdxf.enums import TextEntityAlignment
+    doc = ezdxf.new('R2010', setup=True); msp = doc.modelspace()
+    doc.layers.add('E-LIGHT', color=3); doc.layers.add('WALL', color=7); doc.layers.add('PIPE', color=5)
+    doc.layers.add('HIDDEN').off(); doc.layers.add('NOPLOT', plot=False)          # Defpoints comes with the template
+    lamp = doc.blocks.new('LAMP'); lamp.add_circle((0, 0), 200)
+    h = lamp.add_hatch(); h.set_pattern_fill('ANSI31', scale=10); h.paths.add_polyline_path([(-150, -150), (150, -150), (150, 150), (-150, 150)], is_closed=True)
+    lamp.add_attdef('A', (0, -300), dxfattribs={'height': 100}); lamp.add_attdef('T', (250, 0), dxfattribs={'height': 100})
+    sw = doc.blocks.new('SW'); sw.add_solid([(0, 0), (100, 0), (0, 100), (100, 100)]); sw.add_line((0, 0), (0, 300))
+    big = doc.blocks.new('BIG')
+    for k in range(3): big.add_line((500, 6000 + k * 100), (4500, 6000 + k * 100), dxfattribs={'layer': 'WALL'})
+    for k in range(pipes): big.add_line((5000, 6000 + k * 50), (9000, 6000 + k * 50), dxfattribs={'layer': 'PIPE'})
+    bh = big.add_hatch(dxfattribs={'layer': 'WALL'}); bh.set_pattern_fill('ANSI31', scale=10); bh.paths.add_polyline_path([(500, 7000), (900, 7000), (900, 7400)], is_closed=True)
+    frame = doc.blocks.new('FRAME'); frame.add_line((5000, 0), (5000, 7000))
+    handles = {}
+    for name, p in (('L1', (2000, 2000)), ('L2', (2000, 2000.4)), ('L3', (6000, 2000))):
+        ins = msp.add_blockref('LAMP', p, dxfattribs={'layer': 'E-LIGHT'}); ins.add_auto_attribs({'A': '吸顶灯', 'T': 't'})
+        for a in ins.attribs:
+            if a.dxf.tag == 'A': a.is_invisible = True
+        handles[name] = ins.dxf.handle
+    msp.add_blockref('SW', (3000, 3000), dxfattribs={'layer': 'E-LIGHT'})
+    msp.add_blockref('BIG', (0, 0), dxfattribs={'layer': 'WALL'})
+    msp.add_blockref('FRAME', (-4000, 500))
+    msp.add_text('配电箱AL1', height=350, dxfattribs={'layer': 'E-LIGHT'}).set_placement((5000, 1000), align=TextEntityAlignment.BOTTOM_CENTER)
+    msp.add_mtext('第一行\\P第二行', dxfattribs={'char_height': 200, 'insert': (7000, 4000)})
+    doc.styles.add('FIX', font='txt.shx').dxf.height = 250                       # height 0 on a text means "the style's height"
+    for s, style, y in (('样式字高', 'FIX', 5000), ('无字高', 'Standard', 5500)):
+        msp.add_text(s, dxfattribs={'style': style, 'insert': (7000, y)}).dxf.unprotected_set('height', 0.0)   # ezdxf would turn 0 into 2.5
+    msp.add_line((1000, 4000), (4000, 4000), dxfattribs={'linetype': 'DASHED'})
+    for y, lay in ((4500, 'HIDDEN'), (4600, 'Defpoints'), (4700, 'NOPLOT')): msp.add_line((1000, y), (4000, y), dxfattribs={'layer': lay})
+    msp.add_line((20000, 1000), (21000, 1000))                                     # on another sheet
+    doc.saveas(path)
+    return handles
+
+
+def dxf_convert(tmp_path, background=None, with_handles=True, dxf_sha=None, dxf_path='D1.dxf'):
+    nroot = neutral(tmp_path); folder = nroot / 'D1'
+    handles = make_dxf(folder / 'D1.dxf')
+    mf = json.loads((folder / 'CAD中性取证清单.json').read_text(encoding='utf-8'))
+    mf['exchange_dxf'] = {'path': dxf_path, 'sha256': dxf_sha or hashlib.sha256((folder / 'D1.dxf').read_bytes()).hexdigest()}
+    (folder / 'CAD中性取证清单.json').write_text(json.dumps(mf, ensure_ascii=False), encoding='utf-8')
+    write_csv(tmp_path / 'tables' / 'lamps.csv', ['编号', '图页', '句柄', 'x', 'y'], [['L1', 'P1', handles['L1'], '2000', '2000'], ['L2', 'P1', handles['L2'], '2000', '2000.4']])
+    p, m = mapping(tmp_path, background=background or {'large_block_points': 30})
+    cols = {'object_id': '编号', 'sheet': '图页', 'x': 'x', 'y': 'y', **({'handle': '句柄'} if with_handles else {})}
+    m['objects'] = [{'key': 'lamp', 'path': 'tables/lamps.csv', 'columns': cols, 'constants': {'title': '灯', 'category': '灯具', 'status': '待复核'}}]
+    p.write_text(json.dumps(m, ensure_ascii=False), encoding='utf-8')
+    out, rep = tmp_path / 'view.json', tmp_path / 'report.json'
+    code, _, err = run(SCRIPT, '--mapping', p, '--neutral-root', nroot, '--output', out, '--report', rep)
+    assert rep.exists(), err
+    return code, json.loads(rep.read_text(encoding='utf-8')), json.loads(out.read_text(encoding='utf-8')) if out.exists() else None, out
+
+
+def test_dxf_background_restores_symbols_text_fill_and_dash(tmp_path):
+    code, report, v, out = dxf_convert(tmp_path)
+    assert code == 0, report
+    c.normalize_view(v)
+    sc = next(s for s in v['scenes'] if s['id'] == 'D1|P1'); items = v['background_sets'][sc['background_refs'][0]]
+    texts = {i['text']: i for i in items if i['kind'] == 'text'}
+    lines = [i for i in items if i['kind'] == 'line']; polys = [i for i in items if i['kind'] == 'polygon']
+    two = {(tuple(i['points'][0]), tuple(i['points'][1])): i for i in lines if len(i['points']) == 2}
+    # Visible attribute drawn, invisible one not; MTEXT line by line; TEXT keeps its height and alignment.
+    assert 't' in texts and '吸顶灯' not in texts and {'第一行', '第二行'} <= set(texts)
+    assert texts['配电箱AL1']['height'] == 350 and texts['配电箱AL1']['align'] == 'center' and texts['配电箱AL1']['baseline'] == 'bottom'
+    assert texts['样式字高']['height'] == 250 and 'height' not in texts['无字高']
+    # Counted symbol fully expanded: circle and pattern lines; the switch block's solid is a filled polygon.
+    assert any(len(i['points']) > 8 and min(p[0] for p in i['points']) == 1800 for i in lines)
+    assert sum(1 for (a, b) in two if all(1850 <= q <= 2150 for q in (*a, *b))) >= 3
+    assert any(i.get('fill') for i in polys)
+    # Dashed linetype carries a dash pattern; hidden, Defpoints and non-plotting layers are not drawn.
+    assert two[((1000, 4000), (4000, 4000))].get('dash') and not any(((1000, y), (4000, y)) in two for y in (4500, 4600, 4700))
+    # Frame inserted outside the sheet with content inside is taken; the other sheet's line is not.
+    assert ((1000, 500), (1000, 7500)) in two and not any(q[0] >= 20000 for i in lines for q in i['points'])
+    # Large block: walls drawn, pipes dropped and counted with its pattern hatch as "须回原图".
+    assert sum(1 for (a, b) in two if a[0] == 500 and b[0] == 4500) == 3 and not any(a[0] == 5000 and b[0] == 9000 for (a, b) in two)
+    assert sc['restoration'] == {'source': 'dxf', 'not_shown_total': 11, 'other_layers_top': [['PIPE', 10]],
+                                 'not_shown': {'other_layers': 10, 'pattern_hatch': 1, 'image': 0, 'ole': 0, 'proxy': 0, 'xref_missing': 0}}
+    s1 = next(s for s in report['scenes'] if s['id'] == 'D1|P1')
+    assert s1['dropped_layers'] == {'PIPE': 10} and s1['restoration'] == sc['restoration'] and report['checks']['S-5']['pass']
+    r = builder.build(out, tmp_path / 'page.html', feedback_url='')
+    assert r['quantity_changes'] == 0
+
+
+def test_dxf_symbol_reconciliation_counts_uncounted_and_duplicates(tmp_path):
+    code, report, v, _ = dxf_convert(tmp_path / 'a')
+    assert code == 0, report
+    sc = next(s for s in v['scenes'] if s['id'] == 'D1|P1')
+    assert sc['symbol_reconciliation'] == [{'block': 'LAMP', 'label': '吸顶灯', 'layer': 'E-LIGHT', 'on_sheet': 3, 'counted': 2, 'uncounted': 1, 'duplicates': 1,
+                                            'uncounted_points': [[6000, 2000]], 'duplicate_points': [[2000, 2000]]}]
+    assert next(s for s in report['scenes'] if s['id'] == 'D1|P1')['symbols'] == {'blocks': 1, 'on_sheet': 3, 'counted': 2, 'uncounted': 1, 'duplicates': 1}
+    assert report['checks']['S-5']['object_handles'] == 2 and 'symbol_note' not in report['checks']['S-5']
+    # No handle column: nothing is known as counted; symbol_layers still lists the blocks on that layer, all "uncounted".
+    code, report, v, _ = dxf_convert(tmp_path / 'b', background={'large_block_points': 30, 'symbol_layers': ['^E-LIGHT$']}, with_handles=False)
+    assert code == 0 and 'symbol_note' in report['checks']['S-5']
+    rows = {r['block']: r for r in next(s for s in v['scenes'] if s['id'] == 'D1|P1')['symbol_reconciliation']}
+    assert set(rows) == {'LAMP', 'SW'} and rows['LAMP']['counted'] == 0 and rows['LAMP']['uncounted'] == 3 and rows['SW']['on_sheet'] == 1
+
+
+def test_dxf_background_inputs_must_match(tmp_path):
+    code, report, v, _ = dxf_convert(tmp_path / 'sha', dxf_sha='0' * 64)
+    assert code == 2 and v is None and any(p['check'] == 'S-5' and '哈希与取证清单不符' in p['message'] for p in report['problems'])
+    code, report, v, _ = dxf_convert(tmp_path / 'file', dxf_path='nope.dxf')
+    assert code == 2 and v is None and any(p['check'] == 'S-5' and '交换 DXF 不存在' in p['message'] for p in report['problems'])
+    # No exchange DXF registered: no silent fall-back; the mapping must say source "neutral" to get the old background.
+    nroot = neutral(tmp_path / 'none'); p, m = mapping(tmp_path / 'none', background={})
+    code, summary, _ = run(SCRIPT, '--mapping', p, '--neutral-root', nroot, '--output', tmp_path / 'none' / 'v.json', '--report', tmp_path / 'none' / 'r.json')
+    report = json.loads((tmp_path / 'none' / 'r.json').read_text(encoding='utf-8'))
+    assert code == 2 and any(p['check'] == 'S-5' and 'source: "neutral"' in p['message'] for p in report['problems'])
+    code, _, report, out = convert(tmp_path / 'neutral')
+    v = json.loads(out.read_text(encoding='utf-8'))
+    assert code == 0 and all(s['restoration']['source'] == 'neutral' and '块内内容' in s['restoration']['note'] for s in v['scenes'])
+    assert report['checks']['S-5']['scenes_neutral_background'] == len(v['scenes']) and 'symbol_reconciliation' not in v['scenes'][0]
+
+
+def test_contract_checks_restored_display_fields():
+    v = fx.view(); del v['comparison']; v['schema'] = 'qto-review-view/1.0'
+    s = v['scenes'][0]
+    s['background'] = [{'kind': 'text', 'point': [0, 0], 'text': '轴', 'height': 350, 'align': 'center', 'baseline': 'bottom', 'width_factor': 0.8},
+                       {'kind': 'polygon', 'points': [[0, 0], [1, 0], [1, 1]], 'color': '#112233', 'fill': '#112233'},
+                       {'kind': 'line', 'points': [[0, 0], [1, 1]], 'dash': [5, 2.5]}]
+    s['restoration'] = {'source': 'dxf', 'not_shown_total': 3, 'not_shown': {'other_layers': 2, 'pattern_hatch': 1}}
+    s['symbol_reconciliation'] = [{'block': 'LAMP', 'label': '灯', 'layer': 'E', 'on_sheet': 2, 'counted': 1, 'uncounted': 1, 'duplicates': 0,
+                                   'uncounted_points': [[1, 1]], 'duplicate_points': []}]
+    c.normalize_view(copy.deepcopy(v))
+    bad = [(lambda w: w['scenes'][0]['background'][0].update(align='middle'), '对齐'),
+           (lambda w: w['scenes'][0]['background'][0].update(height=0), '字高'),
+           (lambda w: w['scenes'][0]['background'][2].update(fill='#112233'), '填充'),
+           (lambda w: w['scenes'][0]['background'][2].update(dash=[-1]), '虚线'),
+           (lambda w: w['scenes'][0]['restoration'].update(not_shown_total=9), '须回原图'),
+           (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(counted=2), '符号对账'),
+           (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(uncounted_points=[]), '符号对账')]
+    for change, msg in bad:
+        w = copy.deepcopy(v); change(w)
+        with pytest.raises(ValueError, match=msg): c.normalize_view(w)
