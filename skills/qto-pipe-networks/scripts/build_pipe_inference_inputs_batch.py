@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-eviden
 
 import build_pipe_inference_input as adapter
 
-VERSION = "qto-pipe-batch-frame-adapter/1.1.0"
+VERSION = "qto-pipe-batch-frame-adapter/1.2.0"
 MAPPING_SCHEMA = "qto-pipe-batch-family-mapping/1.0"
 FRAMES_SCHEMA = "qto-pipe-batch-frames/1.0"
 SUMMARY_SCHEMA = "qto-pipe-batch-conversion-summary/1.0"
@@ -354,12 +354,40 @@ def path_prefixes(instance_path: str) -> list[str]:
 def anchor_in(row: dict[str, Any], bounds: dict[str, float]) -> bool | None:
     """True/False when the row has a usable extent or anchor; None when it has neither."""
     bbox = row.get("bbox")
-    if isinstance(bbox, list) and len(bbox) >= 4 and all(isinstance(n, (int, float)) and math.isfinite(n) for n in bbox[:4]):
+    if (isinstance(bbox, list) and len(bbox) >= 4
+        and all(isinstance(n, (int, float)) and not isinstance(n, bool) and math.isfinite(n) for n in bbox[:4])
+        and bbox[2] >= bbox[0] and bbox[3] >= bbox[1]):
         return adapter.bbox_intersects(row, bounds)
     x, y = row.get("x"), row.get("y")
-    if isinstance(x, (int, float)) and isinstance(y, (int, float)) and math.isfinite(x) and math.isfinite(y):
+    if all(isinstance(n, (int, float)) and not isinstance(n, bool) and math.isfinite(n) for n in (x,y)):
         return bounds["xmin"] <= x < bounds["xmax_exclusive"] and bounds["ymin"] <= y < bounds["ymax_exclusive"]
     return None
+
+
+def located_frame_ids(row: dict[str, Any], frames: list[dict[str, Any]], insert_index: dict[str, str], bounds_by_frame=None) -> tuple[list[str] | None, str]:
+    """None means unlocatable; [] means located outside the selected frames.
+
+    A child's missing bbox must not mean "intersects every frame". Use its own
+    geometry first, then the nearest ancestor INSERT's world insertion point.
+    """
+    bounds = bounds_by_frame if bounds_by_frame is not None else {f['frame_id']: frame_bounds_of(f) for f in frames}
+    hits = {fid: anchor_in(row, box) for fid, box in bounds.items()}
+    if any(v is not None for v in hits.values()):
+        return [fid for fid, yes in hits.items() if yes], 'own_geometry'
+    for key in reversed(path_prefixes(str(row.get('instance_path') or ''))):
+        raw = insert_index.get(key)
+        if raw is None:
+            continue
+        ancestor = json.loads(raw)
+        x, y = ancestor.get('x'), ancestor.get('y')
+        if all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in (x, y)):
+            owners = [fid for fid, box in bounds.items() if box['xmin'] <= x < box['xmax_exclusive'] and box['ymin'] <= y < box['ymax_exclusive']]
+            return owners, 'ancestor_insertion_point'
+        matches = {fid: anchor_in(ancestor, box) for fid, box in bounds.items()}
+        if any(v is not None for v in matches.values()):
+            owners = [fid for fid, yes in matches.items() if yes]
+            return (owners if len(owners) <= 1 else None), 'ancestor_extent' if len(owners) <= 1 else 'ambiguous_ancestor_extent'
+    return None, 'unlocated'
 
 
 def unit_context_ids(mapping: dict[str, Any]) -> set[str]:
@@ -403,6 +431,7 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
     rows = adapter.expanded_manifest_rows(stream_path, block_path, cad_manifest, mapping["block_expansion"]["max_depth"],
                                           expansion_failures, target_layout=layout, scope_bounds=union)
     total_rows = 0
+    drawing_pending: list[dict[str, Any]] = []
     try:
         for row in rows:
             total_rows += 1
@@ -419,9 +448,16 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
             if record_id in context_ids:
                 context_rows[record_id] = serialized or json.dumps(row, ensure_ascii=False)
             instance_path = str(row.get("instance_path") or "")
+            owners, location_basis = located_frame_ids(row, frames, insert_index, frame_bounds)
+            if owners is None:
+                if entity_type in REVIEW_TYPES:
+                    drawing_pending.append({'object_id': record_id, 'entity_type': entity_type, 'layer': layer,
+                                            'block_name': row.get('block_name'), 'instance_path': row.get('instance_path'),
+                                            'reason': 'unlocated_object', 'location_basis': location_basis, 'family_ids': []})
+                continue
             for frame in frames:
                 frame_id = frame["frame_id"]
-                if not adapter.bbox_intersects(row, frame_bounds[frame_id]):
+                if frame_id not in owners:
                     continue
                 state = per_frame[frame_id]
                 if serialized is None:
@@ -442,7 +478,7 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
                 if entity_type not in REVIEW_TYPES:
                     continue
                 item = {"object_id": record_id, "entity_type": entity_type, "layer": layer, "block_name": row.get("block_name"),
-                        "instance_path": row.get("instance_path")}
+                        "instance_path": row.get("instance_path"), "location_basis": location_basis}
                 matched: dict[str, Any] | None = None
                 conflicts: list[str] = []
                 if entity_type in {"CIRCLE", "INSERT"}:
@@ -500,7 +536,8 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
         state["entity_counts"] = dict(sorted(state["entity_counts"].items()))
         state["text_hits"] = dict(sorted(state["text_hits"].items()))
     return {"frames": per_frame, "total_rows": total_rows, "expansion_failures": len(expansion_failures),
-            "drawing_level_failures": drawing_level, "insert_index": insert_index, "context_rows": context_rows}
+            "drawing_level_failures": drawing_level, "drawing_level_pending": drawing_pending,
+            "insert_index": insert_index, "context_rows": context_rows}
 
 
 def finalize_prescoped(frame: dict[str, Any], state: dict[str, Any], scan: dict[str, Any], mapping: dict[str, Any],
@@ -841,6 +878,20 @@ def main(argv: list[str] | None = None) -> int:
             "count": len(drawing_level), "by_kind": dict(sorted(Counter(str(item.get("kind")) for item in drawing_level).items())),
             "meaning": "图框外或无定位的块实例展开失败；不影响任何图框的范围内对象，只在此处列一次", "items": drawing_level}
 
+        unlocated_state = {'pending': scan['drawing_level_pending'], 'owned_insert_keys': set()}
+        unlocated_detail, unlocated_groups, _ = group_pending(unlocated_state, scan['insert_index'])
+        unlocated_path, unlocated_detail_path = output / '未定位对象待办.jsonl', output / '未定位对象明细.jsonl'
+        for path, rows in ((unlocated_path, unlocated_groups), (unlocated_detail_path, unlocated_detail)):
+            with path.open('w', encoding='utf-8') as handle:
+                for item in rows:
+                    handle.write(json.dumps({'frame_id': None, 'location_status': 'unlocated', **item}, ensure_ascii=False) + '\n')
+        summary['drawing_level_unlocated_objects'] = {
+            'count': len(unlocated_detail), 'groups': len(unlocated_groups),
+            'by_entity_type': dict(sorted(Counter(item['entity_type'] for item in unlocated_detail).items())),
+            'pending_list': str(unlocated_path), 'pending_detail': str(unlocated_detail_path),
+            'top_level_summary': top_level_summary(unlocated_groups, 20),
+            'meaning': '自身与祖先均无法定位的对象只在全图列一次；不灌入各框待办或pending_line_objects。已定位框外对象不属于此项。'}
+
         all_groups: list[dict[str, Any]] = []
         with pending_path.open("w", encoding="utf-8") as pending_handle, detail_path.open("w", encoding="utf-8") as detail_handle:
             for frame in runnable:
@@ -908,12 +959,16 @@ def main(argv: list[str] | None = None) -> int:
     statuses = Counter(f["status"] for f in summary["frames"])
     summary["counts"] = {"frames": len(summary["frames"]), "by_status": dict(sorted(statuses.items())),
                          "pending_groups": sum(f.get("pending_groups", 0) for f in summary["frames"]),
-                         "pending_objects": sum(f.get("pending_count", 0) for f in summary["frames"]), "diagnostics": len(diagnostics)}
+                         "pending_objects": sum(f.get("pending_count", 0) for f in summary["frames"]),
+                         "unlocated_objects": len(unlocated_detail), 'unlocated_groups': len(unlocated_groups),
+                         "diagnostics": len(diagnostics)}
     produced = statuses.get("READY", 0) + statuses.get("REVIEW_REQUIRED", 0)
     if statuses.get("FAILED") or statuses.get("SKIPPED"):
         return finish("PARTIAL", 3) if produced else finish("FAILED", 2)
     if produced:
-        return finish("REVIEW_REQUIRED" if statuses.get("REVIEW_REQUIRED") else "READY", 0)
+        return finish("REVIEW_REQUIRED" if statuses.get("REVIEW_REQUIRED") or unlocated_detail else "READY", 0)
+    if unlocated_detail:
+        return finish('REVIEW_REQUIRED', 0)
     return finish("NO_PIPES", 0)
 
 

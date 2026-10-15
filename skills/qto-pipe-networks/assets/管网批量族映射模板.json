@@ -32,11 +32,11 @@
       "geometric_corroboration": [
         {
           "kind": "frame_size_scale",
-          "paper_size_mm": 841,
+          "paper_size_mm": [841, 594],
           "scale_denominator": 100,
-          "measured_drawing_units": 84100,
+          "measured_drawing_units": [84100, 59400],
           "object_ids": ["填写图框边线的中性record_id"],
-          "basis": "填写幅面与比例的出处（图签比例栏、图纸目录）；applies_to 为 coordinates 且说明只含一种单位时可删除本数组"
+          "basis": "填写幅面两边与比例的出处（图签比例栏、图纸目录），两轴实测须对应；applies_to 为 coordinates 且说明只含一种单位时可删除本数组"
         }
       ],
       "evidence_ids": ["EV-图例"]

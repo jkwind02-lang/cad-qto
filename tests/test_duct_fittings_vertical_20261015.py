@@ -27,6 +27,11 @@ def seg(sid, floor, start, end, w=1000, h=500, el=None, ref='bottom', level='确
 
 
 def fit(fid, floor, kind, bbox, **extra):
+    # Frozen synthetic centreline endpoints, independent of the bbox/size formula.
+    centres = {'E3':[5750,20000], 'E4':[45750,0], 'E5':[45600,100000], 'E6':[50000,2650]}
+    if fid in centres:
+        extra.setdefault('single_end_geometry', dict(centerline_point=centres[fid], turn_plane='vertical',
+                         endpoint_relation='at_connection', source_id='CENTER-'+fid, basis='合成图中独立给定的中心线止点'))
     return dict(fitting_id=fid, floor_id=floor, kind=kind, bbox=bbox, source_id=f'BLK-{fid}', **extra)
 
 
@@ -86,7 +91,7 @@ def test_fitting_arms_follow_centreline_junction_rules(tmp_path, plan):
     assert {a['spec'] for a in f['R1']['arms']} == {'1000x500', '800x400'}  # each half keeps its own side's spec
     assert f['E2']['status'] == 'offset_candidate' and f['E2']['centerline_length'] == pytest.approx(1.0)
     assert 'E2dup' not in f and out['duplicate_fittings'][0]['duplicate_of'] == 'E2'
-    assert f['E3']['status'] == 'single_end' and f['E3']['centerline_length'] == pytest.approx(0.75)  # 1000 extent - 250 half width
+    assert f['E3']['status'] == 'single_end' and f['E3']['centerline_length'] == pytest.approx(0.75)  # centre 5750 minus straight end 5000
     assert all(a['evidence_level'] == '规则推算' for item in out['fittings'] for a in item['arms'])
 
 
@@ -162,21 +167,21 @@ def test_bottom_tag_without_height_cannot_give_centre_elevation(tmp_path, plan):
 
 # --- registration 20261015-0152: single-end plane reading, host-declared vertical links, elevation origin ---
 
-def test_single_end_plane_reports_both_readings_and_default_is_unchanged(tmp_path, plan):
+def test_single_end_plane_uses_frozen_centres_and_keeps_old_readings_diagnostic(tmp_path, plan):
     _, out = run(tmp_path, plan)
     e3 = by_id(out['fittings'], 'fitting_id', 'E3')
     arm = e3['arms'][0]
-    assert arm['length'] == pytest.approx(0.75) and arm['plane_policy'] == 'extension_minus_half_width'
-    assert arm['plane_scenarios'] == pytest.approx({'extension_minus_half_width': 0.75, 'extension_full': 1.0})
+    assert arm['length'] == pytest.approx(0.75) and arm['plane_policy'] == 'centerline_point'
+    assert arm['plane_scenarios'] == pytest.approx({'extension_minus_half_width': 0.75, 'extension_full': 1.0, 'centerline_point':.75})
     sc = out['single_end_plane_scenarios']
-    assert sc['policy'] == 'extension_minus_half_width' and sc['fitting_count'] >= 1
+    assert sc['policy'] == 'geometry_evidence' and sc['fitting_count'] >= 1 and sc['legacy_readings_diagnostic_only'] is True
     assert sc['difference_full_minus_default'] == pytest.approx(sc['extension_full'] - sc['extension_minus_half_width'])
     assert sc['difference_full_minus_default'] >= 0.25 - 1e-9
-    assert out['metrics']['single_end_plane_default'] == pytest.approx(sc['extension_minus_half_width'])
-    # control: choosing the full-extension reading changes only the single-end arms
+    assert out['metrics']['single_end_plane_default'] == pytest.approx(sc['geometry_evidence'])
+    # A legacy knob cannot override the independently evidenced centre.
     plan['parameters']['single_end_plane_policy'] = 'extension_full'
     _, full = run(tmp_path, plan)
-    assert by_id(full['fittings'], 'fitting_id', 'E3')['centerline_length'] == pytest.approx(1.0)
+    assert by_id(full['fittings'], 'fitting_id', 'E3')['centerline_length'] == pytest.approx(.75)
     assert by_id(full['fittings'], 'fitting_id', 'E1')['centerline_length'] == pytest.approx(1.0)
     assert full['single_end_plane_scenarios']['extension_full'] == pytest.approx(sc['extension_full'])
 

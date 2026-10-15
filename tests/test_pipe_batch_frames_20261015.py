@@ -300,7 +300,7 @@ def mixed_unit_mapping(package, **declaration):
     return mapping
 
 
-SHEET = dict(kind='frame_size_scale', paper_size_mm=841, scale_denominator=100, measured_drawing_units=84100, basis='A1 图框幅面 841，图签比例 1:100')
+SHEET = dict(kind='frame_size_scale', paper_size_mm=[841,594], scale_denominator=100, measured_drawing_units=[84100,59400], basis='A1 图框幅面 841×594，图签比例 1:100')
 
 
 def test_half_sentence_about_annotations_needs_geometric_corroboration(package):
@@ -327,7 +327,7 @@ def test_sheet_frame_at_plot_scale_corroborates_the_coordinate_unit(package):
 
 @pytest.mark.parametrize('change,message', [
     (dict(scale_denominator=50), '不符'),                          # implies 0.5 mm per unit
-    (dict(paper_size_mm=900, measured_drawing_units=90000), '都不符'),  # stated span is not the cited frame's extent
+    (dict(paper_size_mm=[900,594], measured_drawing_units=[90000,59400]), '实测边'),  # stated width is not the cited frame's extent
 ])
 def test_wrong_corroboration_is_rejected(package, change, message):
     mapping = mixed_unit_mapping(package, applies_to='annotation_values',

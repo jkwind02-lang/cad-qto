@@ -87,8 +87,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/局部识图与对象操作.md",
-      "sha256": "78bfb1c60d7dc35005206f301ae0c9e6bcddcdb54aabe8dc2df76eab748c9eb1",
-      "bytes": 9345
+      "sha256": "4eab339961d2a0073f22a23b9aa9f62a596b8df1f431bfd148d9773b98159cf7",
+      "bytes": 9541
     },
     {
       "path": "_qto-shared-evidence/references/工程量成果最小字段.schema.json",
@@ -247,8 +247,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_cad_source_contract.py",
-      "sha256": "0cc6c89f68a57b9e0f497832b0d35fd5aaa830014db1e40e2e9aabbd54d3fc78",
-      "bytes": 8435
+      "sha256": "b35dbf2c91134a91dd6c0f0bf5d0d4ef264d4310c31ce885e8d2b3f07181b90a",
+      "bytes": 10514
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_dimension_semantics.py",
@@ -567,8 +567,8 @@
     },
     {
       "path": "qto-duct-air-systems/references/管件中心线与竖向段推算.md",
-      "sha256": "23854ee73b5081e098871a4af9cfb8db6db3a29b32a3cf556c69cc0d4303c77d",
-      "bytes": 10434
+      "sha256": "9766d9632064face74303436a68ab865130f21969500bb9fb8726637a32532d5",
+      "bytes": 12511
     },
     {
       "path": "qto-duct-air-systems/references/结果检查与输出.md",
@@ -592,13 +592,13 @@
     },
     {
       "path": "qto-duct-air-systems/scripts/infer_duct_fittings_vertical.py",
-      "sha256": "08cee469a67ffc64261526f25d7d555f3fc4a14f9dfde7202c9bab144af5c0aa",
-      "bytes": 53411
+      "sha256": "78a822fcd65a72b249a70c5529bdcfee1732e3c4bf18575292bf04436f894896",
+      "bytes": 62820
     },
     {
       "path": "qto-duct-air-systems/SKILL.md",
-      "sha256": "da347320841a7cdd88e3aae281e364f9c859332542a0d5bee4722deab339defa",
-      "bytes": 5969
+      "sha256": "39933f7bd7305d1c9808dc4b08540673d5bb9f85dd67060baccfdbac321c561c",
+      "bytes": 6140
     },
     {
       "path": "qto-earthwork-terrain/agents/openai.yaml",
@@ -897,8 +897,8 @@
     },
     {
       "path": "qto-pipe-networks/assets/管网批量族映射模板.json",
-      "sha256": "9bed8753c1cf98750b434f749febf506a4e7e848af6e299687c3e42adcb2d1d3",
-      "bytes": 4408
+      "sha256": "b8920cc49089f6ec6a4f225d73075e43fdd1ecda2927355be29437537c07d782",
+      "bytes": 4454
     },
     {
       "path": "qto-pipe-networks/assets/管网识别配置模板.json",
@@ -967,8 +967,8 @@
     },
     {
       "path": "qto-pipe-networks/references/管网推算输入格式.md",
-      "sha256": "35340b5a1486cea12e28b28624c1eab0da8a34e6f3bff56a3dd1e3ba466c8ae4",
-      "bytes": 17187
+      "sha256": "81b0654f33f86a1814f15047304a4c3729a99c0da3d6caad3c0e9cf5d3dd618b",
+      "bytes": 18185
     },
     {
       "path": "qto-pipe-networks/references/结果检查与输出.md",
@@ -1027,8 +1027,8 @@
     },
     {
       "path": "qto-pipe-networks/scripts/build_pipe_inference_inputs_batch.py",
-      "sha256": "172f4ff9caf06054660d424c94c55fbc8037c9c2bec36d042b69b6dff0752633",
-      "bytes": 55567
+      "sha256": "0e806854ec83454636a9ee3177a44eef7e086e38af7608119d7a520b40089ef2",
+      "bytes": 59423
     },
     {
       "path": "qto-pipe-networks/scripts/infer_pipe_network.py",

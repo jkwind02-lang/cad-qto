@@ -78,7 +78,11 @@ _MEASURE_TOLERANCE = .01   # stated measured span vs the cited objects' extent
 
 
 def _positive(value, label):
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+    try:
+        valid = not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value) and value > 0
+    except (OverflowError, ValueError):
+        valid = False
+    if not valid:
         raise ValueError(f'{label} 必须是正数')
     return float(value)
 
@@ -101,10 +105,15 @@ def verify_unit_corroboration(declared_raw_unit, items, object_bounds):
         if not isinstance(item, dict):
             raise ValueError(f'{label} 必须是对象')
         kind = item.get('kind')
-        measured = _positive(item.get('measured_drawing_units'), f'{label}.measured_drawing_units')
         if kind == 'frame_size_scale':
-            real_m = _positive(item.get('paper_size_mm'), f'{label}.paper_size_mm') * _positive(item.get('scale_denominator'), f'{label}.scale_denominator') / 1000.
+            paper, measured = item.get('paper_size_mm'), item.get('measured_drawing_units')
+            if not all(isinstance(v, (list, tuple)) and len(v) == 2 for v in (paper, measured)):
+                raise ValueError(f'{label} 图框佐证必须同时提供两边：paper_size_mm=[纸宽,纸高]、measured_drawing_units=[实测X跨度,实测Y跨度]；旧单边声明须补齐，不能猜幅面')
+            paper = [_positive(v, f'{label}.paper_size_mm[{i}]') for i, v in enumerate(paper)]
+            measured = [_positive(v, f'{label}.measured_drawing_units[{i}]') for i, v in enumerate(measured)]
+            denominator = _positive(item.get('scale_denominator'), f'{label}.scale_denominator')
         elif kind == 'known_component_size':
+            measured = _positive(item.get('measured_drawing_units'), f'{label}.measured_drawing_units')
             real_m = _positive(item.get('real_length_m'), f'{label}.real_length_m')
         else:
             raise ValueError(f'{label}.kind 必须是 frame_size_scale 或 known_component_size')
@@ -116,11 +125,28 @@ def verify_unit_corroboration(declared_raw_unit, items, object_bounds):
         boxes = []
         for oid in ids:
             box = object_bounds.get(oid)
-            if not isinstance(box, (list, tuple)) or len(box) < 4 or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in box[:4]):
+            if (not isinstance(box, (list, tuple)) or len(box) < 4
+                or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in box[:4])
+                or box[2] < box[0] or box[3] < box[1]):
                 raise ValueError(f'{label} 引用的对象 {oid} 不在当前布局或没有可量的范围')
             boxes.append(box)
         width = max(b[2] for b in boxes) - min(b[0] for b in boxes)
         height = max(b[3] for b in boxes) - min(b[1] for b in boxes)
+        if kind == 'frame_size_scale':
+            if any(abs(actual - claimed) > _MEASURE_TOLERANCE * claimed for actual, claimed in zip((width, height), measured)):
+                raise ValueError(f'{label} 图框两条实测边与所引对象的实际宽 {width:.6g} / 高 {height:.6g} 不符')
+            orientations = [paper, paper[::-1]]  # portrait and landscape, never select just one matching edge
+            options = [[side * denominator / 1000. / span for side, span in zip(sides, measured)] for sides in orientations]
+            accepted = next(((sides, ratios) for sides, ratios in zip(orientations, options)
+                             if all(abs(r / scale - 1.) <= _RATIO_TOLERANCE for r in ratios)
+                             and abs(ratios[0] / ratios[1] - 1.) <= _RATIO_TOLERANCE), None)
+            if accepted is None:
+                raise ValueError(f'{label} 图框幅面两边/比例与声明单位 {declared_raw_unit} 不符，或两边推得的坐标比例不一致')
+            sides, ratios = accepted
+            checked.append({**item, 'object_width': width, 'object_height': height,
+                            'checked_paper_size_mm': sides, 'implied_metres_per_unit_by_axis': ratios,
+                            'implied_metres_per_unit': sum(ratios) / 2., 'checked_axes': 2})
+            continue
         if min(abs(width - measured), abs(height - measured)) > _MEASURE_TOLERANCE * measured:
             raise ValueError(f'{label}.measured_drawing_units={measured} 与所引对象的实际宽 {width:.6g} / 高 {height:.6g} 都不符')
         implied = real_m / measured
