@@ -22,7 +22,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from qto_cad_source_contract import canonical_scale
 
-VERSION = "qto-duct-fitting-vertical/1.3.0"
+VERSION = "qto-duct-fitting-vertical/1.3.1"
 INPUT_SCHEMA = "qto-duct-fitting-vertical-input/1.0"
 RESULT_SCHEMA = "qto-duct-fitting-vertical-result/1.0"
 FITTING_KINDS = {"elbow", "tee", "cross", "reducer", "rect_to_round", "tap", "offset", "unknown"}
@@ -127,14 +127,19 @@ def single_end_plane(net, fitting, sid, which):
     e, od = net.end_point(sid, which), net.outward(sid, which)
     x1, y1, x2, y2 = fitting['bbox']
     ext = max((x-e[0])*od[0] + (y-e[1])*od[1] for x in (x1,x2) for y in (y1,y2))
-    # The bbox is axis-aligned: its far corner is the block's far face along the pipe only
-    # when the pipe runs parallel to a drawing axis. Otherwise it is merely an upper bound.
-    axis_aligned = min(abs(od[0]), abs(od[1])) <= net.params['collinear_cross_limit']
+    # The bbox is axis-aligned, so its far corner overshoots the block's far face along the pipe.
+    # The block touches the bbox side x=x2 (and y=y2), so the overshoot is at most
+    # min(height*|uy|, width*|ux|) for any block shape: 0 on an exact axis, growing with block size
+    # and angle. The bbox stands in for the far face only while that bound is drawing noise; the
+    # pipe-parallelism parameter is no evidence of it.
+    error_bound = min((y2-y1)*abs(od[1]), (x2-x1)*abs(od[0]))
+    axis_aligned = error_bound <= net.params['end_snap_tolerance']
     half_width = (segment.get('width') if segment.get('width') is not None else segment.get('diameter'))
     half_width = half_width / 2. if half_width is not None else None
     scenarios = {'extension_full': max(0.,ext), 'extension_minus_half_width': max(0.,ext-half_width) if half_width is not None else None}
     result = {'length': None, 'method': None, 'scenarios': scenarios, 'extension': ext, 'half_width': half_width,
-              'extension_basis': 'axis_aligned_bbox' if axis_aligned else 'rotated_bbox_upper_bound'}
+              'extension_basis': 'axis_aligned_bbox' if axis_aligned else 'rotated_bbox_upper_bound',
+              'extension_error_bound': error_bound}
     g = fitting.get('single_end_geometry')
     if g is None:
         return {**result, 'reason': '缺 single_end_geometry：块外包框不能证明管件中心或本体端点；旧整段/减半宽读法只作诊断'}
@@ -149,10 +154,11 @@ def single_end_plane(net, fitting, sid, which):
     extent = ext if axis_aligned else None   # block far face along the pipe, when known
     if 'extent_along_pipe' in g:
         given = finite(g['extent_along_pipe'], label+'.extent_along_pipe', 0.)
-        if given <= 0 or given > ext + tol or (axis_aligned and abs(given - ext) > tol):
-            return {**result, 'reason': 'extent_along_pipe 与块范围不符：轴向管须与外包框伸出一致，斜向管不能超过外包框上限'}
+        # where the bbox stands in for the far face the two must agree; otherwise it is only an upper bound
+        if given <= 0 or given > ext + tol or (axis_aligned and given < ext - error_bound - tol):
+            return {**result, 'reason': 'extent_along_pipe 与块范围不符：外包框可代用时须与外包框伸出一致，否则不能超过外包框上限'}
         extent = given
-        result.update(extension=given, extension_basis='host_measured_along_pipe')
+        result.update(extension=given, extension_basis='host_measured_along_pipe', extension_error_bound=0.)
     bound = extent if extent is not None else ext
     candidates = {}
     if 'centerline_point' in g:
@@ -195,7 +201,7 @@ def single_end_plane(net, fitting, sid, which):
             depth = finite(depth, label+'.riser_depth', 0.)
             flange = finite(g['flange_allowance'], label+'.flange_allowance', 0.)
             if extent is None:
-                return {**result, 'reason': '管段不平行于坐标轴，外包框伸出不等于沿管向伸出；外皮扣减须给 extent_along_pipe（沿管向量得的块远端距离）'}
+                return {**result, 'reason': '管段不平行于坐标轴，外包框伸出可能比沿管向伸出多出 extension_error_bound；外皮扣减须给 extent_along_pipe（沿管向量得的块远端距离）'}
             length = extent - depth/2. - flange
             if depth <= 0 or length < 0:
                 return {**result, 'reason': '伸出长度不足以扣除半管高和远端法兰，方向或端点关系待核；不能裁成零'}
@@ -456,11 +462,12 @@ def build_connections(net: Network, result: dict[str, Any]) -> None:
             fitting['system'] = fitting['system'] or next(iter(systems), None)
         # Duplicates only within the same system; ambiguous copies of one block (Revit exports)
         # collapse into one pending item instead of one per copy.
-        group_key = 'ambiguous' if ambiguous else fitting['system']
+        # tagged keys: a system may legitimately be named "ambiguous"
+        group_key = ('ambiguous',) if ambiguous else ('system', fitting['system'])
         area = max((x2 - x1) * (y2 - y1), 1e-9)
         duplicate_of = None
         for other in kept:
-            other_key = 'ambiguous' if other['status'] == 'system_ambiguous' else other['system']
+            other_key = ('ambiguous',) if other['status'] == 'system_ambiguous' else ('system', other['system'])
             if other["kind"] != fitting["kind"] or other["floor_id"] != fitting["floor_id"] or other_key != group_key:
                 continue
             ox1, oy1, ox2, oy2 = other["bbox"]
@@ -585,6 +592,7 @@ def fitting_arms(net: Network, result: dict[str, Any]) -> None:
                                  'single_end_horizontal' if g.get('turn_plane') == 'horizontal' else 'single_end_unresolved')
             fitting['plane_extension'] = measured['extension']
             fitting['plane_extension_basis'] = measured['extension_basis']
+            fitting['plane_extension_error_bound'] = measured['extension_error_bound']
             fitting['plane_scenarios'] = measured['scenarios']
             if measured['length'] is None:
                 fitting['plane_length_unresolved'] = True
@@ -971,6 +979,8 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
                              'single_end_geometry': fitting.get('single_end_geometry'),
                              'plane_center': fitting.get('plane_center'),
                              'plane_extension_basis': fitting.get('plane_extension_basis'),
+                             'plane_extension_error_bound': (fitting['plane_extension_error_bound']*f
+                                                             if fitting.get('plane_extension_error_bound') is not None else None),
                              'plane_scenarios': {k: v*f if v is not None else None for k,v in fitting.get('plane_scenarios',{}).items()},
                              "centerline_length": None if fitting.get('plane_length_unresolved') else sum(a["length"] for a in arms),
                              "vertical_id": fitting.get("vertical_id"), "notes": fitting["notes"]})

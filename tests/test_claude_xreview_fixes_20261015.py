@@ -111,6 +111,45 @@ def test_axis_aligned_outer_face_control_and_round_duct():
     assert r['fittings'][0]['centerline_length'] == pytest.approx(.220)   # 450 - 400/2 - 30
 
 
+# --- Codex review of the patch (6f72bcd), D1-R1: near-axis bbox error is bounded, not assumed away ---
+
+@pytest.mark.parametrize('angle', [.5, -.5, 89.5, 179.5])
+def test_near_axis_wide_block_needs_measured_extent(angle):
+    # 2000-wide block 0.5 deg off an axis: the bbox far corner overshoots by 2000*sin*cos = 17.45 mm (> 15 mm)
+    end, u, bbox = rotated(angle, half=1000.)
+    overshoot = 2000 * abs(math.sin(math.radians(angle)) * math.cos(math.radians(angle))) / 1000
+    r = infer(data([seg('A', end=end, width=2000)], [single('E', bbox, g=vertical(flange_allowance=30))]))
+    fit = r['fittings'][0]
+    assert fit['centerline_length'] is None and fit['plane_extension_basis'] == 'rotated_bbox_upper_bound'
+    assert fit['plane_extension_error_bound'] >= overshoot - 1e-9
+    r = infer(data([seg('A', end=end, width=2000)], [single('E', bbox, g=vertical(flange_allowance=30, extent_along_pipe=385))]))
+    assert r['fittings'][0]['centerline_length'] == pytest.approx(.195)
+
+
+def test_near_axis_small_block_uses_bbox_within_stated_bound():
+    # 320-wide block 0.5 deg off: overshoot 320*sin*cos = 2.79 mm, inside end_snap_tolerance; the bound is reported
+    end, u, bbox = rotated(.5, half=160.)
+    r = infer(data([seg('A', end=end, width=320)], [single('E', bbox, g=vertical(flange_allowance=30))]))
+    fit = r['fittings'][0]
+    assert fit['plane_extension_basis'] == 'axis_aligned_bbox'
+    assert .00279 - 1e-6 <= fit['plane_extension_error_bound'] <= .005
+    assert 0 <= fit['centerline_length'] - .195 <= fit['plane_extension_error_bound'] + 1e-9
+    # where the bbox stands in, a stated extent must agree with it from both sides
+    for wrong in (420, 360):
+        r = infer(data([seg('A', end=end, width=320)], [single('E', bbox, g=vertical(flange_allowance=30, extent_along_pipe=wrong))]))
+        assert r['fittings'][0]['centerline_length'] is None
+
+
+def test_pipe_parallelism_parameter_does_not_decide_bbox_use():
+    end, u, bbox = rotated(5.)
+    d = data([seg('A', end=end)], [single('E', bbox, g=vertical(flange_allowance=30))])
+    d['parameters']['collinear_cross_limit'] = .1
+    assert infer(d)['fittings'][0]['centerline_length'] is None
+    d = data([seg('A')], [single('E', [1000, -500, 1385, 500], g=vertical(flange_allowance=30))])
+    d['parameters']['collinear_cross_limit'] = .1
+    assert infer(d)['fittings'][0]['centerline_length'] == pytest.approx(.195)
+
+
 # --- D7: drawing noise behind the end is not a reversal ---
 
 @pytest.mark.parametrize('x,expected', [(998, 0.), (995, 0.), (990, None)])
@@ -169,6 +208,18 @@ def test_ambiguous_copies_collapse_but_declared_systems_stay_apart():
     assert len(pend) == 1 and pend[0]['duplicate_fitting_ids'] == ['R2']
     r = infer(data(parts, [dict(block, system='SYS-A'), dict(block, fitting_id='R2', system='SYS-B')]))
     assert len(r['fittings']) == 2 and not r['duplicate_fittings']
+
+
+@pytest.mark.parametrize('order', ['assigned_first', 'ambiguous_first'])
+def test_system_named_like_the_internal_ambiguous_group_stays_apart(order):
+    # Codex review of the patch, D11-R1: a real system may be called "ambiguous"
+    parts = [seg('A', 'ambiguous', elev=3.), seg('B', 'SYS-B', (1200, 0), (2200, 0))]
+    assigned = dict(fitting_id='R1', kind='reducer', floor_id='F1', bbox=[990, -200, 1210, 200], system='ambiguous')
+    open_ = {k: v for k, v in assigned.items() if k != 'system'}; open_['fitting_id'] = 'R2'
+    r = infer(data(parts, [assigned, open_] if order == 'assigned_first' else [open_, assigned]))
+    assert sorted(f['fitting_id'] for f in r['fittings']) == ['R1', 'R2'] and not r['duplicate_fittings']
+    pend = [p for p in r['pending'] if p['kind'] == 'fitting_system_ambiguous']
+    assert [p['fitting_id'] for p in pend] == ['R2'] and pend[0]['duplicate_fitting_ids'] == []
 
 
 # --- D12: coincident ends of different systems are flagged, never linked ---

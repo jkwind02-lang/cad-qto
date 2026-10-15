@@ -567,8 +567,8 @@
     },
     {
       "path": "qto-duct-air-systems/references/管件中心线与竖向段推算.md",
-      "sha256": "ceaebe7255d2015cf7318bfab0da6b5a12076f1a3ce6a981154f662c9f319084",
-      "bytes": 14862
+      "sha256": "a0feeeba7a978df4f16b32db3ebb132a8d8b7db98cd7b98971e4e0bfe586e35c",
+      "bytes": 15662
     },
     {
       "path": "qto-duct-air-systems/references/结果检查与输出.md",
@@ -592,13 +592,13 @@
     },
     {
       "path": "qto-duct-air-systems/scripts/infer_duct_fittings_vertical.py",
-      "sha256": "eacf3902147b961ba719cd65375d089bbc2ef4e2f4197ef835f9af7d6942fa8e",
-      "bytes": 67666
+      "sha256": "511f480971dc03b5cf7547bd59b2811a60fe6ca0d50d6f3aaaa10427295ab887",
+      "bytes": 68611
     },
     {
       "path": "qto-duct-air-systems/SKILL.md",
-      "sha256": "043ef8da946367df8ce78b5335592bf39744d4705b0e42e2a165df4a93ef6ed8",
-      "bytes": 6254
+      "sha256": "c2ba8a7821f8ebe8f57e8bdfe295eadaeee446022925759a98b20bea97ade35a",
+      "bytes": 6310
     },
     {
       "path": "qto-earthwork-terrain/agents/openai.yaml",
