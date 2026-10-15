@@ -536,6 +536,18 @@ def test_tables_merge_several_base_views_and_stop_on_clashes(tmp_path):
     assert [g['id'] for g in json.loads(out.read_text(encoding='utf-8'))['groups']] == ['G01', 'b|G01'] and report['renamed_groups'] == [{'view': 'b.json', 'from': 'G01', 'to': 'b|G01'}]
 
 
+def test_tables_keys_the_conversion_does_not_read_are_reported_not_dropped(tmp_path):
+    mapping = tables(tmp_path)[1]
+    code, report, _ = build(tmp_path, mapping)
+    assert code == 0 and 'mapping_warnings' not in report   # the shipped-style mapping (members with quantities and attributes) raises nothing
+    spec = mapping['tables']['issues'][0]
+    spec['columns']['natrue'] = '做法'; spec['colums'] = {}; spec.setdefault('constants', {})['dim.floor'] = '1F'
+    code, report, _ = build(tmp_path, mapping)
+    assert code == 0, report
+    got = {(w['where'].split('（')[0] + w['where'].split('）')[-1], tuple(w['keys'])) for w in report['mapping_warnings']}
+    assert got == {('tables.issues[0]', ('colums',)), ('tables.issues[0].columns', ('natrue',)), ('tables.issues[0].constants', ('dim.floor',))}
+
+
 @pytest.mark.parametrize('spec, ok', [('tables/audit_rows.csv', True), ({'path': 'tables/audit_rows.csv', 'column': 'row_id'}, True), (5, False), ({'column': 'row_id'}, False)])
 def test_tables_row_ids_table_accepts_object_or_path_string(tmp_path, spec, ok):
     mapping = tables(tmp_path)[1]; mapping['comparison']['sources'][0]['row_ids_table'] = spec

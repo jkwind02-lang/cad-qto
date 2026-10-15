@@ -45,6 +45,27 @@ class TableError(ValueError):
 def sha_file(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+SPEC_FIELDS = {'path', 'columns', 'constants', 'value_maps', 'list_separators'}
+
+
+def mapping_warnings(mapping):
+ """Keys the mapping writes but the conversion does not read: listed as reminders in the report instead of being dropped silently."""
+ dims = {d['id'] for d in mapping.get('comparison', {}).get('dimensions', []) if isinstance(d, dict) and d.get('id')}
+ out = []
+ for role, specs in mapping.get('tables', {}).items():
+  if role not in ROLES or not isinstance(specs, list): continue
+  allowed = {*KEYS.get(role, ()), *('dim.' + d for d in dims)}
+  for n, spec in enumerate(specs):
+   if not isinstance(spec, dict): continue
+   where = f"tables.{role}[{n}]（{spec.get('path', '')}）"
+   extra = sorted(set(spec) - SPEC_FIELDS - ({'quantities', 'attributes'} if role == 'members' else set()))
+   if extra: out.append({'where': where, 'keys': extra, 'message': '不认识的映射字段，没有使用：' + '、'.join(extra)})
+   for part in ('columns', 'constants', 'value_maps', 'list_separators'):
+    keys = sorted(k for k in (spec.get(part) or {}) if k not in allowed)
+    if keys: out.append({'where': f'{where}.{part}', 'keys': keys, 'message': '这张表不认识这些标准键，没有读取：' + '、'.join(keys) + '（维度键须先在 comparison.dimensions 里声明）'})
+ return out
+
+
 def read_table(spec, role, base, dims, problems, files):
  """Read one CSV into rows of canonical keys; bad cells are collected, never guessed."""
  path = (base / spec['path']).resolve(); files.append({'role': role, 'path': spec['path'], 'sha256': sha_file(path)})
@@ -382,6 +403,8 @@ def main():
   mapping = json.loads(a.mapping.read_text(encoding='utf-8-sig'))
   if mapping.get('schema') != MAPPING_SCHEMA: raise ValueError('映射文件 schema 须为 ' + MAPPING_SCHEMA)
   if not isinstance(mapping.get('view'), dict) or not isinstance(mapping.get('tables'), dict): raise ValueError('映射文件须有 view 和 tables')
+  warnings = mapping_warnings(mapping)
+  if warnings: report['mapping_warnings'] = warnings
   out_dir = a.output.resolve().parent
   base_view = merge_base_views(a.base_view, out_dir) if a.base_view else None
   view, info = build_view(mapping, a.mapping.resolve().parent, base_view)
@@ -402,6 +425,7 @@ def main():
   a.report.parent.mkdir(parents=True, exist_ok=True); a.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
  summary = {k: report[k] for k in ('status', 'output', 'comparison_counts', 'error') if k in report}
  if 'problems' in report: summary['problem_count'] = len(report['problems'])
+ if 'mapping_warnings' in report: summary['mapping_warning_count'] = len(report['mapping_warnings'])
  print(json.dumps(summary, ensure_ascii=False)); return code
 
 
