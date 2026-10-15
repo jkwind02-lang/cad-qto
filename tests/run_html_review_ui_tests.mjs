@@ -254,7 +254,12 @@ if(art.comparison_html){
  const other=d.scenes.find(s=>s.id!==s0.id);se.scene.value=other.id;se.scene.onchange();assert.equal(se.symbols.hidden,true);assert.equal(se['symbols-panel'].hidden,true);
  const nd=structuredClone(data);nd.scenes[0].restoration={source:'neutral',note:'底图只有模型空间顶层图元，块内内容、字高、填充都没有'};const nh=harness(withData(sourceHTML,nd));await nh.start();nh.ids.scene.value=nd.scenes[0].id;nh.ids.scene.onchange();
  assert.match(nh.ids.mapstatus.textContent,/底图只有模型空间顶层图元/);assert.equal(nh.ids.symbols.hidden,true);
- checks.push('交换DXF底图：图面状态写“本页看不出 n 处，须回原图”及类别和主要图层，中性底图写明缺什么；符号对账列本页计数，点“未计”标红圈并提示，换到没有对账的图页面板收起');
+ // Symbol notes (contract 7.5.1): explained symbols get their own columns with the note in the hint.
+ const xd=structuredClone(d),xs=xd.scenes.find(s=>s.id===s0.id);Object.assign(xs.symbol_reconciliation[0],{on_sheet:5,removed_overlap:1,removed_overlap_points:[p],counted_elsewhere:1,counted_elsewhere_points:[p],same_item_elsewhere:0,same_item_elsewhere_points:[],notes:{counted_elsewhere:['电力平面计入']}});
+ const xh=harness(withData(sourceHTML,xd));await xh.start();xh.ids.scene.value=s0.id;xh.ids.scene.onchange();xh.ids.symbols.click();
+ assert.match(xh.ids['symbols-panel'].textContent,/未计 1，同位置 1；已说明：已剔除 1、他图计入 1、同一实物另一图 0/);assert.match(xh.ids['symbols-panel'].textContent,/同一实物另一图/);
+ findIn(xh.ids['symbols-panel'],n=>n.className==='link'&&/他图计入/.test(n.title||'')).click();assert.match(xh.ids['action-message'].textContent,/他图计入（电力平面计入）/);
+ checks.push('交换DXF底图：图面状态写“本页看不出 n 处，须回原图”及类别和主要图层，中性底图写明缺什么；符号对账列本页计数，点“未计”标红圈并提示，换到没有对账的图页面板收起；有对账说明时另列已剔除、他图计入、同一实物另一图，点数字标红圈并带说明');
 }
 // Measuring (scene mapping contract 4 and 13):clicks snap to drawn vertices, segments add up, real length uses length_factor, else 1:1 for mm, else no conversion.
 {

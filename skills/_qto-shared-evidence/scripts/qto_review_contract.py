@@ -92,7 +92,11 @@ def normalize_view(raw, base_dir=None):
    for r in sym:
     require(isinstance(r,dict) and string(r.get('block')) and all(isinstance(r.get(k),int) and r[k]>=0 for k in ('on_sheet','counted','uncounted','duplicates')),'符号对账行无效')
     up,dp=r.get('uncounted_points') or [],r.get('duplicate_points') or []
-    require(r['counted']+r['uncounted']==r['on_sheet'] and len(up)==r['uncounted'] and len(dp)==r['duplicates'] and all(xy(p) for p in [*up,*dp]),'符号对账行计数与点位不符')
+    # Explained symbols (scene mapping contract 7.5.1): removed overlaps, counted on another sheet, same item drawn elsewhere.
+    ex={k:r.get(k,0) for k in ('removed_overlap','counted_elsewhere','same_item_elsewhere')}
+    require(all(isinstance(v,int) and v>=0 and len(r.get(k+'_points') or [])==v and all(xy(p) for p in r.get(k+'_points') or []) for k,v in ex.items()),'符号对账说明类计数与点位不符')
+    require(isinstance(r.get('notes',{}),dict) and all(isinstance(v,list) and all(string(n) for n in v) for v in r.get('notes',{}).values()),'符号对账说明无效')
+    require(r['counted']+r['uncounted']+sum(ex.values())==r['on_sheet'] and len(up)==r['uncounted'] and len(dp)==r['duplicates'] and all(xy(p) for p in [*up,*dp]),'符号对账行计数与点位不符')
   if s.get('raster_path'):
    require(base_dir is not None,'raster_path需要输入文件目录')
    path=(Path(base_dir)/s['raster_path']).resolve();raw_image=path.read_bytes()

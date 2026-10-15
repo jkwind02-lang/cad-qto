@@ -112,14 +112,16 @@ try{
   const rows=scene?.symbol_reconciliation||[],panel=$('symbols-panel');$('symbols').hidden=!rows.length;panel.replaceChildren();
   if(!rows.length){panel.hidden=true;$('symbols').classList.remove('on');return;}
   const total=k=>rows.reduce((a,r)=>a+(r[k]||0),0),head=document.createElement('div');
-  head.textContent='符号对账（只对账，不改数量）：本页 '+total('on_sheet')+' 个，已计 '+total('counted')+'，未计 '+total('uncounted')+'，同位置 '+total('duplicates');
+  // Explained symbols (scene mapping contract 7.5.1) get their own columns and never count as uncounted or same position.
+  const NOTES=[['removed_overlap','已剔除'],['counted_elsewhere','他图计入'],['same_item_elsewhere','同一实物另一图']],explained=rows.some(r=>'removed_overlap' in r);
+  head.textContent='符号对账（只对账，不改数量）：本页 '+total('on_sheet')+' 个，已计 '+total('counted')+'，未计 '+total('uncounted')+'，同位置 '+total('duplicates')+(explained?'；已说明：'+NOTES.map(([k,t])=>t+' '+total(k)).join('、'):'');
   const table=document.createElement('table'),tr=document.createElement('tr');
-  for(const h of ['符号','图层','本页','已计','未计','同位置']){const th=document.createElement('th');th.textContent=h;tr.append(th);}table.append(tr);
+  for(const h of ['符号','图层','本页','已计','未计','同位置',...(explained?NOTES.map(n=>n[1]):[])]){const th=document.createElement('th');th.textContent=h;tr.append(th);}table.append(tr);
   for(const r of rows){
    const row=document.createElement('tr'),name=(r.label||r.block)+(r.sheet?'（'+r.sheet+'）':'');
-   for(const [v,pts,what] of [[name],[r.layer||''],[r.on_sheet],[r.counted],[r.uncounted,r.uncounted_points,'未计'],[r.duplicates,r.duplicate_points,'同位置']]){
+   for(const [v,pts,what,why] of [[name],[r.layer||''],[r.on_sheet],[r.counted],[r.uncounted,r.uncounted_points,'未计'],[r.duplicates,r.duplicate_points,'同位置'],...(explained?NOTES.map(([k,t])=>[r[k],r[k+'_points'],t,(r.notes?.[k]||[]).join('；')]):[])]){
     const td=document.createElement('td');
-    if(pts&&v){const b=document.createElement('button');b.className='link';b.textContent=v;b.title='在图上标出'+what+'的位置';b.onclick=()=>showMarks(pts,name+' '+what);td.append(b);}else td.textContent=v??'';
+    if(pts&&v){const b=document.createElement('button');b.className='link';b.textContent=v;b.title='在图上标出'+what+'的位置'+(why?'。说明：'+why:'');b.onclick=()=>showMarks(pts,name+' '+what+(why?'（'+why+'）':''));td.append(b);}else td.textContent=v??'';
     row.append(td);
    }
    row.children[0].title='块名 '+r.block;table.append(row);

@@ -13,7 +13,9 @@ from qto_cad_geometry import conic_point
 from qto_dxf_background import build_dxf_backgrounds, restoration_summary, DxfBackgroundError, LARGE_BLOCK_LAYERS, DEFAULTS as DXF_DEFAULTS
 
 MAPPING_SCHEMA = 'qto-review-scene-mapping/1.0'
-TOP_FIELDS = {'schema', 'view', 'drawings', 'sheets', 'scenes', 'background', 'objects', 'groups'}
+TOP_FIELDS = {'schema', 'view', 'drawings', 'sheets', 'scenes', 'background', 'objects', 'groups', 'symbol_notes'}
+NOTE_KINDS = ('removed_overlap', 'counted_elsewhere', 'same_item_elsewhere')
+NOTE_KEYS = ('handle', 'kept_handle', 'note', 'drawing')
 SPEC_FIELDS = {'path', 'columns', 'constants', 'value_maps', 'list_separators'}
 SHEET_KEYS = ('sheet_id', 'drawing', 'title', 'floor', 'sheet_kind', 'x1', 'y1', 'x2', 'y2', 'raster_path', 'length_factor')
 OBJECT_KEYS = ('object_id', 'catalog_key', 'sheet', 'drawing', 'kind', 'title', 'category', 'status', 'detail', 'source', 'professional',
@@ -236,6 +238,35 @@ def dxf_config(cfg, where, problems):
 
 
 # ---------- build ----------
+def load_symbol_notes(m, base, drawings, problems, files):
+ """Symbol notes (contract 7.5.1): per drawing, upper-case handle -> (kind, note, kept handle, table index)."""
+ notes, info = defaultdict(dict), []
+ specs = m.get('symbol_notes') or []
+ if not isinstance(specs, list): problems.append({'check': 'S-0', 'where': 'symbol_notes', 'message': 'symbol_notes 须为表的列表'}); return notes, info
+ for n, spec in enumerate(specs):
+  where = f'symbol_notes[{n}]'
+  kind = spec.get('kind') if isinstance(spec, dict) else None
+  if kind not in NOTE_KINDS: problems.append({'check': 'S-0', 'where': where, 'message': '对账说明 kind 只能是 ' + '、'.join(NOTE_KINDS)}); continue
+  filt = []
+  for col, pat in (spec.get('filter') or {}).items():
+   try: filt.append((col, re.compile(pat)))
+   except (re.error, TypeError) as e: problems.append({'check': 'S-0', 'where': where, 'message': f'filter 正则无效：{pat}（{e}）'})
+  rows, _ = read_rows(spec, NOTE_KEYS, base, problems, files, 'symbol_notes')
+  got = 0
+  for r in rows:
+   if any(not p.search((r['_raw'].get(c) or '').strip()) for c, p in filt): continue
+   h, kept, note = (opt(r, 'handle') or '').upper(), (opt(r, 'kept_handle') or '').upper(), opt(r, 'note')
+   dr = opt(r, 'drawing') or (next(iter(drawings)) if len(drawings) == 1 else None)
+   bad = ('缺 handle' if not h else '缺 note（说明）' if not note else f'图纸不明或未声明：{dr}' if dr not in drawings else
+          '缺 kept_handle（保留句柄）' if kind == 'removed_overlap' and not kept else '剔除句柄与保留句柄相同' if kind == 'removed_overlap' and kept == h else '')
+   if bad: problems.append({'check': 'S-0', 'where': r['_where'], 'message': '对账说明：' + bad}); continue
+   old = notes[dr].get(h)
+   if old and old[0] != kind: problems.append({'check': 'S-0', 'where': r['_where'], 'message': f'对账说明：句柄 {h} 已写在 {old[0]}，不能再写进 {kind}'}); continue
+   if not old: notes[dr][h] = (kind, note, kept, n); got += 1
+  info.append({'table': spec.get('path'), 'kind': kind, 'rows': got})
+ return notes, info
+
+
 def build(m, base, neutral_root, problems, files):
  view_cfg = m.get('view') if isinstance(m.get('view'), dict) else {}
  for k in ('project_id', 'review_id', 'title', 'revision'):
@@ -257,6 +288,7 @@ def build(m, base, neutral_root, problems, files):
   dxf = {'path': folder / ex['path'], 'sha256': ex['sha256']} if text(ex.get('path')) and re.fullmatch('[0-9a-fA-F]{64}', str(ex.get('sha256', ''))) else None
   drawings[d['id']] = {'id': d['id'], 'unit': unit, 'precision': d.get('precision', 0 if unit == 'mm' else 3), 'layout': layout, 'sha256': src['sha256'].lower(),
                        'title': d.get('title') or f"{d['id']}（{Path(str(src.get('path', ''))).name}）", 'background': d.get('background') or {}, 'dxf': dxf}
+ symbol_notes, notes_info = load_symbol_notes(m, base, drawings, problems, files)
  # Sheets (contract 4).
  sheets, conflicts, sheet_rows, used_conflicts = {}, {}, {}, set()
  for spec in m.get('sheets') or []:
@@ -520,12 +552,14 @@ def build(m, base, neutral_root, problems, files):
   scan_layout(drawings[dr]['layout'], set(), ts, resolve_counter)
  # Restored background from the exchange DXF (contract 7.1-7.5); any handle in an object table marks its block as a counted symbol.
  object_handles = {x['handle'] for g in drafts for x in g['rows'] if x.get('handle')}
- dxf_ok = {}
+ dxf_ok, notes_used = {}, Counter()
  for dr, ts in dxf_targets.items():
   d = drawings[dr]['dxf']
   if d is None: problems.append({'check': 'S-5', 'where': dr, 'message': '中性取证清单没有交换 DXF（exchange_dxf）；要用中性底图，须在映射写 background.source: "neutral"'}); continue
   if not d['path'].is_file(): problems.append({'check': 'S-5', 'where': dr, 'message': f"交换 DXF 不存在：{d['path']}"}); continue
-  try: build_dxf_backgrounds(d['path'], d['sha256'], ts, object_handles, UNIT_MM[drawings[dr]['unit']], drawings[dr]['precision'])
+  try:
+   res = build_dxf_backgrounds(d['path'], d['sha256'], ts, object_handles, UNIT_MM[drawings[dr]['unit']], drawings[dr]['precision'], symbol_notes.get(dr))
+   notes_used.update(symbol_notes[dr][h][3] for h in res.get('notes_used', ()))
   except DxfBackgroundError as e: problems.append({'check': 'S-5', 'where': dr, 'message': str(e)}); continue
   except (ImportError, OSError) as e: problems.append({'check': 'S-5', 'where': dr, 'message': f'读交换 DXF 失败：{e}'}); continue
   dxf_ok[dr] = d['sha256'].lower()
@@ -587,7 +621,8 @@ def build(m, base, neutral_root, problems, files):
  if failed_in_located: problems.append({'check': 'S-4', 'where': '；'.join(failed_in_located[:5]), 'message': '定位失败的行进了已定位对象'})
  checks['S-5'] = {'scenes': len(scenes), 'dxf_checked': dxf_ok, 'scenes_neutral_background': sum(1 for s in scenes if s.get('restoration', {}).get('source') == 'neutral'),
                   'object_handles': len(object_handles),
-                  **({'symbol_note': '对象表没有映射 handle：符号对账认不出哪些符号已计，只列 symbol_layers 图层上的块；按坐标定位的表也请映射 handle 列'} if dxf_targets and not object_handles else {}),
+                  **({'symbol_notes': [{**t, 'used_on_these_sheets': notes_used[n]} for n, t in enumerate(notes_info)]} if notes_info else {}),
+                  **({'symbol_note':'对象表没有映射 handle：符号对账认不出哪些符号已计，只列 symbol_layers 图层上的块；按坐标定位的表也请映射 handle 列'} if dxf_targets and not object_handles else {}),
                   'pass': all(k in background_sets for s in scenes for k in s.get('background_refs', [])) and all(dr in dxf_ok for dr in dxf_targets)}
  for key in sorted(used_conflicts):
   problems.append({'check': 'S-0', 'where': '；'.join(conflicts[key]), 'message': f'图页 {key[0]}|{key[1]} 在图页表里有几行且内容不同，对象或叠图用到了它，须先在图页表里改正'})
@@ -596,7 +631,7 @@ def build(m, base, neutral_root, problems, files):
          'scenes': [{'id': s['id'], 'title': s['title'], 'objects': dict(Counter(o['kind'] for o in used.get(s['id'], []))), **dict(scene_meta[s['id']]['stats']),
                      **({'bounds_basis': s['bounds_basis']} if s.get('bounds_basis') else {}), 'background_key': scene_meta[s['id']]['key'], 'background_filters': scene_meta[s['id']]['filters'],
                      'restoration': s.get('restoration'), 'dropped_layers': dict((scene_meta[s['id']].get('dropped_layers') or Counter()).most_common(40)),
-                     'symbols': {'blocks': len(s.get('symbol_reconciliation') or []), **{k: sum(r[k] for r in s.get('symbol_reconciliation') or []) for k in ('on_sheet', 'counted', 'uncounted', 'duplicates')}}}
+                     'symbols': {'blocks': len(s.get('symbol_reconciliation') or []), **{k: sum(r.get(k, 0) for r in s.get('symbol_reconciliation') or []) for k in ('on_sheet', 'counted', 'uncounted', 'duplicates', *(NOTE_KINDS if notes_info else ()))}}}
                     for s in scenes],
          'objects': dict(Counter(o['kind'] for o in draws)), 'unlocated': dict(Counter(o.get('unlocated_reason') for o in draws if o['kind'] == 'unlocated')),
          'checks': checks}

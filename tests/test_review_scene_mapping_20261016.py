@@ -506,7 +506,7 @@ def make_dxf(path, pipes=10):
     return handles
 
 
-def dxf_convert(tmp_path, background=None, with_handles=True, dxf_sha=None, dxf_path='D1.dxf'):
+def dxf_convert(tmp_path, background=None, with_handles=True, dxf_sha=None, dxf_path='D1.dxf', notes=None):
     nroot = neutral(tmp_path); folder = nroot / 'D1'
     handles = make_dxf(folder / 'D1.dxf')
     mf = json.loads((folder / 'CAD中性取证清单.json').read_text(encoding='utf-8'))
@@ -516,6 +516,7 @@ def dxf_convert(tmp_path, background=None, with_handles=True, dxf_sha=None, dxf_
     p, m = mapping(tmp_path, background=background or {'large_block_points': 30})
     cols = {'object_id': '编号', 'sheet': '图页', 'x': 'x', 'y': 'y', **({'handle': '句柄'} if with_handles else {})}
     m['objects'] = [{'key': 'lamp', 'path': 'tables/lamps.csv', 'columns': cols, 'constants': {'title': '灯', 'category': '灯具', 'status': '待复核'}}]
+    if notes: m['symbol_notes'] = notes(handles, tmp_path / 'tables')
     p.write_text(json.dumps(m, ensure_ascii=False), encoding='utf-8')
     out, rep = tmp_path / 'view.json', tmp_path / 'report.json'
     code, _, err = run(SCRIPT, '--mapping', p, '--neutral-root', nroot, '--output', out, '--report', rep)
@@ -568,6 +569,48 @@ def test_dxf_symbol_reconciliation_counts_uncounted_and_duplicates(tmp_path):
     assert set(rows) == {'LAMP', 'SW'} and rows['LAMP']['counted'] == 0 and rows['LAMP']['uncounted'] == 3 and rows['SW']['on_sheet'] == 1
 
 
+def test_dxf_symbol_notes_explain_removed_overlaps_other_sheets_and_same_items(tmp_path):
+    # Contract 7.5.1. Fixture: L1 and L2 counted at one point (same position), L3 not counted.
+    keys = ('on_sheet', 'counted', 'uncounted', 'duplicates', 'removed_overlap', 'counted_elsewhere', 'same_item_elsewhere')
+
+    def shared(h, t):
+        # The project's shared-facts overlap table read as is: only block rows, handle_b removed, handle_a kept; the line row must be skipped.
+        write_csv(t / '重叠图元.csv', ['kind', 'sheet', 'layer', 'block', 'handle_a', 'handle_b', 'dup_len_m'],
+                  [['块', 'P1', 'E-LIGHT', 'LAMP', h['L1'], h['L2'], '0.0'], ['线', 'P1', 'E-LIGHT', '', h['L1'], h['L3'], '0.0']])
+        write_csv(t / '他图计入.csv', ['句柄', '说明'], [[h['L3'].lower(), '电力平面计入']])
+        return [{'kind': 'removed_overlap', 'path': 'tables/重叠图元.csv', 'filter': {'kind': '^块$'}, 'columns': {'handle': 'handle_b', 'kept_handle': 'handle_a'},
+                 'constants': {'drawing': 'D1', 'note': '与 {handle_a} 重叠，计数前剔除'}},
+                {'kind': 'counted_elsewhere', 'path': 'tables/他图计入.csv', 'columns': {'handle': '句柄', 'note': '说明'}}]
+    code, report, v, _ = dxf_convert(tmp_path / 'a', notes=shared)
+    assert code == 0, report.get('problems')
+    c.normalize_view(v)
+    row = next(s for s in v['scenes'] if s['id'] == 'D1|P1')['symbol_reconciliation'][0]
+    assert {k: row[k] for k in keys} == dict(zip(keys, (3, 1, 0, 0, 1, 1, 0)))
+    assert row['removed_overlap_points'] == [[2000, 2000]] and row['counted_elsewhere_points'] == [[6000, 2000]] and row['same_item_elsewhere_points'] == []
+    assert row['notes']['counted_elsewhere'] == ['电力平面计入'] and row['notes']['removed_overlap'][0].endswith('重叠，计数前剔除')
+    assert [(t['kind'], t['rows'], t['used_on_these_sheets']) for t in report['checks']['S-5']['symbol_notes']] == [('removed_overlap', 1, 1), ('counted_elsewhere', 1, 1)]
+    assert next(s for s in report['scenes'] if s['id'] == 'D1|P1')['symbols']['removed_overlap'] == 1
+
+    def same_item(h, t):
+        write_csv(t / '同一实物.csv', ['句柄', '说明'], [[h['L3'], '电力平面已计的同一个箱子']])
+        return [{'kind': 'same_item_elsewhere', 'path': 'tables/同一实物.csv', 'columns': {'handle': '句柄', 'note': '说明'}}]
+    code, report, v, _ = dxf_convert(tmp_path / 'b', notes=same_item)
+    row = next(s for s in v['scenes'] if s['id'] == 'D1|P1')['symbol_reconciliation'][0]
+    assert code == 0 and {k: row[k] for k in keys} == dict(zip(keys, (3, 2, 0, 1, 0, 0, 1)))   # unexplained same position stays
+
+    def bad(h, t):
+        write_csv(t / 'bad.csv', ['剔除', '保留', '说明', '类'], [[h['L2'], h['L2'], '自己', 'x'], [h['L3'], h['L1'], '', 'x']])
+        write_csv(t / 'twice.csv', ['句柄', '说明'], [[h['L3'], '暖通计']])
+        return [{'kind': 'removed_overlap', 'path': 'tables/bad.csv', 'columns': {'handle': '剔除', 'kept_handle': '保留', 'note': '说明'}},
+                {'kind': 'counted_elsewhere', 'path': 'tables/twice.csv', 'columns': {'handle': '句柄', 'note': '说明'}},
+                {'kind': 'same_item_elsewhere', 'path': 'tables/twice.csv', 'columns': {'handle': '句柄', 'note': '说明'}},
+                {'kind': 'moved', 'path': 'tables/twice.csv'}]
+    code, report, v, _ = dxf_convert(tmp_path / 'c', notes=bad)
+    msgs = ' | '.join(x['message'] for x in report['problems'])
+    assert code == 2 and v is None
+    assert '剔除句柄与保留句柄相同' in msgs and '缺 note' in msgs and '不能再写进 same_item_elsewhere' in msgs and '对账说明 kind 只能是' in msgs
+
+
 def test_dxf_background_inputs_must_match(tmp_path):
     code, report, v, _ = dxf_convert(tmp_path / 'sha', dxf_sha='0' * 64)
     assert code == 2 and v is None and any(p['check'] == 'S-5' and '哈希与取证清单不符' in p['message'] for p in report['problems'])
@@ -602,7 +645,8 @@ def test_contract_checks_restored_display_fields():
            (lambda w: w['scenes'][0]['restoration'].update(not_shown_total=9), '须回原图'),
            (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(counted=2), '符号对账'),
            (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(uncounted_points=[]), '符号对账'),
-           (lambda w: w['scenes'][0].update(length_factor=0), '实长换算')]
+           (lambda w: w['scenes'][0].update(length_factor=0), '实长换算'),
+           (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(removed_overlap=1), '符号对账说明类')]
     for change, msg in bad:
         w = copy.deepcopy(v); change(w)
         with pytest.raises(ValueError, match=msg): c.normalize_view(w)

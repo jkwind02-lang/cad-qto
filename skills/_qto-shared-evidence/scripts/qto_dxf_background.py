@@ -14,6 +14,7 @@ LARGE_BLOCK_LAYERS = ['WALL', 'COLU', '柱', 'AXIS', 'DOTE', '轴', 'WINDOW', 'D
                       'SPACE', 'ROOM', '房间', 'TITLE', '图框', '图名', '图号', 'DIM', '标注', 'PUB_TEXT', 'PUB_HATCH']
 DEFAULTS = {'large_block_points': 2000, 'flatten_mm': 8.0, 'duplicate_tolerance_mm': 1.0}
 NOT_SHOWN = ('other_layers', 'pattern_hatch', 'image', 'ole', 'proxy', 'xref_missing')
+NOTE_KINDS = ('removed_overlap', 'counted_elsewhere', 'same_item_elsewhere')
 SKIP_SILENT = {'POINT', 'WIPEOUT', 'VIEWPORT', 'ATTDEF'}
 UNSHOWN_TYPES = {'IMAGE': 'image', 'OLE2FRAME': 'ole', 'OLEFRAME': 'ole', 'ACAD_PROXY_ENTITY': 'proxy'}
 ALIGN = {0: 'left', 1: 'center', 2: 'right', 3: 'left', 4: 'center', 5: 'left'}
@@ -291,7 +292,7 @@ def _label(insert):
  return next((v for v in vals if v), '')
 
 
-def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, unit_mm, precision):
+def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, unit_mm, precision, symbol_notes=None):
  """Fill each target's items, restoration, dropped layers and symbol reconciliation from one DXF.
 
  targets: [{'scene_id', 'sheet_bounds', 'dx', 'dy', 'cfg', 'include', 'exclude', 'symbol_layers', 'items': [], 'stats': Counter()}]
@@ -337,6 +338,8 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
     if p is None or _inside(p, b): t['restoration'][kind] += 1
    for lay, n in dropped.items(): t['dropped_layers'][lay] += n
  # Symbol reconciliation (contract 7.5): blocks the object tables point at, plus blocks on the declared symbol layers.
+ # Symbol notes (contract 7.5.1) explain a symbol before it may count as duplicate or uncounted; without notes the output is unchanged.
+ notes, used = symbol_notes or {}, set()
  counted_blocks = {e.dxf.name for e in inserts if e.dxf.handle in object_handles}
  for t in targets:
   sym = t['symbol_layers']; tol = t['cfg']['duplicate_tolerance_mm'] / unit_mm
@@ -344,20 +347,31 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
   for name, h, lay, p, lab in t['_symbols']:
    if name in counted_blocks or (sym and any(r.search(lay) for r in sym)): rows[name].append((h, lay, p, lab))
   out = []
+  r = (lambda v: int(round(v))) if precision == 0 else (lambda v: round(v, precision))
+  pts = lambda ps: [[r(x + t['dx']), r(y + t['dy'])] for x, y in ps]
   for name, recs in sorted(rows.items()):
-   seen, dup_pts, unc_pts = [], [], []
+   seen, dup_pts, unc_pts, counted = [], [], [], 0
+   expl, why = {k: [] for k in NOTE_KINDS}, {k: Counter() for k in NOTE_KINDS}
    for h, lay, p, lab in recs:
-    if any(math.hypot(p[0] - q[0], p[1] - q[1]) < tol for q in seen): dup_pts.append(p)
+    nt = notes.get(str(h).upper())
+    if nt: used.add(str(h).upper())
+    if nt and nt[0] == 'removed_overlap': expl[nt[0]].append(p); why[nt[0]][nt[1]] += 1; continue
+    if not nt and any(math.hypot(p[0] - q[0], p[1] - q[1]) < tol for q in seen): dup_pts.append(p)
     seen.append(p)
-    if h not in object_handles: unc_pts.append(p)
+    if h in object_handles: counted += 1
+    elif nt: expl[nt[0]].append(p); why[nt[0]][nt[1]] += 1
+    else: unc_pts.append(p)
    labels = Counter(lab for *_, lab in recs if lab)
-   r = (lambda v: int(round(v))) if precision == 0 else (lambda v: round(v, precision))
-   out.append({'block': name, 'label': labels.most_common(1)[0][0] if labels else '', 'layer': Counter(l for _, l, _, _ in recs).most_common(1)[0][0],
-               'on_sheet': len(recs), 'counted': len(recs) - len(unc_pts), 'uncounted': len(unc_pts), 'duplicates': len(dup_pts),
-               'uncounted_points': [[r(x + t['dx']), r(y + t['dy'])] for x, y in unc_pts], 'duplicate_points': [[r(x + t['dx']), r(y + t['dy'])] for x, y in dup_pts]})
+   row = {'block': name, 'label': labels.most_common(1)[0][0] if labels else '', 'layer': Counter(l for _, l, _, _ in recs).most_common(1)[0][0],
+          'on_sheet': len(recs), 'counted': counted, 'uncounted': len(unc_pts), 'duplicates': len(dup_pts),
+          'uncounted_points': pts(unc_pts), 'duplicate_points': pts(dup_pts)}
+   if notes:
+    for k in NOTE_KINDS: row[k] = len(expl[k]); row[k + '_points'] = pts(expl[k])
+    row['notes'] = {k: [n for n, _ in why[k].most_common(5)] for k in NOTE_KINDS if why[k]}
+   out.append(row)
   t['symbol_reconciliation'] = out
   for k in ('_walker', '_symbols'): t.pop(k, None)
- return {'sha256': got}
+ return {'sha256': got, 'notes_used': used}
 
 
 def restoration_summary(targets):
