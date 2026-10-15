@@ -1,6 +1,7 @@
 {
   "schema": "cad-qto-feedback-config/1.0",
-  "enabled": true,
+  "enabled": false,
+  "note": "2026-10-15 用户决定先取消在线上传：复核页只本地保存，带批注 HTML 手工转交；恢复时改回 true 并发布新版",
   "provider": "tencent",
   "url": "https://dc-knowledge-d7g1d4mfn67992452-1300583265.ap-shanghai.app.tcloudbase.com/cad-qto-feedback",
   "backup_url": "https://cad-qto-feedback.jkwind02.workers.dev"
