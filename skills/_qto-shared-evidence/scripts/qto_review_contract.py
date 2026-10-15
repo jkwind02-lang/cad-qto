@@ -2,9 +2,14 @@
 import base64, copy, gzip, hashlib, json, math, re
 from pathlib import Path
 from qto_review_revision import bind_result_versions, classify_feedback
+from qto_review_comparison import normalize_comparison, VERDICTS
 
 VIEW_SCHEMA = 'qto-review-view/1.0'
+VIEW_SCHEMA_COMPARISON = 'qto-review-view/1.1'
+VIEW_SCHEMAS = {VIEW_SCHEMA, VIEW_SCHEMA_COMPARISON}
 FEEDBACK_SCHEMA = 'qto-review-feedback/2.0'
+FEEDBACK_SCHEMA_COMPARISON = 'qto-review-feedback/2.1'
+FEEDBACK_SCHEMAS = {FEEDBACK_SCHEMA, FEEDBACK_SCHEMA_COMPARISON}
 LEGACY_SCHEMAS = {'cad-qto-review-feedback/1.0', 'cad-qto-review-feedback/1.1'}
 PROFESSIONALS = {
  'qto-pipe-networks':'管道管网', 'qto-components-points':'构件设备点位',
@@ -28,7 +33,9 @@ def identity(data):
  return hashlib.sha256(json.dumps(canonical,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 def normalize_view(raw, base_dir=None):
- d=copy.deepcopy(raw);require(d.get('schema')==VIEW_SCHEMA,'复核视图schema无效')
+ d=copy.deepcopy(raw);require(d.get('schema') in VIEW_SCHEMAS,'复核视图schema无效')
+ v11=d['schema']==VIEW_SCHEMA_COMPARISON
+ require(v11 or 'comparison' not in d,'comparison扩展须使用qto-review-view/1.1')
  for k in ['project_id','review_id','title','revision']: require(string(d.get(k)),k+'必须填写')
  sources=d.get('sources');require(isinstance(sources,list) and sources,'缺少来源文件身份')
  require(len({s.get('id') for s in sources})==len(sources),'来源编号重复')
@@ -40,7 +47,7 @@ def normalize_view(raw, base_dir=None):
  d['source_sha256']=fingerprint
  if d.get('legacy_source_sha256'):
   require(len(sources)==1 and d['legacy_source_sha256']==sources[0]['sha256'],'旧版导入只能显式绑定同一单来源')
- scenes=d.get('scenes');require(isinstance(scenes,list) and scenes,'至少提供一张图页/视图')
+ scenes=d.get('scenes');require(isinstance(scenes,list) and (scenes or v11),'至少提供一张图页/视图')
  d.setdefault('background_sets',{});require(isinstance(d['background_sets'],dict),'共用底图集无效')
  scene_ids=set();source_ids={s['id'] for s in sources}
  for s in scenes:
@@ -62,7 +69,7 @@ def normalize_view(raw, base_dir=None):
    require(mime is not None,'底图图片仅支持PNG/JPEG，SVG须转为可信几何或栅格')
    s['raster_data_uri']='data:'+mime+';base64,'+base64.b64encode(raw_image).decode();s.pop('raster_path')
   if s.get('raster_data_uri'):require(re.fullmatch(r'data:image/(png|jpeg);base64,[A-Za-z0-9+/=\s]+',s['raster_data_uri']) is not None,'不允许外部或可执行底图图片')
- objects=d.get('objects');require(isinstance(objects,list) and objects,'缺少可复核对象')
+ objects=d.get('objects');require(isinstance(objects,list) and (objects or 'comparison' in d),'缺少可复核对象')
  keys=set()
  for o in objects:
   for k in ['id','catalog_key','title','category','detail','source','status']:require(string(o.get(k)),'对象'+str(o.get('id'))+'缺少'+k)
@@ -70,7 +77,7 @@ def normalize_view(raw, base_dir=None):
   require(o.get('professional') in PROFESSIONALS,'对象专业不属于13个专业Skill')
   require(o.get('kind') in ['point','line','polygon','unlocated'],'对象几何类型无效')
   if o['kind']!='unlocated':
-   require(o.get('scene_id') in scene_ids,'对象图页缺失')
+   require(o.get('scene_id') in scene_ids,'对象图页缺失' if scene_ids else '没有图页时全部对象须为unlocated、scene_id为null')
    pts=o.get('points');minimum={'point':1,'line':2,'polygon':3}[o['kind']]
    require(isinstance(pts,list) and len(pts)>=minimum and all(xy(p) for p in pts),'对象几何无效')
    for ring in o.get('holes',[]):require(isinstance(ring,list) and len(ring)>=3 and all(xy(p) for p in ring),'面域孔洞无效')
@@ -87,6 +94,7 @@ def normalize_view(raw, base_dir=None):
   members=g.get('member_keys');require(isinstance(members,list) and members and len(set(members))==len(members) and all(k in keys for k in members),'问题组成员不存在或重复')
   g['member_snapshot']=[{'catalog_key':k,'object_id':bykey[k]['id'],'title':bykey[k]['title'],'scene_id':bykey[k].get('scene_id'),'professional':bykey[k]['professional'],'quantities':copy.deepcopy(bykey[k]['quantities']),'attributes':copy.deepcopy(bykey[k]['attributes'])} for k in members]
   g['count']=len(members);g['object_ids']=list(dict.fromkeys(bykey[k]['id'] for k in members))
+ if 'comparison' in d:d['comparison']['generation_check']=normalize_comparison(d,keys)
  d.setdefault('receipts',{});require(isinstance(d['receipts'],dict),'receipts须为对象')
  for key,rc in d['receipts'].items():
   for k in ['status','assistant_response','source_annotation_updated_at']:require(string(rc.get(k)),'处理回执缺少'+k)
@@ -109,17 +117,19 @@ def extract_json_file(path):
 
 def validate_feedback(raw, view):
  p=copy.deepcopy(raw);legacy=p.get('schema') in LEGACY_SCHEMAS
- require(legacy or p.get('schema')==FEEDBACK_SCHEMA,'批注schema无效')
+ require(legacy or p.get('schema') in FEEDBACK_SCHEMAS,'批注schema无效')
+ out_schema=FEEDBACK_SCHEMA_COMPARISON if p.get('schema')==FEEDBACK_SCHEMA_COMPARISON else feedback_schema(view)
  if legacy:
   require(view.get('legacy_source_sha256') and p.get('source_sha256')==view['legacy_source_sha256'],'旧版批注来源未获当前视图显式绑定')
  else:
   require(p.get('source_sha256')==view['source_sha256'] and p.get('project_id')==view['project_id'] and p.get('review_id')==view['review_id'],'批注属于其他项目、复核范围或图纸版本')
- p.update(schema=FEEDBACK_SCHEMA,project_id=view['project_id'],review_id=view['review_id'],source_sha256=view['source_sha256'])
+ p.update(schema=out_schema,project_id=view['project_id'],review_id=view['review_id'],source_sha256=view['source_sha256'])
  if legacy:p['legacy_schema']=raw['schema'];p['legacy_source_sha256']=raw['source_sha256']
  require(isinstance(p.get('annotations'),dict),'缺少已保存批注')
  p.setdefault('drafts',{});p.setdefault('custom_markers',[])
  require(isinstance(p['drafts'],dict) and isinstance(p['custom_markers'],list),'草稿或新增标记无效')
  scene_ids={s['id'] for s in view['scenes']};keys={o['catalog_key'] for o in view['objects']};groups={g['id']:g for g in view['groups']};unmatched=[]
+ comparison=view.get('comparison') or {};items={i['id']:i for i in comparison.get('items',[])};issues={q['id']:q for q in comparison.get('issues',[])}
  for m in p['custom_markers']:
   if legacy and not m.get('scene_id'):
    m['scene_id']=view.get('legacy_scene_map',{}).get(m.get('plan_side','supply'));m['professional']=view.get('legacy_professional')
@@ -131,8 +141,25 @@ def validate_feedback(raw, view):
   for key,r in p[field].items():
    require(key not in ['__proto__','constructor','prototype'] and isinstance(r,dict),'批注键或结构无效')
    require(isinstance(r.get('confirmed_result',''),str) and isinstance(r.get('reason',''),str),'批注结果和原因必须是文字')
-   if field=='annotations':require(string(r.get('confirmed_result')) and string(r.get('reason')),'已保存批注须有结果及原因')
-   if r.get('group_id'):
+   audit=r.get('item_snapshot') is not None or r.get('issue_snapshot') is not None
+   if audit:require(r.get('verdict') in (None,'',*VERDICTS),'快捷结论只能是同意、要改、待定')
+   if field=='annotations':
+    if audit:require(string(r.get('reason')) and (string(r.get('confirmed_result')) or r.get('verdict') in VERDICTS),'已保存审核意见须有原因，以及快捷结论或结论文字')
+    else:require(string(r.get('confirmed_result')) and string(r.get('reason')),'已保存批注须有结果及原因')
+   if audit:
+    require(not r.get('group_id') and not r.get('object_snapshot') and (r.get('item_snapshot') is None or r.get('issue_snapshot') is None),'审核意见只能指向一个对照条目或问题')
+    require(r.get('verdict') in (None,'',*VERDICTS),'快捷结论只能是同意、要改、待定')
+    ex=r.get('excluded_detail_row_ids',[]);require(isinstance(ex,list) and all(isinstance(x,str) for x in ex) and len(set(ex))==len(ex),'例外明细行须为不重复的编号')
+    if r.get('item_snapshot') is not None:
+     snap=r['item_snapshot'];require(isinstance(snap,dict) and string(snap.get('item_id')) and key=='对照条目|'+snap['item_id'],'对照条目批注键与快照不一致')
+     item=items.get(snap['item_id'])
+     if item is None:unmatched.append({'annotation_key':key,'reason':'对照条目已不在当前视图，不自动应用'})
+     else:require(set(ex)<={x['id'] for x in item.get('detail_rows',[])},'例外明细行不属于该条目')
+    else:
+     require(not ex,'问题批注没有明细行例外')
+     snap=r['issue_snapshot'];require(isinstance(snap,dict) and string(snap.get('issue_id')) and key=='问题|'+snap['issue_id'],'问题批注键与快照不一致')
+     if snap['issue_id'] not in issues:unmatched.append({'annotation_key':key,'reason':'问题已不在当前视图，不自动应用'})
+   elif r.get('group_id'):
     snaps=r.get('member_snapshot',[]);sm={s['catalog_key']:s for s in snaps};sel=r.get('selected_object_keys',[]);ex=r.get('excluded_object_keys',[])
     require(len(sm)==len(snaps) and len(set(sel))==len(sel) and len(set(ex))==len(ex),'批注成员重复')
     require(set(sel).isdisjoint(ex) and set(sel)|set(ex)==set(sm),'勾选与例外须完整覆盖本组快照')
@@ -151,5 +178,8 @@ def validate_feedback(raw, view):
      if obj:require(obj['id']==snap['object_id'],'单对象快照与当前对象身份不一致')
  return classify_feedback(p,view,unmatched)
 
+def feedback_schema(view):
+ return FEEDBACK_SCHEMA_COMPARISON if view.get('schema')==VIEW_SCHEMA_COMPARISON else FEEDBACK_SCHEMA
+
 def empty_feedback(view):
- return {'schema':FEEDBACK_SCHEMA,'project_id':view['project_id'],'review_id':view['review_id'],'source_sha256':view['source_sha256'],'drawing_revision':view['revision'],'result_fingerprint':view['result_fingerprint'],'annotations':{},'drafts':{},'custom_markers':[]}
+ return {'schema':feedback_schema(view),'project_id':view['project_id'],'review_id':view['review_id'],'source_sha256':view['source_sha256'],'drawing_revision':view['revision'],'result_fingerprint':view['result_fingerprint'],'annotations':{},'drafts':{},'custom_markers':[]}

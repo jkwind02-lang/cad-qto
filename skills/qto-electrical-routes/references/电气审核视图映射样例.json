@@ -1,0 +1,68 @@
+{
+ "schema": "qto-comparison-table-mapping/1.0",
+ "view": {
+  "project_id": "<项目编号>",
+  "review_id": "电气审核与复核",
+  "title": "电气工程量审核与复核",
+  "revision": "r1",
+  "sources": [{"id": "AUDIT-LIST", "title": "<审计清单文件名>", "sha256": "<审计清单文件的64位SHA256>"}],
+  "scope_notes": [],
+  "summary": []
+ },
+ "comparison": {
+  "display_terms": {"third_party": "清单"},
+  "handler_labels": {
+   "decide": "需要你定口径（会改数量）",
+   "confirm": "需设计、业主或清单编制方确认",
+   "assumed": "已按假设或判断计入，可抽查",
+   "closed": "已处理，仅留记录"
+  },
+  "thresholds": {
+   "difference_rate_alert": 0.2,
+   "consistent_band": 0.05,
+   "consistent_band_by_unit": {"台": 0, "个": 0, "套": 0, "组": 0, "座": 0, "系统": 0, "处": 0, "根": 0, "块": 0, "只": 0}
+  },
+  "sources": [{"id": "AUDIT", "kind": "审计清单", "title": "各单位工程审计清单",
+               "files": [{"title": "<审计清单文件名>", "sha256": "<审计清单文件的64位SHA256>"}],
+               "basis_note": "按 items.csv 的清单列", "row_ids_from": "items"}],
+  "dimensions": [
+   {"id": "building", "title": "楼栋", "role": "overview", "values_from": {"table": "buildings", "id": "楼栋", "merged_from": "单位工程"}},
+   {"id": "division", "title": "分部", "role": "section", "values_from": "data"},
+   {"id": "package", "title": "分包", "role": "filter", "values_from": "data"},
+   {"id": "system", "title": "系统", "role": "filter", "values_from": "data"}
+  ],
+  "member_tables": []
+ },
+ "tables": {
+  "items": [
+   {"path": "review_data/items.csv", "constants": {"kind": "third_party", "source_id": "AUDIT"},
+    "columns": {"id": "item_id", "row_id": "item_id", "seq": "清单序号", "code": "清单编码", "name": "项目名称", "features": "项目特征", "unit": "单位",
+                "row_quantity": "清单量", "确认量": "确认", "规则推算量": "规则推算", "方案暂估量": "方案暂估", "total": "本次合计",
+                "estimate_dominant": "暂估为主", "difference": "差额", "difference_rate": "差额率", "conclusion": "结论",
+                "third_party_corrected": "清单有误已修正", "ours_note": "说明", "missing_drawing_note": "说明", "correction_note": "说明",
+                "search_drawings": "检索图纸", "search_targets": "检索目标", "search_method": "检索方法", "search_hits": "命中数",
+                "dim.building": "楼栋", "dim.division": "分部", "dim.package": "包号", "dim.system": "系统"},
+    "value_maps": {"conclusion": {"清单无量": "第三方无量"}},
+    "list_separators": {"search_drawings": "；", "search_targets": "；"}},
+   {"path": "review_data/extra.csv", "constants": {"kind": "extra"},
+    "columns": {"id": "extra_id", "name": "项目名称", "features": "项目特征", "unit": "单位", "确认量": "确认", "规则推算量": "规则推算", "方案暂估量": "方案暂估",
+                "total": "本次合计", "dim.building": "楼栋", "dim.package": "包号", "dim.system": "系统"}}
+  ],
+  "detail_rows": [
+   {"path": "review_data/members.csv",
+    "columns": {"id": "member_id", "item_id": "挂接", "level": "数量层级", "quantity": "工程量", "unit": "单位", "basis": "计算式或依据", "area": "楼层区域",
+                "drawing": "图纸", "locator": "定位", "relation": "清单关系", "note": "备注", "dim.building": "楼栋", "dim.package": "包号", "dim.system": "系统"},
+    "value_maps": {"level": {"确认": "确认量", "规则推算": "规则推算量", "方案暂估": "方案暂估量", "未决": "未决量"}}}
+  ],
+  "redirects": [{"path": "review_data/targets.csv", "columns": {"item_id": "from_item", "target_item_id": "to_item"}}],
+  "issues": [
+   {"path": "review_data/issues.csv",
+    "columns": {"id": "编号", "handler": "类别", "title": "标题", "text": "情况", "impact_text": "影响", "current_practice": "现做法", "dim.building": "楼栋"},
+    "value_maps": {"handler": {"需要你定口径（会改数量）": "decide", "需设计、业主或清单编制方确认": "confirm", "已按假设或判断计入，可抽查": "assumed", "已处理，仅留记录": "closed"}},
+    "list_separators": {"dim.building": "、"}}
+  ],
+  "issue_links": [{"path": "review_data/issue_links.csv"}],
+  "issue_sources": [{"path": "review_data/issue_sources.csv", "columns": {"ref": "原条目", "text": "原文"}}],
+  "buildings": [{"path": "review_data/buildings.csv"}]
+ }
+}

@@ -48,7 +48,7 @@ def build(data_path,output,feedback_path=None,feedback_url=None,feedback_backup_
  raw=json.dumps(view,ensure_ascii=False,separators=(',',':')).encode();payload='\n'.join(textwrap.wrap(base64.b64encode(gzip.compress(raw,mtime=0)).decode(),180))
  page=template.replace('__PAGE_TITLE__',html.escape(view['title'])).replace('__PAYLOAD__',payload)
  page=page.replace('__FEEDBACK__',json.dumps(feedback,ensure_ascii=False,indent=0).replace('<','\\u003c'))
- page=page.replace('__REVIEW_CORE__',(assets/'review-core.js').read_text(encoding='utf-8')).replace('__REVIEW_APP__',(assets/'review-app.js').read_text(encoding='utf-8'))
+ page=page.replace('__REVIEW_CORE__',(assets/'review-core.js').read_text(encoding='utf-8')).replace('__REVIEW_AUDIT__',(assets/'review-audit.js').read_text(encoding='utf-8')).replace('__REVIEW_APP__',(assets/'review-app.js').read_text(encoding='utf-8'))
  page=page.replace('__PROBLEM_CONFIG__',json.dumps(config,ensure_ascii=False).replace('<','\\u003c')).replace('__PROBLEM_FEEDBACK__',(assets/'problem-feedback.js').read_text(encoding='utf-8'))
  assert json.loads(gzip.decompress(base64.b64decode(payload)))==view
  class IdParser(HTMLParser):
@@ -62,7 +62,10 @@ def build(data_path,output,feedback_path=None,feedback_url=None,feedback_backup_
  longest=max(map(len,page.splitlines()));warnings=[]
  if output.stat().st_size>2_000_000:warnings.append('HTML超过2MB提醒值；资料完整保留，需按用途检查实际打开性能')
  if longest>10_000:warnings.append('存在超过10000字符的行，需复核源码预览性能')
- return {'status':'PASS_WITH_WARNINGS' if warnings or unmatched else 'PASS','output':str(output),'source_sha256':view['source_sha256'],'object_records':len(view['objects']),'distinct_object_ids':len({o['id'] for o in view['objects']}),'professional_count':len({o['professional'] for o in view['objects']}),'scene_count':len(view['scenes']),'group_count':len(view['groups']),'saved_annotations':len(feedback['annotations']),'drafts':len(feedback['drafts']),'bytes':output.stat().st_size,'longest_line':longest,'unmatched_historical_feedback':unmatched,'warnings':warnings,'quantity_changes':0,'native_browser_validation':'not performed by this builder'}
+ report={'status':'PASS_WITH_WARNINGS' if warnings or unmatched else 'PASS','output':str(output),'schema':view['schema'],'source_sha256':view['source_sha256'],'object_records':len(view['objects']),'distinct_object_ids':len({o['id'] for o in view['objects']}),'professional_count':len({o['professional'] for o in view['objects']}),'scene_count':len(view['scenes']),'group_count':len(view['groups']),'saved_annotations':len(feedback['annotations']),'drafts':len(feedback['drafts']),'bytes':output.stat().st_size,'size_estimate':{'raw_json_bytes':len(raw),'gzip_bytes':len(gzip.compress(raw,mtime=0)),'html_bytes':output.stat().st_size},'longest_line':longest,'unmatched_historical_feedback':unmatched,'warnings':warnings,'quantity_changes':0,'native_browser_validation':'not performed by this builder'}
+ if 'comparison' in view:
+  check=view['comparison']['generation_check'];report.update(comparison_counts=check['counts'],comparison_exceptions=check['exceptions'],consistent_band={k:view['comparison']['thresholds'].get(k) for k in ('consistent_band','consistent_band_by_unit')})
+ return report
 
 def main():
  p=argparse.ArgumentParser();p.add_argument('--input',required=True,type=Path);p.add_argument('--output',required=True,type=Path);p.add_argument('--feedback',type=Path);p.add_argument('--feedback-url');p.add_argument('--feedback-backup-url');p.add_argument('--feedback-provider',choices=['tencent','cloudflare']);p.add_argument('--local-only',action='store_true');p.add_argument('--report',type=Path);a=p.parse_args()
@@ -72,5 +75,9 @@ def main():
   report=build(a.input,a.output,a.feedback,'' if a.local_only else a.feedback_url,None if a.local_only else a.feedback_backup_url,a.feedback_provider)
   if a.report:a.report.parent.mkdir(parents=True,exist_ok=True);a.report.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
   print(json.dumps(report,ensure_ascii=False,indent=2));return 0
- except (OSError,ValueError,TypeError,KeyError,AssertionError) as e:print(json.dumps({'status':'INPUT_REQUIRED','error':str(e)},ensure_ascii=False));return 2
+ except (OSError,ValueError,TypeError,KeyError,AssertionError) as e:
+  out={'status':'INPUT_REQUIRED','error':str(e)}
+  if hasattr(e,'problems'):out['problems']=e.problems
+  if a.report and hasattr(e,'problems'):a.report.parent.mkdir(parents=True,exist_ok=True);a.report.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
+  print(json.dumps(out,ensure_ascii=False));return 2
 if __name__=='__main__':raise SystemExit(main())

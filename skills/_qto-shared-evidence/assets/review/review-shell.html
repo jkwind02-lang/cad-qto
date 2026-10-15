@@ -28,14 +28,30 @@ main{--navw:260px;--revieww:clamp(390px,34vw,620px);display:grid;grid-template-c
  #problem-dialog::backdrop{background:#20364b66}#problem-dialog h2{font-size:18px;margin:0 0 12px}
  #problem-preview{white-space:pre-wrap;overflow-wrap:anywhere;max-height:42vh;overflow:auto;background:#f2f6fa;padding:12px;font:13px/1.65 "Microsoft YaHei",sans-serif}
  #problem-dialog p{line-height:1.7}#problem-message{white-space:pre-wrap;color:#805323;line-height:1.7}#problem-send{background:#225e7c;color:white}
+main[hidden],.map[hidden],.splitter[hidden]{display:none!important}main.no-map{grid-template-columns:var(--navw) 6px minmax(300px,1fr)}
+.mode-tabs{flex:none;display:flex;gap:4px}.mode-tabs[hidden]{display:none}.mode-tabs button{padding:5px 10px}
+#audit-top{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap;margin-top:5px;font-size:12px}#audit-top[hidden]{display:none}#resolve-counts{display:flex;gap:5px;flex-wrap:wrap}.chip{border-radius:12px;padding:3px 9px;font-size:12px;background:#f3f8fb}.chip.warn{background:#fff3e0;border-color:#e6c08a}#band-rule{color:#47677e}#band-rule[hidden],#route-message[hidden]{display:none}#route-message{color:#8d2323}
+main.audit{display:grid;grid-template-columns:300px minmax(380px,1fr) clamp(340px,28vw,480px);flex:1;min-height:0;min-width:0;overflow:hidden}
+.audit-nav{display:flex;flex-direction:column;min-height:0;background:white;padding:8px;border-right:1px solid #dbe4eb}.audit-filters{display:grid;grid-template-columns:1fr 1fr;gap:4px 6px}.audit-filters label{font-size:11px;display:flex;flex-wrap:wrap;gap:3px;align-items:center;min-width:0}.audit-filters select{width:100%;min-width:0;padding:4px;font-size:12px}.audit-filters input[type=number]{width:56px;padding:2px 4px}
+#audit-search{width:100%;margin:6px 0}#audit-counter{font-size:11px;color:#6c7e8d;margin-bottom:4px}#audit-list{flex:1;min-height:0;overflow:auto;border-top:1px solid #dee7ed}.sect{display:block;width:100%;text-align:left;border:0;border-radius:0;background:#eef4f8;font-weight:bold;font-size:12px;padding:7px}.more{display:block;width:100%;margin:4px 0;font-size:12px}
+.badge{display:inline-block;font-size:10px;font-weight:normal;padding:0 5px;margin-left:4px;border-radius:8px;background:#e8eef2;color:#4b6475}.badge.warn{background:#fde7cf;color:#8a4b0c}.badge.bad{background:#f9d9d9;color:#8d2323}
+.bars{margin-top:3px}.bar2{display:flex;height:5px;margin-top:2px;background:#eef2f5}.bar2 span{display:block;height:5px}.b-tp{background:#8ea8b9}.b-firm{background:#2f7da6}.b-est{background:#e2a14a}
+.audit-center{display:flex;flex-direction:column;min-width:0;min-height:0;background:#f8fafc}.audit-mapbar{flex:none;display:flex;gap:5px;align-items:center;flex-wrap:wrap;padding:6px 8px;font-size:12px}.audit-mapbar[hidden]{display:none}.audit-mapbar button{padding:4px 8px;font-size:12px}
+#audit-map-slot{flex:none;height:46%;min-height:240px;display:flex}#audit-map-slot[hidden]{display:none}#audit-map-slot>.map{flex:1}#audit-map-slot .membernav,#audit-map-slot .hint,#audit-map-slot #add-marker,#audit-map-slot #group-fit{display:none}.card.on .minor{color:#dce9f1}
+#audit-detail{flex:1;min-height:0;overflow:auto;padding:10px 16px;line-height:1.6}#audit-detail h2{font-size:15px;margin:4px 0}#audit-detail h3{font-size:13px;margin:14px 0 4px;color:#154f72}.para{margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere}.link{border:0;background:transparent;color:#1d6a96;padding:0 6px 0 0;text-decoration:underline;font-size:12px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}.card{text-align:left;padding:9px;line-height:1.6}.card b{display:block;font-size:13px}
+.audit-editor{display:flex;flex-direction:column;min-height:0;background:white;border-left:1px solid #dbe4eb}.audit-form{flex:1;min-height:0;overflow:auto;padding:10px 13px}.audit-form label{display:block;font-weight:bold;font-size:12px;margin:9px 0 4px}.audit-form select{width:100%}#audit-editor-title{display:block;font-size:14px;color:#154f72}#audit-result{min-height:80px}#audit-reason{min-height:120px}#audit-save{width:100%;padding:10px;background:#225e7c;color:white;font-weight:bold}#audit-entry-status{display:block;font-size:11px;line-height:1.6;margin-top:6px}#audit-history{white-space:pre-wrap;font-size:12px}
+@media(max-width:1050px){main.audit{grid-template-columns:240px minmax(300px,1fr) 320px}}
+@media(max-width:850px){main.audit{display:flex;flex-direction:column;overflow:visible}.audit-nav{height:400px}.audit-center{min-height:500px}.audit-editor{min-height:520px}}
 </style>
-<header><div class="header-row"><h1 id="page-title">__PAGE_TITLE__</h1><span id="review-status" aria-live="polite"></span><button id="save-html">保存带批注HTML</button>
+<header><div class="header-row"><h1 id="page-title">__PAGE_TITLE__</h1><nav id="mode-tabs" class="mode-tabs" aria-label="页面模式" hidden></nav><span id="review-status" aria-live="polite"></span><button id="save-html">保存带批注HTML</button>
 <details id="header-details"><summary>说明与更多</summary><div class="header-panel">
 <div class="intro" id="current-summary">正在载入复核资料。</div>
 <div id="summary-strip" class="summary-strip"></div><div id="scope-notes"></div>
 <p>批注自动暂存在本机；交接时保存带批注HTML或导出JSON，交回其中一份即可。</p>
 <div class="exportbar"><button id="export-feedback">导出批注JSON</button><button id="import-feedback">导入批注HTML或JSON</button><button id="report-problem">保存与插件反馈</button><input type="file" id="import-file" accept=".json,.html,.htm"></div>
 </div></details></div><div id="action-message" role="status" hidden></div>
+<div id="audit-top" hidden><div id="resolve-counts"></div><div id="band-rule"></div><div id="route-message" role="status" hidden></div></div>
 </header>
 <main id="layout">
 <aside class="nav"><div class="modebar"><button id="mode-groups" class="on">按问题组</button><button id="mode-objects">全部对象</button></div>
@@ -44,7 +60,7 @@ main{--navw:260px;--revieww:clamp(390px,34vw,620px);display:grid;grid-template-c
 <div id="counter"></div><div id="list"></div><div class="pagination"><button id="list-prev">上一页</button><span id="list-page"></span><button id="list-next">下一页</button></div>
 <div id="members-panel" hidden><div class="members-head">本组成员 · 可取消特殊位置</div><div class="members-actions"><button id="member-all">全选</button><button id="member-none">全不选</button><span id="selected-count"></span></div><div id="member-list"></div><div class="pagination"><button id="members-prev">上一页</button><span id="members-page"></span><button id="members-next">下一页</button></div></div>
 </aside><div class="splitter" id="nav-splitter" title="拖动调整对象列表"></div>
-<section class="map"><div class="bar"><label for="scene">图页/视图</label><select id="scene"></select><button id="fit">整图</button><button id="group-fit">本组本页</button><button id="plus">＋</button><button id="minus">−</button><button id="add-marker">新增标记</button><button id="export-image">保存当前图</button></div>
+<section class="map" id="map-section"><div class="bar"><label for="scene">图页/视图</label><select id="scene"></select><button id="fit">整图</button><button id="group-fit">本组本页</button><button id="plus">＋</button><button id="minus">−</button><button id="add-marker">新增标记</button><button id="export-image">保存当前图</button></div>
 <div class="membernav"><button id="member-prev">上一处</button><button id="member-next">下一处</button><button id="member-single">只批注当前处</button><span id="member-position"></span></div>
 <div class="maparea"><canvas id="cad" aria-label="全专业对象回图"></canvas><div id="unlocated" hidden></div><div id="mapstatus"></div></div>
 <div class="hint">左侧选组，中间逐位置查看，右侧记录结论和原因；跨图页成员自动切换。拖动两条分隔线可调整宽度。</div>
@@ -60,6 +76,17 @@ main{--navw:260px;--revieww:clamp(390px,34vw,620px);display:grid;grid-template-c
 <div class="savebar"><button id="save-review" disabled>保存本条批注</button><span id="entry-status"></span></div></div>
 <div class="footer-note">草稿与已保存意见分开。保存只记录意见，专业复算后才更新数量及回执；方法意见不当作具体数值确认。完成后交回带批注HTML或JSON中的一份即可。</div>
 </aside></main>
+<main id="audit" class="audit" hidden>
+<aside class="audit-nav"><div id="audit-filters" class="audit-filters"></div><input id="audit-search" placeholder="搜索编号、名称、特征、说明或问题" aria-label="搜索审核内容"><div id="audit-counter"></div><div id="audit-list"></div></aside>
+<section class="audit-center"><div class="audit-mapbar" id="audit-mapbar"><span>图面</span><button id="map-auto" class="on">自动</button><button id="map-open">展开</button><button id="map-close">收起</button><button id="member-prev2">上一处</button><button id="member-next2">下一处</button><span id="map-note" class="minor"></span></div><div id="audit-map-slot" hidden></div><div id="audit-detail"></div></section>
+<aside class="audit-editor"><div class="review-titlebar"><span>审核意见</span></div><div class="audit-form"><b id="audit-editor-title">先选问题或条目</b>
+<label for="audit-verdict">快捷结论</label><select id="audit-verdict"></select>
+<label for="audit-result">结论（选了快捷结论可以留空）</label><textarea id="audit-result"></textarea>
+<label for="audit-reason">原因／依据（保存时必填）</label><textarea id="audit-reason"></textarea><div id="audit-excluded" class="minor"></div>
+<details><summary>本条修改历史</summary><div id="audit-history"></div></details>
+<div class="savebar"><button id="audit-save" disabled>保存本条意见</button><span id="audit-entry-status"></span></div></div>
+<div class="footer-note">意见只记录，不改数量；所属专业复核后才更新成果。完成后交回带批注HTML或JSON中的一份即可。</div></aside>
+</main>
 <div id="loading">正在展开内嵌图纸、对象和批注…</div>
 <dialog id="problem-dialog" aria-labelledby="problem-title"><h2 id="problem-title">保存并反馈</h2>
 <p id="problem-destination"></p><p>同一次操作保存到本机，并将同一份完整HTML同步到维护者的私有存储，保留项目和图面上下文。</p>
@@ -71,6 +98,7 @@ main{--navw:260px;--revieww:clamp(390px,34vw,620px);display:grid;grid-template-c
 <script id="feedback-seed" type="application/json">__FEEDBACK__</script>
 <script>__REVIEW_CORE__</script>
 <script>__PROBLEM_FEEDBACK__</script>
+<script>__REVIEW_AUDIT__</script>
 <script id="payload" type="application/octet-stream">
 __PAYLOAD__
 </script>

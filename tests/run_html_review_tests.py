@@ -60,6 +60,14 @@ def main():
  bad=c.empty_feedback(view);obj=view['objects'][0];bad['annotations']['单项']={'object_id':obj['id'],'object_ids':['其他对象'],'object_snapshot':{'catalog_key':obj['catalog_key'],'object_id':obj['id']},'confirmed_result':'修改','reason':'测试'};rejected('单项不能改到其他对象',lambda:c.validate_feedback(bad,view))
  f=out/'保存批注.json';f.write_text(json.dumps(fb,ensure_ascii=False,indent=2),encoding='utf-8');build(datafile,out/'全专业带批注验证.html',f);checks.append('批注随完整HTML封装')
  reader=root/'_qto-shared-evidence/scripts/read_qto_review_feedback.py';p=subprocess.run([sys.executable,str(reader),'--view',str(datafile),'--feedback',str(out/'全专业带批注验证.html'),'--output',str(out/'批注交接.json')],capture_output=True,text=True,encoding='utf-8');assert p.returncode==0,p.stdout+p.stderr;handoff=json.loads((out/'批注交接.json').read_text(encoding='utf-8'));assert handoff['quantity_changes']==0 and len(handoff['actions'])==1;checks.append('HTML读取交接不执行脚本不修改数量')
- expected={'schema':'qto-review-test-artifacts/1.0','view':str(datafile),'html':str(out/'全专业图面复核演示.html'),'with_feedback':str(out/'全专业带批注验证.html'),'feedback':str(f),'normalized_view':str(out/'规范化视图.json')};Path(expected['normalized_view']).write_text(json.dumps(view,ensure_ascii=False,indent=2),encoding='utf-8');(out/'测试产物路径.json').write_text(json.dumps(expected,ensure_ascii=False,indent=2),encoding='utf-8')
+ expected={'schema':'qto-review-test-artifacts/1.0','view':str(datafile),'html':str(out/'全专业图面复核演示.html'),'with_feedback':str(out/'全专业带批注验证.html'),'feedback':str(f),'normalized_view':str(out/'规范化视图.json')};Path(expected['normalized_view']).write_text(json.dumps(view,ensure_ascii=False,indent=2),encoding='utf-8')
+ # R1 comparison views (qto-review-view/1.1): synthetic fixture with and without drawing pages.
+ sys.path.insert(0,str(Path(__file__).resolve().parent));import review_comparison_fixture as fx
+ for tag,v in (('comparison',fx.view()),('comparison_noscene',fx.view(with_scene=False))):
+  vf=out/(tag+'_view.json');vf.write_text(json.dumps(v,ensure_ascii=False,indent=1),encoding='utf-8');html_out=out/(tag+'.html');r=build(vf,html_out)
+  assert r['schema']=='qto-review-view/1.1' and r['comparison_counts']['items']==6 and r['quantity_changes']==0 and 'size_estimate' in r
+  nf=out/(tag+'_normalized.json');nf.write_text(json.dumps(c.normalize_view(v,out),ensure_ascii=False,indent=1),encoding='utf-8');expected.update({tag+'_view':str(vf),tag+'_html':str(html_out),tag+'_normalized':str(nf)})
+ checks.append('1.1对照视图生成：有图页与无图页，报告含体量预估')
+ (out/'测试产物路径.json').write_text(json.dumps(expected,ensure_ascii=False,indent=2),encoding='utf-8')
  result={'status':'PASS','checks':checks,'check_count':len(checks),'professional_adapters':results,'report':report,'artifacts':expected};(a.output_root/'最新核验.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8');print(json.dumps({'status':'PASS','check_count':len(checks),'professional_count':13,'output':str(out)},ensure_ascii=False));return 0
 if __name__=='__main__':raise SystemExit(main())

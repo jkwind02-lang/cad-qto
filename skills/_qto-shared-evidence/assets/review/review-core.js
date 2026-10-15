@@ -1,13 +1,28 @@
 (function(root){
 'use strict';
-const schema='qto-review-feedback/2.0';
+const schema='qto-review-feedback/2.0',comparisonSchema='qto-review-feedback/2.1';
 const scopes=['仅所选对象','本组勾选对象','本图同类对象（需核对范围）','供通用规则评估','本支路同类对象','本图相同画法'];
 const instructions=['确认现结果','修改结果','排除对象','仍需核实','请助手复核','暂缓计算'];
+const verdicts=['同意','要改','待定'];
 const clone=x=>JSON.parse(JSON.stringify(x));
 function ensure(ok,message){if(!ok)throw Error(message);}
 function text(x){return typeof x==='string'?x:'';}
+const schemaFor=view=>view.schema==='qto-review-view/1.1'?comparisonSchema:schema;
+const isAudit=r=>r&&typeof r==='object'&&(r.item_snapshot!=null||r.issue_snapshot!=null);
+// Comparison item / issue comments (contract 9): reason always; a quick verdict may stand in for the result text.
+function cleanAudit(r,key,complete){
+ ensure(typeof r.confirmed_result==='string'&&typeof r.reason==='string','结果和原因须为文字');
+ ensure([undefined,null,'',...verdicts].includes(r.verdict),'快捷结论只能是同意、要改、待定');
+ if(complete)ensure(r.reason.trim()&&(r.confirmed_result.trim()||verdicts.includes(r.verdict)),'已保存审核意见须有原因，以及快捷结论或结论文字');
+ ensure(!r.group_id&&!r.object_snapshot&&(r.item_snapshot==null||r.issue_snapshot==null),'审核意见只能指向一个对照条目或问题');
+ const ex=r.excluded_detail_row_ids||[];ensure(Array.isArray(ex)&&ex.every(x=>typeof x==='string')&&new Set(ex).size===ex.length,'例外明细行须为不重复的编号');
+ if(r.item_snapshot!=null)ensure(typeof r.item_snapshot.item_id==='string'&&r.item_snapshot.item_id&&key==='对照条目|'+r.item_snapshot.item_id,'对照条目批注键与快照不一致');
+ else ensure(typeof r.issue_snapshot.issue_id==='string'&&r.issue_snapshot.issue_id&&key==='问题|'+r.issue_snapshot.issue_id,'问题批注键与快照不一致');
+ return {...clone(r),annotation_id:key,verdict:r.verdict||'',excluded_detail_row_ids:ex,history:r.history||[]};
+}
 function cleanRecord(r,key,complete=true){
  ensure(r&&typeof r==='object'&&!Array.isArray(r),'批注结构无效');
+ if(isAudit(r)){const q=cleanAudit(r,key,complete);ensure(Array.isArray(q.history),'历史记录无效');return q;}
  ensure(typeof r.confirmed_result==='string'&&typeof r.reason==='string','结果和原因须为文字');
  if(complete)ensure(r.confirmed_result.trim()&&r.reason.trim(),'请填写结论和判断原因；需要助手判断时也请说明问题');
  const q={...clone(r),annotation_id:key,object_id:text(r.object_id),object_ids:r.object_ids||[],
@@ -28,6 +43,13 @@ function cleanRecord(r,key,complete=true){
  return q;
 }
 function assessRecord(record,view){
+ if(isAudit(record)){
+  const item=record.item_snapshot!=null,snap=item?record.item_snapshot:record.issue_snapshot,label=item?'对照条目':'问题';
+  const current=((item?view.comparison?.items:view.comparison?.issues)||[]).find(x=>x.id===(item?snap.item_id:snap.issue_id));
+  if(!current)return {state:'unmatched',reason:label+'已不在当前成果中，须由所属专业重新对应'};
+  if(snap.result_fingerprint!==current.result_fingerprint||record.result_fingerprint!==current.result_fingerprint)return {state:'stale',reason:label+'的第三方量、本次量、结论或明细已变化；旧意见仅保留为历史参考'};
+  return {state:'current',reason:'已绑定当前成果快照；仍须所属专业复核，不自动改量'};
+ }
  const objects=new Map(view.objects.map(o=>[o.catalog_key,o])),groups=new Map(view.groups.map(g=>[g.id,g]));
  const target=record.group_id?groups.get(record.group_id):objects.get(record.object_snapshot?.catalog_key);
  if(!target)return {state:'unmatched',reason:'历史对象或新增标记须由所属专业重新对应，不自动沿用确认'};
@@ -45,11 +67,12 @@ function assessRecord(record,view){
 function parse(input,view){
  const raw=typeof input==='string'?JSON.parse(input):input,p=clone(raw);
  const legacy=['cad-qto-review-feedback/1.0','cad-qto-review-feedback/1.1'].includes(p.schema);
- ensure(legacy||p.schema===schema,'不是支持的复核批注文件');
+ ensure(legacy||p.schema===schema||p.schema===comparisonSchema,'不是支持的复核批注文件');
  if(legacy)ensure(view.legacy_source_sha256&&p.source_sha256===view.legacy_source_sha256,'旧版批注未绑定到本图，不可跨项目导入');
  else ensure(p.project_id===view.project_id&&p.review_id===view.review_id&&p.source_sha256===view.source_sha256,'项目、复核范围或来源图纸不同，已停止导入');
  if(legacy){p.legacy_schema=p.schema;p.legacy_source_sha256=p.source_sha256;}
- p.schema=schema;p.project_id=view.project_id;p.review_id=view.review_id;p.source_sha256=view.source_sha256;
+ p.schema=p.schema===comparisonSchema?comparisonSchema:schemaFor(view);p.project_id=view.project_id;p.review_id=view.review_id;p.source_sha256=view.source_sha256;
+ const auditItems=new Map((view.comparison?.items||[]).map(i=>[i.id,i]));
  ensure(p.annotations&&typeof p.annotations==='object'&&!Array.isArray(p.annotations),'缺少已保存批注');
  const keys=new Set(view.objects.map(o=>o.catalog_key)),groups=new Map(view.groups.map(g=>[g.id,g])),sceneIds=new Set(view.scenes.map(s=>s.id));
  p.custom_markers=p.custom_markers||[];ensure(Array.isArray(p.custom_markers),'新增标记无效');
@@ -64,6 +87,7 @@ function parse(input,view){
   for(const [k,r] of Object.entries(records)){
    ensure(!['__proto__','constructor','prototype'].includes(k),'批注键无效');
    const q=cleanRecord(r,k,field==='annotations');
+   if(q.item_snapshot&&auditItems.has(q.item_snapshot.item_id)){const rows=new Set(auditItems.get(q.item_snapshot.item_id).detail_rows.map(x=>x.id));ensure(q.excluded_detail_row_ids.every(x=>rows.has(x)),'例外明细行不属于该条目');}
    if(q.object_snapshot){const obj=view.objects.find(o=>o.catalog_key===q.object_snapshot.catalog_key);ensure(!obj||obj.id===q.object_snapshot.object_id,'单对象快照与当前对象身份不一致');}
    if(q.group_id&&groups.has(q.group_id)){
     const expected=groups.get(q.group_id).member_keys;
@@ -105,5 +129,5 @@ function mergePackages(local,incoming){
 function embed(html,pkg){const json=JSON.stringify(pkg,null,1).replace(/^[ \t]+/gm,'').replace(/</g,'\\u003c');ensure(/id="feedback-seed"/.test(html),'页面缺少批注嵌入块');return html.replace(/(<script id="feedback-seed" type="application\/json">)[\s\S]*?(<\/script>)/,(_,a,b)=>a+json+b);}
 function readFileText(text){if(text.trimStart().startsWith('<')){const m=text.match(/<script id="feedback-seed" type="application\/json">([\s\S]*?)<\/script>/);ensure(m,'HTML没有批注数据块');return JSON.parse(m[1]);}return JSON.parse(text);}
 function receiptState(receipt,annotation){return receipt&&annotation&&annotation.result_fingerprint&&annotation.applicability_state!=='stale'&&annotation.applicability_state!=='unmatched'&&receipt.source_annotation_updated_at===annotation.updated_at&&receipt.source_result_fingerprint===annotation.result_fingerprint?'current':receipt?'stale':'none';}
-root.QtoReviewCore={schema,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord};
+root.QtoReviewCore={schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord};
 })(globalThis);

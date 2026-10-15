@@ -19,6 +19,8 @@ from qto_actor_identity import is_model_identity
 
 EVIDENCE_SCHEMA = 'qto-human-review-evidence/1.0'
 FEEDBACK_SCHEMA = 'qto-review-feedback/2.0'
+# 2.1 is written by pages with the third-party comparison view; same annotation fields as 2.0.
+FEEDBACK_SCHEMAS = (FEEDBACK_SCHEMA, 'qto-review-feedback/2.1')
 DECISION = 'confirm_quantity'
 FEEDBACK_DECISION = 'quantity_confirmation'
 _SKIP = object()
@@ -138,8 +140,8 @@ def _feedback_issues(source, record, project_id, base_dir) -> list[str]:
         feedback = extract_json_file(path)
     except (ValueError, OSError) as exc:
         return [f'原批注文件无法读取：{exc}']
-    if not isinstance(feedback, dict) or feedback.get('schema') != FEEDBACK_SCHEMA:
-        return [f'原批注文件不是 {FEEDBACK_SCHEMA}']
+    if not isinstance(feedback, dict) or feedback.get('schema') not in FEEDBACK_SCHEMAS:
+        return [f'原批注文件不是 {"或".join(FEEDBACK_SCHEMAS)}']
     if feedback.get('project_id') != project_id:
         issues.append('原批注属于其他项目')
     annotations = feedback.get('annotations')
