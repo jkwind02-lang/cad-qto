@@ -266,6 +266,29 @@ def test_scene_bad_inputs_are_all_reported(tmp_path):
     assert report['mapping_warnings'][0]['keys'] == ['colour']
 
 
+def test_sheet_length_factor_goes_to_its_scene_and_must_be_positive(tmp_path):
+    nroot = neutral(tmp_path)
+
+    def run_with(tag, p1_factor):
+        p, mp = mapping(tmp_path)
+        write_csv(tmp_path / 'tables' / 'sheets.csv', ['图页', '图名', '楼层', '类型', 'x1', 'y1', 'x2', 'y2', '实长系数'],
+                  [[*r, p1_factor if r[0] == 'P1' else ''] for r in SHEETS])
+        mp['sheets'][0]['columns']['length_factor'] = '实长系数'
+        mp['scenes'] = [{'id': 'C1', 'drawing': 'D1', 'base': 'P1', 'overlays': [{'sheet': 'P2', 'dx': -20000, 'dy': 0}]}]
+        p.write_text(json.dumps(mp, ensure_ascii=False), encoding='utf-8')
+        out, rep = tmp_path / f'v_{tag}.json', tmp_path / f'r_{tag}.json'
+        code, _, _ = run(SCRIPT, '--mapping', p, '--neutral-root', nroot, '--output', out, '--report', rep)
+        return code, json.loads(rep.read_text(encoding='utf-8')), out
+
+    code, report, out = run_with('ok', '0.05')
+    assert code == 0, report['problems']
+    scenes = {s['id']: s for s in json.loads(out.read_text(encoding='utf-8'))['scenes']}
+    assert scenes['D1|C1']['length_factor'] == 0.05 and 'length_factor' not in scenes['D1|P3']
+    code, report, out = run_with('bad', '-1')
+    assert code == 2 and not out.exists()
+    assert any(x['check'] == 'S-0' and 'length_factor 须为正数' in x['message'] for x in report['problems'])
+
+
 def test_scene_refuses_existing_output_wrong_schema_and_missing_source_hash(tmp_path):
     nroot = neutral(tmp_path); p, mp = mapping(tmp_path)
     out = tmp_path / 'v.json'; out.write_text('{}', encoding='utf-8')
@@ -417,6 +440,31 @@ def test_merged_line_across_overlay_sheets_shifts_each_row(tmp_path):
     assert code == 2 and v is None and any('落在不同场景' in p['message'] for p in r['problems'])
 
 
+def test_same_handle_on_two_drawings_uses_each_rows_drawing(tmp_path):
+    """Handle A1 exists on D1 and D2 at different places: a row is looked up on its own drawing, never the first row's."""
+    def run_rows(where, rows):
+        nroot = neutral(where)
+        d2 = nroot / 'D2'; d2.mkdir()
+        (d2 / 'CAD中性取证清单.json').write_text(json.dumps({'authoritative_source': {'path': '合成2.dwg', 'sha256': fx.sha('dwg2')}}, ensure_ascii=False), encoding='utf-8')
+        moved = [rec('A1', 'LINE', 'E-WIRE', [1000, 1100, 3000, 1100], [seg((1000, 1100), (3000, 1100))])] + ENTITIES[1:]
+        (d2 / '中性布局图元.ndjson').write_text('\n'.join(moved) + '\n', encoding='utf-8')
+        p, m = mapping(where)
+        m['drawings'] = [{'id': 'D1'}, {'id': 'D2'}]
+        m['sheets'].append({**copy.deepcopy(m['sheets'][0]), 'constants': {'drawing': 'D2'}})
+        write_csv(where / 'tables' / 'probe.csv', ['编号', '图纸', '图页', '句柄'], rows)
+        m['objects'] = [{'key': 'probe', 'path': 'tables/probe.csv', 'group_by': ['编号'], 'columns': {'object_id': '编号', 'drawing': '图纸', 'sheet': '图页', 'handle': '句柄'},
+                         'constants': {'title': '合并线', 'category': '走线', 'status': '待复核'}}]
+        p.write_text(json.dumps(m, ensure_ascii=False), encoding='utf-8')
+        out, rep = where / 'v.json', where / 'r.json'
+        code, _, err = run(SCRIPT, '--mapping', p, '--neutral-root', nroot, '--output', out, '--report', rep)
+        assert rep.exists(), err
+        return code, json.loads(rep.read_text(encoding='utf-8')), json.loads(out.read_text(encoding='utf-8')) if out.exists() else None
+    code, r, v = run_rows(tmp_path / 'ok', [['G2', 'D2', 'P1', 'A1']])
+    assert code == 0 and v['objects'][0]['scene_id'] == 'D2|P1' and v['objects'][0]['points'] == [[1000.0, 1100.0], [3000.0, 1100.0]]
+    code, r, v = run_rows(tmp_path / 'mixed', [['G1', 'D1', 'P1', 'A1'], ['G1', 'D2', 'P1', 'A1']])
+    assert code == 2 and v is None and any('落在不同场景' in p['message'] and 'D1|P1' in p['message'] and 'D2|P1' in p['message'] for p in r['problems'])
+
+
 # ---------- restored background from the exchange DXF (contract 7.1-7.5) ----------
 
 def make_dxf(path, pipes=10):
@@ -545,6 +593,7 @@ def test_contract_checks_restored_display_fields():
     s['restoration'] = {'source': 'dxf', 'not_shown_total': 3, 'not_shown': {'other_layers': 2, 'pattern_hatch': 1}}
     s['symbol_reconciliation'] = [{'block': 'LAMP', 'label': '灯', 'layer': 'E', 'on_sheet': 2, 'counted': 1, 'uncounted': 1, 'duplicates': 0,
                                    'uncounted_points': [[1, 1]], 'duplicate_points': []}]
+    s['length_factor'] = 0.05
     c.normalize_view(copy.deepcopy(v))
     bad = [(lambda w: w['scenes'][0]['background'][0].update(align='middle'), '对齐'),
            (lambda w: w['scenes'][0]['background'][0].update(height=0), '字高'),
@@ -552,7 +601,8 @@ def test_contract_checks_restored_display_fields():
            (lambda w: w['scenes'][0]['background'][2].update(dash=[-1]), '虚线'),
            (lambda w: w['scenes'][0]['restoration'].update(not_shown_total=9), '须回原图'),
            (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(counted=2), '符号对账'),
-           (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(uncounted_points=[]), '符号对账')]
+           (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(uncounted_points=[]), '符号对账'),
+           (lambda w: w['scenes'][0].update(length_factor=0), '实长换算')]
     for change, msg in bad:
         w = copy.deepcopy(v); change(w)
         with pytest.raises(ValueError, match=msg): c.normalize_view(w)

@@ -80,6 +80,7 @@ def normalize_view(raw, base_dir=None):
    if p.get('width_factor') is not None:require(number(p['width_factor']) and p['width_factor']>0,'底图文字宽度系数无效')
    if p.get('fill') is not None:require(p['kind']=='polygon' and isinstance(p['fill'],str) and re.fullmatch('#[0-9a-fA-F]{6}',p['fill']) is not None,'底图填充只用于面，颜色写 #rrggbb')
    if p.get('dash') is not None:require(p['kind']!='text' and isinstance(p['dash'],list) and bool(p['dash']) and all(number(v) and v>=0 for v in p['dash']),'底图虚线无效')
+  if s.get('length_factor') is not None:require(number(s['length_factor']) and s['length_factor']>0,'图页实长换算系数须为正数')
   # What the page cannot show (contract 7.4) and the symbol reconciliation (7.5): counts must add up.
   rs=s.get('restoration')
   if rs is not None:
@@ -231,3 +232,72 @@ def feedback_schema(view):
 
 def empty_feedback(view):
  return {'schema':feedback_schema(view),'project_id':view['project_id'],'review_id':view['review_id'],'source_sha256':view['source_sha256'],'drawing_revision':view['revision'],'result_fingerprint':view['result_fingerprint'],'annotations':{},'drafts':{},'custom_markers':[]}
+
+# Page payload (review view contract 11.1): transport only, the view itself is unchanged.
+# Background items become a shared style table plus delta-coded integer coordinates; a set whose
+# coordinates are not exact at <= 6 decimals, or whose items are not plain point/points, stays JSON.
+PACK_MAGIC=b'QTOPACK1'
+def _varint(n,out):
+ while True:
+  b=n&127;n>>=7
+  if n:out.append(b|128)
+  else:out.append(b);return
+def _packable(items):
+ pts=[]
+ for it in items:
+  if not isinstance(it,dict) or ('point' in it)==('points' in it):return None
+  ps=[it['point']] if 'point' in it else it['points']
+  if not isinstance(ps,list) or not ps or not all(isinstance(p,list) and len(p)==2 and all(type(c) in (int,float) and math.isfinite(c) for c in p) for p in ps):return None
+  pts+=ps
+ for nd in range(7):
+  k=10**nd
+  if all(round(c*k)/k==c for p in pts for c in p):return nd
+ return None
+def pack_payload(view):
+ v=dict(view);v['scenes']=[dict(s) for s in view['scenes']]
+ if isinstance(view.get('background_sets'),dict):v['background_sets']=dict(view['background_sets'])
+ styles,index,cols,binary=[],{},[],bytearray()
+ targets=[('set',k,items) for k,items in (v.get('background_sets') or {}).items()]+[('scene',n,s.get('background') or []) for n,s in enumerate(v['scenes'])]
+ for where,key,items in targets:
+  nd=_packable(items) if items else None
+  if nd is None:continue
+  k=10**nd;start=len(binary);x=y=0
+  for it in items:
+   st={f:val for f,val in it.items() if f not in ('point','points')};sk=json.dumps(st,ensure_ascii=False,sort_keys=True)
+   if sk not in index:index[sk]=len(styles);styles.append(st)
+   ps=[it['point']] if 'point' in it else it['points']
+   _varint(index[sk],binary);_varint(0 if 'point' in it else len(ps),binary)
+   for px,py in ps:
+    X,Y=round(px*k),round(py*k)
+    for d in (X-x,Y-y):_varint(d*2 if d>=0 else -d*2-1,binary)
+    x,y=X,Y
+  cols.append({where:key,'count':len(items),'decimals':nd,'start':start,'end':len(binary)})
+  if where=='set':v['background_sets'][key]=[]
+  else:v['scenes'][key]['background']=[]
+ if not cols:return json.dumps(view,ensure_ascii=False,separators=(',',':')).encode()
+ v['background_pack']={'format':'qto-background-pack/1','styles':styles,'collections':cols}
+ raw=json.dumps(v,ensure_ascii=False,separators=(',',':')).encode()
+ return PACK_MAGIC+len(raw).to_bytes(4,'big')+raw+bytes(binary)
+def unpack_payload(raw):
+ if not raw.startswith(PACK_MAGIC):return json.loads(raw)
+ n=int.from_bytes(raw[8:12],'big');v=json.loads(raw[12:12+n]);b=raw[12+n:];pack=v.pop('background_pack');pos=0
+ def vi():
+  nonlocal pos
+  val=shift=0
+  while True:
+   c=b[pos];pos+=1;val|=(c&127)<<shift;shift+=7
+   if not c&128:return val
+ for e in pack['collections']:
+  pos=e['start'];k=10**e['decimals'];x=y=0;out=[]
+  for _ in range(e['count']):
+   it=dict(pack['styles'][vi()]);cnt=vi();ps=[]
+   for _ in range(cnt or 1):
+    dx,dy=vi(),vi();x+=dx//2 if dx%2==0 else -(dx+1)//2;y+=dy//2 if dy%2==0 else -(dy+1)//2
+    ps.append([x,y] if k==1 else [x/k,y/k])
+   if cnt:it['points']=ps
+   else:it['point']=ps[0]
+   out.append(it)
+  require(pos==e['end'],'底图打包数据长度不符')
+  if 'set' in e:v['background_sets'][e['set']]=out
+  else:v['scenes'][e['scene']]['background']=out
+ return v

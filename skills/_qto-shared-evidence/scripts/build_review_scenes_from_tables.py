@@ -8,14 +8,14 @@ anything it cannot place becomes an unlocated object with a reason code.
 import argparse, base64, csv, gzip, hashlib, json, math, os, re
 from collections import Counter, defaultdict
 from pathlib import Path
-from qto_review_contract import normalize_view, VIEW_SCHEMA_COMPARISON, PROFESSIONALS
+from qto_review_contract import normalize_view, pack_payload, VIEW_SCHEMA_COMPARISON, PROFESSIONALS
 from qto_cad_geometry import conic_point
 from qto_dxf_background import build_dxf_backgrounds, restoration_summary, DxfBackgroundError, LARGE_BLOCK_LAYERS, DEFAULTS as DXF_DEFAULTS
 
 MAPPING_SCHEMA = 'qto-review-scene-mapping/1.0'
 TOP_FIELDS = {'schema', 'view', 'drawings', 'sheets', 'scenes', 'background', 'objects', 'groups'}
 SPEC_FIELDS = {'path', 'columns', 'constants', 'value_maps', 'list_separators'}
-SHEET_KEYS = ('sheet_id', 'drawing', 'title', 'floor', 'sheet_kind', 'x1', 'y1', 'x2', 'y2', 'raster_path')
+SHEET_KEYS = ('sheet_id', 'drawing', 'title', 'floor', 'sheet_kind', 'x1', 'y1', 'x2', 'y2', 'raster_path', 'length_factor')
 OBJECT_KEYS = ('object_id', 'catalog_key', 'sheet', 'drawing', 'kind', 'title', 'category', 'status', 'detail', 'source', 'professional',
                'unlocated_reason', 'unlocated_note', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'points', 'handle')
 OBJECT_FIELDS = SPEC_FIELDS | {'key', 'filter', 'geometry', 'transform', 'coords', 'group_by', 'attributes', 'quantities', 'professional'}
@@ -27,7 +27,7 @@ OVERLAY_FIELDS = {'sheet', 'dx', 'dy', 'layers_include', 'layers_exclude'}
 BG_FIELDS = {'source', 'layers_include', 'layers_exclude', 'text_max_len', 'include_types', 'large_block_points', 'large_block_layers', 'symbol_layers',
              'duplicate_tolerance', 'flatten'}
 NEUTRAL_NOTE = '底图只有模型空间顶层图元，块内内容、字高、填充都没有'
-NUMBER_KEYS = {'x', 'y', 'x1', 'y1', 'x2', 'y2'}
+NUMBER_KEYS = {'x', 'y', 'x1', 'y1', 'x2', 'y2', 'length_factor'}
 SHEET_KINDS = ('平面', '系统图', '表与说明', '图例', '详图', '其他')
 SKIP_TYPES = {'HATCH', 'DIMENSION', 'OLE2FRAME'}
 POINT_TYPES = {'INSERT', 'TEXT', 'MTEXT', 'POINT', 'ATTRIB', 'ATTDEF'}
@@ -269,7 +269,10 @@ def build(m, base, neutral_root, problems, files):
    if any(v is not None for v in xs) and not all(v is not None for v in xs): problems.append({'check': 'S-0', 'where': r['_where'], 'message': '图框范围 x1、y1、x2、y2 要么都写，要么都不写'}); continue
    bounds = [min(xs[0], xs[2]), min(xs[1], xs[3]), max(xs[0], xs[2]), max(xs[1], xs[3])] if xs[0] is not None else None
    if bounds and (bounds[2] <= bounds[0] or bounds[3] <= bounds[1]): problems.append({'check': 'S-0', 'where': r['_where'], 'message': '图框范围无效'}); continue
-   rec = {'sheet_id': sid, 'drawing': dr, 'title': opt(r, 'title') or sid, 'floor': opt(r, 'floor'), 'sheet_kind': opt(r, 'sheet_kind'), 'bounds': bounds, 'raster_path': opt(r, 'raster_path')}
+   # Real metres per coordinate unit for the page's measure tool (contract 4); only for pages not drawn 1:1 in model space.
+   lf = r.get('length_factor')
+   if lf is not None and not lf > 0: problems.append({'check': 'S-0', 'where': r['_where'], 'message': 'length_factor 须为正数（每个坐标单位折合多少米实长）'}); continue
+   rec = {'sheet_id': sid, 'drawing': dr, 'title': opt(r, 'title') or sid, 'floor': opt(r, 'floor'), 'sheet_kind': opt(r, 'sheet_kind'), 'bounds': bounds, 'raster_path': opt(r, 'raster_path'), 'length_factor': lf}
    key = (dr, sid)
    # A repeated sheet id with different content only matters when an object uses it (contract 4).
    if key in sheets and sheets[key] != rec: conflicts.setdefault(key, [sheet_rows[key]]).append(r['_where']); continue
@@ -487,6 +490,8 @@ def build(m, base, neutral_root, problems, files):
   stats = Counter()
   sc = {'id': scene_id, 'title': title, 'source_id': dr, 'coordinate_unit': drw['unit'], 'y_axis': 'up', 'bounds': bounds, 'background': []}
   if basis: sc['bounds_basis'] = basis
+  home_sheet = sheets[(dr, composites[scene_id]['base'])] if scene_id in composites else sheets[(dr, scene_id.split('|', 1)[1])]
+  if home_sheet.get('length_factor'): sc['length_factor'] = home_sheet['length_factor']
   if scene_id not in composites and sheets[(dr, scene_id.split('|', 1)[1])]['sheet_kind']: sc['sheet_kind'] = sheets[(dr, scene_id.split('|', 1)[1])]['sheet_kind']
   if scene_id not in composites and sheets[(dr, scene_id.split('|', 1)[1])]['raster_path']: sc['raster_path'] = str((base / sheets[(dr, scene_id.split('|', 1)[1])]['raster_path']).resolve())
   items, filters_desc, scene_dxf_targets = [], [], []
@@ -602,7 +607,9 @@ def build(m, base, neutral_root, problems, files):
 
 def size_estimate(view):
  raw = json.dumps(view, ensure_ascii=False, separators=(',', ':')).encode(); gz = gzip.compress(raw, mtime=0)
- return {'raw_json_bytes': len(raw), 'gzip_bytes': len(gz), 'html_bytes_estimate': len(base64.b64encode(gz)) + 160_000}
+ # The page carries the packed payload (review view contract 11.1), so the HTML estimate follows it.
+ packed = gzip.compress(pack_payload(view), mtime=0)
+ return {'raw_json_bytes': len(raw), 'gzip_bytes': len(gz), 'payload_gzip_bytes': len(packed), 'html_bytes_estimate': len(base64.b64encode(packed)) + 160_000}
 
 
 def main():

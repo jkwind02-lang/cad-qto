@@ -1,4 +1,4 @@
-import {spawnSync} from 'node:child_process';import fs from 'node:fs';import path from 'node:path';import vm from 'node:vm';import assert from 'node:assert/strict';import {gzipSync} from 'node:zlib';
+import {spawnSync} from 'node:child_process';import fs from 'node:fs';import path from 'node:path';import vm from 'node:vm';import assert from 'node:assert/strict';import {gzipSync,gunzipSync} from 'node:zlib';
 const args=process.argv.slice(2),arg=k=>args[args.indexOf(k)+1],root=arg('--root'),report=JSON.parse(fs.readFileSync(arg('--report'),'utf8')),art=report.artifacts,A=path.join(root,'_qto-shared-evidence','assets','review');
 const data=JSON.parse(fs.readFileSync(art.normalized_view,'utf8')),sourceHTML=fs.readFileSync(art.html,'utf8');
 function harness(html,extra={}){
@@ -255,5 +255,27 @@ if(art.comparison_html){
  const nd=structuredClone(data);nd.scenes[0].restoration={source:'neutral',note:'底图只有模型空间顶层图元，块内内容、字高、填充都没有'};const nh=harness(withData(sourceHTML,nd));await nh.start();nh.ids.scene.value=nd.scenes[0].id;nh.ids.scene.onchange();
  assert.match(nh.ids.mapstatus.textContent,/底图只有模型空间顶层图元/);assert.equal(nh.ids.symbols.hidden,true);
  checks.push('交换DXF底图：图面状态写“本页看不出 n 处，须回原图”及类别和主要图层，中性底图写明缺什么；符号对账列本页计数，点“未计”标红圈并提示，换到没有对账的图页面板收起');
+}
+// Measuring (scene mapping contract 4 and 13):clicks snap to drawn vertices, segments add up, real length uses length_factor, else 1:1 for mm, else no conversion.
+{
+ const d=structuredClone(data),s0=d.scenes[0],b=s0.bounds,W=b[2]-b[0],H=b[3]-b[1],A=[b[0]+W*.3,b[1]+H*.4],B=[A[0]+W*.2,A[1]],C=[B[0],B[1]+H*.2];
+ s0.background=[...(s0.background||[]),{kind:'line',points:[A,B,C]}];s0.length_factor=.05;const other=d.scenes.find(s=>s.id!==s0.id);other.coordinate_unit='mm';delete other.length_factor;
+ const mh=harness(withData(sourceHTML,d));await mh.start();const me=mh.ids;me.scene.value=s0.id;me.scene.onchange();
+ const scale=Math.min(625/W,595/H),cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2,sg=s0.y_axis==='down'?1:-1,scr=p=>[(p[0]-cx)*scale+340,(p[1]-cy)*scale*sg+325];
+ const tap=(h,p)=>{h.ids.cad.onpointerdown({pointerId:1,clientX:p[0],clientY:p[1]});h.ids.cad.onpointerup({pointerId:1,clientX:p[0],clientY:p[1]});},near=p=>{const s=scr(p);return [s[0]+3,s[1]-3];};
+ me.measure.click();assert.match(me.measure.className,/on/);assert.match(me['action-message'].textContent,/量距：已取 0 点/);
+ tap(mh,near(A));tap(mh,near(B));tap(mh,near(C));const total=Math.hypot(B[0]-A[0],B[1]-A[1])+Math.hypot(C[0]-B[0],C[1]-B[1]),u=s0.coordinate_unit;
+ assert.equal(me['action-message'].textContent,'量距 2 段：图上合计 '+Number(total.toPrecision(6))+' '+u+'，实长 '+(total*.05).toFixed(3)+' m（按本图页换算系数，每 1 '+u+' 折 0.05 m）');
+ me.scene.value=other.id;me.scene.onchange();assert.match(me['action-message'].textContent,/量距：已取 0 点/);tap(mh,[100,100]);tap(mh,[400,100]);assert.match(me['action-message'].textContent,/^量距 1 段：图上合计 [\d.]+ mm，实长 [\d.]+ m（按 1:1，图上 1 mm 即实长 1 mm）$/);
+ me['add-marker'].click();assert.doesNotMatch(me.measure.className,/on/);me['add-marker'].click();me.measure.click();me.measure.click();assert.equal(me['action-message'].hidden,true);
+ const pd=structuredClone(data);pd.scenes[0].coordinate_unit='px';delete pd.scenes[0].length_factor;const ph=harness(withData(sourceHTML,pd));await ph.start();ph.ids.measure.click();tap(ph,[100,100]);tap(ph,[300,100]);
+ assert.match(ph.ids['action-message'].textContent,/^量距 1 段：图上合计 [\d.]+ px；本图页没有比例，不换算实长，请对照尺寸标注。$/);
+ checks.push('量距：点击吸附到图上端点、分段累加，按图页换算系数或毫米 1:1 折实长，像素图页不换算；换图页清空、与新增标记互斥、再点结束');
+}
+// Page payload (review view contract 11.1): the built page packs background items; decoding gives the normalized view back.
+{
+ const b64=sourceHTML.match(/<script id="payload" type="application\/octet-stream">([\s\S]*?)<\/script>/)[1].replace(/\s/g,''),buf=new Uint8Array(gunzipSync(Buffer.from(b64,'base64')));
+ assert.equal(String.fromCharCode(...buf.subarray(0,8)),'QTOPACK1');assert.deepEqual(JSON.parse(JSON.stringify(await h.ctx.QtoReviewCore.readPayload(buf))),data);
+ checks.push('页面载荷：底图按样式表加差分整数打包，页面解包后与视图逐项相等');
 }
 const result={status:'PASS',count:checks.length,checks,scope:'无浏览器DOM模拟，非原生浏览器视觉验收',saved_feedback:packageFile};fs.writeFileSync(path.join(path.dirname(arg('--report')),'交互核验.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));

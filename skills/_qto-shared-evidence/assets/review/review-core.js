@@ -178,5 +178,18 @@ function receiptState(receipt,annotation){return receipt&&annotation&&annotation
 // Why an object has no drawing position (scene mapping contract 8); unknown codes are shown as written.
 const UNLOCATED={no_geometry:'没有坐标',handle_not_found:'句柄查不到',handle_in_block:'在块内，回不到',sheet_unknown:'图页不在图页表里',outside_sheet:'落在图页范围外',estimated:'估算，没有图面路径'};
 const unlocatedText=o=>o&&o.unlocated_reason?(UNLOCATED[o.unlocated_reason]||o.unlocated_reason)+(o.unlocated_note?'：'+o.unlocated_note:''):'';
-root.QtoReviewCore={schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord,isAudit,opinion,unlocatedText};
+// Page payload (review view contract 11.1): plain JSON, or QTOPACK1 + JSON length + JSON + background items packed as style index and delta integers.
+async function readPayload(buf){
+ if(String.fromCharCode(...buf.subarray(0,8))!=='QTOPACK1')return JSON.parse(await new Response(buf).text());
+ const n=buf[8]*16777216+buf[9]*65536+buf[10]*256+buf[11],data=JSON.parse(await new Response(buf.subarray(12,12+n)).text()),bin=buf.subarray(12+n),pack=data.background_pack;
+ let i=0;const vi=()=>{let v=0,m=1,b;do{ensure(i<bin.length,'底图打包数据不完整');b=bin[i++];v+=(b&127)*m;m*=128;}while(b&128);return v;},zz=v=>v%2?-(v+1)/2:v/2;
+ for(const e of pack.collections){
+  i=e.start;const k=10**e.decimals,out=[];let x=0,y=0;const pt=()=>{x+=zz(vi());y+=zz(vi());return [x/k,y/k];};
+  for(let c=0;c<e.count;c++){const o={...pack.styles[vi()]},cnt=vi();if(cnt)o.points=Array.from({length:cnt},pt);else o.point=pt();out.push(o);}
+  ensure(i===e.end,'底图打包数据长度不符');
+  if('set' in e)data.background_sets[e.set]=out;else data.scenes[e.scene].background=out;
+ }
+ delete data.background_pack;return data;
+}
+root.QtoReviewCore={schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord,isAudit,opinion,unlocatedText,readPayload};
 })(globalThis);
