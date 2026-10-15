@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 276,
+  "runtime_file_count": 278,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -692,13 +692,13 @@
     },
     {
       "path": "qto-electrical-routes/references/专业规则与成熟状态.md",
-      "sha256": "82e34b99b1df0be72e14c3a00d4cd6abfb5a78ae0405460f88aff0fd5bb12ff9",
-      "bytes": 981
+      "sha256": "58cab4be29108432114c2e303f33fe4fb67dc0db5a723021bc71a252af84ea65",
+      "bytes": 1510
     },
     {
       "path": "qto-electrical-routes/references/常规计算逻辑.md",
-      "sha256": "4c08f0b27a67fc737b3a365327f0a1d0b83d99cfa46b5475520d2081bffb3c6e",
-      "bytes": 2589
+      "sha256": "90f96167f31474106fa77b64826e4e3777c03dd8a6fdc4892e757b63dfa76338",
+      "bytes": 2773
     },
     {
       "path": "qto-electrical-routes/references/案例与接入清单.md",
@@ -721,6 +721,16 @@
       "bytes": 896
     },
     {
+      "path": "qto-electrical-routes/references/计量口径选择.md",
+      "sha256": "c88fc7e501e7a1bcdccdede397287a6f19a1e4dc4b56e905b3da587b3cb7db9e",
+      "bytes": 6369
+    },
+    {
+      "path": "qto-electrical-routes/references/防雷接地识图.md",
+      "sha256": "b4f4838c10fc2d6133c7b9b2d2e260e939cd5cbd22570dc205d2e2f4f84dded1",
+      "bytes": 3239
+    },
+    {
       "path": "qto-electrical-routes/scripts/calculate_electrical_paths.py",
       "sha256": "9d661f320654c5d164b21c39d2f077a1ac50d7866a9ee7912656ec1cf60c8056",
       "bytes": 7215
@@ -732,8 +742,8 @@
     },
     {
       "path": "qto-electrical-routes/SKILL.md",
-      "sha256": "c2c75513707228bb0d161c55d303a99222d4847b0208998d917606e71919b615",
-      "bytes": 5802
+      "sha256": "21f548d41f61c64ee547c34209ea24231c1253c499230684ed47e12bcbeb396f",
+      "bytes": 6052
     },
     {
       "path": "qto-framing-supports/agents/openai.yaml",
