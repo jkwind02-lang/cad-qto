@@ -53,7 +53,7 @@ def test_valid_view_normalizes_and_fills_only_rule_based_fields():
         assert i['ours']['levels'] == fx.item(before, i['id'])['ours']['levels']
     gc = n['comparison']['generation_check']
     assert gc['counts'] == {'items': 6, 'extra_items': 1, 'detail_rows': 5, 'issues': 2, 'open_issues': 1, 'sources': 2, 'source_rows': 8,
-                            'member_objects': 3, 'uncertain_items': 2, 'uncertain_without_issue': 2}
+                            'member_objects': 3, 'uncertain_items': 2, 'uncertain_without_issue': 2, 'search_incomplete': 0}
     assert {e['kind'] for e in gc['exceptions']} >= {'第三方条目有误已修正'}
     assert n['comparison']['handler_labels']['confirm'] == '需设计或业主确认' and n['comparison']['handler_labels']['decide'] == '需要你定口径'
 
@@ -130,7 +130,7 @@ def test_c3_3_every_source_row_exactly_once():
 
 def test_c3_4_member_in_two_rows_needs_split_summing_to_one():
     v = fx.view(); rows = fx.item(v, 'I1')['detail_rows']
-    rows[1].update(aggregation='declared', aggregation_reason='合成', member_keys=[v['objects'][0]['catalog_key']])
+    rows[1].update(aggregation='declared', aggregation_reason='合成', member_keys=[v['objects'][0]['catalog_key']], member_quantity_name='水平长度')
     assert 'C3-4' in checks_of(v)
     key = v['objects'][0]['catalog_key']
     rows[0]['shared_member_split'] = [{'member_key': key, 'share': 0.5, 'basis': '合成拆分'}]
@@ -145,16 +145,72 @@ def test_c3_4_member_in_two_rows_needs_split_summing_to_one():
     assert any('份额合计' in p['message'] for p in problems(v))
 
 
+def test_c3_4_one_object_may_feed_rows_with_different_quantity_names():
+    v = fx.view(); key = v['objects'][0]['catalog_key']; row = fx.item(v, 'I2')['detail_rows'][0]
+    row.update(aggregation='declared', aggregation_reason='合成：电缆头按回路计数', member_keys=[key], member_quantity_name='电缆头')
+    norm(v)                                                    # same circuit, another quantity: not a duplicate
+    row['member_quantity_name'] = '水平长度'
+    assert 'C3-4' in checks_of(v)                              # same quantity of the same object in two rows
+
+
+@pytest.mark.parametrize('impact, ok', [
+    (None, True), ({'value': 5.0, 'unit': 'm'}, True), ({'value': None, 'note': '定性：影响计价口径'}, True),
+    ([{'value': 5.0, 'unit': 'm'}, {'value': 2, 'unit': '个', 'note': '电缆头'}], True),
+    ({'value': 5.0}, False), ({'value': None}, False), ([{'value': 'x', 'unit': 'm'}], False), ('5 m', False)])
+def test_c3_6_issue_impact_may_be_several_segments(impact, ok):
+    v = fx.view(); v['comparison']['issues'][0]['impact'] = impact
+    if ok:
+        norm(v)
+    else:
+        assert any('impact' in p['message'] for p in problems(v))
+
+
 def test_c3_5_uniform_band_overrides_per_item_judgement():
-    v = fx.view(); seg(v, 'I1')['conclusion'] = '多算'           # 2.9% is within the 5% band
-    assert any('统一带宽判定“一致”' in p['message'] for p in problems(v))
+    v = fx.view(); seg(v, 'I1')['conclusion'] = '多算'           # 2.9% is within the 5% measure band
+    assert any('默认带宽判定“一致”' in p['message'] for p in problems(v))
     v = fx.view(); seg(v, 'I2')['conclusion'] = '一致'           # count unit: 10 vs 11 must be 少算
-    assert any('统一带宽判定“少算”' in p['message'] for p in problems(v))
-    v = fx.view(); v['comparison']['thresholds']['consistent_band_by_unit'] = {}
-    v['comparison']['thresholds']['consistent_band'] = 0.1
+    assert any('默认带宽判定“少算”' in p['message'] for p in problems(v))
+    v = fx.view(); v['comparison']['thresholds'] = {'consistent_band': 0.1}   # one number for every unit
     assert norm(v)['comparison']['items'][1]['third_parties'][0]['conclusion'] == '一致'   # 9.1% within 10%
     v = fx.view(); v['comparison']['thresholds'].pop('consistent_band')
     assert any('consistent_band' in p['message'] for p in problems(v))
+
+
+@pytest.mark.parametrize('thresholds, message', [
+    ({'consistent_band': {'计量': 0.05, '计数': 0}}, '须给 count_units'),
+    ({'consistent_band': {'计量': 0.05}, 'count_units': ['个']}, '"计量": 非负数字'),
+    ({'consistent_band': -0.1}, '非负数字'),
+    ({'consistent_band': 0.05, 'consistent_band_by_unit': {'个': 0}}, '已删除'),
+    ({'consistent_band': 0.05, 'count_units': ['个', '个']}, '不重复'),
+])
+def test_c3_0_default_band_split_by_unit_class(thresholds, message):
+    v = fx.view(); v['comparison']['thresholds'] = thresholds
+    assert any(message in p['message'] for p in problems(v))
+
+
+def test_band_check_only_on_band_judged_segments():
+    segs = {i['id']: i['third_parties'][0] for i in norm(fx.view())['comparison']['items'] if i['third_parties']}
+    assert segs['I1']['band_check']['equal'] is False and abs(segs['I1']['band_check']['rate'] - 1 / 34) < 1e-12
+    assert segs['I2']['band_check'] == {'rate': -1 / 11, 'equal': False}
+    assert all('band_check' not in segs[k] for k in ('I3', 'I4', 'I6'))   # 图上无、归入他项、第三方无量 are shown as written
+    v = fx.view(); seg(v, 'I3')['band_check'] = {'rate': 0, 'equal': True}
+    assert 'band_check' not in fx.item(norm(v), 'I3')['third_parties'][0]   # never trusted from the input
+
+
+def test_legacy_search_evidence_marks_incomplete_instead_of_failing():
+    v = fx.view(); seg(v, 'I3')['search_evidence'] = {'note': '查过 P1、P2，未逐条记关键词'}
+    assert any('检索依据缺' in p['message'] for p in problems(v))           # rule in force: incomplete records fail
+    v['comparison']['legacy_search_evidence'] = {'rule': 'e63fe30', 'note': '规则生效前交付，不回头补'}
+    n = norm(v); s = fx.item(n, 'I3')['third_parties'][0]; check = n['comparison']['generation_check']
+    assert s['search_incomplete'] is True and s['conclusion'] == '图上无' and check['counts']['search_incomplete'] == 1
+    assert any(e['kind'] == '检索记录不全' and '查过 P1' in e['detail'] for e in check['exceptions'])
+    assert not fx.item(n, 'I3')['uncertain']                                # not turned into an open item
+    v = fx.view(); seg(v, 'I3')['search_evidence'] = None; v['comparison']['legacy_search_evidence'] = {'rule': 'e63fe30', 'note': '合成'}
+    assert fx.item(norm(v), 'I3')['third_parties'][0]['search_incomplete'] is True
+    v = fx.view(); v['comparison']['legacy_search_evidence'] = {'rule': 'e63fe30', 'note': '合成'}
+    assert 'search_incomplete' not in fx.item(norm(v), 'I3')['third_parties'][0]   # complete records stay complete
+    v = fx.view(); v['comparison']['legacy_search_evidence'] = {'rule': 'e63fe30'}
+    assert any(p['where'] == 'legacy_search_evidence' for p in problems(v))
 
 
 def test_c3_5_difference_rate_and_conclusion_fields():
@@ -397,6 +453,26 @@ def test_python_javascript_both_reject_bad_item_comments(change):
     with pytest.raises(ValueError):
         c.validate_feedback(fb, n)
     assert 'error' in js_parse(fb, n)
+
+
+PAGE_VIEW = {'consistent_band': {'计量': 0.1, '计数': 0}, 'conclusions': {'AUDIT': '一致'}}
+
+
+def test_page_view_is_kept_but_not_used_for_staleness():
+    n = norm(fx.view())
+    fb = feedback(n, {'对照条目|I1': item_note(n, 'I1', page_view=PAGE_VIEW)})
+    out, _ = c.validate_feedback(fb, n)
+    assert out['annotations']['对照条目|I1']['applicability_state'] == 'current' and out['annotations']['对照条目|I1']['page_view'] == PAGE_VIEW
+    assert js_parse(fb, n)['states'] == {'对照条目|I1': 'current'}
+
+
+@pytest.mark.parametrize('pv', [{'consistent_band': -1, 'conclusions': {}}, {'consistent_band': {'计量': 0.05}, 'conclusions': {}},
+                                {'consistent_band': 0.05, 'conclusions': {'AUDIT': '差不多'}}, {'consistent_band': 0.05}, 'x'])
+def test_python_javascript_both_reject_bad_page_view(pv):
+    n = norm(fx.view()); fb = feedback(n, {'对照条目|I1': item_note(n, 'I1', page_view=pv)})
+    with pytest.raises(ValueError, match='page_view'):
+        c.validate_feedback(fb, n)
+    assert 'page_view' in js_parse(fb, n).get('error', '')
 
 
 def test_1_0_views_keep_writing_feedback_2_0():

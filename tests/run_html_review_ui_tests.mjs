@@ -117,10 +117,16 @@ if(art.comparison_html){
  const find=(n,p)=>{if(p(n))return n;for(const ch of n.children||[])if(ch&&typeof ch==='object'){const r=find(ch,p);if(r)return r;}return null;};
  const cview=JSON.parse(fs.readFileSync(art.comparison_normalized,'utf8')),chtml=fs.readFileSync(art.comparison_html,'utf8'),fp=id=>cview.comparison.items.find(i=>i.id===id).result_fingerprint;
  const ch=harness(chtml);await ch.start();const x=ch.ids,act=()=>ch.ctx.QtoReviewAudit.active,row=k=>find(x['audit-list'],n=>n.dataset?.key===k),tab=t=>x['mode-tabs'].children.find(b=>b.textContent===t);
- assert.equal(x.audit.hidden,false);assert.equal(x.layout.hidden,true);assert.deepEqual(x['mode-tabs'].children.map(b=>b.textContent),['待解决','对照审核','清单外新增','图面复核']);assert.equal(act().state().mode,'resolve');
- assert.match(x['resolve-counts'].textContent,/需要你定口径 1/);assert.match(x['resolve-counts'].textContent,/以暂估为主 1/);assert.match(x['resolve-counts'].textContent,/缺图 1/);assert.match(x['band-rule'].textContent,/≤ 5%/);assert.match(x['band-rule'].textContent,/个、台 须相等/);
+ assert.equal(x.audit.hidden,false);assert.equal(x.layout.hidden,true);assert.deepEqual(x['mode-tabs'].children.map(b=>b.textContent),['成果','欠缺条件与资料','对照审核','图面复核']);assert.equal(act().state().mode,'results');
+ assert.match(x['resolve-counts'].textContent,/需要你定口径 1/);assert.match(x['resolve-counts'].textContent,/以暂估为主 1/);assert.match(x['resolve-counts'].textContent,/缺图纸 1/);assert.match(x['band-rule'].textContent,/默认 计量 ±5%，计数 须相等/);
+ {const keys=[];find(x['audit-list'],n=>{if(n.dataset?.key)keys.push(n.dataset.key);return false;});assert.equal(keys.length,7);assert(keys.includes('对照条目|E1'));}
+ assert.match(row('对照条目|I1').textContent,/本次 35 m/);assert.match(row('对照条目|I1').textContent,/对照 合成审计清单：清单 34/);assert.match(row('对照条目|E1').textContent,/清单外新增/);
+ const scope=find(x['audit-filters'],n=>n.tagName==='select'&&n.children.some(o=>o.value==='extra'));scope.value='extra';scope.onchange();assert.match(x['audit-counter'].textContent,/筛选 1 条/);scope.value='全部';scope.onchange();
+ row('对照条目|I1').click();{const d=x['audit-detail'].textContent;assert(d.indexOf('本次成果')>=0&&d.indexOf('本次成果')<d.indexOf('对照：'));assert.match(d,/明细组成与依据/);}
+ checks.push('1.1默认打开成果：全部条目（含清单外）按分类列，本次量为主、第三方作对照；详情先列本次成果与明细依据，后列对照');
+ tab('欠缺条件与资料').click();assert.equal(act().state().mode,'resolve');
  assert(row('问题|Q1'));assert.equal(row('问题|Q2'),null);assert(row('对照条目|E1'));assert.match(x['audit-list'].textContent,/未挂问题/);assert.match(x['audit-list'].textContent,/已处理，仅留记录 · 1/);
- checks.push('1.1默认打开待解决：问题按四类分组、已处理收起，未决/暂估为主/缺图条目单列并标未挂问题');
+ checks.push('欠缺条件与资料：问题按四类分组、已处理收起，未决/暂估为主/缺图纸条目单列并标未挂问题');
  row('问题|Q1').click();assert.match(x['audit-detail'].textContent,/涉及量/);assert.match(x['audit-detail'].textContent,/现含/);assert.match(x['audit-detail'].textContent,/I1配管/);
  assert.deepEqual(x['audit-verdict'].children.map(o=>o.textContent),['（不选）','按现做法','不按现做法','暂不定']);
  x['audit-verdict'].value='要改';x['audit-verdict'].onchange();x['audit-save'].click();assert.match(x['audit-entry-status'].textContent,/须有原因/);
@@ -130,23 +136,31 @@ if(art.comparison_html){
  tab('对照审核').click();assert.equal(act().state().mode,'audit');const keys=[];find(x['audit-list'],n=>{if(n.dataset?.key)keys.push(n.dataset.key);return false;});assert.deepEqual(keys,['对照条目|I1','对照条目|I3','对照条目|I4','对照条目|I2','对照条目|I5','对照条目|I6']);
  const rate=find(x['audit-filters'],n=>n.type==='number'),alert=find(x['audit-filters'],n=>n.tagName==='label'&&n.children.includes(rate)),acb=find(alert,n=>n.type==='checkbox');rate.value='5';rate.oninput();acb.checked=true;acb.onchange();assert.match(x['audit-counter'].textContent,/筛选 1 条/);assert(row('对照条目|I2'));acb.checked=false;acb.onchange();
  checks.push('对照审核按分部分节、差额率排序；差异超阈值可调');
+ const tolM=find(x['band-rule'],n=>n['aria-label']==='一致容差 计量 百分比');tolM.value='2';tolM.oninput();
+ assert.match(row('对照条目|I1').textContent,/多算（原：一致）/);assert.match(x['band-rule'].textContent,/按页面容差显示/);assert.doesNotMatch(row('对照条目|I2').textContent,/原：/);
+ const concSel=find(x['audit-filters'],n=>n.tagName==='select'&&n.children.some(o=>o.value==='多算'));concSel.value='多算';concSel.onchange();assert(row('对照条目|I1'));concSel.value='全部';concSel.onchange();
  row('对照条目|I1').click();const d=x['audit-detail'].textContent;assert.match(d,/合成审计清单/);assert.match(d,/合成招标清单/);assert.match(d,/I1#1/);assert.match(d,/多算/);assert.equal(x['audit-map-slot'].hidden,false);assert.match(x['map-note'].textContent,/可定位成员 3 处/);
  find(x['audit-detail'],n=>n.textContent==='成员 3'&&n.onclick).click();assert.match(x['audit-detail'].textContent,/起点箱/);assert.match(x['audit-detail'].textContent,/AL1/);
  x['member-next2'].click();assert.match(x['map-note'].textContent,/第 2 处/);
  const cb2=find(x['audit-detail'],n=>n['aria-label']==='纳入 I1#2');cb2.checked=false;cb2.onchange();x['audit-verdict'].value='要改';x['audit-verdict'].onchange();x['audit-reason'].value='暂估段待定';x['audit-reason'].oninput();x['audit-save'].click();
  cpkg=JSON.parse([...ch.cache.values()][0]);const inote=cpkg.annotations['对照条目|I1'];assert.deepEqual(inote.excluded_detail_row_ids,['I1#2']);assert.equal(inote.item_snapshot.result_fingerprint,fp('I1'));assert.equal(inote.result_fingerprint,fp('I1'));
+ assert.deepEqual(inote.page_view,{consistent_band:{'计量':0.02,'计数':0},conclusions:{AUDIT:'多算',BID:'多算'}});
+ find(x['band-rule'],n=>n.textContent==='恢复默认'&&n.onclick).click();assert.doesNotMatch(x['audit-list'].textContent,/原：/);assert.equal(tolM.value,5);
+ checks.push('页面可设容差：只重新显示一致/多算/少算并标原结论，筛选按显示结论；批注记下当时的容差和显示结论；可恢复默认');
  row('对照条目|I3').click();assert.equal(x['audit-map-slot'].hidden,true);assert.match(x['map-note'].textContent,/自动收起/);assert.match(x['audit-detail'].textContent,/检索依据/);x['map-open'].click();assert.equal(x['audit-map-slot'].hidden,false);x['map-auto'].click();
  checks.push('条目详情并排来源、明细行下钻成员、有定位时自动展开图面并可上一处下一处；无定位自动收起，可手动展开');
  const pf=path.join(path.dirname(art.comparison_html),'UI对照批注.json');fs.writeFileSync(pf,JSON.stringify(cpkg));const handoff=path.join(path.dirname(art.comparison_html),'UI对照交接.json');
  const rd=spawnSync('python',[path.resolve(root,'_qto-shared-evidence/scripts/read_qto_review_feedback.py'),'--view',art.comparison_view,'--feedback',pf,'--output',handoff],{encoding:'utf8',stdio:['ignore','pipe','pipe']});assert.equal(rd.status,0,rd.stdout+rd.stderr);
- const ho=JSON.parse(fs.readFileSync(handoff,'utf8'));assert.equal(ho.item_actions.length,1);assert.equal(ho.issue_actions.length,1);assert.equal(ho.quantity_changes,0);assert.deepEqual(ho.item_actions[0].excluded_detail_row_ids,['I1#2']);
+ const ho=JSON.parse(fs.readFileSync(handoff,'utf8'));assert.equal(ho.item_actions.length,1);assert.equal(ho.issue_actions.length,1);assert.equal(ho.quantity_changes,0);assert.deepEqual(ho.item_actions[0].excluded_detail_row_ids,['I1#2']);assert.deepEqual(ho.item_actions[0].page_view,inote.page_view);
  checks.push('页面保存的2.1批注通过Python契约读取，生成条目与问题交接，不改数量');
  x['save-html'].click();const csaved=await ch.downloads.at(-1).blob.text(),cr=harness(csaved);await cr.start();cr.ctx.QtoReviewAudit.active.show('I1');assert.equal(cr.ids['audit-verdict'].value,'要改');assert.equal(find(cr.ids['audit-detail'],n=>n['aria-label']==='纳入 I1#2').checked,false);
  checks.push('带审核意见的HTML独立保存恢复');
  const calls=[],listeners={},loc={hash:'#item=I4'},rh2=harness(chtml,{location:loc,history:{replaceState:(a,b,u)=>calls.push(u)},addEventListener:(t,fn)=>{listeners[t]=fn;}});await rh2.start();
- const st=()=>rh2.ctx.QtoReviewAudit.active.state();assert.deepEqual([st().mode,st().current],['audit','I4']);assert.match(rh2.ids['audit-detail'].textContent,/去向/);
+ const st=()=>rh2.ctx.QtoReviewAudit.active.state();assert.deepEqual([st().mode,st().current],['results','I4']);assert.match(rh2.ids['audit-detail'].textContent,/去向/);
+ loc.hash='#mode=audit&item=I4';listeners.hashchange();assert.deepEqual([st().mode,st().current],['audit','I4']);
  loc.hash='#mode=issues&issue=Q2';listeners.hashchange();assert.deepEqual([st().mode,st().current],['resolve','Q2']);
  loc.hash='#item=NOPE';listeners.hashchange();assert.match(rh2.ids['route-message'].textContent,/未找到 条目 NOPE/);
+ loc.hash='#mode=extras';listeners.hashchange();assert.equal(st().mode,'results');assert.match(rh2.ids['audit-counter'].textContent,/筛选 1 条/);
  loc.hash='#dim=building%3AB2&mode=audit';listeners.hashchange();assert.equal(st().overview,'B2');assert.equal(rh2.ids['audit-counter'].textContent.match(/筛选 (\d+)/)[1],'3');
  find(rh2.ids['audit-list'],n=>n.dataset?.key==='对照条目|I5').click();assert.match(calls.at(-1),/item=I5/);assert.match(calls.at(-1),/dim=building%3AB2/);
  loc.hash='#object=WL2';listeners.hashchange();assert.equal(st().mode,'review');assert.equal(rh2.ids.layout.hidden,false);assert.match(rh2.ids['editor-title'].textContent,/回路 WL2/);
@@ -158,5 +172,11 @@ if(art.comparison_html){
  const nr=spawnSync('python',['-c',"import sys,json;sys.path.insert(0,sys.argv[1]);from qto_review_contract import normalize_view;print(json.dumps(normalize_view(json.load(sys.stdin)),ensure_ascii=False))",path.resolve(root,'_qto-shared-evidence/scripts')],{input:JSON.stringify(raw),encoding:'utf8'});assert.equal(nr.status,0,nr.stderr);
  const sh=harness(withData(csaved,JSON.parse(nr.stdout)));await sh.start();sh.ctx.QtoReviewAudit.active.show('I1');assert.match(sh.ids['audit-entry-status'].textContent,/历史意见待重新核对/);sh.ctx.QtoReviewAudit.active.show('Q1');assert.doesNotMatch(sh.ids['audit-entry-status'].textContent,/待重新核对/);
  checks.push('条目第三方量变化后旧意见显示过期，未变的问题意见仍有效');
+ const raw2=JSON.parse(fs.readFileSync(art.comparison_view,'utf8'));raw2.comparison.legacy_search_evidence={rule:'e63fe30',note:'合成'};raw2.comparison.items.find(i=>i.id==='I3').third_parties[0].search_evidence={note:'只记了查过 P1'};
+ const nr2=spawnSync('python',['-c',"import sys,json;sys.path.insert(0,sys.argv[1]);from qto_review_contract import normalize_view;print(json.dumps(normalize_view(json.load(sys.stdin)),ensure_ascii=False))",path.resolve(root,'_qto-shared-evidence/scripts')],{input:JSON.stringify(raw2),encoding:'utf8'});assert.equal(nr2.status,0,nr2.stderr);
+ const lh=harness(withData(chtml,JSON.parse(nr2.stdout)));await lh.start();const lx=lh.ids,la=lh.ctx.QtoReviewAudit.active,lrow=k=>find(lx['audit-list'],n=>n.dataset?.key===k);
+ assert.match(lrow('对照条目|I3').textContent,/检索记录不全/);la.setMode('resolve');assert.match(lx['audit-list'].textContent,/检索记录不全（规则生效前交付/);assert.equal(lrow('对照条目|I3'),null);assert.doesNotMatch(lx['resolve-counts'].textContent,/检索记录不全/);
+ la.show('I3');assert.equal(la.state().mode,'resolve');assert.match(lx['audit-detail'].textContent,/说明 只记了查过 P1/);assert.match(lx['audit-detail'].textContent,/检索记录不全：/);
+ checks.push('规则生效前交付的图上无标“检索记录不全”：成果行有标记，欠缺清单末尾单列且默认收起，不计入欠缺计数');
 }
 const result={status:'PASS',count:checks.length,checks,scope:'无浏览器DOM模拟，非原生浏览器视觉验收',saved_feedback:packageFile};fs.writeFileSync(path.join(path.dirname(arg('--report')),'交互核验.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));

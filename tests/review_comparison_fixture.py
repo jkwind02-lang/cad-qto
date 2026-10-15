@@ -84,7 +84,7 @@ def view(with_scene=True):
         'comparison': {
             'display_terms': {'third_party': '清单'},
             'handler_labels': {'confirm': '需设计或业主确认'},
-            'thresholds': {'difference_rate_alert': 0.2, 'consistent_band': 0.05, 'consistent_band_by_unit': {'个': 0, '台': 0}},
+            'thresholds': {'difference_rate_alert': 0.2, 'consistent_band': {'计量': 0.05, '计数': 0}, 'count_units': ['个', '台']},
             'dimensions': [
                 {'id': 'building', 'title': '楼栋', 'role': 'overview', 'values': [{'id': 'B1', 'title': '一号楼', 'merged_from': ['一号楼（配管部分）']}, {'id': 'B2', 'title': '二号楼'}]},
                 {'id': 'division', 'title': '分部', 'role': 'section', 'values': [{'id': 'D1', 'title': '配管'}, {'id': 'D2', 'title': '设备'}]},

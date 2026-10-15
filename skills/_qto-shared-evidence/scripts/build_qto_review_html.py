@@ -64,7 +64,7 @@ def build(data_path,output,feedback_path=None,feedback_url=None,feedback_backup_
  if longest>10_000:warnings.append('存在超过10000字符的行，需复核源码预览性能')
  report={'status':'PASS_WITH_WARNINGS' if warnings or unmatched else 'PASS','output':str(output),'schema':view['schema'],'source_sha256':view['source_sha256'],'object_records':len(view['objects']),'distinct_object_ids':len({o['id'] for o in view['objects']}),'professional_count':len({o['professional'] for o in view['objects']}),'scene_count':len(view['scenes']),'group_count':len(view['groups']),'saved_annotations':len(feedback['annotations']),'drafts':len(feedback['drafts']),'bytes':output.stat().st_size,'size_estimate':{'raw_json_bytes':len(raw),'gzip_bytes':len(gzip.compress(raw,mtime=0)),'html_bytes':output.stat().st_size},'longest_line':longest,'unmatched_historical_feedback':unmatched,'warnings':warnings,'quantity_changes':0,'native_browser_validation':'not performed by this builder'}
  if 'comparison' in view:
-  check=view['comparison']['generation_check'];report.update(comparison_counts=check['counts'],comparison_exceptions=check['exceptions'],consistent_band={k:view['comparison']['thresholds'].get(k) for k in ('consistent_band','consistent_band_by_unit')})
+  check=view['comparison']['generation_check'];report.update(comparison_counts=check['counts'],comparison_exceptions=check['exceptions'],consistent_band={k:view['comparison']['thresholds'].get(k) for k in ('consistent_band','count_units')},legacy_search_evidence=view['comparison'].get('legacy_search_evidence'))
  return report
 
 def main():

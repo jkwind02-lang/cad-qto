@@ -2,9 +2,10 @@
 
 Checks that professional-supplied numbers agree with each other in both
 directions (item <-> detail rows <-> member objects, source rows <-> items).
-It never computes, rounds or rewrites an engineering quantity; the only values
-it fills are the display total and the estimate-dominant flag, both by fixed
-rules written in the contract.
+It never computes, rounds or rewrites an engineering quantity. The values it
+fills follow fixed rules in the contract: the display total, the
+estimate-dominant flag, the default-band conclusion with its band_check
+ratio, and the uncertain and search_incomplete markers.
 """
 import math, re
 
@@ -18,6 +19,8 @@ SOURCE_KINDS = ('审计清单', '招标清单', '对方报量', '甲方核定量
 AGGREGATIONS = ('leaf', 'sum_members', 'declared')
 VERDICTS = ('同意', '要改', '待定')
 RATE_TOLERANCE = 0.0005
+BAND_CLASSES = ('计量', '计数')
+SEARCH_KEYS = ('drawings', 'targets', 'method', 'hits')
 MEMBER_COLUMN = re.compile(r'(id|title|status|source|detail|(attributes|quantities)\..+)')
 MAX_LISTED = 40
 
@@ -63,10 +66,22 @@ def normalize_comparison(view, object_keys):
  th = c.setdefault('thresholds', {})
  if not isinstance(th, dict): bad('C3-0', 'thresholds', '须为对象'); th = c['thresholds'] = {}
  th.setdefault('difference_rate_alert', 0.2)
- for k in ('difference_rate_alert', 'consistent_band'):
-  if k in th and not (number(th[k]) and th[k] >= 0): bad('C3-0', 'thresholds.' + k, '须为非负数字'); th.pop(k)
- by_unit = th.setdefault('consistent_band_by_unit', {})
- if not isinstance(by_unit, dict) or not all(text(u) and number(b) and b >= 0 for u, b in by_unit.items()): bad('C3-0', 'thresholds.consistent_band_by_unit', '须为 {单位: 非负数字}'); by_unit = th['consistent_band_by_unit'] = {}
+ if not (number(th['difference_rate_alert']) and th['difference_rate_alert'] >= 0): bad('C3-0', 'thresholds.difference_rate_alert', '须为非负数字'); th.pop('difference_rate_alert')
+ # Default consistent band (contract 5.4): one number, or split by unit class with count_units.
+ if 'consistent_band_by_unit' in th: bad('C3-0', 'thresholds.consistent_band_by_unit', '已删除：改用 consistent_band 分写 {"计量", "计数"} 并给 count_units')
+ band = th.get('consistent_band'); count_units = th.get('count_units')
+ if band is not None and not (number(band) and band >= 0) and not (isinstance(band, dict) and set(band) == set(BAND_CLASSES) and all(number(v) and v >= 0 for v in band.values())):
+  bad('C3-0', 'thresholds.consistent_band', '须为非负数字，或 {"计量": 非负数字, "计数": 非负数字}'); th.pop('consistent_band'); band = None
+ if count_units is not None and not (isinstance(count_units, list) and all(text(u) for u in count_units) and len(set(count_units)) == len(count_units)):
+  bad('C3-0', 'thresholds.count_units', '须为不重复的单位文字数组'); th.pop('count_units'); count_units = None
+ if isinstance(band, dict) and count_units is None: bad('C3-0', 'thresholds.count_units', 'consistent_band 分写计量、计数时须给 count_units'); band = None
+ def band_for(unit):
+  if isinstance(band, dict): return band['计数'] if unit in count_units else band['计量']
+  return band
+ legacy = c.get('legacy_search_evidence')
+ if legacy is not None and not (isinstance(legacy, dict) and text(legacy.get('rule')) and text(legacy.get('note'))): bad('C3-0', 'legacy_search_evidence', '须为 {rule, note} 或 null'); legacy = None
+ if legacy: note('检索记录规则生效前交付', 'comparison', f"{legacy['rule']}：{legacy['note']}")
+ search_incomplete = 0
 
  # Dimensions: closed value domains.
  dimvals = {}; roles = {r: 0 for r in ROLES}
@@ -186,7 +201,7 @@ def normalize_comparison(view, object_keys):
    same_unit = unit == ours.get('unit')
    diff = seg.get('difference')
    if diff is not None and not (isinstance(diff, dict) and num_or_none(diff.get('value')) and num_or_none(diff.get('rate'))): bad('C3-5', sw, 'difference 须为 {value, rate}，数字或 null'); diff = None
-   seg['difference'] = diff
+   seg['difference'] = diff; seg.pop('band_check', None)
    if not same_unit:
     if not text(seg.get('unit_mismatch_note')): bad('C3-5', sw, f'单位 {unit} 与本次单位 {ours.get("unit")} 不同，须写 unit_mismatch_note')
     else: note('单位不同', sw, seg['unit_mismatch_note'] + ('；结论由专业判，不按带宽' if conclusion in SIGNED else ''))
@@ -194,16 +209,18 @@ def normalize_comparison(view, object_keys):
     if conclusion is None: bad('C3-5', sw, '单位不同不能按带宽判，须写结论')
    else:
     value = diff.get('value') if diff else None
-    # Uniform band (contract 5.4): one rule for the whole page, never a per-item judgement.
+    # Default band (contract 5.4): one rule for the whole page, never a per-item judgement.
+    # band_check lets the page re-show the three signed conclusions under a user tolerance.
     judged = qty not in (None, 0) and total is not None and (conclusion is None or conclusion in SIGNED)
     if judged:
-     band = by_unit.get(unit, th.get('consistent_band'))
-     if band is None: bad('C3-5', sw, '按带宽判结论须给 thresholds.consistent_band')
+     b = band_for(unit)
+     if b is None: bad('C3-5', sw, '按带宽判结论须给 thresholds.consistent_band')
      else:
-      r = (total - qty) / qty
-      auto = '一致' if (close(total, qty) if band == 0 else abs(r) <= band + 1e-12) else '多算' if r > 0 else '少算'
+      r = (total - qty) / qty; equal = close(total, qty)
+      auto = '一致' if (equal if b == 0 else equal or abs(r) <= b + 1e-12) else '多算' if r > 0 else '少算'
+      seg['band_check'] = {'rate': r, 'equal': equal}
       if conclusion is None: conclusion = seg['conclusion'] = auto
-      elif conclusion != auto: bad('C3-5', sw, f'结论“{conclusion}”与统一带宽判定“{auto}”不同（差额率 {r:.4%}，带宽 {band:.2%}）')
+      elif conclusion != auto: bad('C3-5', sw, f'结论“{conclusion}”与默认带宽判定“{auto}”不同（差额率 {r:.4%}，带宽 {b:.2%}）')
      if value is None: bad('C3-5', sw, '按带宽判的段须有差额')
     elif conclusion is None: bad('C3-5', sw, '来源数量为空或 0、或本次没有合计，不能按带宽判，须写结论')
     elif conclusion in SIGNED: bad('C3-5', sw, f'结论“{conclusion}”只能用于同单位、来源数量不为 0 且本次有合计的段')
@@ -227,15 +244,21 @@ def normalize_comparison(view, object_keys):
    if not isinstance(seg['redirect_to'], list) or not all(text(x) for x in seg['redirect_to']) or len(set(seg['redirect_to'])) != len(seg['redirect_to']): bad('C3-5', sw, 'redirect_to 须为不重复的条目编号数组'); seg['redirect_to'] = []
    if conclusion == '归入他项' and not seg['redirect_to']: bad('C3-5', sw, '结论“归入他项”须写 redirect_to')
    if iid in seg['redirect_to']: bad('C3-5', sw, '去向不能是自己')
-   ev = seg.get('search_evidence')
+   ev = seg.get('search_evidence'); seg.pop('search_incomplete', None)
+   if ev is not None and not isinstance(ev, dict): bad('C3-5', sw, 'search_evidence 须为对象或 null'); ev = None
+   elif ev is not None and ev.get('note') is not None and not isinstance(ev['note'], str): bad('C3-5', sw, 'search_evidence.note 须为文字')
    if conclusion == '图上无':
-    if not isinstance(ev, dict): bad('C3-5', sw, '结论“图上无”须附检索依据（drawings、targets、method、hits）')
+    if ev is None: missing = list(SEARCH_KEYS)
     else:
      missing = [k for k in ('drawings', 'targets') if not (text(ev.get(k)) or (isinstance(ev.get(k), list) and ev[k] and all(text(x) for x in ev[k])))]
      if not text(ev.get('method')): missing.append('method')
      if not (number(ev.get('hits')) and ev['hits'] >= 0): missing.append('hits')
-     if missing: bad('C3-5', sw, '检索依据缺：' + '、'.join(missing))
-   elif ev is not None and not isinstance(ev, dict): bad('C3-5', sw, 'search_evidence 须为对象或 null')
+    if missing and legacy:
+     # Delivered before the search-record rule (contract 5): shown as incomplete, never turned into an open item.
+     seg['search_incomplete'] = True; search_incomplete += 1
+     note('检索记录不全', sw, '缺：' + '、'.join(missing) + (f"；说明：{ev['note']}" if ev and text(ev.get('note')) else ''))
+    elif missing and ev is None: bad('C3-5', sw, '结论“图上无”须附检索依据（drawings、targets、method、hits）')
+    elif missing: bad('C3-5', sw, '检索依据缺：' + '、'.join(missing))
    if conclusion == '缺图' and not text(seg.get('missing_drawing_note')): bad('C3-5', sw, '结论“缺图”须写 missing_drawing_note')
    if conclusion == '第三方无量' and qty not in (None, 0): bad('C3-5', sw, '结论“第三方无量”时来源数量须为 null 或 0')
   if seg_sources and [s for s in source_order if s in seg_sources] != seg_sources: bad('C3-8', where, '来源段须按 sources 的顺序排列')
@@ -266,7 +289,10 @@ def normalize_comparison(view, object_keys):
    splits = r.get('shared_member_split', [])
    if not isinstance(splits, list) or not all(isinstance(s, dict) and s.get('member_key') in members and number(s.get('share')) and 0 < s['share'] <= 1 and text(s.get('basis')) for s in splits): bad('C3-4', rw, 'shared_member_split 每项须有本行成员、0～1 的份额和依据'); splits = []
    share = {s['member_key']: s['share'] for s in splits}
-   for k in members: member_rows.setdefault(k, []).append((r['id'], share.get(k)))
+   if r.get('member_quantity_name') is not None and not text(r['member_quantity_name']): bad('C3-2', rw, 'member_quantity_name 须为文字')
+   # C3-4 counts one use per (object, quantity name): a circuit may feed cable, head, conduit and wire rows.
+   qname = r.get('member_quantity_name') if agg == 'sum_members' else (r.get('member_quantity_name') or ours.get('quantity_name') or '')
+   for k in members: member_rows.setdefault((k, qname or ''), []).append((r['id'], share.get(k)))
    if agg == 'leaf' and members: bad('C3-2', rw, 'leaf 明细不能有成员')
    if agg == 'declared':
     if not text(r.get('aggregation_reason')): bad('C3-2', rw, 'declared 明细须写 aggregation_reason')
@@ -295,11 +321,12 @@ def normalize_comparison(view, object_keys):
    if vals and not close(got, expect): bad('C3-1', where, f'{lvl} {got} 与明细合计 {expect} 不符')
    if not vals and got not in (None, 0): bad('C3-1', where, f'{lvl} 为 {got}，但没有该层级的明细行')
 
- # Member objects belong to at most one detail row unless split explicitly (C3-4).
- for k, uses in member_rows.items():
+ # One quantity of a member object feeds at most one detail row unless split explicitly (C3-4).
+ for (k, qname), uses in member_rows.items():
   if len(uses) > 1:
-   if any(s is None for _, s in uses): bad('C3-4', '对象 ' + k, '属于多行明细：' + '、'.join(r for r, _ in uses) + '；须在每行写 shared_member_split')
-   elif not close(sum(s for _, s in uses), 1.0): bad('C3-4', '对象 ' + k, '拆分份额合计不是 1')
+   what = f"对象 {k} 的数量项 {qname or '（整个对象）'}"
+   if any(s is None for _, s in uses): bad('C3-4', what, '进了多行明细：' + '、'.join(r for r, _ in uses) + '；须在每行写 shared_member_split')
+   elif not close(sum(s for _, s in uses), 1.0): bad('C3-4', what, '拆分份额合计不是 1')
  # Source rows appear exactly once (C3-3).
  for sid, s in sources.items():
   declared = s.get('row_ids') if isinstance(s.get('row_ids'), list) else []
@@ -328,7 +355,11 @@ def normalize_comparison(view, object_keys):
   for k in ('impact_text', 'current_practice', 'status'):
    if k in q and q[k] is not None and not isinstance(q[k], str): bad('C3-6', where, k + ' 须为文字')
   imp = q.get('impact')
-  if imp is not None and not (isinstance(imp, dict) and number(imp.get('value')) and text(imp.get('unit'))): bad('C3-6', where, 'impact 须为 {value, unit} 或 null')
+  parts = imp if isinstance(imp, list) else [] if imp is None else [imp]
+  def impact_ok(s):
+   if not isinstance(s, dict) or not num_or_none(s.get('value')) or any(s.get(k) is not None and not isinstance(s[k], str) for k in ('unit', 'note')): return False
+   return text(s.get('unit')) if s.get('value') is not None else text(s.get('note'))
+  if not all(impact_ok(s) for s in parts): bad('C3-6', where, 'impact 须为 null、一段 {value, unit, note} 或多段数组；有数字时须有 unit，value 为 null 时须有 note')
   ids = q.setdefault('item_ids', [])
   if not isinstance(ids, list) or len(set(ids)) != len(ids): bad('C3-6', where, 'item_ids 须为不重复的数组'); ids = q['item_ids'] = []
   for t in ids:
@@ -358,6 +389,6 @@ def normalize_comparison(view, object_keys):
  if problems: raise ComparisonError(problems)
  counts = {'items': sum(1 for it in items.values() if it.get('kind') == 'third_party'), 'extra_items': sum(1 for it in items.values() if it.get('kind') == 'extra'),
            'detail_rows': len(detail_ids), 'issues': len(issues), 'open_issues': len(open_issues), 'sources': len(sources),
-           'source_rows': sum(len(v) for v in row_seen.values()), 'member_objects': len(member_rows),
-           'uncertain_items': uncertain, 'uncertain_without_issue': unlinked}
+           'source_rows': sum(len(v) for v in row_seen.values()), 'member_objects': len({k for k, _ in member_rows}),
+           'uncertain_items': uncertain, 'uncertain_without_issue': unlinked, 'search_incomplete': search_incomplete}
  return {'counts': counts, 'exceptions': exceptions}

@@ -10,11 +10,11 @@ from qto_review_comparison import ComparisonError, LEVELS
 
 MAPPING_SCHEMA = 'qto-comparison-table-mapping/1.0'
 TRUE, FALSE = {'是', 'true', 'True', 'TRUE', '1', 'Y', 'y'}, {'', '否', 'false', 'False', 'FALSE', '0', 'N', 'n'}
-ROLES = ('items', 'source_rows', 'detail_rows', 'redirects', 'issues', 'issue_links', 'issue_sources', 'members')
+ROLES = ('items', 'source_rows', 'detail_rows', 'redirects', 'issues', 'issue_links', 'issue_sources', 'issue_impacts', 'members')
 ITEM_KEYS = ('id', 'kind', 'source_id', 'name', 'features', 'unit', 'quantity_name', 'ours_note', *LEVELS, 'total', 'estimate_dominant',
              'row_id', 'seq', 'code', 'row_name', 'row_features', 'row_unit', 'row_quantity', 'tp_quantity', 'tp_unit', 'difference', 'difference_rate',
              'conclusion', 'disposition_note', 'third_party_corrected', 'correction_note', 'unit_mismatch_note', 'quantity_note', 'missing_drawing_note',
-             'search_drawings', 'search_targets', 'search_method', 'search_hits', 'search_unread', 'search_uncovered', 'search_record_ref', 'redirect_to')
+             'search_drawings', 'search_targets', 'search_method', 'search_hits', 'search_unread', 'search_uncovered', 'search_record_ref', 'search_note', 'redirect_to')
 ITEM_LEVEL_KEYS = ('kind', 'name', 'features', 'unit', 'quantity_name', 'ours_note', *LEVELS, 'total', 'estimate_dominant')
 KEYS = {'items': ITEM_KEYS,
         'source_rows': ('item_id', 'source_id', 'row_id', 'seq', 'code', 'row_name', 'row_features', 'row_unit', 'row_quantity'),
@@ -22,9 +22,9 @@ KEYS = {'items': ITEM_KEYS,
                         'aggregation_reason', 'member_keys', 'member_quantity_name', 'member_table'),
         'redirects': ('item_id', 'target_item_id', 'source_id'),
         'issues': ('id', 'handler', 'title', 'text', 'impact_text', 'current_practice', 'source_refs', 'status', 'group_id', 'item_ids'),
-        'issue_links': ('issue_id', 'item_id'), 'issue_sources': ('issue_id', 'ref', 'text'),
+        'issue_links': ('issue_id', 'item_id'), 'issue_sources': ('issue_id', 'ref', 'text'), 'issue_impacts': ('issue_id', 'value', 'unit', 'note'),
         'members': ('catalog_key', 'object_id', 'detail_id', 'title', 'category', 'status', 'professional', 'detail', 'source')}
-NUMBERS = {*LEVELS, 'total', 'row_quantity', 'tp_quantity', 'difference', 'difference_rate', 'search_hits', 'quantity'}
+NUMBERS = {*LEVELS, 'total', 'row_quantity', 'tp_quantity', 'difference', 'difference_rate', 'search_hits', 'quantity', 'value'}
 BOOLEANS = {'estimate_dominant', 'third_party_corrected'}
 LISTS = {'redirect_to', 'member_keys', 'source_refs', 'item_ids'}
 
@@ -130,7 +130,7 @@ def build_view(mapping, base, base_view):
    if opt(rec, k) is not None: seg[k] = rec[k]
   if rec.get('third_party_corrected') is not None: seg['third_party_corrected'] = rec['third_party_corrected']
   ev = {dest: rec[src] for src, dest in (('search_drawings', 'drawings'), ('search_targets', 'targets'), ('search_method', 'method'), ('search_hits', 'hits'),
-                                         ('search_unread', 'unread'), ('search_uncovered', 'uncovered'), ('search_record_ref', 'record_ref')) if opt(rec, src) is not None}
+                                         ('search_unread', 'unread'), ('search_uncovered', 'uncovered'), ('search_record_ref', 'record_ref'), ('search_note', 'note')) if opt(rec, src) is not None}
   if ev: seg['search_evidence'] = ev
   seg['redirect_to'] = list(rec.get('redirect_to') or [])
   it['third_parties'].append(seg)
@@ -211,6 +211,13 @@ def build_view(mapping, base, base_view):
   q = issues.get(opt(rec, 'issue_id'))
   if q is None: problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': '原条目对应的问题不存在：' + str(rec.get('issue_id'))})
   elif opt(rec, 'ref') is not None: q['source_refs'].append({'ref': rec['ref'], 'text': rec.get('text') or ''})
+ for rec in data['issue_impacts']:
+  q = issues.get(opt(rec, 'issue_id'))
+  if q is None: problems.append({'check': 'TABLE', 'where': rec['_where'], 'message': '影响对应的问题不存在：' + str(rec.get('issue_id'))}); continue
+  part = {'value': rec.get('value')}
+  for k in ('unit', 'note'):
+   if opt(rec, k) is not None: part[k] = rec[k]
+  q.setdefault('impact', []).append(part)
 
  # Dimension values: explicit, from data, or from a lookup table.
  for d in comp_map.get('dimensions', []):

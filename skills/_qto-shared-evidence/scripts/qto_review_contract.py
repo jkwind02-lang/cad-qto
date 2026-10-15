@@ -2,7 +2,7 @@
 import base64, copy, gzip, hashlib, json, math, re
 from pathlib import Path
 from qto_review_revision import bind_result_versions, classify_feedback
-from qto_review_comparison import normalize_comparison, VERDICTS
+from qto_review_comparison import normalize_comparison, VERDICTS, CONCLUSIONS, BAND_CLASSES
 
 VIEW_SCHEMA = 'qto-review-view/1.0'
 VIEW_SCHEMA_COMPARISON = 'qto-review-view/1.1'
@@ -24,6 +24,13 @@ def require(ok, message):
  if not ok: raise ValueError(message)
 
 def string(v): return isinstance(v,str) and bool(v.strip())
+def nonneg(v): return isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v) and v>=0
+def page_view_ok(pv):
+ # What the reviewer saw under the page tolerance (contract 9); never used for staleness.
+ if not isinstance(pv,dict):return False
+ band,conc=pv.get('consistent_band'),pv.get('conclusions')
+ band_ok=nonneg(band) or (isinstance(band,dict) and set(band)==set(BAND_CLASSES) and all(nonneg(x) for x in band.values()))
+ return band_ok and isinstance(conc,dict) and all(isinstance(k,str) and x in CONCLUSIONS for k,x in conc.items())
 def number(v): return isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v)
 def xy(v): return isinstance(v,list) and len(v)==2 and all(number(n) for n in v)
 
@@ -150,6 +157,7 @@ def validate_feedback(raw, view):
     require(not r.get('group_id') and not r.get('object_snapshot') and (r.get('item_snapshot') is None or r.get('issue_snapshot') is None),'审核意见只能指向一个对照条目或问题')
     require(r.get('verdict') in (None,'',*VERDICTS),'快捷结论只能是同意、要改、待定')
     ex=r.get('excluded_detail_row_ids',[]);require(isinstance(ex,list) and all(isinstance(x,str) for x in ex) and len(set(ex))==len(ex),'例外明细行须为不重复的编号')
+    if r.get('page_view') is not None:require(r.get('item_snapshot') is not None and page_view_ok(r['page_view']),'page_view 须为 {consistent_band, conclusions}，只用于对照条目批注')
     if r.get('item_snapshot') is not None:
      snap=r['item_snapshot'];require(isinstance(snap,dict) and string(snap.get('item_id')) and key=='对照条目|'+snap['item_id'],'对照条目批注键与快照不一致')
      item=items.get(snap['item_id'])

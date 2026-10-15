@@ -19,12 +19,13 @@
   },
   "thresholds": {
    "difference_rate_alert": 0.2,
-   "consistent_band": 0.05,
-   "consistent_band_by_unit": {"台": 0, "个": 0, "套": 0, "组": 0, "座": 0, "系统": 0, "处": 0, "根": 0, "块": 0, "只": 0}
+   "consistent_band": {"计量": 0.05, "计数": 0},
+   "count_units": ["台", "个", "套", "组", "座", "系统", "处", "根", "块", "只"]
   },
+  "legacy_search_evidence": null,
   "sources": [{"id": "AUDIT", "kind": "审计清单", "title": "各单位工程审计清单",
                "files": [{"title": "<审计清单文件名>", "sha256": "<审计清单文件的64位SHA256>"}],
-               "basis_note": "按 items.csv 的清单列", "row_ids_from": "items"}],
+               "basis_note": "来源行编号从审计清单原件逐行抽取", "row_ids_table": {"path": "review_data/source_row_ids.csv", "column": "row_id"}}],
   "dimensions": [
    {"id": "building", "title": "楼栋", "role": "overview", "values_from": {"table": "buildings", "id": "楼栋", "merged_from": "单位工程"}},
    {"id": "division", "title": "分部", "role": "section", "values_from": "data"},
@@ -39,8 +40,9 @@
     "columns": {"id": "item_id", "row_id": "item_id", "seq": "清单序号", "code": "清单编码", "name": "项目名称", "features": "项目特征", "unit": "单位",
                 "row_quantity": "清单量", "确认量": "确认", "规则推算量": "规则推算", "方案暂估量": "方案暂估", "total": "本次合计",
                 "estimate_dominant": "暂估为主", "difference": "差额", "difference_rate": "差额率", "conclusion": "结论",
-                "third_party_corrected": "清单有误已修正", "ours_note": "说明", "missing_drawing_note": "说明", "correction_note": "说明",
-                "search_drawings": "检索图纸", "search_targets": "检索目标", "search_method": "检索方法", "search_hits": "命中数",
+                "third_party_corrected": "清单有误已修正", "ours_note": "说明", "missing_drawing_note": "缺图说明", "correction_note": "修正说明",
+                "search_drawings": "检索图纸", "search_targets": "检索对象", "search_method": "检索方法", "search_hits": "检索命中数",
+                "search_unread": "未能读取", "search_uncovered": "未覆盖", "search_record_ref": "检索记录", "search_note": "检索说明",
                 "dim.building": "楼栋", "dim.division": "分部", "dim.package": "包号", "dim.system": "系统"},
     "value_maps": {"conclusion": {"清单无量": "第三方无量"}},
     "list_separators": {"search_drawings": "；", "search_targets": "；"}},

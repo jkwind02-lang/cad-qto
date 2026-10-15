@@ -32,7 +32,8 @@ def test_builder_reports_size_estimate_and_comparison_counts(tmp_path):
     size = report['size_estimate']
     assert size['raw_json_bytes'] > size['gzip_bytes'] > 0 and size['html_bytes'] == (tmp_path / 'page.html').stat().st_size
     assert report['comparison_counts']['items'] == 6 and report['comparison_counts']['extra_items'] == 1
-    assert report['consistent_band'] == {'consistent_band': 0.05, 'consistent_band_by_unit': {'个': 0, '台': 0}}
+    assert report['consistent_band'] == {'consistent_band': {'计量': 0.05, '计数': 0}, 'count_units': ['个', '台']}
+    assert report['legacy_search_evidence'] is None
     assert any(e['kind'] == '第三方条目有误已修正' for e in report['comparison_exceptions'])
     assert report['quantity_changes'] == 0
 
@@ -108,7 +109,7 @@ def tables(tmp_path, **override):
         'view': {'project_id': '合成审核验证', 'review_id': 'R1 表格', 'title': '合成表格审核', 'revision': 'r1',
                  'sources': [{'id': 'LIST', 'title': '合成清单', 'sha256': fx.sha('list')}], 'scope_notes': ['合成数据']},
         'comparison': {'display_terms': {'third_party': '清单'},
-                       'thresholds': {'difference_rate_alert': 0.2, 'consistent_band': 0.05, 'consistent_band_by_unit': {'个': 0, '台': 0}},
+                       'thresholds': {'difference_rate_alert': 0.2, 'consistent_band': {'计量': 0.05, '计数': 0}, 'count_units': ['个', '台']},
                        'sources': [{'id': 'AUDIT', 'kind': '审计清单', 'title': '合成审计', 'files': [{'title': '审计.xlsx', 'sha256': fx.sha('audit')}],
                                     'row_ids_table': {'path': 'tables/audit_rows.csv'}},
                                    {'id': 'BID', 'kind': '招标清单', 'title': '合成招标', 'files': [{'title': '招标.xlsx', 'sha256': fx.sha('bid')}], 'row_ids_from': 'items'}],
@@ -218,6 +219,31 @@ def test_tables_contract_checks_still_apply_after_conversion(tmp_path):
     code, _, report, out = convert(tmp_path, details=details)
     assert code == 2 and not out.exists()
     assert {p['check'] for p in report['problems']} >= {'C3-1', 'C3-2'}
+
+
+def test_tables_issue_impacts_search_note_and_legacy_pass_through(tmp_path):
+    m, mapping = tables(tmp_path)
+    write_csv(tmp_path / 'tables' / 'impacts.csv', ['问题', '量', '单位', '说明'], [['Q1', '5', 'm', '出桥架段'], ['Q1', '', '', '定性：影响口径']])
+    mapping['tables']['issue_impacts'] = [{'path': 'tables/impacts.csv', 'columns': {'issue_id': '问题', 'value': '量', 'unit': '单位', 'note': '说明'}}]
+    mapping['comparison']['legacy_search_evidence'] = {'rule': 'e63fe30', 'note': '合成：规则生效前交付'}
+    mapping['tables']['items'][0]['columns']['search_note'] = '检索说明'
+    path = tmp_path / 'tables' / 'items.csv'
+    with open(path, encoding='utf-8-sig', newline='') as f:
+        rows = list(csv.reader(f))
+    rows[0].append('检索说明')
+    for r in rows[1:]:
+        r.append('只记了查过 P1、P2' if r[0] == 'I3' else '')
+        if r[0] == 'I3': r[rows[0].index('检索方法')] = ''
+    write_csv(path, rows[0], rows[1:]); m.write_text(json.dumps(mapping, ensure_ascii=False), encoding='utf-8')
+    out, rep = tmp_path / 'view.json', tmp_path / 'report.json'
+    code, _, _ = run('build_comparison_view_from_tables.py', '--mapping', m, '--output', out, '--report', rep)
+    assert code == 0, rep.read_text(encoding='utf-8')
+    v = json.loads(out.read_text(encoding='utf-8'))
+    q1 = next(q for q in v['comparison']['issues'] if q['id'] == 'Q1')
+    assert q1['impact'] == [{'value': 5.0, 'unit': 'm', 'note': '出桥架段'}, {'value': None, 'note': '定性：影响口径'}]
+    seg = fx.item(c.normalize_view(copy.deepcopy(v)), 'I3')['third_parties'][0]
+    assert seg['search_evidence']['note'] == '只记了查过 P1、P2' and 'method' not in seg['search_evidence'] and seg['search_incomplete'] is True
+    assert v['comparison']['legacy_search_evidence']['rule'] == 'e63fe30'
 
 
 def test_tables_base_view_objects_are_referenced_not_duplicated(tmp_path):

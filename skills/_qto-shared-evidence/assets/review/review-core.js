@@ -9,6 +9,10 @@ function ensure(ok,message){if(!ok)throw Error(message);}
 function text(x){return typeof x==='string'?x:'';}
 const schemaFor=view=>view.schema==='qto-review-view/1.1'?comparisonSchema:schema;
 const isAudit=r=>r&&typeof r==='object'&&(r.item_snapshot!=null||r.issue_snapshot!=null);
+const conclusions=['一致','多算','少算','第三方无量','图上无','缺图','归入他项'],bandClasses=['计量','计数'];
+const nonneg=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0,plain=v=>v&&typeof v==='object'&&!Array.isArray(v);
+// What the reviewer saw under the page tolerance (contract 9); never used for staleness.
+function pageViewOk(pv){if(!plain(pv))return false;const b=pv.consistent_band,c=pv.conclusions;const bandOk=nonneg(b)||(plain(b)&&Object.keys(b).length===bandClasses.length&&bandClasses.every(k=>nonneg(b[k])));return !!bandOk&&plain(c)&&Object.values(c).every(v=>conclusions.includes(v));}
 // Comparison item / issue comments (contract 9): reason always; a quick verdict may stand in for the result text.
 function cleanAudit(r,key,complete){
  ensure(typeof r.confirmed_result==='string'&&typeof r.reason==='string','结果和原因须为文字');
@@ -16,6 +20,7 @@ function cleanAudit(r,key,complete){
  if(complete)ensure(r.reason.trim()&&(r.confirmed_result.trim()||verdicts.includes(r.verdict)),'已保存审核意见须有原因，以及快捷结论或结论文字');
  ensure(!r.group_id&&!r.object_snapshot&&(r.item_snapshot==null||r.issue_snapshot==null),'审核意见只能指向一个对照条目或问题');
  const ex=r.excluded_detail_row_ids||[];ensure(Array.isArray(ex)&&ex.every(x=>typeof x==='string')&&new Set(ex).size===ex.length,'例外明细行须为不重复的编号');
+ if(r.page_view!=null)ensure(r.item_snapshot!=null&&pageViewOk(r.page_view),'page_view 须为 {consistent_band, conclusions}，只用于对照条目批注');
  if(r.item_snapshot!=null)ensure(typeof r.item_snapshot.item_id==='string'&&r.item_snapshot.item_id&&key==='对照条目|'+r.item_snapshot.item_id,'对照条目批注键与快照不一致');
  else ensure(typeof r.issue_snapshot.issue_id==='string'&&r.issue_snapshot.issue_id&&key==='问题|'+r.issue_snapshot.issue_id,'问题批注键与快照不一致');
  return {...clone(r),annotation_id:key,verdict:r.verdict||'',excluded_detail_row_ids:ex,history:r.history||[]};
