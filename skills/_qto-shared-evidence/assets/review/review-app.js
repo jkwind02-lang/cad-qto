@@ -17,6 +17,20 @@ try{
  function within(r,view){let b=boundsCache.get(r);if(!b){b=pointBounds(allPts(r));boundsCache.set(r,b);}return b[0]<=view[2]&&b[2]>=view[0]&&b[1]<=view[3]&&b[3]>=view[1];}
  function installMarkers(){for(const m of feedback.custom_markers){if(!objects.has(m.catalog_key)){data.objects.push(m);objects.set(m.catalog_key,m);}}}
  installMarkers();
+ // One physical object carried by several packages (scene mapping contract 6): point objects with the same scene and id whose first
+ // points lie within the unit tolerance share one marker; same id farther apart stays separate and is flagged in the details.
+ const TWIN_TOL={mm:1,cm:.1,m:.001};
+ function twinIndex(){
+  const byId=new Map(),out=new Map();
+  for(const o of data.objects){if(o.kind!=='point'||!o.scene_id||!o.points?.length)continue;const k=JSON.stringify([o.scene_id,o.id]);if(!byId.has(k))byId.set(k,[]);byId.get(k).push(o);}
+  for(const os of byId.values()){
+   if(os.length<2)continue;const tol=TWIN_TOL[scenes.get(os[0].scene_id)?.coordinate_unit]??0,clusters=[];
+   for(const o of os){const p=o.points[0],c=clusters.find(c=>Math.hypot(c[0].points[0][0]-p[0],c[0].points[0][1]-p[1])<=tol);c?c.push(o):clusters.push([o]);}
+   for(const c of clusters)for(const o of c)out.set(o.catalog_key,{same:c,apart:clusters.filter(x=>x!==c).flat()});
+  }
+  return out;
+ }
+ const twins=twinIndex();
  let mode=data.groups.length?'groups':'objects',selected=null,focused=null,checked=new Set(),items=[],page=0,memberPage=0;
  let scene=data.scenes[0],cx=0,cy=0,scale=1,cw=0,ch=0,drag=null,moved=0,placing=false,wide=false,external=null,marks=[],measuring=false,mpts=[];
  const PAGE=60,MEMBER_PAGE=80,cv=$('cad'),ctx=cv.getContext('2d'),images=new Map();
@@ -97,9 +111,20 @@ try{
   }
   $('detail').textContent='对象：'+i.id+'\n专业：'+data.professional_labels[i.professional]+'\n图页：'+(scenes.get(i.scene_id)?.title||'未定位')+'\n状态：'+i.status+'\n'+i.detail+'\n来源：'+i.source+'\n属性：'+JSON.stringify(i.attributes||{},null,2);
   if(data.legacy_records?.[i.catalog_key])$('detail').textContent+='\n兼容迁移的完整原记录：'+JSON.stringify(data.legacy_records[i.catalog_key],null,2);
+  const tw=twins.get(i.catalog_key);if(tw)$('object-facts').append(twinBox(i,tw));
   const rc=data.receipts[key(selected)],saved=feedback.annotations[key(selected)],state=core.receiptState(rc,saved),box=$('current-adoption');box.hidden=!rc&&!i.adoption_result;
   box.textContent=(i.adoption_result?'当前采用：'+i.adoption_result+'\n'+(i.adoption_reason||'')+'\n'+(i.adoption_note||''):'')+(rc?'\n处理回执：'+rc.status+'\n'+rc.assistant_response+(state==='stale'?'\n意见或成果版本已变化，旧回执不能证明当前结果已复核。':''):'');
   if(rc?.member_results){const row=rc.member_results.find(r=>r.object_id===i.id||r['对象编号']===i.id);if(row)box.textContent+='\n本成员处理：'+JSON.stringify(row,null,2);}
+ }
+ // Records of the same object: which carry quantities and which are references; two with quantities may count it twice.
+ function twinBox(i,tw){
+  const box=document.createElement('div'),span=t=>{const s=document.createElement('span');s.textContent=t;return s;};box.className='twins';
+  const rows=(list,lead)=>{box.append(span(lead));list.forEach((o,n)=>{if(n)box.append(span('；'));const t=(data.professional_labels[o.professional]||o.professional)+' · '+o.catalog_key+' · '+(o.quantities?.length?'带数量 '+qtyText(o):'参照');
+   if(o===i){box.append(span(t+'（当前）'));return;}const b=document.createElement('button');b.className='link';b.textContent=t;b.title='切换到这条记录';b.onclick=()=>selected?.member_keys||external?focus(o):select(o);box.append(b);});};
+  const counted=tw.same.filter(o=>o.quantities?.length).length;
+  if(tw.same.length>1)rows(tw.same,'同一实物 '+tw.same.length+' 条记录，图上只画一个点'+(counted>1?'；其中 '+counted+' 条带数量，可能跨包重复计量，请核对':'')+'：');
+  if(tw.apart.length){if(tw.same.length>1)box.append(document.createElement('br'));rows(tw.apart,'注意：同编号另有 '+tw.apart.length+' 条记录坐标不一致，各画各的点，请核对坐标：');}
+  return box;
  }
  function changeScene(id,fitPage=true){if(!scenes.has(id))return;const swap=scene!==scenes.get(id);scene=scenes.get(id);$('scene').value=id;if(swap){marks=[];mpts=[];renderSymbols();if(measuring)status(measureText());}if(fitPage)fit();draw();}
  // What this page cannot show is counted per scene; the reviewer must go back to the original for those (scene mapping contract 7.4).
@@ -174,13 +199,15 @@ try{
    }
    else{if(!within(r,view))continue;path(r.points,r.kind==='polygon');if(r.fill){ctx.fillStyle=r.fill;ctx.fill();}ctx.strokeStyle=r.color||'#b4c1ca';ctx.lineWidth=r.width||.7;const dl=r.dash?r.dash.reduce((a,b)=>a+b,0)*scale:0;if(dl>=4)ctx.setLineDash(r.dash.map(v=>Math.max(1,v*scale)));ctx.stroke();if(dl>=4)ctx.setLineDash([]);}
   }
+  const drawn=new Set();
   for(const i of mapItems()){
-   if(!visible(i)||!within(i,view))continue;const active=i===focused,allowed=!selected?.member_keys||checked.has(i.catalog_key),color=!allowed?'#b6bec5':i.color||(/排除|暂缓|不计/.test(i.status)?'#8f9ca5':active?'#d36b17':'#237ba1');
+   if(!visible(i)||!within(i,view))continue;const tw=twins.get(i.catalog_key)?.same;if(tw?.length>1){if(drawn.has(tw))continue;drawn.add(tw);}
+   const same=tw?.length>1?tw:[i],active=same.includes(focused),allowed=!selected?.member_keys||same.some(o=>checked.has(o.catalog_key)),color=!allowed?'#b6bec5':i.color||(/排除|暂缓|不计/.test(i.status)?'#8f9ca5':active?'#d36b17':'#237ba1');
    ctx.strokeStyle=color;ctx.lineWidth=active?4:2;
    if(i.kind==='polygon'){path(i.points,true);for(const h of i.holes||[]){ctx.moveTo(...screen(h[0]));h.slice(1).forEach(p=>ctx.lineTo(...screen(p)));ctx.closePath();}ctx.fillStyle=allowed?'#2d91b92a':'#bac2c72a';ctx.fill('evenodd');ctx.stroke();}
    else if(i.kind==='line'){for(const q of partsOf(i)){path(q);ctx.stroke();}}
    const p=screen(midpoint(i));if(p[0]<-30||p[0]>cw+30||p[1]<-30||p[1]>ch+30)continue;ctx.beginPath();ctx.arc(...p,active?7:4,0,2*Math.PI);ctx.fillStyle='white';ctx.fill();ctx.stroke();
-   if(active){ctx.font='bold 12px Microsoft YaHei';const label=i.id,width=ctx.measureText(label).width,x=Math.max(5,Math.min(cw-width-10,p[0]+12)),y=Math.max(20,p[1]-12);ctx.fillStyle='white';ctx.fillRect(x-3,y-14,width+8,20);ctx.fillStyle=color;ctx.fillText(label,x,y);}
+   if(active){ctx.font='bold 12px Microsoft YaHei';const label=i.id+(same.length>1?' · '+same.length+' 条记录':''),width=ctx.measureText(label).width,x=Math.max(5,Math.min(cw-width-10,p[0]+12)),y=Math.max(20,p[1]-12);ctx.fillStyle='white';ctx.fillRect(x-3,y-14,width+8,20);ctx.fillStyle=color;ctx.fillText(label,x,y);}
   }
   for(const q of marks){const p=screen(q);if(p[0]<-20||p[0]>cw+20||p[1]<-20||p[1]>ch+20)continue;ctx.beginPath();ctx.arc(...p,11,0,2*Math.PI);ctx.strokeStyle='#d21f1f';ctx.lineWidth=2.5;ctx.stroke();}
   if(mpts.length){const f=lengthFactor();ctx.strokeStyle='#c2187a';ctx.lineWidth=2;ctx.setLineDash([6,4]);path(mpts);ctx.stroke();ctx.setLineDash([]);ctx.font='bold 12px Microsoft YaHei';mpts.forEach((q,n)=>{const s=screen(q);ctx.fillStyle='#c2187a';ctx.fillRect(s[0]-3,s[1]-3,6,6);if(!n)return;const a=screen(mpts[n-1]),d=Math.hypot(q[0]-mpts[n-1][0],q[1]-mpts[n-1][1]),t=f?(d*f).toFixed(3)+' m':num(d)+' '+scene.coordinate_unit,w=ctx.measureText(t).width,x=(a[0]+s[0])/2+6,y=(a[1]+s[1])/2-6;ctx.fillStyle='white';ctx.fillRect(x-2,y-13,w+4,17);ctx.fillStyle='#c2187a';ctx.fillText(t,x,y);});}
@@ -230,7 +257,7 @@ try{
  const UNIT_M={mm:.001,cm:.01,m:1},num=v=>Number(v.toPrecision(6)),lengthFactor=()=>scene.length_factor||UNIT_M[scene.coordinate_unit]||null;
  function snap(p){const view=pointBounds([world([0,0]),world([cw,ch])]);let best=null,gap=10;const test=q=>{const s=screen(q),g=Math.hypot(s[0]-p[0],s[1]-p[1]);if(g<gap){gap=g;best=q;}};for(const r of backgrounds.get(scene.id))if(r.kind!=='text'&&within(r,view))allPts(r).forEach(test);for(const o of mapItems().filter(visible))if(within(o,view))allPts(o).forEach(test);return best?[best[0],best[1]]:world(p);}
  function measureText(){if(mpts.length<2)return '量距：已取 '+mpts.length+' 点，请在图上依次点击，靠近端点会自动吸附；再点“量距”结束。';let d=0;for(let n=1;n<mpts.length;n++)d+=Math.hypot(mpts[n][0]-mpts[n-1][0],mpts[n][1]-mpts[n-1][1]);const f=lengthFactor(),u=scene.coordinate_unit,on='量距 '+(mpts.length-1)+' 段：图上合计 '+num(d)+' '+u;return f?on+'，实长 '+(d*f).toFixed(3)+' m（'+(scene.length_factor?'按本图页换算系数，每 1 '+u+' 折 '+num(f)+' m':'按 1:1，图上 1 '+u+' 即实长 1 '+u)+'）':on+'；本图页没有比例，不换算实长，请对照尺寸标注。';}
- cv.onpointerup=e=>{if(moved<5&&scene&&measuring){const r=cv.getBoundingClientRect();mpts.push(snap([e.clientX-r.left,e.clientY-r.top]));draw();status(measureText());drag=null;return;}if(moved<5&&scene&&!external){const r=cv.getBoundingClientRect(),p=[e.clientX-r.left,e.clientY-r.top];if(placing)createMarker(world(p));else{let best=null,distance=16;for(const o of mapItems().filter(visible)){const gap=hitDistance(o,p);if(gap<distance){distance=gap;best=o;}}if(best)selected?.member_keys?focus(best):select(best);}}drag=null;};
+ cv.onpointerup=e=>{if(moved<5&&scene&&measuring){const r=cv.getBoundingClientRect();mpts.push(snap([e.clientX-r.left,e.clientY-r.top]));draw();status(measureText());drag=null;return;}if(moved<5&&scene&&!external){const r=cv.getBoundingClientRect(),p=[e.clientX-r.left,e.clientY-r.top];if(placing)createMarker(world(p));else{let best=null,distance=16;for(const o of mapItems().filter(visible)){const gap=hitDistance(o,p);if(gap<distance){distance=gap;best=o;}}if(best){const shown=mapItems();best=twins.get(best.catalog_key)?.same.find(o=>o.quantities?.length&&shown.includes(o))||best;selected?.member_keys?focus(best):select(best);}}}drag=null;};
  $('add-marker').onclick=()=>{if(!scene){status('没有图页，不能新增标记。');return;}placing=!placing;$('add-marker').classList.toggle('on',placing);if(placing&&measuring){measuring=false;mpts=[];$('measure').classList.remove('on');draw();}status(placing?'请点击当前图页添加复核标记。':'');};
  $('measure').onclick=()=>{if(!scene){status('没有图页，不能量距。');return;}measuring=!measuring;mpts=[];$('measure').classList.toggle('on',measuring);if(measuring&&placing){placing=false;$('add-marker').classList.remove('on');}draw();status(measuring?measureText():'');};
  function divider(id,isNav){let state=null;const el=$(id);el.onpointerdown=e=>{el.setPointerCapture(e.pointerId);state={x:e.clientX,nav:document.querySelector('.nav').getBoundingClientRect().width,review:document.querySelector('.review-pane').getBoundingClientRect().width};};el.onpointermove=e=>{if(!state)return;const width=$('layout').getBoundingClientRect().width;$('layout').style.setProperty(isNav?'--navw':'--revieww',(isNav?Math.max(200,Math.min(380,state.nav+e.clientX-state.x)):Math.max(340,Math.min(width-state.nav-300,state.review+state.x-e.clientX)))+'px');};el.onpointerup=()=>{state=null;};}

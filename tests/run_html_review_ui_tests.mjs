@@ -283,6 +283,31 @@ if(art.comparison_html){
  checks.push('块内符号：面板写“块内 N 个符号未参与对账”并按块名列个数，点数字标红圈；只有块内符号的图页也显示符号对账按钮');
  checks.push('交换DXF底图：图面状态写“本页看不出 n 处，须回原图”及类别和主要图层，中性底图写明缺什么；符号对账列本页计数，点“未计”标红圈并提示，换到没有对账的图页面板收起；有对账说明时另列已剔除、他图计入、同一实物另一图，点数字标红圈并带说明');
 }
+// Same object in several packages (registration 1615, scene mapping contract 6): one marker per scene + id + point within the unit
+// tolerance, the details list every record with quantity or reference; farther apart, other kinds and other scenes are drawn as before.
+{
+ const findIn=(n,p)=>{if(p(n))return n;for(const ch of n.children||[])if(ch&&typeof ch==='object'){const r=findIn(ch,p);if(r)return r;}return null;};
+ const objMode=async d=>{const th=harness(withData(sourceHTML,d));await th.start();th.ids['mode-objects'].click();th.ids.professional.value='全部';th.ids.professional.onchange();th.ids.scene.value='plan';th.ids.scene.onchange();th.canvasCalls.length=0;th.ids.fit.click();return th;};
+ const markers=th=>th.canvasCalls.filter(c=>c[0]==='arc'&&(c[3]===4||c[3]===7)).length;
+ const plain=await objMode(structuredClone(data));
+ assert.equal(markers(plain),data.objects.filter(o=>o.scene_id==='plan'&&o.kind!=='unlocated').length);assert.doesNotMatch(plain.ids['object-facts'].textContent,/同一实物|同编号另有/);
+ const d=structuredClone(data),base=d.objects.find(o=>o.catalog_key==='复核|qto-components-points-对象1'),q=[structuredClone(base.quantities[0])];base.quantities=[];
+ const twin=(key,prof,over)=>({...structuredClone(base),catalog_key:key,professional:prof,title:key+' 配电箱',...over});
+ d.objects.push(twin('包B|箱1','qto-electrical-routes',{points:[[2800.4,1100]],quantities:q}),twin('包C|箱1','qto-pipe-networks',{quantities:q}),
+  twin('包D|箱1','qto-duct-air-systems',{points:[[2900,1100]]}),twin('包G|箱1','qto-rebar',{points:[[2801.5,1100]]}),
+  twin('包E|箱1','qto-structural-steel',{kind:'line',points:[[2850,1150],[2950,1250]]}),twin('包F|箱1','qto-masonry-secondary',{scene_id:'section',points:[[0.5,1]]}));
+ const th=await objMode(d);assert.equal(markers(th),markers(plain)+3,'包B、包C与原对象只画一个点；包D、包G超出 1 mm 容差，包E是线，各画各的');
+ const b=d.scenes.find(s=>s.id==='plan').bounds,sc=Math.min(625/(b[2]-b[0]),595/(b[3]-b[1])),px=(2800-(b[0]+b[2])/2)*sc+340,py=-(1100-(b[1]+b[3])/2)*sc+325;
+ th.ids.cad.onpointerdown({pointerId:1,clientX:px,clientY:py});th.ids.cad.onpointerup({pointerId:1,clientX:px,clientY:py});
+ const facts=th.ids['object-facts'].textContent;
+ assert.match(facts,/^包B\|箱1 配电箱/,'点到共用的标记，取带数量的那条');
+ assert.match(facts,/同一实物 3 条记录，图上只画一个点；其中 2 条带数量，可能跨包重复计量，请核对：/);
+ assert.match(facts,/包B\|箱1 · 带数量 主项 4\.25 台（规则推算量）（当前）/);assert.match(facts,/复核\|qto-components-points-对象1 · 参照/);
+ assert.match(facts,/注意：同编号另有 2 条记录坐标不一致，各画各的点，请核对坐标：/);assert.doesNotMatch(facts,/包E|包F/);
+ findIn(th.ids['object-facts'],n=>n.className==='link'&&/ · 包C\|箱1 · /.test(n.textContent)).click();
+ assert.match(th.ids['object-facts'].textContent,/^包C\|箱1 配电箱/);assert.match(th.ids['object-facts'].textContent,/包C\|箱1 · 带数量 [^；]*（当前）/);
+ checks.push('同一实物多包：同图页同编号、坐标在容差内的点只画一个标记，点选取带数量的那条并列出各包记录（带数量/参照，可切换），两条以上带数量给提示；坐标超出容差、线对象、别的图页照常各画各的');
+}
 // Affine text retains both glyph axes, including scene handedness; culling uses the transformed height.
 {
  for(const y_axis of ['up','down']){

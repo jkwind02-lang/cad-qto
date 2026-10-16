@@ -3,7 +3,8 @@
 Only moves and renames values (contract docs/维护/复核页审核视图契约.md, section 12); it never
 computes an engineering quantity. The result is checked by the shared contract before it is written.
 """
-import argparse, copy, csv, hashlib, json, os
+import argparse, copy, csv, hashlib, json, math, os
+from collections import Counter, defaultdict
 from pathlib import Path
 from qto_review_contract import normalize_view, VIEW_SCHEMA_COMPARISON
 from qto_review_comparison import ComparisonError, LEVELS, close
@@ -376,7 +377,73 @@ def build_view(mapping, base, base_view):
 SCENE_SAME = ('title', 'source_id', 'coordinate_unit', 'y_axis', 'bounds', 'background', 'background_refs', 'raster_path', 'raster_data_uri')
 
 
-def merge_base_views(paths, out_dir):
+def load_scene_reports(paths):
+ """Scene conversion reports (build_review_scenes_from_tables --report): background key -> (report name, background filters)."""
+ out = {}
+ for path in paths:
+  rep = json.loads(path.read_text(encoding='utf-8-sig'))
+  if not isinstance(rep.get('scenes'), list): raise ValueError('图面转换检查报告没有 scenes：' + path.name)
+  for s in rep['scenes']:
+   if isinstance(s, dict) and s.get('background_key'): out.setdefault(s['background_key'], (path.name, s.get('background_filters') or []))
+ return out
+
+
+def _short(v):
+ s = json.dumps(v, ensure_ascii=False)
+ return s if len(s) <= 80 else s[:77] + '…'
+
+
+def filter_difference(fa, fb, va, vb):
+ """Background filters of two copies of one sheet, part by part: list keys as set differences, other keys as both values."""
+ if len(fa) != len(fb): return [f'底图分 {len(fa)} 部分与 {len(fb)} 部分']
+ out = []
+ for n, (a, b) in enumerate(zip(fa, fb), 1):
+  part = f'第 {n} 部分（图页 {a.get("sheet")}）' if len(fa) > 1 else ''
+  for k in sorted(set(a) | set(b)):
+   x, y = a.get(k), b.get(k)
+   if x == y: continue
+   if isinstance(x, list) and isinstance(y, list) and all(isinstance(i, str) for i in x + y):
+    only_a, only_b = [i for i in x if i not in y], [i for i in y if i not in x]
+    out.append(f'{part}{k} ' + '，'.join([*([f'只在 {va}：{"、".join(only_a)}'] if only_a else []), *([f'只在 {vb}：{"、".join(only_b)}'] if only_b else [])] or ['顺序不同']))
+   else: out.append(f'{part}{k} {_short(x)} 与 {_short(y)}')
+ return out
+
+
+def scene_difference(a, b, va, vb, filters):
+ """Why two copies of one scene id differ: the differing fields, then details (values, background filter set differences when the scene reports give them)."""
+ fields = [k for k in SCENE_SAME if a.get(k) != b.get(k)]
+ details = []
+ for k in fields:
+  if k == 'background': details.append(f'background 图元 {len(a.get(k) or [])} 与 {len(b.get(k) or [])} 个')
+  elif k == 'raster_data_uri': details.append('raster_data_uri 图像不同')
+  elif k != 'background_refs': details.append(f'{k} {_short(a.get(k))} 与 {_short(b.get(k))}')
+ if 'background_refs' in fields:
+  ra, rb = a.get('background_refs') or [], b.get('background_refs') or []
+  missing = [r for r in ra + rb if r not in (filters or {})]
+  if not filters: details.append('底图过滤条件未知：加 --scene-report 给出两包的图面转换检查报告，可列出过滤条件的差集')
+  elif missing: details.append('底图键 ' + '、'.join(missing) + ' 在给出的图面转换检查报告里找不到')
+  else:
+   fd = filter_difference([p for r in ra for p in filters[r][1]], [p for r in rb for p in filters[r][1]], va, vb)
+   details.append('底图过滤条件：' + '；'.join(fd) if fd else '底图过滤条件相同，底图键不同来自图纸或交换 DXF 的哈希（两包用的图纸文件不是同一份）')
+ return fields, details
+
+
+def check_shared_scenes(paths, filters):
+ """Read-only check before a merge: every scene id used by two or more base views, each later copy compared with the first."""
+ first, rows = {}, []
+ for path in paths:
+  base = json.loads(path.read_text(encoding='utf-8-sig'))
+  for s in base.get('scenes', []):
+   # Raster paths are relative to each view file; compare the files they point at, as the merge does.
+   if s.get('raster_path'): s = {**s, 'raster_path': str((path.resolve().parent / s['raster_path']).resolve())}
+   if s['id'] not in first: first[s['id']] = (path.name, s); continue
+   va, a = first[s['id']]
+   fields, details = scene_difference(a, s, va, path.name, filters)
+   rows.append({'scene': s['id'], 'views': [va, path.name], 'same': not fields, **({'fields': fields, 'details': details} if fields else {})})
+ return rows
+
+
+def merge_base_views(paths, out_dir, filters=None):
  """Several existing views (contract 12.1): scenes, objects and groups are only moved; any id clash stops the merge.
  Raster paths are rewritten relative to the output view so the merged view still finds its images."""
  merged = {'scenes': [], 'objects': [], 'groups': [], 'background_sets': {}, 'receipts': {}, 'sources': [], 'renamed_groups': [], 'base_views': [], 'merged_scenes': []}
@@ -399,10 +466,10 @@ def merge_base_views(paths, out_dir):
     # Packages that use the same sheet emit the same scene (scene mapping contract 10): identical ones become one page.
     if field == 'scenes' and x[ident] in seen[field]:
      first = next(s for s in merged['scenes'] if s['id'] == x[ident])
-     diff = [k for k in SCENE_SAME if first.get(k) != x.get(k)]
+     diff, details = scene_difference(first, x, seen[field][x[ident]], name, filters)
      if not diff:
       merged['merged_scenes'].append({'scene': x[ident], 'views': [seen[field][x[ident]], name]}); continue
-     raise ValueError(f'几份基础视图的图页编号相同而内容不同：{x[ident]}（{seen[field][x[ident]]} 与 {name}，不同的是 {"、".join(diff)}）')
+     raise ValueError(f'几份基础视图的图页编号相同而内容不同：{x[ident]}（{seen[field][x[ident]]} 与 {name}，不同的是 {"、".join(diff)}）。' + '；'.join(details))
     if x[ident] in seen[field]: raise ValueError(f'几份基础视图的{label}相同：{x[ident]}（{seen[field][x[ident]]} 与 {name}）')
     seen[field][x[ident]] = name
     merged[field].append(x)
@@ -418,40 +485,93 @@ def merge_base_views(paths, out_dir):
  return merged
 
 
+TWIN_TOL = {'mm': 1, 'cm': 0.1, 'm': 0.001}   # same object, same sheet: points this close are one marker on the page (review-app.js)
+
+
+def shared_object_stats(view, cap=50):
+ """Records sharing one object id (scene mapping contract 6): how many objects several records carry; those where two or more records
+ carry quantities (may be counted twice across packages); point records of one sheet farther apart than the unit tolerance."""
+ by_id = defaultdict(list)
+ for o in view.get('objects', []): by_id[o['id']].append(o)
+ shared = {k: v for k, v in sorted(by_id.items()) if len(v) > 1}
+ units = {s['id']: s.get('coordinate_unit') for s in view.get('scenes', [])}
+ multi = [{'object_id': k, 'records': [o['catalog_key'] for o in v if o.get('quantities')]} for k, v in shared.items() if sum(1 for o in v if o.get('quantities')) > 1]
+ apart = []
+ for k, v in shared.items():
+  per_scene = defaultdict(list)
+  for o in v:
+   if o.get('kind') == 'point' and o.get('scene_id') and o.get('points'): per_scene[o['scene_id']].append(o)
+  for sid, os_ in sorted(per_scene.items()):
+   tol, clusters = TWIN_TOL.get(units.get(sid), 0), []
+   for o in os_:
+    p = o['points'][0]
+    c = next((c for c in clusters if math.hypot(c[0]['points'][0][0] - p[0], c[0]['points'][0][1] - p[1]) <= tol), None)
+    if c is None: clusters.append([o])
+    else: c.append(o)
+   if len(clusters) > 1: apart.append({'scene': sid, 'object_id': k, 'positions': len(clusters), 'records': [o['catalog_key'] for o in os_]})
+ out = {'objects': len(shared), 'records': sum(len(v) for v in shared.values()),
+        'by_record_count': {str(n): c for n, c in sorted(Counter(len(v) for v in shared.values()).items())},
+        'multi_quantity': len(multi), 'coordinate_mismatch': len(apart)}
+ if multi: out.update(multi_quantity_rows=multi[:cap], warning=f'{len(multi)} 个实物有两条以上记录带数量，可能跨包重复计量，请核对 multi_quantity_rows')
+ if apart: out['coordinate_mismatch_rows'] = apart[:cap]
+ return out
+
+
+def build(a, report, filters):
+ """Mapping + tables (+ base views) -> one comparison view; fills the report and returns the exit code."""
+ if not a.mapping or not a.output: raise ValueError('要写 --mapping 和 --output（只核同号图页用 --check-shared-sheets）')
+ if a.output.exists(): raise ValueError('输出视图已存在，请用新的版本名')
+ mapping = json.loads(a.mapping.read_text(encoding='utf-8-sig'))
+ if mapping.get('schema') != MAPPING_SCHEMA: raise ValueError('映射文件 schema 须为 ' + MAPPING_SCHEMA)
+ if not isinstance(mapping.get('view'), dict) or not isinstance(mapping.get('tables'), dict): raise ValueError('映射文件须有 view 和 tables')
+ warnings = mapping_warnings(mapping)
+ if warnings: report['mapping_warnings'] = warnings
+ out_dir = a.output.resolve().parent
+ base_view = merge_base_views(a.base_view, out_dir, filters) if a.base_view else None
+ view, info = build_view(mapping, a.mapping.resolve().parent, base_view)
+ if base_view: info['base_views'] = base_view['base_views']
+ if base_view and base_view['renamed_groups']: info['renamed_groups'] = base_view['renamed_groups']
+ if base_view and base_view['merged_scenes']: info['merged_scenes'] = base_view['merged_scenes']
+ normalized = normalize_view(view, out_dir if a.base_view else None)
+ a.output.parent.mkdir(parents=True, exist_ok=True)
+ with a.output.open('x', encoding='utf-8', newline='\n') as f: json.dump(view, f, ensure_ascii=False, indent=1)
+ check = normalized['comparison']['generation_check']
+ report.update(status='PASS', output=str(a.output), mapping_sha256=sha_file(a.mapping), **info, comparison_counts=check['counts'], comparison_exceptions=check['exceptions'],
+               result_fingerprint=normalized['result_fingerprint'], shared_objects=shared_object_stats(view))
+ return 0
+
+
 def main():
- p = argparse.ArgumentParser(); p.add_argument('--mapping', required=True, type=Path); p.add_argument('--output', required=True, type=Path)
- p.add_argument('--base-view', type=Path, action='append', default=[], help='可以写多次，并入几份已有视图'); p.add_argument('--report', type=Path); a = p.parse_args()
+ p = argparse.ArgumentParser(); p.add_argument('--mapping', type=Path); p.add_argument('--output', type=Path)
+ p.add_argument('--base-view', type=Path, action='append', default=[], help='可以写多次，并入几份已有视图'); p.add_argument('--report', type=Path)
+ p.add_argument('--scene-report', type=Path, action='append', default=[], help='各包的图面转换检查报告，可写多次；同号图页底图不同时据此列出过滤条件的差集')
+ p.add_argument('--check-shared-sheets', action='store_true', help='只核几份基础视图的同号图页是否相同，不合成；不用 --mapping、--output，有不同的退出码 2')
+ a = p.parse_args()
  report = {'status': 'INPUT_REQUIRED', 'quantity_changes': 0}
  try:
-  if a.output.exists(): raise ValueError('输出视图已存在，请用新的版本名')
-  if a.report and a.report.resolve() in {x.resolve() for x in (a.mapping, a.output, *a.base_view) if x}: raise ValueError('检查报告路径不能覆盖映射、视图或基础视图')
-  mapping = json.loads(a.mapping.read_text(encoding='utf-8-sig'))
-  if mapping.get('schema') != MAPPING_SCHEMA: raise ValueError('映射文件 schema 须为 ' + MAPPING_SCHEMA)
-  if not isinstance(mapping.get('view'), dict) or not isinstance(mapping.get('tables'), dict): raise ValueError('映射文件须有 view 和 tables')
-  warnings = mapping_warnings(mapping)
-  if warnings: report['mapping_warnings'] = warnings
-  out_dir = a.output.resolve().parent
-  base_view = merge_base_views(a.base_view, out_dir) if a.base_view else None
-  view, info = build_view(mapping, a.mapping.resolve().parent, base_view)
-  if base_view: info['base_views'] = base_view['base_views']
-  if base_view and base_view['renamed_groups']: info['renamed_groups'] = base_view['renamed_groups']
-  if base_view and base_view['merged_scenes']: info['merged_scenes'] = base_view['merged_scenes']
-  normalized = normalize_view(view, out_dir if a.base_view else None)
-  a.output.parent.mkdir(parents=True, exist_ok=True)
-  with a.output.open('x', encoding='utf-8', newline='\n') as f: json.dump(view, f, ensure_ascii=False, indent=1)
-  check = normalized['comparison']['generation_check']
-  report.update(status='PASS', output=str(a.output), mapping_sha256=sha_file(a.mapping), **info, comparison_counts=check['counts'], comparison_exceptions=check['exceptions'],
-                result_fingerprint=normalized['result_fingerprint'])
-  code = 0
+  if a.report and a.report.resolve() in {x.resolve() for x in (a.mapping, a.output, *a.base_view, *a.scene_report) if x}: raise ValueError('检查报告路径不能覆盖映射、视图、基础视图或图面转换检查报告')
+  filters = load_scene_reports(a.scene_report)
+  if a.check_shared_sheets:
+   if a.mapping or a.output: raise ValueError('--check-shared-sheets 只核不合成，不写 --mapping、--output')
+   if len(a.base_view) < 2: raise ValueError('--check-shared-sheets 至少要两份 --base-view')
+   rows = check_shared_scenes(a.base_view, filters); diff = [r for r in rows if not r['same']]
+   report.update(status='INPUT_REQUIRED' if diff else 'PASS', mode='check_shared_sheets', base_views=[x.name for x in a.base_view],
+                 shared_sheets={'checked': len(rows), 'same': len(rows) - len(diff), 'different': len(diff)}, shared_sheet_rows=rows)
+   if diff: report['error'] = f'{len(diff)} 处同号图页内容不同：' + '、'.join(f'{r["scene"]}（{" 与 ".join(r["views"])}）' for r in diff)
+   code = 2 if diff else 0
+  else:
+   code = build(a, report, filters)
  except (OSError, ValueError, KeyError, TypeError) as e:
   report['error'] = str(e)
   if hasattr(e, 'problems'): report['problems'] = e.problems
   code = 2
  if a.report:
   a.report.parent.mkdir(parents=True, exist_ok=True); a.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
- summary = {k: report[k] for k in ('status', 'output', 'comparison_counts', 'error') if k in report}
+ summary = {k: report[k] for k in ('status', 'output', 'comparison_counts', 'shared_sheets', 'error') if k in report}
  if 'problems' in report: summary['problem_count'] = len(report['problems'])
  if 'mapping_warnings' in report: summary['mapping_warning_count'] = len(report['mapping_warnings'])
+ so = report.get('shared_objects') or {}
+ if so.get('multi_quantity') or so.get('coordinate_mismatch'): summary['shared_objects'] = {k: so[k] for k in ('objects', 'multi_quantity', 'coordinate_mismatch')}
  print(json.dumps(summary, ensure_ascii=False)); return code
 
 

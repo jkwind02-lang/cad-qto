@@ -17,8 +17,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
-      "sha256": "7df4190801f33202a5a706077facf3a080d18dd64486f77ae562da98f49db75f",
-      "bytes": 37475
+      "sha256": "1cb2aa1b85965ec71ae38cf44a2775437356f6e62a5238aea739a2e2fc127135",
+      "bytes": 40193
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-audit.js",
@@ -32,8 +32,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-shell.html",
-      "sha256": "ed4a742fc0e83961f162ae02b82d89280f1c417c3e132e020bd6a02187d29754",
-      "bytes": 22974
+      "sha256": "28e448e70414e60245103d08933cb5b0a7cfbb5d11dd2d080bc7ae5ee9a99479",
+      "bytes": 23085
     },
     {
       "path": "_qto-shared-evidence/assets/插件问题登记模板.md",
@@ -57,8 +57,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
-      "sha256": "af112d9b3d4f7cbaef0ee88b3ea29ac59cefe7020d53b03f41af87c51d70145b",
-      "bytes": 22869
+      "sha256": "d3b10e2b2067269ec58929472ab779ff3047d9a6e23cf517e0916ca0f8f8901f",
+      "bytes": 23280
     },
     {
       "path": "_qto-shared-evidence/references/PDF图片与表格提取.md",
@@ -87,8 +87,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/复核页待解决与对照审核.md",
-      "sha256": "e4e16e00dbec13e618d3120bcb552740fa27ea3710ec23fa95ed7bc7260c3fcf",
-      "bytes": 17069
+      "sha256": "c5bc3be06a9de45290b3c1df70b963438576799fb0d7145c2023b2d67c087d7c",
+      "bytes": 17787
     },
     {
       "path": "_qto-shared-evidence/references/尺寸指向与尺寸链复核.md",
@@ -177,8 +177,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/build_comparison_view_from_tables.py",
-      "sha256": "6d7b3abd506ba2fb7a67e1e412a71179be3ace5072cd87abc19ef958ecae768a",
-      "bytes": 33741
+      "sha256": "2bc5445f11713a4e3f7c857bfafc5a12d8e70f81c2695f8f6ba206ecfbcd3697",
+      "bytes": 41422
     },
     {
       "path": "_qto-shared-evidence/scripts/build_qto_review_html.py",
@@ -417,8 +417,8 @@
     },
     {
       "path": "qto-components-points/references/点位覆盖台账.md",
-      "sha256": "0924588dc002b9b63cf87ef7bf675a81397b8dbb84daeb7e46b325898492b28e",
-      "bytes": 10662
+      "sha256": "f4cb5c3875b5a177774ad27b550386abc84957b3b0e8d8cbf71493aa4f80245c",
+      "bytes": 11310
     },
     {
       "path": "qto-components-points/references/结果检查与输出.md",
@@ -742,8 +742,8 @@
     },
     {
       "path": "qto-electrical-routes/references/复核页审核视图接入.md",
-      "sha256": "007c6f0924348815f7c9471dc7a80efc81e8932d8a166ef72d8b680d88d6576e",
-      "bytes": 13696
+      "sha256": "76ec4d68cc3c7ac964af884cdd8e3309ef6d15084ecb441cca5b4ff125311901",
+      "bytes": 14061
     },
     {
       "path": "qto-electrical-routes/references/常规计算逻辑.md",
