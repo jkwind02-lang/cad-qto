@@ -8,6 +8,8 @@
 - 交叉不连：只能靠交叉过去的设备 → 网络断开（待办）；
 - 图符遮断的小缺口（≤ gap，且共线）桥接，缺口长度单列并计入；超出容差的缺口 → 网络断开，不退回直角距离；
 - 端点离走线在挂接容差内照追并记距离，超出 → 待办；实例找不到 → 待办；
+- 画进挂接容差带、画进设备图符的线照计（从带里最近的线端算起）；设备只挂最近的一组线，邻近设备的线落进带里不用；
+  箱出几路，带里几组线都可挂；挂接距离报实际用到的那个点；
 - 走线和箱在楼层块内（实例号 PT-CAD-<顶层>/FLOOR/CAD-<块内>）；单位换算（输出米）；
 - 范围边上的段 → 待办（不能整段计入）；两条等长路径 → 待办；只给起点 → 输出连通分量；
 - 输出的 paths 行可直接交给 calculate_electrical_paths；映射线表按原图坐标列每段和每个缺口。
@@ -120,6 +122,19 @@ def draw_main(doc, msp):
     h['L15'] = msp.add_line((300, 150000), (9700, 150000), dxfattribs=WIRE).dxf.handle
     msp.add_lwpolyline([(3000, 150000), (3000, 151000), (4900, 151000)], dxfattribs=WIRE)
     msp.add_lwpolyline([(7000, 150000), (7000, 149000), (7900, 149000)], dxfattribs=WIRE)
+    h['A16'], h['D18'] = ins(msp, 'BOX', 0, 160000), ins(msp, 'DEV', 5100, 160400)   # a branch from 0.1 m off the box
+    h['BR'] = msp.add_line((400, 160000), (400, 160400), dxfattribs=WIRE).dxf.handle   # up to a trunk 0.2 m over the box
+    h['TK'] = msp.add_line((-2000, 160400), (5000, 160400), dxfattribs=WIRE).dxf.handle
+    h['A17'], h['D19'] = ins(msp, 'BOX', 0, 170000), ins(msp, 'DEV', 5300, 170000)   # a line drawn to the device centre,
+    h['E1'] = msp.add_line((500, 170000), (5000, 170000), dxfattribs=WIRE).dxf.handle  # its last joint 0.2 m off the device
+    h['E2'] = msp.add_line((5000, 170000), (5250, 170000), dxfattribs=WIRE).dxf.handle  # a joint inside the device too
+    h['E2b'] = msp.add_line((5250, 170000), (5300, 170000), dxfattribs=WIRE).dxf.handle
+    msp.add_line((0, 170200), (0, 172000), dxfattribs=WIRE)                            # another circuit from the box edge
+    h['A18'], h['D20'] = ins(msp, 'BOX', 0, 180000), ins(msp, 'DEV', 800, 175000)    # a trunk down from the box to a device;
+    h['DN'] = ins(msp, 'DEV', 800, 175350)                                             # a neighbour device 0.35 m over it,
+    h['T1'] = msp.add_line((0, 179800), (0, 175000), dxfattribs=WIRE).dxf.handle       # whose line branches off the trunk
+    h['E3'] = msp.add_line((0, 175000), (800, 175000), dxfattribs=WIRE).dxf.handle     # and ends 0.25 m off this device
+    msp.add_line((0, 175350), (800, 175350), dxfattribs=WIRE)
     floor = doc.blocks.new('FLOOR')                                                    # box, device and line in a floor block
     inner_box, inner_dev = ins(floor, 'BOX', 0, 0), ins(floor, 'DEV', 6000, 0)
     floor.add_line((300, 0), (5900, 0), dxfattribs=WIRE)
@@ -131,7 +146,8 @@ def draw_main(doc, msp):
 MAIN_ROUTES = [('RT', 'A14', 'D17'), ('RT2', 'A14', 'D16'), ('RA', 'A15', 'DX'), ('RB', 'B15', 'DY'),
                ('R1', 'A1', 'D1'), ('R2', 'A2', 'D2'), ('R3', 'A2', 'D3'), ('R4', 'A3', 'D4'), ('R5', 'A3', 'D5'),
                ('R6', 'A4', 'D6'), ('R7', 'A4', 'D7'), ('R8', 'A5', 'D8'), ('R9', 'A6', 'D9'), ('R10', 'A7', 'D10'),
-               ('R11', 'A8', 'D11'), ('R12', 'A9', 'D12'), ('R14', 'A11', 'D14'), ('R15', 'A12', 'D15'), ('RF', 'FA', 'FD')]
+               ('R11', 'A8', 'D11'), ('R12', 'A9', 'D12'), ('R14', 'A11', 'D14'), ('R15', 'A12', 'D15'), ('RF', 'FA', 'FD'),
+               ('RS', 'A16', 'D18'), ('RE', 'A17', 'D19'), ('RN', 'A18', 'D20')]
 
 
 @pytest.fixture(scope='module')
@@ -215,6 +231,26 @@ def test_crossings_and_wide_gaps_break_and_small_gaps_bridge(main):
     assert len(r8['bridged_gaps']) == 1
     assert routes['R15']['status'] == '待办'                                         # the line is on another layer
     assert [p['problem'] for p in routes['R15']['problems']] == ['起点离走线超出容差', '终点离走线超出容差']
+
+
+def test_lines_drawn_into_the_attach_band_are_counted(main):
+    """宁波众芯 5# WP7（7BB2）、A 区 WP2（46C9）：挂接容差带里画进去的线不能被最短路径跳过。"""
+    h, code, routes, result, paths, lines, todo, tmp = main
+    rs = routes['RS']                                   # branch 0.4 m + trunk 4.6 m, not just the trunk from the band
+    assert rs['status'] == '已追踪' and rs['length_m'] == pytest.approx(5.0)
+    assert [s['handle'] for s in rs['segments']] == [h['BR'], h['TK']]
+    assert rs['segments'][1]['fraction_range'] == pytest.approx([2400 / 7000, 1.0])
+    assert rs['from']['attach_distance_m'] == pytest.approx(0.1)
+    re_ = routes['RE']                                  # to the line end inside the device, not the joint 0.2 m off it
+    assert re_['status'] == '已追踪' and re_['length_m'] == pytest.approx(4.8)
+    assert [s['handle'] for s in re_['segments']] == [h['E1'], h['E2'], h['E2b']]   # inside: to the free line end
+    assert re_['to']['attach_distance_m'] == pytest.approx(0.0)
+    assert re_['from']['attach_distance_m'] == pytest.approx(0.2)   # the node used, not the other circuit's on the edge
+    rn = routes['RN']                                   # the neighbour's line is shorter but a device takes one line
+    assert rn['status'] == '已追踪' and rn['length_m'] == pytest.approx(5.6)
+    assert [s['handle'] for s in rn['segments']] == [h['T1'], h['E3']] and not rn['t_junctions']
+    assert [round(x['distance_m'], 6) for x in rn['to']['other_line_ends_in_band']] == [0.25]
+    assert 'other_line_ends_in_band' not in routes['RE']['from']    # a box feeds several circuits: all attach
 
 
 def test_endpoint_tolerance_and_missing_instances(main):

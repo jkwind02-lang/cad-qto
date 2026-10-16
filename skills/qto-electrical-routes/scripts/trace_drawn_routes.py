@@ -409,19 +409,46 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
             return "box", end["box"]
         return "point", end["anchor"][:2]
 
-    def attach(end: dict[str, Any]) -> tuple[dict[str, float], float | None]:
-        """Line ends (real nodes) within the endpoint tolerance of the outline (0 inside it) or of the point."""
+    real_ids = {node["node_id"] for node in real_nodes}
+
+    def attach(end: dict[str, Any]) -> tuple[dict[str, float], float | None, dict[str, float]]:
+        """Line ends (real nodes) within the endpoint tolerance of the outline (0 inside it) or of the point.
+
+        Lines drawn into that band are part of the route: each piece of the network inside the band attaches only at
+        its node closest to the end (a free line end first on a tie), so the shortest way cannot start further in.
+        A box feeds several circuits, so every piece in its band attaches; a device or a point takes only the closest
+        piece(s), and the line of a neighbouring device that falls into the band is left out (returned as dropped)."""
         kind, geo = shape(end)
         far = (lambda p: math.dist(p[:2], geo)) if kind == "point" else (lambda p: box_distance(p, geo))
-        near, best = {}, None
-        for node in real_nodes:
-            d = far(node["point"])
-            best = d if best is None or d < best else best
-            if d <= tol:
-                near[node["node_id"]] = d
-        return near, best
+        best = min((far(node["point"]) for node in real_nodes), default=None)
+        band = {n: d for n, p in point_of.items() if (d := far(p)) <= tol}
+        pieces: list[tuple[float, dict[str, float]]] = []
+        seen: set[str] = set()
+        for first in sorted(band):
+            if first in seen:
+                continue
+            piece, stack = [], [first]
+            seen.add(first)
+            while stack:
+                u = stack.pop(); piece.append(u)
+                for v, _, _ in adjacency.get(u, ()):
+                    if v in band and v not in seen:
+                        seen.add(v); stack.append(v)
+            ends_here = [n for n in piece if n in real_ids]
+            if not ends_here:
+                continue
+            low = min(band[n] for n in ends_here)
+            closest = [n for n in ends_here if band[n] <= low + 1e-9]
+            pieces.append((low, {n: band[n] for n in ([n for n in closest if degree[n] == 1] or closest)}))
+        name = str(end.get("insert", {}).get("block_name") or "")
+        feeds_many = req["box_re"] is not None and "spec" in end and "instance_id" in end["spec"] and bool(req["box_re"].search(name))
+        lowest = min((low for low, _ in pieces), default=0.0)
+        near, dropped = {}, {}
+        for low, nodes in pieces:
+            (near if feeds_many or low <= lowest + 1e-9 else dropped).update(nodes)
+        return near, best, dropped
 
-    def end_record(end: dict[str, Any], near: dict[str, float]) -> dict[str, Any]:
+    def end_record(end: dict[str, Any], near: dict[str, float], dropped: dict[str, float]) -> dict[str, Any]:
         spec = end["spec"]
         record: dict[str, Any] = dict(spec)
         if "point" in spec:
@@ -436,6 +463,9 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         if near:
             node_id = min(near, key=lambda n: (near[n], n))
             record.update(attach_node_ids=sorted(near), attach_distance_m=near[node_id] * f)
+        if dropped:
+            record["other_line_ends_in_band"] = [{"node_id": n, "distance_m": d * f, "point_m": m(point_of[n])}
+                                                 for n, d in sorted(dropped.items(), key=lambda x: (x[1], x[0]))]
         return record
 
     def through_box(end: dict[str, Any]) -> list[str]:
@@ -537,8 +567,8 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                 out[which] = dict(end["spec"])
                 out["problems"].append({"problem": f"{END_NAME[which]}{end['problem']}", "detail": end["detail"]})
                 continue
-            near[which], best = attach(end)
-            out[which] = end_record(end, near[which])
+            near[which], best, dropped = attach(end)
+            out[which] = end_record(end, near[which], dropped)
             if out[which].get("basis") == "插入点":
                 out["review_flags"].append({"flag": "端点按插入点", "end": END_NAME[which]})
             if not near[which]:
@@ -574,8 +604,10 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         if found["count"] > 1:
             out["problems"].append({"problem": "多条等长路径", "count": found["count"], "length_m": found["length"] * f})
             out["status"] = "待办"; results.append(out); continue
+        for which, node_id in (("from", found["start"]), ("to", found["target"])):
+            out[which].update(attach_node_id=node_id, attach_distance_m=near[which][node_id] * f)
         pieces = pieces_of(found["steps"])
-        over_edge = [p["segment_id"] for p in pieces if p["kind"] == "segment" and p["crosses_scope_edge"]]
+        over_edge =[p["segment_id"] for p in pieces if p["kind"] == "segment" and p["crosses_scope_edge"]]
         if over_edge:
             out["problems"].append({"problem": "路径经过范围边", "segment_ids": over_edge,
                                     "detail": "跨范围边的段不能整段计入，缩小或放大范围，或把这段单列"})
