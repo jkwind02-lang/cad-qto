@@ -3,10 +3,12 @@
 合成图（毫米，输出米）。箱块 BOX 为 100×100 方框，引线画在 LEAD 层，箱号文字 AL# 在 NOTE 层；规则只写引线不写半径：
 touch_tolerance 0.1 m、text_tolerance 0.3 m、snap_tolerance 0.01 m、max_segments 3。边界清单（备课第二节 L2）：
 - 一条引线到一段文字 → 已绑定（多段线、两条直线串接、LEADER 实体、楼层块里的引线各一例）；
-- 引线分叉到两段文字、两条引线到同一段文字、引线中途断开、文字在引线末端容差外、超过最多段数 → 未决；
-- 引线一端落在两个候选外框之间、都在容差内 → 未决（文字共用）；
+- 检查点一后（决策会话 10-17）：只有两只候选的引线到同一段文字、或引线一端落在两个候选外框之间分不清 → 引线未决；
+- 一只候选的引线分叉到两段文字、两条引线各到一段 → 多段文字（与半径同）；
+- 引线中途断开、文字在引线末端容差外、超过最多段数 → 不算引线（无文字），原因记 leader_notes；
 - 引线只从另一个候选外框中间穿过 → 不算那个候选的引线；引线图层以外的线不走；
-- 半径与引线都写：引线优先，指向不同文字记未决；同一段文字被引线和半径分别认领到不同候选 → 未决；
+- 半径与引线都写：同一候选引线文字优先于半径内的其他文字；引线连到 A 的文字，别的候选不能凭半径认领或共用；
+- 只分型的规则（role: classify）：半径内命中同一条规则的几只候选可以共用同一段文字；一只候选落在两段分型文字内照旧未决；
 - 包外候选不参与认领（R2）；箱号作实例键时“文字无块”照旧列出。
 """
 import hashlib
@@ -171,23 +173,23 @@ def test_one_leader_to_one_text_binds_it(leaders):
     assert '经引线' in disp[ids['B1']]['basis'] and adopted[ids['B1']]['side_text']['via'] == 'leader'
 
 
-def test_ambiguous_leaders_stay_unresolved(leaders):
+def test_only_a_text_two_candidates_lead_to_is_unresolved(leaders):
     ids, report, disp, adopted, out = leaders
-    problems = {name: disp[ids[name]]['side_text'] for name in ('B3', 'B6', 'B12', 'B15', 'B16')}
-    assert [p['problem'] for p in problems['B16']['leader_problems']] == ['多条引线']
-    assert sorted(t['text'] for t in problems['B16']['texts']) == ['AL16', 'AL17']
-    for name, side in problems.items():
-        assert disp[ids[name]]['disposition'] == 'unresolved' and ids[name] not in adopted and side['status'] == '引线未决', name
-    assert [p['problem'] for p in problems['B3']['leader_problems']] == ['引线分叉到多段文字']
-    assert sorted(t['text'] for t in problems['B3']['texts']) == ['AL3', 'AL4']
-    assert [p['problem'] for p in problems['B6']['leader_problems']] == ['引线未到文字']
-    assert [p['problem'] for p in problems['B12']['leader_problems']] == ['引线未到文字']
-    assert [p['problem'] for p in problems['B15']['leader_problems']] == ['引线超过 3 段']
-    assert disp[ids['B3']]['basis'].startswith('引线未决：')
-    for pair in (('B4', 'B5'), ('B7', 'B8')):                      # two leaders to one text; one end between two boxes
+    for pair, problem in ((('B4', 'B5'), '两条引线到同一段文字'), (('B7', 'B8'), '引线端点落在两只候选之间，分不清')):
         for a, b in (pair, pair[::-1]):
             side = disp[ids[a]]['side_text']
-            assert disp[ids[a]]['disposition'] == 'unresolved' and side['status'] == '文字共用' and side['shared_with'] == [ids[b]]
+            assert disp[ids[a]]['disposition'] == 'unresolved' and side['status'] == '引线未决', a
+            assert [p['problem'] for p in side['leader_problems']] == [problem] and side['shared_with'] == [ids[b]], a
+    assert disp[ids['B4']]['basis'].startswith('引线未决：')
+    for name, texts in (('B3', ['AL3', 'AL4']), ('B16', ['AL16', 'AL17'])):   # one candidate, two texts: as with a radius
+        side = disp[ids[name]]['side_text']
+        assert disp[ids[name]]['disposition'] == 'unresolved' and side['status'] == '多段文字', name
+        assert sorted(t['text'] for t in side['texts']) == texts and all(t['via'] == 'leader' for t in side['texts']), name
+    for name in ('B6', 'B12', 'B15'):        # a line at the box that reaches no text is no leader; the reason is kept
+        side = disp[ids[name]]['side_text']
+        assert disp[ids[name]]['disposition'] == 'unresolved' and side['status'] == '无文字' and side['leader_notes'], name
+    assert '超过 3 段' in disp[ids['B15']]['side_text']['leader_notes'][0]
+    assert '没到符合的文字' in disp[ids['B6']]['side_text']['leader_notes'][0] and '没到符合的文字' in disp[ids['B6']]['basis']
 
 
 def test_foreign_layers_and_pass_through_are_no_leader(leaders):
@@ -201,7 +203,7 @@ def test_report_lists_unclaimed_keys_and_the_leader_graph(leaders):
     ids, report, disp, adopted, out = leaders
     side = report['side_text_binding']
     assert sorted(t['text'] for t in side['unclaimed_key_texts']) == ['AL12', 'AL15', 'AL6', 'AL8']
-    assert side['status_counts'] == {'引线未决': 5, '已绑定': 7, '文字共用': 4, '无文字': 2}
+    assert side['status_counts'] == {'已绑定': 7, '引线未决': 4, '多段文字': 2, '无文字': 5}
     graph = side['leader_graphs'][0]
     assert graph['layer_pattern'] == '^lead$' and graph['rule_ids'] == ['BOX'] and graph['unsupported'] == {}
     assert graph['counts']['segments'] == 27 and graph['expanded_blocks'] == ['FLOOR']
@@ -226,15 +228,18 @@ def draw_mixed(doc, msp):
     return ids
 
 
-def test_leader_first_and_radius_conflicts_stay_unresolved(tmp_path):
+def test_a_leader_wins_over_radii_and_takes_its_text_from_other_candidates(tmp_path):
     ids, result, out = build(tmp_path, draw_mixed, key_cond(radius=1.5))
     report, disp, adopted = outcome(result, out)
-    c1 = disp[ids['C1']]['side_text']
-    assert c1['status'] == '引线未决' and [p['problem'] for p in c1['leader_problems']] == ['引线与半径指向不同文字']
+    assert adopted[ids['C1']]['instance_key'] == 'AL1' and disp[ids['C1']]['side_text']['via'] == 'leader'   # beats AL9 nearby
     assert adopted[ids['C2']]['instance_key'] == 'AL2' and disp[ids['C2']]['side_text'].get('via', 'radius') == 'radius'
-    for a, b in (('C3', 'C4'), ('C4', 'C3')):
-        assert disp[ids[a]]['side_text']['status'] == '文字共用' and disp[ids[a]]['side_text']['shared_with'] == [ids[b]]
+    assert adopted[ids['C3']]['instance_key'] == 'AL3'
+    c4 = disp[ids['C4']]['side_text']                              # AL3 lies in its radius, but C3's leader reaches it
+    assert disp[ids['C4']]['disposition'] == 'unresolved' and c4['status'] == '无文字'
+    assert [(t['text'], t['leader_of']) for t in c4['leader_texts_elsewhere']] == [('AL3', [ids['C3']])]
+    assert '别的候选的引线' in disp[ids['C4']]['basis']
     assert adopted[ids['C5']]['instance_key'] == 'AL5' and disp[ids['C5']]['side_text']['via'] == 'leader'
+    assert [t['text'] for t in report['side_text_binding']['unclaimed_key_texts']] == ['AL9']
 
 
 # ---------- R2: the out-of-package candidate claims nothing ----------
@@ -278,6 +283,28 @@ def test_note_inside_a_neighbouring_block_binds_with_its_source(tmp_path):
         assert disp[ids[a]]['side_text']['status'] == '文字共用' and disp[ids[a]]['side_text']['shared_with'] == [ids[b]]
 
 
+def draw_doors_and_fan(doc, msp):
+    ids = draw_doors(doc, msp)
+    note(msp, 'FAN', 9300, 1500)          # a second classifying note beside S1
+    return ids
+
+
+def test_a_classify_note_may_be_shared_by_the_candidates_in_its_radius(tmp_path):
+    """Decision 10-17 ①: a rule declared classify-only lets several candidates share one note in their radii under that
+    rule; a candidate in the radius of two different notes stays undecided; instance keys never share."""
+    cond = {'pattern': '^(JLM|FAN)$', 'radius': 1.2, 'basis': '卷帘门块定义里的 JLM（只分型）', 'role': 'classify'}
+    ids, result, out = build(tmp_path, draw_doors_and_fan, cond)
+    report, disp, adopted = outcome(result, out)
+    for a, b in (('P1', 'P2'), ('P2', 'P1')):
+        side = disp[ids[a]]['side_text']
+        assert disp[ids[a]]['disposition'] == 'adopted' and side['status'] == '已绑定' and side['shared_with'] == [ids[b]], a
+        assert adopted[ids[a]]['side_text']['shared_with'] == [ids[b]] and '共用' in disp[ids[a]]['basis']
+    s1 = disp[ids['S1']]['side_text']
+    assert disp[ids['S1']]['disposition'] == 'unresolved' and s1['status'] == '多段文字'
+    assert sorted(t['text'] for t in s1['texts']) == ['FAN', 'JLM']
+    assert report['side_text_binding']['status_counts'] == {'已绑定': 2, '多段文字': 1}
+
+
 # ---------- rejected inputs ----------
 
 @pytest.mark.parametrize('cond,message', [
@@ -288,6 +315,9 @@ def test_note_inside_a_neighbouring_block_binds_with_its_source(tmp_path):
     (key_cond(leader={**LEADER, 'max_segments': 2.5}), 'BOX.text_condition.leader.max_segments 必须是正整数'),
     (key_cond(leader=[1]), 'BOX.text_condition.leader 必须是对象'),
     ({'pattern': '^AL$', 'basis': 'x'}, 'BOX.text_condition.radius 必须是有限数值'),   # no leader: the radius is required
+    ({'pattern': '^AL$', 'radius': 1, 'basis': 'x', 'role': 'share'}, 'BOX.text_condition.role 只能是 classify'),
+    ({'pattern': '^AL$', 'radius': 1, 'basis': 'x', 'role': 'classify', 'as_instance_key': True},
+     'BOX.text_condition.role 为 classify 时不能作实例键'),
 ])
 def test_bad_leader_condition_is_rejected(tmp_path, cond, message):
     ids, result, out = build(tmp_path, lambda doc, msp: {'B': box(msp, 0, 0)}, cond)

@@ -31,7 +31,7 @@ from qto_actor_identity import is_model_identity
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
 
-VERSION = "qto-component-neutral-adapter/1.8.1"
+VERSION = "qto-component-neutral-adapter/1.9.0"
 # Only these two codes can be released by a dynamic_state_adjudication on an include or exclude rule (registration
 # 20261016-1709; exclude added after checkpoint 1);
 # arrays, xrefs and missing definitions stay unresolved whatever the rule says.
@@ -298,9 +298,15 @@ def text_condition(raw: Any, rule_id: str, decision: str) -> dict[str, Any] | No
     as_key = raw.get("as_instance_key", False)
     if not isinstance(as_key, bool):
         fail(f"{label}.as_instance_key 必须是 true 或 false")
+    role = raw.get("role")   # decision 10-17 ①: classify-only notes may be shared; the default never shares
+    if role is not None and role != "classify":
+        fail(f"{label}.role 只能是 classify（只分型的旁注可以几只候选共用），不写就是不共用")
+    if role == "classify" and as_key:
+        fail(f"{label}.role 为 classify 时不能作实例键（实例键的旁注一律不共用）")
     return {"pattern": compile_pattern(raw.get("pattern"), f"{label}.pattern"), "radius": radius,
             "layer_re": compile_pattern(raw.get("layer_pattern", ".*"), f"{label}.layer_pattern"),
-            "basis": text(raw.get("basis"), f"{label}.basis"), "as_instance_key": as_key, "leader": leader}
+            "basis": text(raw.get("basis"), f"{label}.basis"), "as_instance_key": as_key, "leader": leader,
+            "classify": role == "classify"}
 
 
 LEADER_MAX_SEGMENTS = 12
@@ -729,11 +735,15 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
     to a candidate expanded and the package scope applied, from nodes within touch_tolerance of the candidate's
     drawn box (the main walk's scope_of box, not the insertion point) to texts within text_tolerance of the
     leader's other nodes. A node that already has a matching text is that leader's text end, not where it leaves
-    a box. One leader reaching one text binds it (via leader); a leader branching to two texts, two leaders, a
-    leader reaching no text, one longer than max_segments, or a candidate without a drawn box leaves the
-    candidate "引线未决". Leader first: with a radius as well, a radius holding texts but not the leader's text is
-    a conflict (unresolved); no leader at the box lets the radius decide. Texts claimed by leaders and by
-    radii share one claim table, so one text taken by two candidates either way is shared (unresolved)."""
+    a box. Only a line reaching a matching text is a leader: one reaching no text, one longer than max_segments, or
+    a candidate without a drawn box gives no leader (the reason is kept in leader_notes) and the radius decides,
+    if written. One leader reaching one text binds it (via leader); one candidate's leaders reaching two texts are
+    "多段文字" as with a radius. After checkpoint 1 (decision 10-17): a text a leader connects to candidate A is A's;
+    every candidate's leaders are traced first and such a text leaves the other candidates' radii (listed in
+    leader_texts_elsewhere), and a candidate's own leader text wins over the other texts in its radius. Only a text
+    two candidates' leaders reach (two leaders, or one leader end between two boxes) is "引线未决". A text in
+    several radii is shared (unresolved) unless every claimant takes it under the same classify-only rule
+    (text_condition.role "classify"), which binds each of them with the others listed in shared_with."""
     text_rules = [rule for rule in rules if rule.get("text_cond")]
     if not text_rules:
         return {}, {}
@@ -899,89 +909,109 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
                                     for tid, (distance, item) in reached.items()}})
         return {"kind": "traced", "comps": comps}
 
-    claims: dict[str, set[str]] = defaultdict(set)   # text id -> candidates that take it (leader or radius, any text rule)
+    # Every candidate's leaders first, so that a text a leader reaches is known before any radius looks at it
+    # (decision 10-17: a text a leader connects to candidate A is A's).
+    traces: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+    leader_of: dict[str, dict[str, set[str]]] = defaultdict(dict)   # text id -> candidate -> leader segments reaching it
+    for physical_id, candidate in candidates.items():
+        for rule in candidate["rules"]:
+            if rule["text_cond"]["leader"]:
+                traced = traces[physical_id][rule["rule_id"]] = trace(candidate, rule)
+                for comp in traced.get("comps") or ():
+                    for text_id in comp["texts"]:
+                        leader_of[text_id].setdefault(physical_id, set()).update(comp["segment_ids"])
+
+    radius_claims: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))   # text id -> candidate -> rule ids
     near: dict[str, dict[str, Any]] = {}
     for physical_id, candidate in candidates.items():
         per_rule: dict[str, list[dict[str, Any]]] = {}
-        problems: list[dict[str, Any]] = []
-        reached_all: dict[str, dict[str, Any]] = {}
+        notes: list[str] = []
+        elsewhere: dict[str, dict[str, Any]] = {}
         for rule in candidate["rules"]:
             cond, rule_id = rule["text_cond"], rule["rule_id"]
-            by_radius = within_radius(candidate, cond) if cond["radius"] is not None else None
-            if not cond["leader"]:
-                per_rule[rule_id] = by_radius
+            by_radius = []
+            if cond["radius"] is not None:
+                for item in within_radius(candidate, cond):
+                    owners = leader_of.get(item["text_id"]) or {}
+                    if owners and physical_id not in owners:     # another candidate's leader reaches it: not ours
+                        elsewhere[item["text_id"]] = {"text_id": item["text_id"], "text": item["text"], "leader_of": sorted(owners)}
+                    else:
+                        by_radius.append(item)
+            traced = traces[physical_id].get(rule_id) if cond["leader"] else None
+            comps = (traced or {}).get("comps") or []
+            # Only a line reaching a matching text is a leader; other lines at the box (cable runs on the same
+            # layer, a neighbour's leader end) are listed with a bound text, or noted when nothing is bound by leader.
+            leaders = [comp for comp in comps if comp["texts"]]
+            if traced and traced["kind"] == "no_box":
+                notes.append(f"{rule_id} 候选没有完整图形外框，不追引线")
+            for comp in comps:
+                if comp["too_long"]:
+                    notes.append(f"{rule_id} 挨着外框的线超过 {cond['leader']['max_segments']} 段，不当引线追"
+                                 f"（{len(comp['segment_ids'])} 段）")
+                elif not comp["texts"] and not leaders:
+                    notes.append(f"{rule_id} 挨着外框的线没到符合的文字（{len(comp['segment_ids'])} 段）")
+            if not leaders:
+                per_rule[rule_id] = by_radius                 # no leader: the radius decides, if written
                 continue
-            traced = trace(candidate, rule)
-            if traced["kind"] == "no_box":
-                problems.append({"rule_id": rule_id, "problem": "候选没有完整图形外框，不追引线"})
-                continue
-            if traced["kind"] == "none":
-                per_rule[rule_id] = by_radius or []       # no leader at the box: the radius decides, if written
-                continue
-            comps = traced["comps"]
-            # A leader is a touching line that reaches a matching text; other lines at the box (cable runs on the
-            # same layer, a neighbour's leader passing by) are listed, not counted as a second leader.
-            leaders = [comp for comp in comps if comp["texts"] or comp["too_long"]]
-            others = [s for comp in comps if not comp["texts"] and not comp["too_long"] for s in comp["segment_ids"]]
-            reached = {tid: item for comp in leaders for tid, item in comp["texts"].items()}
-            reached_all.update(reached)
+            others = sorted(s for comp in comps if not comp["texts"] for s in comp["segment_ids"])
+            reached = {text_id: item for comp in leaders for text_id, item in comp["texts"].items()}
             # the same words drawn twice at one leader end are one note: nearest kept, the copies listed
             distinct: dict[str, dict[str, Any]] = {}
-            for tid, item in sorted(reached.items(), key=lambda kv: (kv[1]["distance"], kv[0])):
+            for text_id, item in sorted(reached.items(), key=lambda kv: (kv[1]["distance"], kv[0])):
                 distinct.setdefault(item["text"], item)
-            segments = [s for comp in (leaders or comps) for s in comp["segment_ids"]]
-            if any(comp["too_long"] for comp in comps):
-                problem = f"引线超过 {cond['leader']['max_segments']} 段"
-            elif len(leaders) > 1:
-                problem = "多条引线"
-            elif not reached:
-                problem = "引线未到文字"
-            elif len(distinct) > 1:
-                problem = "引线分叉到多段文字"
-            elif by_radius and not any(item["text_id"] in reached or item["text"] in distinct for item in by_radius):
-                problem = "引线与半径指向不同文字"
-            else:
-                (item,) = distinct.values()
-                copies = sorted(tid for tid in reached if tid != item["text_id"])
-                per_rule[rule_id] = [dict(item, **({"other_line_segment_ids": others} if others else {}),
-                                          **({"same_text_ids": copies} if copies else {}))]
-                continue
-            problems.append({"rule_id": rule_id, "problem": problem, "leader_segment_ids": segments,
-                             **({"other_line_segment_ids": others} if others and leaders else {})})
-        if any(items for items in per_rule.values()):
-            # a leader that reached no text of this rule's pattern while another rule's leader bound one is not a problem
-            problems = [p for p in problems if p["problem"] != "引线未到文字"]
-        for items in per_rule.values():
-            for item in items or ():
-                claims[item["text_id"]].add(physical_id)
-        for text_id in reached_all:
-            claims[text_id].add(physical_id)
-        near[physical_id] = {"per_rule": {rule_id: items or [] for rule_id, items in per_rule.items()},
-                             "rule_ids": sorted(rule["rule_id"] for rule in candidate["rules"]),
-                             "problems": problems, "reached": reached_all,
+            per_rule[rule_id] = []                            # the leader's texts win over the radius of this candidate
+            for item in distinct.values():
+                copies = sorted(t for t, other in reached.items() if other["text"] == item["text"] and t != item["text_id"])
+                per_rule[rule_id].append(dict(item, **({"other_line_segment_ids": others} if others else {}),
+                                              **({"same_text_ids": copies} if copies else {})))
+        for rule_id, items in per_rule.items():
+            for item in items:
+                if item.get("via") != "leader":
+                    radius_claims[item["text_id"]][physical_id].add(rule_id)
+        near[physical_id] = {"per_rule": per_rule, "rule_ids": sorted(rule["rule_id"] for rule in candidate["rules"]),
+                             "notes": notes, "elsewhere": [elsewhere[k] for k in sorted(elsewhere)],
                              "leader": any(rule["text_cond"]["leader"] for rule in candidate["rules"]),
                              "radius": any(rule["text_cond"]["radius"] is not None for rule in candidate["rules"])}
+
+    classify_rules = {rule["rule_id"] for rule in text_rules if rule["text_cond"]["classify"]}
+
+    def shareable(text_id: str) -> bool:
+        """Decision 10-17 ①: every claimant takes the text by radius under one and the same classify-only rule."""
+        rule_ids = set().union(*radius_claims[text_id].values())
+        return len(rule_ids) == 1 and rule_ids <= classify_rules
 
     binding: dict[str, dict[str, Any]] = {}
     for physical_id, item in near.items():
         per_rule = item["per_rule"]
         found = {text["text_id"]: text for texts_ in per_rule.values() for text in texts_}
-        if item["problems"]:
-            listed = {**item["reached"], **found}
-            binding[physical_id] = {"status": LEADER_UNRESOLVED, "rule_ids": item["rule_ids"], "ok": [],
-                                    "texts": sorted(listed.values(), key=lambda t: (t["distance"], t["text_id"])),
-                                    "shared_with": [], "leader_problems": item["problems"],
-                                    "leader": item["leader"], "radius": item["radius"]}
+        listed = sorted(found.values(), key=lambda t: (t["distance"], t["text_id"]))
+        extra = {**({"leader_notes": item["notes"]} if item["notes"] else {}),
+                 **({"leader_texts_elsewhere": item["elsewhere"]} if item["elsewhere"] else {})}
+        contested = sorted(text_id for text_id, text in found.items() if text.get("via") == "leader" and len(leader_of[text_id]) > 1)
+        if contested:
+            # the only leader conflict left: two candidates' leaders reach one text
+            mine = set().union(*(leader_of[text_id][physical_id] for text_id in contested))
+            rivals = set().union(*(set(leader_of[text_id]) for text_id in contested)) - {physical_id}
+            one_line = any(mine & segments for text_id in contested for other, segments in leader_of[text_id].items()
+                           if other != physical_id)
+            binding[physical_id] = {"status": LEADER_UNRESOLVED, "rule_ids": item["rule_ids"], "ok": [], "texts": listed,
+                                    "shared_with": sorted(rivals),
+                                    "leader_problems": [{"problem": "引线端点落在两只候选之间，分不清" if one_line else "两条引线到同一段文字",
+                                                         "text_ids": contested, "leader_segment_ids": sorted(mine)}],
+                                    "leader": item["leader"], "radius": item["radius"], **extra}
             continue
-        shared = sorted(text_id for text_id in found if len(claims[text_id]) > 1)
-        status = "文字共用" if shared else "多段文字" if len(found) > 1 else "已绑定" if found else "无文字"
+        shared = sorted(text_id for text_id in found if found[text_id].get("via") != "leader" and len(radius_claims[text_id]) > 1)
+        if shared and not all(shareable(text_id) for text_id in shared):
+            status = "文字共用"
+        else:
+            status = "多段文字" if len(found) > 1 else "已绑定" if found else "无文字"
         binding[physical_id] = {
             "status": status,
             "rule_ids": item["rule_ids"],
             "ok": sorted(rule_id for rule_id, items in per_rule.items() if items) if status == "已绑定" else [],
-            "texts": sorted(found.values(), key=lambda t: (t["distance"], t["text_id"])),
-            "shared_with": sorted(set().union(*(claims[text_id] for text_id in shared)) - {physical_id}) if shared else [],
-            "leader": item["leader"], "radius": item["radius"],
+            "texts": listed,
+            "shared_with": sorted(set().union(*(set(radius_claims[text_id]) for text_id in shared)) - {physical_id}) if shared else [],
+            "leader": item["leader"], "radius": item["radius"], **extra,
         }
     key_rules = [rule for rule in text_rules if rule["text_cond"]["as_instance_key"]]
     unclaimed_keys = [
@@ -989,7 +1019,7 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
          "rule_ids": [rule["rule_id"] for rule in key_rules
                       if rule["text_cond"]["layer_re"].search(item["layer"]) and rule["text_cond"]["pattern"].search(item["text"])]}
         for item in texts
-        if item["in_scope"] and item["text_id"] not in claims
+        if item["in_scope"] and item["text_id"] not in radius_claims and item["text_id"] not in leader_of
         and any(rule["text_cond"]["layer_re"].search(item["layer"]) and rule["text_cond"]["pattern"].search(item["text"])
                 for rule in key_rules)
     ]
@@ -1010,12 +1040,18 @@ def side_text_basis(side: dict[str, Any]) -> str:
     if side["status"] == "多段文字":
         return f"旁注多段文字：有 {len(side['texts'])} 段符合条件的文字 {texts}，不按远近硬绑"
     if side["status"] == LEADER_UNRESOLVED:
-        reasons = "；".join(f"{p['rule_id']} {p['problem']}" for p in side["leader_problems"])
-        return f"引线未决：{reasons}" + (f"（引线到的文字 {texts}）" if texts else "") + "，不按远近硬绑"
+        reasons = "；".join(p["problem"] for p in side["leader_problems"])
+        return (f"引线未决：{reasons}" + (f"（引线到的文字 {texts}，另有 {len(side['shared_with'])} 只候选的引线也到）" if texts else "")
+                + "，不按远近硬绑")
+    why = "".join(f"；{note}" for note in side.get("leader_notes") or ())
+    taken = side.get("leader_texts_elsewhere") or ()
+    if taken:
+        why += (f"；半径内 {len(taken)} 段文字（" + "、".join(f"“{t['text']}”" for t in taken[:5])
+                + "）已由别的候选的引线引出，不归本候选")
     if side.get("leader"):
         return (f"没有引线引到符合旁注条件的文字{'，半径内也没有' if side.get('radius') else ''}（无文字）："
-                f"{'、'.join(side['rule_ids'])}")
-    return f"半径内没有符合旁注条件的文字（无文字）：{'、'.join(side['rule_ids'])}"
+                f"{'、'.join(side['rule_ids'])}{why}")
+    return f"半径内没有符合旁注条件的文字（无文字）：{'、'.join(side['rule_ids'])}{why}"
 
 
 def main() -> int:
@@ -1268,7 +1304,8 @@ def main() -> int:
                     if side and side["status"] in AMBIGUOUS_SIDE:
                         # Ambiguous side notes decide nothing, not even a fallback rule without text_condition.
                         base.update({"basis": side_text_basis(side), "rule_ids": side["rule_ids"],
-                                     "side_text": {key: side[key] for key in ("status", "texts", "shared_with", "leader_problems")
+                                     "side_text": {key: side[key] for key in ("status", "texts", "shared_with", "leader_problems",
+                                                                              "leader_notes", "leader_texts_elsewhere")
                                                    if key in side}})
                     else:
                         rule, conflicts = choose_rule(block_name, effective_layer, parent_block, rules, physical_id,
@@ -1277,7 +1314,8 @@ def main() -> int:
                         base.update({"basis": "同优先级识别规则冲突", "rule_ids": conflicts})
                     elif rule is None and side and side["status"] == "无文字":
                         base.update({"basis": side_text_basis(side), "rule_ids": side["rule_ids"],
-                                     "side_text": {"status": "无文字", "texts": [], "shared_with": []}})
+                                     "side_text": {"status": "无文字", "texts": [], "shared_with": [],
+                                                   **{key: side[key] for key in ("leader_notes", "leader_texts_elsewhere") if key in side}}})
                     elif rule is None and is_empty and not (side and side["status"] in AMBIGUOUS_SIDE):
                         base.update({"disposition": "not_applicable", "empty_definition_hint": True,
                                      "basis": "空块定义（取证清单 direct_entity_count=0、已序列化）：块内没有图元，"
@@ -1300,10 +1338,14 @@ def main() -> int:
                         bound = None
                         if rule.get("text_cond"):
                             bound = dict(side["texts"][0], rule_id=rule["rule_id"],
-                                         **({"radius": rule["text_cond"]["radius"]} if rule["text_cond"]["radius"] is not None else {}))
-                            base["side_text"] = {"status": "已绑定", **bound}
+                                         **({"radius": rule["text_cond"]["radius"]} if rule["text_cond"]["radius"] is not None else {}),
+                                         **({"shared_with": side["shared_with"]} if side["shared_with"] else {}))
+                            base["side_text"] = {"status": "已绑定", **bound,
+                                                 **{key: side[key] for key in ("leader_notes", "leader_texts_elsewhere") if key in side}}
                             how = (f"经引线 {len(bound['leader_segment_ids'])} 段，引线点距文字 {bound['distance']:g}"
                                    if bound.get("via") == "leader" else f"距 {bound['distance']:g}")
+                            if bound.get("shared_with"):
+                                how += f"，只分型，与 {len(bound['shared_with'])} 只候选共用"
                             base["basis"] += f"；旁注“{bound['text']}”（{how}）：{rule['text_cond']['basis']}"
                             if rule["text_cond"]["as_instance_key"]:
                                 base["instance_key"] = bound["text"]
@@ -1331,7 +1373,8 @@ def main() -> int:
                                 "source_record_id": source_record_id,
                             }
                             if bound:
-                                instance["side_text"] = {key: bound[key] for key in ("text", "text_id", "distance", "rule_id", "via", "leader_handles")
+                                instance["side_text"] = {key: bound[key] for key in ("text", "text_id", "distance", "rule_id", "via", "leader_handles",
+                                                                                     "shared_with")
                                                          if key in bound}
                                 if "instance_key" in base:
                                     instance["instance_key"] = base["instance_key"]
@@ -1701,7 +1744,9 @@ def main() -> int:
                                      "；".join(side.get("shared_with") or []), item.get("instance_key") or "",
                                      point[0], point[1], item.get("coordinate_unit"), via,
                                      "；".join(side.get("leader_handles") or []),
-                                     "；".join(f"{p['rule_id']} {p['problem']}" for p in side.get("leader_problems") or [])])
+                                     "；".join([p["problem"] for p in side.get("leader_problems") or []]
+                                              + list(side.get("leader_notes") or [])
+                                              + [f"“{t['text']}”已由别的候选的引线引出" for t in side.get("leader_texts_elsewhere") or []])])
                 for item in side_summary["unclaimed_key_texts"]:
                     writer.writerow(["文字", "文字无块", "", "", "", "；".join(item["rule_ids"]), item["text"], item["text_id"],
                                      "", "", "", item["point"][0], item["point"][1], coordinate_unit, "", "", ""])

@@ -452,8 +452,8 @@
     },
     {
       "path": "qto-components-points/references/计算与证据流程.md",
-      "sha256": "27ce6af77fb3fb26c2ecb86bb8b282ee8a35e946389d49de7e586feac9d0c451",
-      "bytes": 17159
+      "sha256": "767658022af5421d42a30ecfe1cc28fd331cc798d2bc11d990922b69d9f372d3",
+      "bytes": 18179
     },
     {
       "path": "qto-components-points/references/跨专业端点事实.md",
@@ -462,8 +462,8 @@
     },
     {
       "path": "qto-components-points/scripts/build_component_instances_from_neutral.py",
-      "sha256": "e9e3f1941ad8222533d2cd3480f35714e73f746b7e6ed333d18067ba56a5f135",
-      "bytes": 112885
+      "sha256": "578ccb4ffdb06ca8adfdd4811fba12199c6fe925a4f2930e6dd9d422f5184e30",
+      "bytes": 117159
     },
     {
       "path": "qto-components-points/scripts/build_network_endpoint_handoff.py",
