@@ -31,7 +31,7 @@ from qto_actor_identity import is_model_identity
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
 
-VERSION = "qto-component-neutral-adapter/1.9.0"
+VERSION = "qto-component-neutral-adapter/1.9.1"
 # Only these two codes can be released by a dynamic_state_adjudication on an include or exclude rule (registration
 # 20261016-1709; exclude added after checkpoint 1);
 # arrays, xrefs and missing definitions stay unresolved whatever the rule says.
@@ -944,12 +944,14 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
             leaders = [comp for comp in comps if comp["texts"]]
             if traced and traced["kind"] == "no_box":
                 notes.append(f"{rule_id} 候选没有完整图形外框，不追引线")
-            for comp in comps:
-                if comp["too_long"]:
-                    notes.append(f"{rule_id} 挨着外框的线超过 {cond['leader']['max_segments']} 段，不当引线追"
-                                 f"（{len(comp['segment_ids'])} 段）")
-                elif not comp["texts"] and not leaders:
-                    notes.append(f"{rule_id} 挨着外框的线没到符合的文字（{len(comp['segment_ids'])} 段）")
+            # one note per reason and rule; several line groups at the box are counted, not repeated word for word
+            too_long = [len(comp["segment_ids"]) for comp in comps if comp["too_long"]]
+            no_text = [] if leaders else [len(comp["segment_ids"]) for comp in comps if not comp["too_long"]]
+            for sizes, reason in ((too_long, "超过 {} 段，不当引线追"), (no_text, "没到符合的文字")):
+                if sizes:
+                    reason = reason.format(cond["leader"]["max_segments"])
+                    groups = f" {len(sizes)} 组" if len(sizes) > 1 else ""
+                    notes.append(f"{rule_id} 挨着外框的{groups}线{reason}（{'、'.join(map(str, sizes))} 段）")
             if not leaders:
                 per_rule[rule_id] = by_radius                 # no leader: the radius decides, if written
                 continue

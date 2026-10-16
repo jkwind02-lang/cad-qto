@@ -115,9 +115,9 @@ def draw_leaders(doc, msp):
     ids['B4'], ids['B5'] = box(msp, 30000, 0), box(msp, 32000, 0)  # two leaders to one text
     msp.add_line((30050, 50), (30950, 1000), dxfattribs=LEAD); msp.add_line((31950, 50), (31050, 1000), dxfattribs=LEAD)
     note(msp, 'AL5', 31000, 1100)
-    ids['B6'] = box(msp, 40000, 0)                                 # broken half way
+    ids['B6'] = box(msp, 40000, 0)                                 # broken half way, and a second line reaching nothing
     msp.add_line((40050, 50), (41000, 1000), dxfattribs=LEAD); msp.add_line((41100, 1100), (42000, 1100), dxfattribs=LEAD)
-    note(msp, 'AL6', 42050, 1150)
+    note(msp, 'AL6', 42050, 1150); msp.add_line((39950, -50), (39000, -1000), dxfattribs=LEAD)
     ids['B7'], ids['B8'] = box(msp, 50000, 0), box(msp, 50290, 0)  # leader end 0.095 m from both boxes
     msp.add_line((50145, 0), (51000, 1000), dxfattribs=LEAD); note(msp, 'AL7', 51050, 1050)
     ids['B9'] = box(msp, 60000, 0)                                 # a line on a layer the leader does not read
@@ -189,7 +189,9 @@ def test_only_a_text_two_candidates_lead_to_is_unresolved(leaders):
         side = disp[ids[name]]['side_text']
         assert disp[ids[name]]['disposition'] == 'unresolved' and side['status'] == '无文字' and side['leader_notes'], name
     assert '超过 3 段' in disp[ids['B15']]['side_text']['leader_notes'][0]
-    assert '没到符合的文字' in disp[ids['B6']]['side_text']['leader_notes'][0] and '没到符合的文字' in disp[ids['B6']]['basis']
+    assert disp[ids['B6']]['side_text']['leader_notes'] == ['BOX 挨着外框的 2 组线没到符合的文字（1、1 段）']   # counted, not repeated
+    assert disp[ids['B12']]['side_text']['leader_notes'] == ['BOX 挨着外框的线没到符合的文字（1 段）']
+    assert '没到符合的文字' in disp[ids['B6']]['basis']
 
 
 def test_foreign_layers_and_pass_through_are_no_leader(leaders):
@@ -206,7 +208,7 @@ def test_report_lists_unclaimed_keys_and_the_leader_graph(leaders):
     assert side['status_counts'] == {'已绑定': 7, '引线未决': 4, '多段文字': 2, '无文字': 5}
     graph = side['leader_graphs'][0]
     assert graph['layer_pattern'] == '^lead$' and graph['rule_ids'] == ['BOX'] and graph['unsupported'] == {}
-    assert graph['counts']['segments'] == 27 and graph['expanded_blocks'] == ['FLOOR']
+    assert graph['counts']['segments'] == 28 and graph['expanded_blocks'] == ['FLOOR']
     rows = (out / '点位旁注绑定.csv').read_text(encoding='utf-8-sig').splitlines()
     assert rows[0].startswith('kind,status,physical_id') and rows[0].endswith(',via,leader_handles,leader_problems')
     assert any(',leader,' in row and 'AL1' in row for row in rows)

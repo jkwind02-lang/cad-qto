@@ -462,8 +462,8 @@
     },
     {
       "path": "qto-components-points/scripts/build_component_instances_from_neutral.py",
-      "sha256": "578ccb4ffdb06ca8adfdd4811fba12199c6fe925a4f2930e6dd9d422f5184e30",
-      "bytes": 117159
+      "sha256": "692ae00474b8c58a7376ca1165af66a486b5283875df059f0856dceb00bf8e27",
+      "bytes": 117441
     },
     {
       "path": "qto-components-points/scripts/build_network_endpoint_handoff.py",
