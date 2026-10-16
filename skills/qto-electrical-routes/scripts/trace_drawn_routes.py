@@ -664,7 +664,8 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
             handles = list(dict.fromkeys(s["handle"] for s in out["segments"]))
             paths.append({"id": out["path_id"], "route_id": out["route_id"], "from_node": out["from"]["label"],
                           "to_node": out["to"]["label"], "length_m": out["length_m"], "role": "horizontal",
-                          "length_basis": "actual_drawn_path", "source_ids": [prefix + s["segment_id"] for s in out["segments"]],
+                          "length_basis": "actual_drawn_path", "basis_ids": [f"{prefix}走线追踪:{out['route_id']}"],
+                          "source_ids": [prefix + s["segment_id"] for s in out["segments"]],
                           "source_handles": handles, "drawn_length_m": out["drawn_length_m"],
                           "bridged_gap_length_m": out["bridged_gap_length_m"], "circuit_label": out["circuit_label"],
                           "partial_segments": [{"segment_id": s["segment_id"], "fraction_range": s["fraction_range"]}

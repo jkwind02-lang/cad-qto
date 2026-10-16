@@ -293,7 +293,9 @@ def test_outputs_feed_the_path_ledger_and_the_scene_mapping(main):
     lp = tmp / 'ledger.json'; lp.write_text(json.dumps(ledger, ensure_ascii=False), encoding='utf-8')
     done = run(ROUTES / 'calculate_electrical_paths.py', lp)
     assert done.returncode == 0, done.stdout
-    assert json.loads(done.stdout)['items'][0]['length_m'] == pytest.approx(6.6)
+    item = json.loads(done.stdout)['items'][0]
+    assert item['length_m'] == pytest.approx(6.6) and p1['basis_ids'] == ['SYN:走线追踪:R1']
+    assert (item['quantity_level'], item['length_basis']) == ('规则推算量', 'actual_drawn_path')
     r1_lines = [row for row in lines if row['route_id'] == 'R1']
     assert [row['kind'] for row in r1_lines] == ['segment'] * 5 and {row['handle'] for row in r1_lines} == {h['R1']}
     assert [float(r1_lines[0][k]) for k in ('x1', 'y1', 'x2', 'y2')] == pytest.approx([300, 0, 2000, 0])   # drawing units
