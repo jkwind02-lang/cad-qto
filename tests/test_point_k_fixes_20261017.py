@@ -226,6 +226,60 @@ def test_a_really_missing_definition_still_fails(tmp_path, how):
     assert report['point_workpackage_complete'] is False and ready is False
 
 
+def strip_serialized_flags(neutral):
+    """A manifest written before 0.3.2: every definition serialized, no serialized / referenced_* keys (宁波众芯 D022/D023)."""
+    manifest = manifest_of(neutral)
+    for b in manifest['blocks']:
+        for key in ('serialized', 'referenced_from_layouts', 'referenced_by_native_symbols'):
+            b.pop(key, None)
+    save_manifest(neutral, manifest)
+
+
+def test_old_manifest_without_the_serialized_flag_still_knows_its_empty_blocks(tmp_path):
+    # D022 *U14 ×10, D023 *U16 ×8 stayed missing_block_definition after K1: their manifests carry no serialized flag
+    doc, h = doc_with_empty(nested=True)
+    dxf, neutral = extract(tmp_path, doc)
+    strip_serialized_flags(neutral)
+    result, out = adapt(tmp_path, dxf, neutral, [
+        {'rule_id': 'TB', 'block_pattern': '^TB$', 'decision': 'include'},
+        {'rule_id': 'EX', 'block_pattern': '^(EMPTY|CONT)$', 'decision': 'exclude'}], bounds=(-1000, -1000, 1000, 1000))
+    report, disp, ready = outcome(result, out)
+    assert disp[f'PT-CAD-{h["EMPTY"]}']['disposition'] == 'excluded'
+    assert f'PT-CAD-{h["CONT"]}' not in disp   # the nested empty insert no longer leaves CONT without an extent
+    assert report['block_expansion_failures'] == [] and report['point_workpackage_complete'] is True and ready is True
+
+
+def test_old_manifest_block_with_entities_but_no_rows_is_still_missing(tmp_path):
+    # legal control: no flag and entities counted, yet no rows in the definition stream -> a real gap
+    doc = ezdxf.new('R2013'); doc.units = 4
+    doc.blocks.new('TB').add_lwpolyline(SQUARE, close=True)
+    doc.blocks.new('GONE').add_circle((0, 0), 10)
+    msp = doc.modelspace()
+    msp.add_blockref('TB', (0, 0))
+    gone = msp.add_blockref('GONE', (300, 0)).dxf.handle
+    dxf, neutral = extract(tmp_path, doc)
+    rewrite_stream(neutral, 'block_definitions', lambda rows: [r for r in rows if r.get('parent_block') != 'GONE'])
+    strip_serialized_flags(neutral)
+    result, out = adapt(tmp_path, dxf, neutral, [
+        {'rule_id': 'TB', 'block_pattern': '^TB$', 'decision': 'include'},
+        {'rule_id': 'EX', 'block_pattern': '^GONE$', 'decision': 'exclude'}])
+    report, _, ready = outcome(result, out)
+    assert [(f['kind'], f['instance_path']) for f in report['block_expansion_failures']] == [('missing_block_definition', f'CAD-{gone}')]
+    assert ready is False
+
+
+@pytest.mark.parametrize('item, empty', [
+    ({'block_name': 'E', 'direct_entity_count': 0, 'serialized': True}, True),
+    ({'block_name': 'E', 'direct_entity_count': 0}, True),                          # before 0.3.2: every definition written
+    ({'block_name': 'E', 'direct_entity_count': 0, 'serialized': False}, False),    # inventoried only
+    ({'block_name': 'E', 'direct_entity_count': 3}, False),
+    ({'block_name': 'E'}, False), (None, False)])
+def test_the_shared_empty_definition_rule(item, empty):
+    sys.path.insert(0, str(SHARED))
+    import qto_cad_geometry
+    assert qto_cad_geometry.is_empty_definition(item) is empty
+
+
 def test_nested_empty_block_does_not_make_the_parent_unbounded(tmp_path):
     # CONT (square + an empty insert) lies far outside the scope; before K1 its bounds were unknown and it stayed
     doc, h = doc_with_empty(nested=True)

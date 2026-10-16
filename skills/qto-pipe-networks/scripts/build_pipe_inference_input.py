@@ -376,10 +376,10 @@ def transform_row(row: dict[str, Any], matrix: tuple[float, ...], instance_path:
 
 def empty_block_names(manifest: dict[str, Any], definitions: dict[str, Any]) -> set[str]:
     """Definitions that exist with no entities (serialized, direct_entity_count 0) are not missing (registration
-    20261016-2359): they draw nothing and expand to nothing."""
+    20261016-2359): they draw nothing and expand to nothing. Manifests before 0.3.2 carry no serialized flag."""
     return {str(item["block_name"]) for item in manifest.get("blocks", [])
-            if isinstance(item, dict) and item.get("block_name") and item.get("serialized") is True
-            and item.get("direct_entity_count") == 0 and str(item["block_name"]) not in definitions}
+            if isinstance(item, dict) and item.get("block_name") and cad_geometry.is_empty_definition(item)
+            and str(item["block_name"]) not in definitions}
 
 
 def drop_zero_length_parts(geometry: Any) -> tuple[Any, list[int]]:
@@ -774,7 +774,7 @@ def main() -> int:
                 empty_block_hits[str(row.get("block_name") or "")] += 1
                 object_dispositions[source_record_id].update(
                     empty_definition_hint=True,
-                    basis="空块定义（取证清单 serialized=true、direct_entity_count=0），不画任何图元，不是缺定义；仅提示")
+                    basis="空块定义（取证清单 direct_entity_count=0、已序列化），不画任何图元，不是缺定义；仅提示")
             if entity_type in TEXT_TYPES:
                 text_rows.append(row)
             if entity_type == "INSERT":

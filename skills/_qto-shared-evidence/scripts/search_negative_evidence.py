@@ -200,7 +200,7 @@ def read_drawing(d, base, non_drawing, overrides, problems):
     if not lay.exists() or not blk.exists(): return None
     man = json.loads((nd / 'CAD中性取证清单.json').read_text(encoding='utf-8-sig')) if (nd / 'CAD中性取证清单.json').exists() else {}
     meta = {str(b.get('block_name')): b for b in man.get('blocks', []) if isinstance(b, dict) and b.get('block_name')}
-    empty = frozenset(n for n, b in meta.items() if b.get('serialized') is True and b.get('direct_entity_count') == 0)
+    empty = frozenset(n for n, b in meta.items() if cad_geometry.is_empty_definition(b))
     folders = {}   # block -> folded extent rows, the point coverage ledger's way (definitions can be hundreds of MB)
     occ, binst, parents, inserted, unread = [], defaultdict(list), defaultdict(list), Counter(), Counter()
     tops = defaultdict(list)

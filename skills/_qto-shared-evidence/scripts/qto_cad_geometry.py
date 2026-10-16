@@ -904,6 +904,13 @@ EXTENT_ANNOTATION_TYPES = frozenset({"TEXT", "MTEXT", "ATTDEF", "ATTRIB", "POINT
 EXTENT_NOTES = {"fill_skipped": "包围盒未含填充", "annotation_as_insertion_point": "注记按插入点计"}
 
 
+def is_empty_definition(item: Any) -> bool:
+    """A block definition that exists and draws nothing (registration 20261016-2359): inventoried in the manifest with
+    direct_entity_count 0 and serialized. Manifests written before 0.3.2 serialized every definition and carry no serialized
+    flag, so a missing flag counts as serialized; serialized=false (inventoried only, not written) does not."""
+    return isinstance(item, dict) and item.get("direct_entity_count") == 0 and item.get("serialized", True) is True
+
+
 def _valid_box3(box):
     return (isinstance(box, (list, tuple)) and len(box) == 6
             and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in box))

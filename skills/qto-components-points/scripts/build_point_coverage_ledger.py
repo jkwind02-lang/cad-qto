@@ -222,7 +222,7 @@ class Ledger:
                 self.problem("C-2", str(manifest_path), f"中性 {key} 缺失或 SHA256 与清单不一致"); return None
             self.files.append({"role": f"neutral_{key}", "drawing": drawing, "path": str(paths[key]), "sha256": artifact.get("sha256")})
         meta = {str(b.get("block_name")): b for b in manifest.get("blocks") or [] if isinstance(b, dict) and b.get("block_name")}
-        empty = frozenset(n for n, b in meta.items() if b.get("serialized") is True and b.get("direct_entity_count") == 0)
+        empty = frozenset(n for n, b in meta.items() if cad_geometry.is_empty_definition(b))
         top: dict[str, dict[str, Any]] = {}
         in_block: set[str] = set()
         # Streamed once: per block only its folded extent rows and its child INSERTs are kept (D006 definitions are

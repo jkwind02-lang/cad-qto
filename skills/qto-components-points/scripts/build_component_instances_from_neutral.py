@@ -878,9 +878,10 @@ def main() -> int:
             if isinstance(item, dict) and item.get("block_name")
         }
         # A definition that exists but holds no entities is not a missing one (registration 20261016-2359): the
-        # manifest serialized it and counted zero entities, so it has no rows in the definition stream.
+        # manifest serialized it and counted zero entities, so it has no rows in the definition stream (manifests before
+        # 0.3.2 carry no serialized flag: every definition was written).
         empty_blocks = {name for name, item in inventory.items()
-                        if item.get("serialized") is True and item.get("direct_entity_count") == 0 and name not in definitions}
+                        if cad_geometry.is_empty_definition(item) and name not in definitions}
         identity = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0)
         dispositions: list[dict[str, Any]] = []
         adopted: list[dict[str, Any]] = []
@@ -1062,7 +1063,7 @@ def main() -> int:
                                      "side_text": {"status": "无文字", "texts": [], "shared_with": []}})
                     elif rule is None and is_empty and not (side and side["status"] in ("文字共用", "多段文字")):
                         base.update({"disposition": "not_applicable", "empty_definition_hint": True,
-                                     "basis": "空块定义（取证清单 serialized=true、direct_entity_count=0）：块内没有图元，"
+                                     "basis": "空块定义（取证清单 direct_entity_count=0、已序列化）：块内没有图元，"
                                               "不单独计数；没有规则处置，仅提示"})
                     elif rule:
                         decision = rule["decision"]
