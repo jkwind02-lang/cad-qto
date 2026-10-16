@@ -156,11 +156,12 @@ def test_dynamic_inner_boxes_with_exact_block_adjudication_are_adopted(tmp_path)
     ids, top_id, result, out = build(tmp_path)
     report, disp, ready = outcome(result, out)
     assert [disp[i]['disposition'] for i in ids] == ['adopted'] * 4
-    for i in ids:
+    for n, i in enumerate(ids):
         assert disp[i]['dynamic_state_adjudication']['rule_id'] == 'TB'
         assert disp[i]['dynamic_state_adjudication']['evidence_ids'] == ['VIS']
-        assert disp[i]['scope_geometry_bbox'] is None
-        assert disp[i]['scope_location_basis'] == 'insertion_anchor_dynamic_state_adjudicated'
+        # 第五批 K2：动态块按块定义的当前图形参与范围裁剪（状态未核验，不参与外形归并）
+        assert disp[i]['scope_geometry_bbox'] == pytest.approx([1000 * n - 50, -50, 1000 * n + 50, 50])
+        assert disp[i]['scope_location_basis'] == 'transformed_geometry_extent_dynamic_state_unverified'
         assert '动态块状态裁决：端子箱可见状态只切换标注' in disp[i]['basis']
     assert 'dynamic_state_adjudication' not in disp[top_id]
     assert report['counts']['adopted_physical_instance_count'] == 5

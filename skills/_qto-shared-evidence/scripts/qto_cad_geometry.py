@@ -888,34 +888,180 @@ def transform_bounds(box, matrix):
     return [min(p[i] for p in points) for i in range(3)]+[max(p[i] for p in points) for i in range(3)]
 
 
-def definition_bounds(name, definitions, origins, max_depth=16, cache=None, stack=()):
-    """A missing/unsupported child makes bounds unknown, not artificially small."""
+def issue_codes_within(row, allowed):
+    """True when every geometry issue of the row carries a code and all codes are in `allowed`."""
+    issues, codes = row.get("geometry_issues"), row.get("geometry_issue_codes")
+    return (bool(issues) and bool(allowed) and isinstance(codes, list) and len(codes) == len(issues)
+            and set(codes) <= set(allowed))
+
+
+# Registration 20261017-0031, K3 (decision 10-17, option B with a guard): fills without geometry are skipped and
+# annotations count at their insertion point, so one HATCH or label no longer leaves the whole block unscoped. Such
+# an extent is incomplete: callers keep an instance whose insertion point lies in scope even when this box misses it.
+DYNAMIC_STATE_CODES = frozenset({"dynamic_state_not_evaluated", "anonymous_block_state_unverified"})
+EXTENT_FILL_TYPES = frozenset({"HATCH", "SOLID"})
+EXTENT_ANNOTATION_TYPES = frozenset({"TEXT", "MTEXT", "ATTDEF", "ATTRIB", "POINT"})
+EXTENT_NOTES = {"fill_skipped": "包围盒未含填充", "annotation_as_insertion_point": "注记按插入点计"}
+
+
+def _valid_box3(box):
+    return (isinstance(box, (list, tuple)) and len(box) == 6
+            and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in box))
+
+
+def definition_extent(name, definitions, origins, max_depth=16, cache=None, stack=(), empty=frozenset(),
+                      allowed_insert_codes=frozenset()):
+    """(box, notes): the definition's local 3D extent and the incompleteness notes (keys of EXTENT_NOTES).
+
+    A missing/unsupported child makes the extent unknown, not artificially small; so do SPLINE, DIMENSION, REGION
+    and other rows without geometry. HATCH/SOLID without geometry are skipped ("fill_skipped"); TEXT, MTEXT, ATTDEF,
+    ATTRIB and POINT count at their insertion point ("annotation_as_insertion_point"). A definition holding only
+    fills and annotations has no extent. empty: definitions known to exist with no entities (manifest serialized,
+    direct_entity_count 0); a child insert of one draws nothing and adds nothing (registration 20261016-2359).
+    allowed_insert_codes: issue codes of a child INSERT whose definition extent is still used, e.g. the
+    dynamic-state codes (registration 20261017-0027)."""
+    unknown = (None, frozenset())
     if name in stack or len(stack) >= max_depth or name not in definitions:
-        return None
+        return unknown
     if not stack and cache is not None and name in cache:
         return cache[name]
-    boxes=[]
+    boxes, notes, solid = [], set(), False
     for row in definitions[name]:
-        # In particular, an array INSERT's first cell is not its envelope.
-        # Keep the parent unpruned so adapters can retain unresolved instances.
-        if row.get("geometry_issues") or row.get("geometry_status") in {"unsupported", "requires_reextraction"}:
-            return None
-        if row.get("entity_type") == "INSERT":
+        kind, box = extent_row_kind(row, empty, allowed_insert_codes)
+        if kind == "skip":
+            continue
+        if kind == "unknown":
+            return unknown
+        if kind == "annotation":
+            boxes.append(box)
+            notes.add("annotation_as_insertion_point")
+            continue
+        if kind == "fill":
+            notes.add("fill_skipped")
+            continue
+        if kind == "insert":
             child=str(row.get("block_name") or "")
-            box=definition_bounds(child,definitions,origins,max_depth,None,(*stack,name))
-            if box is not None:
-                box=transform_bounds(box,matrix_for_insert(row,origins.get(child,[0.,0.,0.])))
-        elif row.get("geometry") is not None:
-            box=row.get("bbox3d")
-        else:
-            box=None  # Point-only glyph extents are not a complete block envelope.
-        if box is None:
-            return None
+            box, child_notes = definition_extent(child,definitions,origins,max_depth,None,(*stack,name),empty,allowed_insert_codes)
+            if box is None:
+                return unknown
+            box=transform_bounds(box,matrix_for_insert(row,origins.get(child,[0.,0.,0.])))
+            notes |= child_notes
         boxes.append(box)
-    result=([min(b[i] for b in boxes) for i in range(3)]+[max(b[i+3] for b in boxes) for i in range(3)]) if boxes else None
+        solid = True
+    result=(([min(b[i] for b in boxes) for i in range(3)]+[max(b[i+3] for b in boxes) for i in range(3)]), frozenset(notes)) if solid else unknown
     if not stack and cache is not None:
         cache[name]=result
     return result
+
+
+def extent_row_kind(row, empty=frozenset(), allowed_insert_codes=frozenset()):
+    """How one definition row enters definition_extent: (kind, box). kind is skip (an empty child definition),
+    annotation (box = insertion point), fill (skipped), insert (recurse), solid (box = bbox3d) or unknown."""
+    entity_type = str(row.get("entity_type") or "").upper()
+    is_insert = entity_type == "INSERT"
+    if (is_insert and str(row.get("block_name") or "") in empty
+            and (not row.get("geometry_issues") or issue_codes_within(row, allowed_insert_codes))):
+        return "skip", None
+    unsupported = bool(row.get("geometry_issues") or row.get("geometry_status") in {"unsupported", "requires_reextraction"})
+    if entity_type in EXTENT_ANNOTATION_TYPES:
+        anchor = [row.get("x"), row.get("y"), 0.0 if row.get("z") is None else row.get("z")]
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in anchor):
+            return "unknown", None
+        return "annotation", [*anchor, *anchor]
+    if entity_type in EXTENT_FILL_TYPES and (unsupported or row.get("geometry") is None or not _valid_box3(row.get("bbox3d"))):
+        return "fill", None
+    # In particular, an array INSERT's first cell is not its envelope.
+    # Keep the parent unpruned so adapters can retain unresolved instances.
+    if unsupported and not (is_insert and issue_codes_within(row, allowed_insert_codes)):
+        return "unknown", None
+    if is_insert:
+        return "insert", None
+    if row.get("geometry") is not None and row.get("bbox3d") is not None:
+        return "solid", row.get("bbox3d")
+    return "unknown", None  # SPLINE, DIMENSION, REGION and the like: no complete block envelope.
+
+
+class DefinitionExtentFolder:
+    """Streaming stand-in for one definition's rows, for callers that cannot keep a large definition stream in
+    memory (the point coverage ledger): non-INSERT rows fold into at most four synthetic rows and INSERT rows are
+    kept with the keys definition_extent reads, so definition_extent over rows() gives the same (box, notes)."""
+    INSERT_KEYS = ("record_id", "entity_handle", "entity_type", "block_name", "layer", "x", "y", "z", "rotation",
+                   "scale_factors", "extrusion", "insert_matrix_wcs", "geometry_issues", "geometry_issue_codes", "geometry_status")
+
+    def __init__(self, empty=frozenset(), allowed_insert_codes=frozenset()):
+        self.empty, self.allowed = empty, allowed_insert_codes
+        self.solid = self.annotation = None
+        self.fill = self.unknown = False
+        self.inserts = []
+
+    @staticmethod
+    def _union(a, b):
+        return list(b) if a is None else [min(a[i], b[i]) for i in range(3)] + [max(a[i + 3], b[i + 3]) for i in range(3)]
+
+    def add(self, row):
+        kind, box = extent_row_kind(row, self.empty, self.allowed)
+        if kind == "insert" or (kind == "skip" and str(row.get("entity_type") or "").upper() == "INSERT"):
+            self.inserts.append({key: row.get(key) for key in self.INSERT_KEYS})
+        elif kind == "unknown":
+            self.unknown = True
+        elif kind == "fill":
+            self.fill = True
+        elif kind == "annotation":
+            self.annotation = self._union(self.annotation, box)
+        elif kind == "solid":
+            self.solid = self._union(self.solid, box)
+
+    def rows(self):
+        out = []
+        if self.unknown:
+            out.append({"entity_type": "SPLINE", "geometry": None})
+        if self.solid is not None:
+            out.append({"entity_type": "LINE", "geometry": True, "bbox3d": self.solid})
+        if self.annotation is not None:
+            for corner in (self.annotation[:3], self.annotation[3:]):
+                out.append({"entity_type": "POINT", "x": corner[0], "y": corner[1], "z": corner[2]})
+        if self.fill:
+            out.append({"entity_type": "HATCH", "geometry": None})
+        return out + self.inserts
+
+
+def definition_bounds(name, definitions, origins, max_depth=16, cache=None, stack=(), empty=frozenset(),
+                      allowed_insert_codes=frozenset()):
+    """The box of definition_extent; callers that prune by it must apply the insertion-point guard themselves when
+    the extent is incomplete (use definition_extent for the notes)."""
+    return definition_extent(name, definitions, origins, max_depth, cache, stack, empty, allowed_insert_codes)[0]
+
+
+def extent_note_labels(notes):
+    return [EXTENT_NOTES[key] for key in sorted(notes or ())]
+
+
+# Sheet placement shared by the point coverage ledger and the negative-evidence search (registration 20261017-0012).
+PLACEMENT_GEOMETRY = "图形范围中心"
+PLACEMENT_PARTIAL = "图形范围中心（范围不完整：未含填充或注记按插入点计）"
+PLACEMENT_INSERT = "插入点（定不出图形范围）"
+
+
+def placement_point(world_box, notes, insert_point):
+    """((x, y), basis): the centre of a transformed definition extent (3D box from transform_bounds), else the insertion
+    point."""
+    if world_box is not None:
+        return ((world_box[0] + world_box[3]) / 2, (world_box[1] + world_box[4]) / 2), (PLACEMENT_PARTIAL if notes else PLACEMENT_GEOMETRY)
+    return (insert_point[0], insert_point[1]), PLACEMENT_INSERT
+
+
+def point_in_scope(point, scope):
+    return (scope is None or point is None
+            or (scope["xmin"] <= point[0] < scope["xmax_exclusive"] and scope["ymin"] <= point[1] < scope["ymax_exclusive"]))
+
+
+def extent_in_scope(box, notes, anchor, scope):
+    """Scope test of an instance with a (possibly incomplete) transformed extent. No extent keeps it (bounds_intersect
+    of None). An incomplete extent prunes only when the insertion point is outside as well (K3 guard: a skipped fill
+    or a label may be what reaches into the frame); an unknown insertion point cannot show it is outside."""
+    if bounds_intersect(box, scope):
+        return True
+    return bool(notes) and point_in_scope(anchor, scope)
 
 
 def bounds_intersect(box, scope):

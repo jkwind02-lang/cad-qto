@@ -103,7 +103,14 @@ def load_working_entries(ledger, path, expected_source):
 
 def applies_to(rule, object_id):
     authority = rule.get("authority", {})
-    return authority.get("decision_origin") != "model" or object_id in authority["object_ids"]
+    if authority.get("decision_origin") != "model":
+        return True
+    # A record may list tens of thousands of objects; a list scan per instance made one page take minutes
+    # (registration 20261017-0027). The set is cached on the rule, keyed by the list it was built from.
+    cached = rule.get("_object_id_set")
+    if cached is None or cached[0] is not authority["object_ids"]:
+        cached = rule["_object_id_set"] = (authority["object_ids"], frozenset(authority["object_ids"]))
+    return object_id in cached[1]
 
 
 def recognition_basis(ledger, path):

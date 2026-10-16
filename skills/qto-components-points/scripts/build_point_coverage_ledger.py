@@ -27,7 +27,7 @@ from search_negative_evidence import OUTPUT_SCHEMA as SEARCH_SCHEMA, record_prob
 
 SCHEMA = "qto-point-coverage-input/1.0"
 LEDGER_SCHEMA = "qto-point-coverage-ledger/1.0"
-VERSION = "qto-point-coverage-ledger/1.2.0"
+VERSION = "qto-point-coverage-ledger/1.3.0"
 DESTINATIONS = ("已计", "有据排除", "待识别", "版本冲突", "无去向")
 DISPOSITION_DEST = {"adopted": "已计", "merged": "已计", "excluded": "有据排除", "not_applicable": "有据排除",
                     "duplicate_excluded": "有据排除", "unresolved": "待识别"}
@@ -45,7 +45,13 @@ AUTO_EXCLUDABLE = (LEGEND_KIND, SYSTEM_KIND)
 DEFAULT_AUTO_EXCLUDE = [LEGEND_KIND]
 AUTO_BASIS = {LEGEND_KIND: "图例页上的复制件（A10）", SYSTEM_KIND: "系统图页上的示意，不单独计数（auto_exclude_sheet_kinds）"}
 UNSHEETED = "图页未定"
-GEOMETRY_BASIS, INSERT_BASIS, DYNAMIC_BASIS = "图形范围中心", "插入点（定不出图形范围）", "插入点（动态块图形范围不参与定位）"
+# K3 (registration 20261017-0031): the extent rules are cad_geometry.definition_extent, shared with the adapters and,
+# with these labels, with the negative-evidence search (registration 20261017-0012)
+GEOMETRY_BASIS, PARTIAL_BASIS, INSERT_BASIS = (cad_geometry.PLACEMENT_GEOMETRY, cad_geometry.PLACEMENT_PARTIAL,
+                                               cad_geometry.PLACEMENT_INSERT)
+DYNAMIC_BASIS = "插入点（动态块图形范围不参与定位）"
+GUARD_BASIS = "插入点（范围不完整且落在包外，按插入点保留）"
+GEOMETRY_BASES = (GEOMETRY_BASIS, PARTIAL_BASIS)
 COUNT_KEYS = ("drawing", "handle", "category", "sheet")
 EXCLUSION_KEYS = ("drawing", "handle", "basis")
 TOP_FIELDS = {"schema_version", "scope_id", "drawings", "count_tables", "handle_exclusions", "sheets", "legend_coverage",
@@ -80,22 +86,6 @@ def normalize_id(value: str) -> tuple[str | None, str | None]:
     if raw.startswith("PT-CAD-"):
         raw = raw[len("PT-CAD-"):]
     return raw.upper(), None
-
-
-def box3(row: dict[str, Any]) -> list[float] | None:
-    box = row.get("bbox3d")
-    if isinstance(box, list) and len(box) == 6 and all(isinstance(v, (int, float)) for v in box):
-        return [float(v) for v in box]
-    box = row.get("bbox")
-    if isinstance(box, list) and len(box) == 4 and all(isinstance(v, (int, float)) for v in box):
-        return [float(box[0]), float(box[1]), 0.0, float(box[2]), float(box[3]), 0.0]
-    return None
-
-
-def union(a: list[float] | None, b: list[float] | None) -> list[float] | None:
-    if a is None or b is None:
-        return a if b is None else b
-    return [min(a[i], b[i]) for i in range(3)] + [max(a[i + 3], b[i + 3]) for i in range(3)]
 
 
 class InputProblems(Exception):
@@ -198,8 +188,11 @@ class Ledger:
                 iy = point[1] / factor if point[1] is not None else None
                 # scope_geometry_bbox is the adapter's transformed definition extent, in drawing units (1713)
                 box = row.get("scope_geometry_bbox")
-                if isinstance(box, list) and len(box) >= 4 and all(isinstance(v, (int, float)) for v in box[:4]):
-                    x, y, placed = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2, GEOMETRY_BASIS
+                if row.get("scope_location_basis") == "insertion_anchor_incomplete_extent_guard":
+                    x, y, placed = ix, iy, GUARD_BASIS
+                elif isinstance(box, list) and len(box) >= 4 and all(isinstance(v, (int, float)) for v in box[:4]):
+                    x, y = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+                    placed = PARTIAL_BASIS if row.get("scope_extent_notes") else GEOMETRY_BASIS
                 else:
                     x, y = ix, iy
                     placed = DYNAMIC_BASIS if row.get("scope_location_basis") == "insertion_anchor_dynamic_state_adjudicated" else INSERT_BASIS
@@ -229,9 +222,11 @@ class Ledger:
                 self.problem("C-2", str(manifest_path), f"中性 {key} 缺失或 SHA256 与清单不一致"); return None
             self.files.append({"role": f"neutral_{key}", "drawing": drawing, "path": str(paths[key]), "sha256": artifact.get("sha256")})
         meta = {str(b.get("block_name")): b for b in manifest.get("blocks") or [] if isinstance(b, dict) and b.get("block_name")}
+        empty = frozenset(n for n, b in meta.items() if b.get("serialized") is True and b.get("direct_entity_count") == 0)
         top: dict[str, dict[str, Any]] = {}
         in_block: set[str] = set()
-        # Streamed once: per block only its own extent and its child INSERTs are kept (D006 definitions are 734 MB).
+        # Streamed once: per block only its folded extent rows and its child INSERTs are kept (D006 definitions are
+        # 734 MB); the folder keeps what cad_geometry.definition_extent needs, so placement follows the adapters' rules.
         blocks: dict[str, dict[str, Any]] = {}
         with paths["block_definitions"].open(encoding="utf-8") as handle:
             for line in handle:
@@ -244,11 +239,13 @@ class Ledger:
                     in_block.add(handle_id)   # a counted row may point inside a block
                 if parent is None or row.get("row_type", "entity") != "entity":
                     continue
-                entry = blocks.setdefault(str(parent), {"box": None, "inserts": []})
+                entry = blocks.get(str(parent))
+                if entry is None:
+                    entry = blocks[str(parent)] = {"inserts": [], "folder": cad_geometry.DefinitionExtentFolder(
+                        empty, cad_geometry.DYNAMIC_STATE_CODES)}
+                entry["folder"].add(row)
                 if str(row.get("entity_type") or "").upper() == "INSERT":
                     entry["inserts"].append({k: row.get(k) for k in INSERT_KEYS})
-                else:
-                    entry["box"] = union(entry["box"], box3(row))
         with paths["layout_entities"].open(encoding="utf-8") as handle:
             for line in handle:
                 if '"parent_block":null' not in line and '"parent_block": null' not in line:   # block children: handle only
@@ -272,30 +269,26 @@ class Ledger:
         except (ValueError, TypeError, IndexError):
             return None
 
-    def extent(self, blocks: dict[str, Any], meta: dict[str, Any], name: str, memo: dict[str, Any], stack: tuple[str, ...] = ()):
-        """Placement extent of a block definition: own entities plus transformed children (an estimate for finding
-        the sheet, not a measured envelope; unknown children are skipped instead of making the whole box unknown)."""
-        if name in memo:
-            return memo[name]
-        if name in stack or len(stack) >= MAX_DEPTH or name not in blocks:
-            return None
-        entry = blocks[name]
-        box = entry["box"]
-        for child in entry["inserts"]:
-            child_box = self.extent(blocks, meta, str(child.get("block_name") or ""), memo, (*stack, name))
-            matrix = self.matrix(child, meta) if child_box is not None else None
-            if matrix is not None:
-                box = union(box, cad_geometry.transform_bounds(child_box, matrix))
-        memo[name] = box
-        return box
+    def extent(self, blocks: dict[str, Any], meta: dict[str, Any], name: str, memo: dict[Any, Any]):
+        """(local box, notes) of a block definition by the adapters' rules (cad_geometry.definition_extent, K3 of
+        registration 20261017-0031): fills skipped, labels at their insertion point, any other unmeasured row or an
+        unreadable child leaves the box unknown and the insertion point places the instance."""
+        if ("definitions",) not in memo:   # tuple keys never meet a block name
+            memo[("definitions",)] = {n: entry["folder"].rows() for n, entry in blocks.items()}
+            memo[("origins",)] = {n: (m.get("origin") or [0.0, 0.0, 0.0]) for n, m in meta.items()}
+            memo[("cache",)] = {}
+            memo[("empty",)] = next((entry["folder"].empty for entry in blocks.values()), frozenset())
+        try:
+            return cad_geometry.definition_extent(name, memo[("definitions",)], memo[("origins",)], MAX_DEPTH, memo[("cache",)],
+                                                  (), memo[("empty",)], cad_geometry.DYNAMIC_STATE_CODES)
+        except (ValueError, TypeError, IndexError):
+            return None, frozenset()
 
     def placed(self, blocks, meta, memo, name: str, matrix, insert_point) -> tuple[Any, Any, str]:
-        box = self.extent(blocks, meta, name, memo) if matrix is not None else None
-        if box is not None:
-            world = cad_geometry.transform_bounds(box, matrix)
-            if world is not None:
-                return (world[0] + world[3]) / 2, (world[1] + world[4]) / 2, GEOMETRY_BASIS
-        return insert_point[0], insert_point[1], INSERT_BASIS
+        box, notes = self.extent(blocks, meta, name, memo) if matrix is not None else (None, frozenset())
+        world = cad_geometry.transform_bounds(box, matrix) if box is not None else None
+        (x, y), basis = cad_geometry.placement_point(world, notes, insert_point)
+        return x, y, basis
 
     def expand(self, drawing: str, path_id: str, block: str, matrix, layer: str, blocks, meta, memo, expand_set: set[str],
                out: dict[str, dict[str, Any]], stack: tuple[str, ...]) -> None:
@@ -509,7 +502,7 @@ class Ledger:
             s = self.locate(sheets, c["drawing"], c["x"], c["y"])
             if s:
                 c["sheet"], c["sheet_title"], c["sheet_kind"] = s["sheet_id"], s["title"], s["kind"]
-            if c.get("placement_basis") == GEOMETRY_BASIS and c.get("insert_x") is not None:
+            if c.get("placement_basis") in GEOMETRY_BASES and c.get("insert_x") is not None:
                 at_insert = self.locate(sheets, c["drawing"], c["insert_x"], c["insert_y"])
                 insert_sheet = at_insert["sheet_id"] if at_insert else UNSHEETED
                 if insert_sheet != c["sheet"]:

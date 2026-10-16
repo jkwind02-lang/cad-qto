@@ -12,7 +12,10 @@ import argparse, csv, hashlib, json, re, sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-VERSION = '1.0.1'
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import qto_cad_geometry as cad_geometry  # noqa: E402
+
+VERSION = '1.1.0'
 INPUT_SCHEMA, OUTPUT_SCHEMA = 'qto-negative-search-input/1.0', 'qto-negative-search/1.0'
 KINDS = ('spec', 'tray', 'box', 'model', 'pipe', 'text', 'block')
 SHEET_KINDS = ('平面', '系统图', '表与说明', '图例', '详图', '其他')
@@ -26,18 +29,35 @@ MTEXT_CODE = re.compile(r'\\[ACcFfHhQTWp][^;\\]*;|\\[LlOoKkNnPpXx~]|[{}]')
 SPEC_GROUP = re.compile(r'(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)')
 
 
+TEXT_BASIS = '文字插入点'
+HIT_DETAIL = '否定结论检索命中明细.csv'
+HIT_COLUMNS = ['检索记录编号', '条目', '命中类别', '图号', '图页', '图页名', '图页类型', '句柄', '块内句柄', '图层', '文字', '统一写法',
+               '经由', '定位依据', '判定', '判定序号', '判定依据']
+
+
 class InputError(ValueError):
-    def __init__(self, problems): super().__init__('；'.join(problems[:5])); self.problems = problems
+    def __init__(self, problems, detail=None):
+        super().__init__('；'.join(problems[:5])); self.problems = problems; self.detail = detail
 
 
 def sha_file(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
 
+FLAT_MAP = str.maketrans({'×': 'X', '*': 'X', '（': '(', '）': ')', '＋': '+', '－': '-', '—': '-'})
+
+
 def flat(s):
     """Text in one comparable form: MTEXT codes gone, upper case, multiply signs as X, ASCII brackets, no spaces, hyphens or
     underscores, no diameter marks (JDG%%C20 and JDGΦ20 read as JDG20; %%C is AutoCAD's code for the diameter sign)."""
-    s = MTEXT_CODE.sub(' ', str(s)).upper().translate(str.maketrans({'×': 'X', '*': 'X', '（': '(', '）': ')', '＋': '+', '－': '-', '—': '-'}))
+    s = MTEXT_CODE.sub(' ', str(s)).upper().translate(FLAT_MAP)
     return re.sub(r'[\s\-_]+|%%C|[ΦφØø∅]', '', s)
+
+
+def flat_sep(s):
+    """flat() keeping one '-' where the text had spaces, hyphens or underscores, so a box number matches as whole words:
+    1B-LPB-N-3 inside 01-F2-1B-LPB-N-3 or before a size, not inside 11B-LPB-N-3 (registration 20261017-0015)."""
+    s = re.sub(r'%%C|[ΦφØø∅]', '', MTEXT_CODE.sub(' ', str(s)).upper().translate(FLAT_MAP))
+    return re.sub(r'[\s\-_]+', '-', s).strip('-')
 
 
 def bounded(core, first, last, whole=False):
@@ -83,12 +103,22 @@ def variants(item):
         cores = [re.escape(f) for f in forms]
         if kind == 'pipe':   # SC20 also written SC%%C20, SCΦ20 (flat drops the mark) or SC DN20
             cores = [re.sub(r'^([A-Z]+)(\d)', r'\1(?:DN)?\2', c) for c in cores]
-        main.append(bounded('(?:' + '|'.join(cores) + ')', forms[0][0], forms[0][-1]))
+        if kind == 'box':
+            # whole words on flat_sep (registration 20261017-0015): a separator may sit between any two characters, and
+            # the edge test then sees the separator, so a short number inside a full number with a prefix is found
+            sep_cores = ['-?'.join(re.escape(ch) for ch in f) for f in forms]
+            main.append((bounded('(?:' + '|'.join(sep_cores) + ')', forms[0][0], forms[0][-1]), 'flat_sep'))
+        else:
+            main.append(bounded('(?:' + '|'.join(cores) + ')', forms[0][0], forms[0][-1]))
         shown += [term, *(item.get('aliases') or [])]
         notes.append('大小写不分，空格、连字符、下划线、直径符号省略' + ('；管材与管径之间可带 DN' if kind == 'pipe' else ''))
         if kind == 'box':
-            near = re.sub(r'\d+', r'\\d+', re.escape(forms[0]))
-            if near != re.escape(forms[0]): second.append(bounded(near, forms[0][0], forms[0][-1])); notes.append('近似编号（数字不同）只作次级')
+            notes.append('箱号按整段词匹配：前面是连字符、空格、下划线或文字开头时，完整编号里的短号也算命中（如 01-F2-1B-LPB-N-3 里的 '
+                         '1B-LPB-N-3），后面隔开接尺寸的也算（1A-GPB-N-2 600*2000*400）；数字紧邻数字的不算（11B-LPB-N-3 不是 1B-LPB-N-3）；'
+                         '不带分隔符连写的完整编号（01F21BLPBN3）分不出短号从哪开始，只作次级')
+            units = re.findall(r'\d+|.', forms[0])
+            near = '-?'.join(r'\d+' if u.isdigit() else re.escape(u) for u in units)
+            if any(u.isdigit() for u in units): second.append((bounded(near, forms[0][0], forms[0][-1]), 'flat_sep')); notes.append('近似编号（数字不同）只作次级')
     elif kind == 'text':
         for t in [term, *(item.get('aliases') or [])]:
             if t: main.append(re.escape(flat(t))); shown.append(t)
@@ -100,7 +130,9 @@ def variants(item):
     blocks = [re.compile(p, re.I) for p in item.get('block_names') or []]
     if kind == 'block' and not blocks: raise ValueError(f'{item["item_id"]}：block 类要写 block_names')
     if not main and not blocks: raise ValueError(f'{item["item_id"]}：没有可检索的写法')
-    return {'main': [re.compile(p) for p in main], 'second': [re.compile(p) for p in second], 'blocks': blocks,
+    # (pattern, text form): user patterns and every kind but box read flat(); box numbers read flat_sep()
+    fielded = lambda ps: [(re.compile(p), 'flat') if isinstance(p, str) else (re.compile(p[0]), p[1]) for p in ps]
+    return {'main': fielded(main), 'second': fielded(second), 'blocks': blocks,
             'exclude': [re.compile(flat_regex(p)) for p in item.get('exclude') or []],
             'second_exclude': [re.compile(flat_regex(p)) for p in sec.get('exclude') or []],
             'shown': list(dict.fromkeys(shown)), 'notes': notes,
@@ -133,14 +165,15 @@ def read_sheets(spec, base, did, problems):
 
 
 def place(sheets, layout, x, y):
+    """Sheet of a point, as the point coverage ledger picks it: of the model-space sheets holding the point the one with
+    the smallest area (registration 20261017-0012); a paper-space layout row goes to its layout's sheet."""
     if layout and layout != 'Model':
         s = next((s for s in sheets if s['layout'] == layout), None)
         if s: return s
     if x is None or y is None: return None
-    for s in sheets:
-        b = s['box']
-        if b and (not s['layout'] or s['layout'] == 'Model') and b[0] <= x <= b[2] and b[1] <= y <= b[3]: return s
-    return None
+    hits = [s for s in sheets if s['box'] and (not s['layout'] or s['layout'] == 'Model')
+            and s['box'][0] <= x <= s['box'][2] and s['box'][1] <= y <= s['box'][3]]
+    return min(hits, key=lambda s: (s['box'][2] - s['box'][0]) * (s['box'][3] - s['box'][1])) if hits else None
 
 
 def apply(m, x, y): return (m[0] * x + m[1] * y + m[3], m[4] * x + m[5] * y + m[7])
@@ -165,6 +198,10 @@ def read_drawing(d, base, non_drawing, overrides, problems):
     nd = base / d['neutral_dir']
     lay, blk = nd / '中性布局图元.ndjson', nd / '中性块定义图元.ndjson'
     if not lay.exists() or not blk.exists(): return None
+    man = json.loads((nd / 'CAD中性取证清单.json').read_text(encoding='utf-8-sig')) if (nd / 'CAD中性取证清单.json').exists() else {}
+    meta = {str(b.get('block_name')): b for b in man.get('blocks', []) if isinstance(b, dict) and b.get('block_name')}
+    empty = frozenset(n for n, b in meta.items() if b.get('serialized') is True and b.get('direct_entity_count') == 0)
+    folders = {}   # block -> folded extent rows, the point coverage ledger's way (definitions can be hundreds of MB)
     occ, binst, parents, inserted, unread = [], defaultdict(list), defaultdict(list), Counter(), Counter()
     tops = defaultdict(list)
     for path, layer_kind in ((lay, 'layout'), (blk, 'block')):
@@ -172,6 +209,12 @@ def read_drawing(d, base, non_drawing, overrides, problems):
             for line in f:
                 r = json.loads(line); et = r.get('entity_type') or ''
                 parent = r.get('parent_block') if layer_kind == 'block' else None
+                if parent and r.get('row_type', 'entity') == 'entity':
+                    folder = folders.get(parent)
+                    if folder is None:
+                        folder = folders[parent] = cad_geometry.DefinitionExtentFolder(empty, cad_geometry.DYNAMIC_STATE_CODES)
+                    folder.add(r)
+                own = {'block': r['block_name'], 'matrix': r.get('insert_matrix_wcs')} if et == 'INSERT' and r.get('block_name') else {}
                 if et == 'INSERT' and r.get('block_name'):
                     m = r.get('insert_matrix_wcs')
                     if layer_kind == 'layout':
@@ -183,15 +226,26 @@ def read_drawing(d, base, non_drawing, overrides, problems):
                 kind = UNREAD_TYPES.get(et) or ('代理对象' if 'PROXY' in str(r.get('object_name') or '').upper() else None)
                 if kind: unread[(kind, r.get('layer') or '', classify(r, non_drawing, overrides, d['id']))] += 1
                 for text, via in texts_of(r):
-                    rec = {'text': text, 'flat': flat(text), 'via': via, 'layer': r.get('layer'), 'handle': r.get('entity_handle'), 'x': r.get('x'), 'y': r.get('y'), 'layout': r.get('layout')}
+                    # an INSERT's attribute values are placed with the INSERT (own carries its block and matrix)
+                    rec = {'text': text, 'flat': flat(text), 'flat_sep': flat_sep(text), 'via': via, 'layer': r.get('layer'),
+                           'handle': r.get('entity_handle'), 'x': r.get('x'), 'y': r.get('y'), 'layout': r.get('layout'), **own}
                     if layer_kind == 'layout': occ.append(rec)
                     elif parent and not parent.startswith('*D'): binst[parent].append(rec)   # dimension blocks only hold measured values
                 if et == 'INSERT' and r.get('block_name'):
-                    rec = {'block': r['block_name'], 'layer': r.get('layer'), 'handle': r.get('entity_handle'), 'x': r.get('x'), 'y': r.get('y'), 'layout': r.get('layout'), 'via': 'block'}
-                    if layer_kind == 'layout': occ.append({**rec, 'text': None, 'flat': ''})
-                    elif parent: binst[parent].append({**rec, 'text': None, 'flat': ''})
-    man = json.loads((nd / 'CAD中性取证清单.json').read_text(encoding='utf-8-sig')) if (nd / 'CAD中性取证清单.json').exists() else {}
-    return {'occ': occ, 'blocks': binst, 'parents': parents, 'tops': tops, 'inserted': inserted, 'unread': unread,
+                    rec = {'layer': r.get('layer'), 'handle': r.get('entity_handle'), 'x': r.get('x'), 'y': r.get('y'), 'layout': r.get('layout'), 'via': 'block', **own}
+                    if layer_kind == 'layout': occ.append({**rec, 'text': None, 'flat': '', 'flat_sep': ''})
+                    elif parent: binst[parent].append({**rec, 'text': None, 'flat': '', 'flat_sep': ''})
+    definitions = {name: folder.rows() for name, folder in folders.items()}
+    origins = {n: (b.get('origin') or [0.0, 0.0, 0.0]) for n, b in meta.items()}
+    extents = {}
+
+    def extent(name):
+        """(local box, notes) by cad_geometry.definition_extent, the rule of the adapters and the coverage ledger."""
+        try:
+            return cad_geometry.definition_extent(name, definitions, origins, MAX_DEPTH, extents, (), empty, cad_geometry.DYNAMIC_STATE_CODES)
+        except (ValueError, TypeError, IndexError):
+            return None, frozenset()
+    return {'occ': occ, 'blocks': binst, 'parents': parents, 'tops': tops, 'inserted': inserted, 'unread': unread, 'extent': extent,
             'neutral': {'dir': str(nd), 'layout_sha256': sha_file(lay), 'block_sha256': sha_file(blk)},
             'unserialized_blocks': sum(1 for b in man.get('blocks', []) if b.get('serialized') is False)}
 
@@ -221,8 +275,28 @@ def instances(dr, block, cache):
 
 def match(o, pats, excl, var):
     if o['text'] is None: return any(p.search(o['block']) for p in var['blocks'])
-    if not any(p.search(o['flat']) for p in pats): return False
+    if not any(p.search(o[form]) for p, form in pats): return False
     return not any(p.search(o['flat']) for p in excl)
+
+
+def anchor(dr, o, m=None):
+    """(x, y, basis) of one occurrence, m the world matrix of the block holding it (None in a layout). A block, for its
+    name or an attribute it carries, sits at the centre of its transformed definition extent and falls back to its
+    insertion point, the point coverage ledger's rule (registration 20261017-0012); text sits at its own insertion point."""
+    if o.get('x') is None or o.get('y') is None:
+        return None, None, '无坐标'
+    point = (o['x'], o['y']) if m is None else apply(m, o['x'], o['y'])
+    if not o.get('block'):
+        return point[0], point[1], TEXT_BASIS
+    box, notes = dr['extent'](o['block']) if o.get('matrix') else (None, frozenset())
+    world = None
+    if box is not None:
+        try:
+            world = cad_geometry.transform_bounds(box, o['matrix'] if m is None else chain(o['matrix'], m))
+        except (ValueError, TypeError):
+            world = None
+    (x, y), basis = cad_geometry.placement_point(world, notes, point)
+    return x, y, basis
 
 
 def search(item, var, drawings, data, sheets):
@@ -236,7 +310,8 @@ def search(item, var, drawings, data, sheets):
             bag = hits if which == 'main' else second
             for o in dr['occ']:
                 if (o['text'] is None and which == 'second') or not match(o, pats, excl, var): continue
-                bag.append(hit(d, sheets[d['id']], o, o.get('x'), o.get('y'), o.get('layout'), 'layout' if o['text'] is not None else 'block'))
+                x, y, basis = anchor(dr, o)
+                bag.append(hit(d, sheets[d['id']], o, x, y, o.get('layout'), 'layout' if o['text'] is not None else 'block', basis=basis))
             for name, rows in dr['blocks'].items():
                 found = [o for o in rows if not (o['text'] is None and which == 'second') and match(o, pats, excl, var)]
                 if not found: continue
@@ -248,12 +323,12 @@ def search(item, var, drawings, data, sheets):
                     inst = [([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], 'Model', None)]
                 for m, lay, top in inst:
                     for o in found:
-                        x, y = apply(m, o['x'], o['y']) if o.get('x') is not None else (None, None)
-                        bag.append(hit(d, sheets[d['id']], o, x, y, lay, f'块 {name}（插入 {len(inst)} 次）', top))
+                        x, y, basis = anchor(dr, o, m)
+                        bag.append(hit(d, sheets[d['id']], o, x, y, lay, f'块 {name}（插入 {len(inst)} 次）', top, basis))
     return hits, second, unplaced
 
 
-def hit(d, sheets, o, x, y, layout, via, top=None):
+def hit(d, sheets, o, x, y, layout, via, top=None, basis=None):
     s = place(sheets, layout, x, y)
     scope = d.get('role', 'scope') == 'scope' and not (s and d.get('_exclude') and d['_exclude'].search(s['title']))
     how = {'layout': '布局文字', 'block': '块名'}.get(via, via)
@@ -261,7 +336,7 @@ def hit(d, sheets, o, x, y, layout, via, top=None):
     return {'drawing': d['id'], 'group': d.get('group') or ('本次范围' if d.get('role', 'scope') == 'scope' else '参照'), 'scope': scope,
             'sheet': s['sheet'] if s else '', 'sheet_title': s['title'] if s else '', 'sheet_kind': s['kind'] if s else OFF_SHEET,
             'handle': top or o.get('handle'), 'inner_handle': o.get('handle') if top else None, 'layer': o.get('layer'),
-            'text': o['text'] if o['text'] is not None else o.get('block'), 'via': how}
+            'text': o['text'] if o['text'] is not None else o.get('block'), 'via': how, 'placement_basis': basis}
 
 
 def existing(item, var, tables):
@@ -270,7 +345,9 @@ def existing(item, var, tables):
         for n, row in t['rows']:
             text = ' '.join(row.get(c) or '' for c in t['text_columns'])
             f = flat(text)
-            kind = 'main' if any(p.search(f) for p in var['main']) else 'second' if any(p.search(f) for p in var['second']) else None
+            forms = {'flat': f, 'flat_sep': flat_sep(text)}
+            kind = ('main' if any(p.search(forms[form]) for p, form in var['main'])
+                    else 'second' if any(p.search(forms[form]) for p, form in var['second']) else None)
             if kind and not any(p.search(f) for p in var['exclude'] + (var['second_exclude'] if kind == 'second' else [])):
                 out.append({'source': f'{t["label"]}:{n}', 'id': row.get(t['id_column']) or '', 'text': text.strip()[:200], 'match': '同写法' if kind == 'main' else '次级'})
     return out
@@ -278,19 +355,39 @@ def existing(item, var, tables):
 
 def judge(sec, judgments):
     """Each in-scope secondary hit takes the first judgment naming it: by top handle (optionally drawing, inner_handle)
-    or by a regex on its flat text. Returns how many hits each judgment took."""
+    or by a regex on its flat text, whole or any whitespace-separated part of it (a box number followed by its size,
+    01-F1-1A-GPB-N-2 600*2000*400, is matched by 1AGPBN2(?![0-9A-Z]); registration 20261017-0024). Returns how many
+    hits each judgment took."""
     used = Counter()
     for h in sec:
         if not h['scope']: continue
+        forms = None
         for k, j in enumerate(judgments):
             if j.get('handle'):
                 ok = (str(j['handle']).upper() == str(h['handle'] or '').upper() and j.get('drawing') in (None, h['drawing'])
                       and (j.get('inner_handle') is None or str(j['inner_handle']).upper() == str(h['inner_handle'] or '').upper()))
             else:
-                ok = re.search(j['text_pattern'], flat(h['text'] or '')) is not None
+                if forms is None:
+                    forms = [flat(h['text'] or ''), *(flat(part) for part in MTEXT_CODE.sub(' ', str(h['text'] or '')).split())]
+                ok = any(re.search(j['text_pattern'], form) is not None for form in forms)
             if ok:
-                h['judgment'], h['judgment_basis'] = j['judgment'], j['basis']; used[k] += 1; break
+                h['judgment'], h['judgment_basis'], h['judgment_index'] = j['judgment'], j['basis'], k; used[k] += 1; break
     return used
+
+
+def detail_rows(record_id, item_id, main, stamp, sec):
+    """One row per hit for HIT_DETAIL: every hit the record counts, not the samples (registration 20261017-0015)."""
+    rows = []
+    for category, hs in (('主命中', [h for h in main if h['scope']]), ('参照（主写法）', [h for h in main if not h['scope']]),
+                         ('次级', [h for h in sec if h['scope']]), ('次级（参照）', [h for h in sec if not h['scope']]),
+                         ('印章水印（不算命中）', stamp)):
+        for h in hs:
+            rows.append({'检索记录编号': record_id, '条目': item_id, '命中类别': category, '图号': h['drawing'], '图页': h['sheet'] or OFF_SHEET,
+                         '图页名': h['sheet_title'], '图页类型': h['sheet_kind'], '句柄': h['handle'] or '', '块内句柄': h['inner_handle'] or '',
+                         '图层': h['layer'] or '', '文字': h['text'] or '', '统一写法': flat(h['text'] or ''), '经由': h['via'],
+                         '定位依据': h.get('placement_basis') or '', '判定': h.get('judgment') or ('未判' if category == '次级' else ''),
+                         '判定序号': h.get('judgment_index', ''), '判定依据': h.get('judgment_basis') or ''})
+    return rows
 
 
 def summarize(hs, scope_only=True):
@@ -359,7 +456,7 @@ def build(cfg, base):
     roles = {d['id']: d.get('role', 'scope') for d in drawings}
     may_contain = blocking_unread(unread, roles)
     kinds_searched = sorted({s['kind'] for d in drawings if d['id'] in searched and d['id'] in scope_ids for s in sheets[d['id']]})
-    records, stale = [], []
+    records, stale, detail = [], [], []
     for i in items:
         var = vars_[i['item_id']]
         hs, sec, unplaced = search(i, var, drawings, data, sheets)
@@ -385,15 +482,20 @@ def build(cfg, base):
                   ([f'可能含图面内容的未读对象 {sum(u["count"] for u in may_contain)} 个'] if may_contain else []) + \
                   ([f'次级命中 {unjudged} 处未判定'] if unjudged else []) + ([f'次级命中 {same} 处判为同一对象'] if same else [])
         status = 'hit' if n else 'no_hit_partial' if reasons else 'no_hit_full'
+        detail += detail_rows('NS-' + str(i['item_id']), i['item_id'], hs, stamp, sec)
         records.append({
             'record_id': 'NS-' + str(i['item_id']), 'item_id': i['item_id'], 'item': {k: i[k] for k in ('package', 'building', 'bill_no', 'name', 'features', 'bill_quantity') if k in i},
             'conclusion': i['conclusion'], 'kind': i['kind'], 'term': i.get('term'),
-            'targets': {'written_forms': var['shown'], 'notes': var['notes'], 'patterns': [p.pattern for p in var['main']], 'block_names': [p.pattern for p in var['blocks']],
+            'targets': {'written_forms': var['shown'], 'notes': var['notes'], 'patterns': [p.pattern for p, _ in var['main']],
+                        'pattern_forms': [form for _, form in var['main']], 'block_names': [p.pattern for p in var['blocks']],
                         'layers': '全部图层', 'reads': ['布局图元文字', '块定义文字（按插入次数展开，含嵌套）', '块属性（全部属性值）']},
-            'secondary': {'description': var['second_note'], 'patterns': [p.pattern for p in var['second']], 'exclude': [p.pattern for p in var['second_exclude']]} if var['second'] else None,
-            'method': f'中性取证包检索：_qto-shared-evidence/scripts/search_negative_evidence.py {VERSION}；布局、块定义（按插入次数展开，含嵌套）、块属性三层，命中按图页表定位',
+            'secondary': {'description': var['second_note'], 'patterns': [p.pattern for p, _ in var['second']], 'pattern_forms': [form for _, form in var['second']],
+                          'exclude': [p.pattern for p in var['second_exclude']]} if var['second'] else None,
+            'method': f'中性取证包检索：_qto-shared-evidence/scripts/search_negative_evidence.py {VERSION}；布局、块定义（按插入次数展开，含嵌套）、块属性三层，'
+                      '命中按图页表定位（块名和块属性命中按块的图形范围中心、定不出用插入点，与点位覆盖台账同一算法；文字按其插入点；落进几张图页取面积最小的）',
             'drawings_searched': sorted(searched), 'drawing_roles': roles, 'sheet_kinds_searched': kinds_searched,
             'result': {'hits': n, 'hits_by_sheet_kind': by_kind, 'hits_by_group': by_group, 'context_hits': sum(1 for h in hs if not h['scope']),
+                       'placement_basis_counts': dict(sorted(Counter(h.get('placement_basis') or '无坐标' for h in hs).items())),
                        'samples': hs[:SAMPLES], 'non_drawing_hits': len(stamp), 'non_drawing_samples': stamp[:SAMPLES], 'unplaced_block_hits': [{'drawing': a, 'block': b, 'texts': c} for (a, b), c in sorted(unplaced.items())],
                        'secondary_hits': sn, 'secondary_samples': scoped[:SAMPLES],
                        'secondary_judged': sn - unjudged, 'secondary_same_object': same, 'secondary_unjudged': unjudged,
@@ -401,12 +503,12 @@ def build(cfg, base):
                        'existing_results': existing(i, var, tables)[:50], 'unread': unread},
             'secondary_judgments': [dict(j, matched=used[k]) for k, j in enumerate(judgments)],
             'uncovered': uncovered, 'status': status, 'status_text': STATUS[status], 'status_reasons': reasons if status == 'no_hit_partial' else []})
-    if stale: raise InputError(stale)
+    if stale: raise InputError(stale, detail)   # the hit list still goes out, to write the judgments against
     reverse = {'requested': len(items), 'records': len(records), 'missing': [i['item_id'] for i in items if not any(r['item_id'] == i['item_id'] for r in records)],
                'declared_drawings': declared, 'searched_drawings': sorted(searched), 'outside_declared': sorted(searched - set(declared))}
     return {'schema': OUTPUT_SCHEMA, 'tool': {'script': '_qto-shared-evidence/scripts/search_negative_evidence.py', 'version': VERSION},
             'scope': scope_info, 'records': records, 'reverse_check': reverse,
-            'summary': dict(Counter(r['status'] for r in records))}
+            'summary': dict(Counter(r['status'] for r in records)), '_detail': detail}
 
 
 def blocking_unread(unread, roles=None):
@@ -480,20 +582,28 @@ def main():
     p.add_argument('--input', required=True, type=Path); p.add_argument('--output-dir', required=True, type=Path)
     a = p.parse_args()
     report = {'status': 'INPUT_REQUIRED'}
+    jp, cp, dp = a.output_dir / '否定结论检索记录.json', a.output_dir / '否定结论检索记录.csv', a.output_dir / HIT_DETAIL
+
+    def write_detail(rows):
+        a.output_dir.mkdir(parents=True, exist_ok=True)
+        with dp.open('w', encoding='utf-8-sig', newline='') as f:
+            w = csv.DictWriter(f, HIT_COLUMNS); w.writeheader(); w.writerows(rows)
+        return {'path': HIT_DETAIL, 'rows': len(rows), 'sha256': sha_file(dp)}
     try:
         cfg = json.loads(a.input.read_text(encoding='utf-8-sig'))
+        if jp.exists() or cp.exists(): raise InputError(['输出目录里已有检索记录，请用新的目录'])
         out = build(cfg, a.input.resolve().parent)
         out['input'] = {'path': str(a.input), 'sha256': sha_file(a.input)}
-        a.output_dir.mkdir(parents=True, exist_ok=True)
-        jp, cp = a.output_dir / '否定结论检索记录.json', a.output_dir / '否定结论检索记录.csv'
-        if jp.exists() or cp.exists(): raise InputError(['输出目录里已有检索记录，请用新的目录'])
+        out['hit_detail'] = write_detail(out.pop('_detail'))
         jp.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding='utf-8')
         with cp.open('w', encoding='utf-8-sig', newline='') as f:
             w = csv.DictWriter(f, CSV_COLUMNS); w.writeheader(); w.writerows(csv_row(r, out['scope']) for r in out['records'])
-        report = {'status': 'PASS', 'records': len(out['records']), 'summary': out['summary'], 'output': str(jp)}
+        report = {'status': 'PASS', 'records': len(out['records']), 'summary': out['summary'], 'output': str(jp), 'hit_detail': str(dp)}
         code = 0
     except InputError as e:
         report.update(error=str(e), problems=e.problems); code = 2
+        if e.detail is not None:   # stale judgments: no record, but every hit to write them against
+            write_detail(e.detail); report['hit_detail'] = str(dp)
     except (OSError, ValueError, KeyError, TypeError) as e:
         report['error'] = str(e); code = 2
     print(json.dumps(report, ensure_ascii=False)); return code

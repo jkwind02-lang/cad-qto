@@ -30,11 +30,11 @@ from qto_actor_identity import is_model_identity
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
 
-VERSION = "qto-component-neutral-adapter/1.6.0"
+VERSION = "qto-component-neutral-adapter/1.7.0"
 # Only these two codes can be released by a dynamic_state_adjudication on an include or exclude rule (registration
 # 20261016-1709; exclude added after checkpoint 1);
 # arrays, xrefs and missing definitions stay unresolved whatever the rule says.
-DYNAMIC_STATE_CODES = {"dynamic_state_not_evaluated", "anonymous_block_state_unverified"}
+DYNAMIC_STATE_CODES = cad_geometry.DYNAMIC_STATE_CODES
 # Exact block names only: a pattern would let one sentence release every dynamic block of a drawing.
 WILDCARD_RE = re.compile(r"\.\*|[?\[\]|^]|(?<!^)\*")
 # Same-place review tolerances are physical (registration 20261016-1044 R2): millimetres per output coordinate unit
@@ -177,8 +177,13 @@ def load_ledger(path: Path, expected_source: str) -> tuple[dict[str, Any], dict[
     return ledger, entries
 
 
-def dynamic_adjudication(raw: Any, rule_id: str, decision: str, evidence_ids: set[str] | None) -> dict[str, Any] | None:
-    """Validated dynamic_state_adjudication: exact block names, a basis and evidence; optional instance list."""
+def dynamic_adjudication(raw: Any, rule_id: str, decision: str, evidence_ids: set[str] | None,
+                         known_blocks: set[str] = frozenset()) -> dict[str, Any] | None:
+    """Validated dynamic_state_adjudication: exact block names and/or an instance list, a basis and evidence.
+
+    A name that is a block of this drawing is exact whatever its characters, so anonymous dynamic names such as
+    `*U|REF63800` can be named (registration 20261017-0027); a name that is no block and looks like a pattern is
+    rejected. block_names may be left out when object_ids lists the instances (adjudication by handle)."""
     if raw is None:
         return None
     label = f"{rule_id}.dynamic_state_adjudication"
@@ -187,12 +192,14 @@ def dynamic_adjudication(raw: Any, rule_id: str, decision: str, evidence_ids: se
     if not isinstance(raw, dict):
         fail(f"{label} 必须是对象")
     names = raw.get("block_names")
-    if not isinstance(names, list) or not names:
-        fail(f"{label}.block_names 必须是非空数组（精确块名）")
+    if names is None and raw.get("object_ids") is not None:
+        names = []
+    elif not isinstance(names, list) or not names:
+        fail(f"{label}.block_names 必须是非空数组（精确块名）；只按实例裁决时不写 block_names、写 object_ids")
     block_names = []
     for index, name in enumerate(names):
         value = text(name, f"{label}.block_names[{index}]")
-        if WILDCARD_RE.search(value) or not value.strip("*"):
+        if value not in known_blocks and (WILDCARD_RE.search(value) or not value.strip("*")):
             fail(f"{label}.block_names[{index}]={value!r} 像通配；动态块裁决只收精确块名")
         if value in block_names:
             fail(f"{label}.block_names 重复：{value}")
@@ -217,7 +224,8 @@ def dynamic_adjudication(raw: Any, rule_id: str, decision: str, evidence_ids: se
             "object_ids": None if object_ids is None else set(object_ids)}
 
 
-def normalize_rules(values: Any, entries: dict[str, dict[str, Any]], evidence_ids: set[str] | None = None) -> list[dict[str, Any]]:
+def normalize_rules(values: Any, entries: dict[str, dict[str, Any]], evidence_ids: set[str] | None = None,
+                    known_blocks: set[str] = frozenset()) -> list[dict[str, Any]]:
     if not isinstance(values, list):
         fail("rules 必须是数组")
     rules = []
@@ -237,7 +245,8 @@ def normalize_rules(values: Any, entries: dict[str, dict[str, Any]], evidence_id
                 "block_re": compile_pattern(rule.get("block_pattern", ".*"), f"{rule_id}.block_pattern"),
                 "layer_re": compile_pattern(rule.get("layer_pattern", ".*"), f"{rule_id}.layer_pattern"),
                 "parent_re": compile_pattern(rule.get("parent_block_pattern", ".*"), f"{rule_id}.parent_block_pattern"),
-                "dynamic_adjudication": dynamic_adjudication(rule.get("dynamic_state_adjudication"), rule_id, decision, evidence_ids),
+                "dynamic_adjudication": dynamic_adjudication(rule.get("dynamic_state_adjudication"), rule_id, decision,
+                                                             evidence_ids, known_blocks),
                 "text_cond": text_condition(rule.get("text_condition"), rule_id, decision),
             }
         )
@@ -799,6 +808,8 @@ def main() -> int:
     parser.add_argument("--profile", required=True, type=Path)
     parser.add_argument("--adjudication-ledger", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--disposition-detail", choices=("compact", "full"), default="compact",
+                        help="处置清单每行只写识别记录的引用（默认）；full 另把整条识别记录写进每一行，体积随 object_ids 放大")
     args = parser.parse_args()
     try:
         profile_path = args.profile.resolve()
@@ -825,7 +836,9 @@ def main() -> int:
             fail("识别配置与项目裁决台账版本不一致")
         known_evidence = ({str(item.get("evidence_id")) for item in ledger.get("evidence") or [] if isinstance(item, dict)}
                           if ledger.get("schema_version") == MODEL_LEDGER_SCHEMA else None)
-        rules = normalize_rules(profile.get("rules"), entries, known_evidence)
+        inventory = {str(item.get("block_name")): item for item in manifest.get("blocks", [])
+                     if isinstance(item, dict) and item.get("block_name")}
+        rules = normalize_rules(profile.get("rules"), entries, known_evidence, set(inventory))
 
         scope = profile.get("scope")
         if not isinstance(scope, dict):
@@ -864,12 +877,17 @@ def main() -> int:
             for item in manifest.get("blocks", [])
             if isinstance(item, dict) and item.get("block_name")
         }
+        # A definition that exists but holds no entities is not a missing one (registration 20261016-2359): the
+        # manifest serialized it and counted zero entities, so it has no rows in the definition stream.
+        empty_blocks = {name for name, item in inventory.items()
+                        if item.get("serialized") is True and item.get("direct_entity_count") == 0 and name not in definitions}
         identity = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0)
         dispositions: list[dict[str, Any]] = []
         adopted: list[dict[str, Any]] = []
         endpoint_instances: list[dict[str, Any]] = []
         failures: list[dict[str, Any]] = []
-        block_boxes: dict[str, list[float] | None] = {}
+        block_boxes: dict[str, tuple[list[float] | None, frozenset]] = {}
+        extent_incomplete: Counter = Counter()   # in-scope instances by incompleteness note (K3)
         geometry: dict[str, dict[str, Any]] = {}
         seen_blocks: dict[str, set[str]] = defaultdict(set)   # block name -> scoped physical ids
         dynamic_released: dict[str, set[str]] = defaultdict(set)   # rule id -> block names released by its adjudication
@@ -877,20 +895,51 @@ def main() -> int:
         def transformed_box(box, matrix):
             return cad_geometry.transform_bounds(box, matrix)
 
-        def definition_box(name, stack=()):
-            return cad_geometry.definition_bounds(name, definitions, origins, max_depth, block_boxes, stack)
+        def record_ref(rule: dict[str, Any]) -> dict[str, Any] | None:
+            """Reference to the recognition record instead of a copy per row (registration 20261017-0027: rows
+            copying a 27,000-object list made one page 15-20 GB). The record itself is in the hash-bound ledger."""
+            authority = rule.get("authority")
+            if not isinstance(authority, dict):
+                return None
+            if "_record_ref" not in rule:
+                payload = json.dumps(authority, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+                rule["_record_ref"] = {
+                    "adjudication_id": authority.get("adjudication_id"), "subject_id": authority.get("subject_id"),
+                    "decision": authority.get("decision"), "decision_origin": authority.get("decision_origin") or "independent",
+                    "object_id_count": len(authority["object_ids"]) if isinstance(authority.get("object_ids"), list) else None,
+                    "entry_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest()}
+            return rule["_record_ref"]
 
-        def scope_of(insert: dict[str, Any], parent_matrix: tuple[float, ...]) -> tuple[bool, list[float] | None]:
+        def definition_box(name, stack=()):
+            """(local box, incompleteness notes); see cad_geometry.definition_extent."""
+            return cad_geometry.definition_extent(name, definitions, origins, max_depth, block_boxes, stack,
+                                                  empty_blocks, DYNAMIC_STATE_CODES)
+
+        def dynamic_only(insert: dict[str, Any]) -> bool:
+            return cad_geometry.issue_codes_within(insert, DYNAMIC_STATE_CODES)
+
+        def scope_of(insert: dict[str, Any], parent_matrix: tuple[float, ...]) -> tuple[bool, list[float] | None, frozenset]:
             """Scope test of one INSERT, shared by the main walk and the side-note pre-pass (Codex retest R2): the
             transformed geometry box must meet the scope bounds, so a far base point with the drawing inside still
             counts. Unsupported INSERT geometry (e.g. MINSERT) or no definition box gives no complete instance
-            envelope and cannot justify pruning: the instance stays."""
+            envelope and cannot justify pruning: the instance stays. A dynamic block whose only issues are the
+            dynamic-state codes is scoped by its definition extent like any block (registration 20261017-0027); an
+            empty definition draws nothing, so its insertion point decides (registration 20261016-2359). An extent
+            without fills or with labels at their insertion point is incomplete (K3, registration 20261017-0031): it
+            prunes only when the insertion point is outside as well. Returns (in scope, 2D world box, notes)."""
             block_name = str(insert.get("block_name") or "")
             matrix = compose(parent_matrix, matrix_for_insert(insert, origins.get(block_name, [0.0, 0.0, 0.0])))
-            local_box = definition_box(block_name)
-            world_box3d = transformed_box(local_box, matrix) if local_box and not insert.get("geometry_issues") else None
-            world_box = [world_box3d[0], world_box3d[1], world_box3d[3], world_box3d[4]] if world_box3d else None
-            return (bbox_intersects({"bbox": world_box}, bounds) if world_box else True), world_box
+            anchor = transform_point([finite(insert.get(axis, 0.0), f"{insert.get('record_id')}.{axis}")
+                                      for axis in ("x", "y", "z")], parent_matrix)
+            if block_name in empty_blocks and (not insert.get("geometry_issues") or dynamic_only(insert)):
+                return (anchor is None or point_in_bounds(anchor, bounds)), None, frozenset()
+            local_box, notes = definition_box(block_name)
+            usable = not insert.get("geometry_issues") or dynamic_only(insert)
+            world_box3d = transformed_box(local_box, matrix) if local_box and usable else None
+            if not world_box3d:
+                return True, None, frozenset()
+            world_box = [world_box3d[0], world_box3d[1], world_box3d[3], world_box3d[4]]
+            return cad_geometry.extent_in_scope(world_box3d, notes, anchor, bounds), world_box, notes
 
         def visit(
             insert: dict[str, Any],
@@ -899,7 +948,7 @@ def main() -> int:
             stack: tuple[str, ...],
             parent_block: str,
             inherited_layer: str,
-            suppressed_by: str | None,
+            suppressed_by: dict[str, str] | None,   # disposed ancestor: physical_id, rule_id, decision
             top_level: bool,
         ) -> None:
             block_name = str(insert.get("block_name") or "")
@@ -913,39 +962,53 @@ def main() -> int:
             ]
             world_point = transform_point(local_anchor, parent_matrix)
             matrix = compose(parent_matrix, matrix_for_insert(insert, origins.get(block_name, [0.0, 0.0, 0.0])))
-            in_scope, world_box = scope_of(insert, parent_matrix)
+            in_scope, world_box, extent_notes = scope_of(insert, parent_matrix)
             if not in_scope:
                 return  # only complete, conservative bounds allow pruning
+            guard_kept = bool(extent_notes) and not bbox_intersects({"bbox": world_box}, bounds)
+            for note in extent_notes:
+                extent_incomplete[note] += 1
+            if guard_kept:
+                extent_incomplete["insertion_point_guard"] += 1
             physical_id = f"PT-{path}"
             seen_blocks[block_name].add(physical_id)
             released = None
-            if insert.get("geometry_issues"):
+            is_empty = block_name in empty_blocks
+            dynamic = bool(insert.get("geometry_issues")) and dynamic_only(insert)
+            dynamic_basis = "transformed_geometry_extent_dynamic_state_unverified"
+            # A disposed parent carries its dynamic children like ordinary ones (registration 20261017-0012), and an
+            # empty definition draws nothing in any state: neither needs a dynamic-state adjudication.
+            if insert.get("geometry_issues") and not (dynamic and (suppressed_by or is_empty)):
                 # Decided on issue codes, not on the issue wording; text without matching codes stays unresolved.
                 codes = insert.get("geometry_issue_codes")
-                if (not suppressed_by and isinstance(codes, list) and codes and len(codes) == len(insert["geometry_issues"])
-                        and set(codes) <= DYNAMIC_STATE_CODES):
+                if not suppressed_by and dynamic:
                     rule, conflicts = choose_rule(block_name, effective_layer, parent_block, rules, physical_id,
                                                   (side_texts.get(physical_id) or {}).get("ok", ()))
                     adjudication = (rule.get("dynamic_adjudication") if rule and not conflicts and rule["decision"] in ("include", "exclude")
                                     else None)
-                    if (adjudication and block_name in adjudication["block_names"]
+                    if (adjudication and (not adjudication["block_names"] or block_name in adjudication["block_names"])
                             and (adjudication["object_ids"] is None or physical_id in adjudication["object_ids"])):
                         released = {"rule_id": rule["rule_id"], "basis": adjudication["basis"],
                                     "evidence_ids": adjudication["evidence_ids"], "geometry_issue_codes": sorted(set(codes)),
-                                    "location_basis": "插入点；动态块图形范围不可信，不参与范围裁剪和外形归并"}
+                                    "location_basis": ("范围裁剪按块定义的当前图形（动态可见状态未核验）；不参与外形归并" if world_box else
+                                                       "插入点；动态块图形范围取不到，不参与范围裁剪和外形归并")}
                         dynamic_released[rule["rule_id"]].add(block_name)
                 if released is None:
                     dispositions.append({"object_id": physical_id, "physical_id": physical_id, "source_record_id": source_record_id,
                                          "block_name": block_name, "layer": effective_layer, "parent_block": parent_block or None,
                                          "point": [value * factor for value in world_point], "coordinate_unit": coordinate_unit,
+                                         "scope_geometry_bbox": world_box if dynamic else None,
+                                         "scope_location_basis": dynamic_basis if dynamic and world_box else "insertion_anchor_fallback_requires_review",
                                          "disposition": "unresolved", "basis": "; ".join(insert["geometry_issues"]), "rule_ids": [],
                                          "geometry_issue_codes": codes if isinstance(codes, list) else None, "instance_path": path})
                     failures.append({"kind": "unsupported_insert_geometry", "instance_path": path, "issues": insert["geometry_issues"]})
                     return
             next_suppressed = suppressed_by
             angle, mirrored = orientation(matrix)
+            # The extent of a dynamic block scopes it but is not trusted for shape grouping (state not verified);
+            # neither is an incomplete extent (fills skipped, labels at their insertion point; K3).
             geometry[physical_id] = {"angle": angle, "mirrored": mirrored,
-                                     "world_box": [value * factor for value in world_box] if world_box else None}
+                                     "world_box": [value * factor for value in world_box] if world_box and not dynamic and not extent_notes else None}
 
             if in_scope:
                 base = {
@@ -959,18 +1022,25 @@ def main() -> int:
                     "point": [value * factor for value in world_point],
                     "coordinate_unit": coordinate_unit,
                     "scope_geometry_bbox": world_box,
-                    "scope_location_basis": "transformed_geometry_extent" if world_box else (
-                        "insertion_anchor_dynamic_state_adjudicated" if released else "insertion_anchor_fallback_requires_review"),
+                    "scope_location_basis": "insertion_anchor_empty_definition" if is_empty else (
+                        ("insertion_anchor_incomplete_extent_guard" if extent_notes and guard_kept else
+                         dynamic_basis if dynamic else
+                         "transformed_geometry_extent_incomplete" if extent_notes else "transformed_geometry_extent") if world_box else (
+                            "insertion_anchor_dynamic_state_adjudicated" if released else "insertion_anchor_fallback_requires_review")),
+                    **({"scope_extent_notes": cad_geometry.extent_note_labels(extent_notes)} if extent_notes else {}),
                     "point_basis": "insertion_anchor_not_verified_connection_port",
                     "disposition": "unresolved",
                     "basis": "未命中冻结点位识别规则",
                     "rule_ids": [],
                 }
                 if suppressed_by:
+                    verb = "承担" if suppressed_by["decision"] == "include" else "排除"
                     base.update(
                         {
                             "disposition": "not_applicable",
-                            "basis": f"由父实例 {suppressed_by} 承担或排除专业身份，子块不单独计数",
+                            "basis": (f"由父实例 {suppressed_by['physical_id']}（规则 {suppressed_by['rule_id']}）{verb}专业身份，子块不单独计数"
+                                      + ("；动态子块随父实例处置，不需要动态状态裁决" if dynamic else "")),
+                            "suppressed_by": suppressed_by,
                         }
                     )
                 else:
@@ -988,16 +1058,22 @@ def main() -> int:
                     elif rule is None and side and side["status"] == "无文字":
                         base.update({"basis": side_text_basis(side), "rule_ids": side["rule_ids"],
                                      "side_text": {"status": "无文字", "texts": [], "shared_with": []}})
+                    elif rule is None and is_empty and not (side and side["status"] in ("文字共用", "多段文字")):
+                        base.update({"disposition": "not_applicable", "empty_definition_hint": True,
+                                     "basis": "空块定义（取证清单 serialized=true、direct_entity_count=0）：块内没有图元，"
+                                              "不单独计数；没有规则处置，仅提示"})
                     elif rule:
                         decision = rule["decision"]
                         base.update(
                             {
                                 "rule_ids": [rule["rule_id"]],
                                 "adjudication_id": rule.get("adjudication_id"),
-                                "recognition_record": rule.get("authority"),
+                                "recognition_record_ref": record_ref(rule),
                                 "basis": str(rule.get("basis") or f"冻结识别规则 {rule['rule_id']}"),
                             }
                         )
+                        if args.disposition_detail == "full":
+                            base["recognition_record"] = rule.get("authority")
                         if released:
                             base["dynamic_state_adjudication"] = released
                             base["basis"] += f"；动态块状态裁决：{released['basis']}"
@@ -1085,10 +1161,10 @@ def main() -> int:
                                     "network_ports": network_ports,
                                 }
                             )
-                            next_suppressed = physical_id
+                            next_suppressed = {"physical_id": physical_id, "rule_id": rule["rule_id"], "decision": "include"}
                         elif decision == "exclude":
                             base["disposition"] = "excluded"
-                            next_suppressed = physical_id
+                            next_suppressed = {"physical_id": physical_id, "rule_id": rule["rule_id"], "decision": "exclude"}
                         elif decision == "container":
                             base["disposition"] = "not_applicable"
                         else:
@@ -1096,7 +1172,7 @@ def main() -> int:
                 dispositions.append(base)
 
             if not block_name or block_name not in definitions:
-                if in_scope and not suppressed_by:
+                if in_scope and not suppressed_by and not is_empty:
                     failures.append(
                         {
                             "kind": "missing_block_definition",
@@ -1161,10 +1237,13 @@ def main() -> int:
             if missing:
                 fail(f"{label}.block_names 在本图范围内没有实例：{'、'.join(missing)}")
             if adjudication["object_ids"] is not None:
-                known = set().union(*(seen_blocks[name] for name in adjudication["block_names"]))
+                names = adjudication["block_names"] or list(seen_blocks)
+                known = set().union(*(seen_blocks[name] for name in names))
                 stray = sorted(adjudication["object_ids"] - known)
-                if stray:
+                if stray and adjudication["block_names"]:
                     fail(f"{label}.object_ids 引用了本图范围内不存在、或块名不在 block_names 里的实例：{'、'.join(stray)}")
+                if stray:
+                    fail(f"{label}.object_ids 引用了本图范围内不存在的实例：{'、'.join(stray)}")
             released_count = sum(1 for item in dispositions
                                  if (item.get("dynamic_state_adjudication") or {}).get("rule_id") == rule["rule_id"])
             dynamic_summary.append({"rule_id": rule["rule_id"], "block_names": adjudication["block_names"],
@@ -1193,6 +1272,26 @@ def main() -> int:
                 "duplicate_instance_keys": [{"instance_key": key, "physical_ids": sorted(ids)}
                                             for key, ids in sorted(keyed.items()) if len(ids) > 1],
             }
+
+        # Empty definitions (registration 20261016-2359): not expansion failures; listed, with a hint for those no rule
+        # disposed and a warning when a rule adopted something that draws nothing.
+        warnings: list[str] = []
+        empty_rows = [item for item in dispositions if item["block_name"] in empty_blocks]
+        empty_summary = {
+            "instance_count": len(empty_rows),
+            "undisposed_instance_count": sum(1 for item in empty_rows if item.get("empty_definition_hint")),
+            "blocks": [{"block_name": name, "instance_count": sum(1 for item in empty_rows if item["block_name"] == name),
+                        "dispositions": dict(sorted(Counter(item["disposition"] for item in empty_rows
+                                                            if item["block_name"] == name).items()))}
+                       for name in sorted({item["block_name"] for item in empty_rows})],
+        }
+        if empty_summary["undisposed_instance_count"]:
+            names = sorted({item["block_name"] for item in empty_rows if item.get("empty_definition_hint")})
+            warnings.append(f"空块定义提示：{empty_summary['undisposed_instance_count']} 个实例的块定义是空的、没有规则处置，"
+                            f"按不单独计数处理（块名：{'、'.join(names[:20])}）")
+        adopted_empty = sorted({item["block_name"] for item in empty_rows if item["disposition"] == "adopted"})
+        if adopted_empty:
+            warnings.append(f"空块定义被规则采用：{'、'.join(adopted_empty[:20])} 的块定义没有图元，请核对是否误收")
 
         physical_ids = [item["physical_id"] for item in adopted]
         if len(physical_ids) != len(set(physical_ids)):
@@ -1400,6 +1499,14 @@ def main() -> int:
                 "dynamic_state_adjudicated_count": sum(item["released_instance_count"] for item in dynamic_summary),
             },
             "dynamic_state_adjudication": dynamic_summary,
+            "empty_block_definitions": empty_summary,
+            "scope_extent_incomplete": {
+                "basis": "块内无几何的填充（HATCH、SOLID）不计入包围盒，注记（TEXT、MTEXT、ATTDEF、ATTRIB、POINT）按插入点计；"
+                         "这样算出的范围不完整，只用于范围裁剪和定页，不参与外形归并；插入点在包内的实例即使范围落在包外也保留",
+                "instances_by_note": {cad_geometry.EXTENT_NOTES.get(key, "插入点在包内、按护栏保留"): count
+                                      for key, count in sorted(extent_incomplete.items())}},
+            "warnings": warnings,
+            "disposition_detail": args.disposition_detail,
             **({"side_text_binding": side_binding} if side_binding is not None else {}),
             "instance_grouping": grouping,
             "duplicate_review": duplicate_review,

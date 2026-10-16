@@ -30,7 +30,7 @@ from qto_cad_source_contract import (check_unit_factor, verify_source_file, unit
 
 from qto_pipe_topology import RouteIndex, route_distance, project_route, geometry_parts, scale_route_geometry
 
-VERSION = "qto-pipe-neutral-adapter/1.8.0"
+VERSION = "qto-pipe-neutral-adapter/1.9.0"
 PROFILE_SCHEMA = "qto-pipe-recognition-profile/1.1"
 LEDGER_SCHEMA = "qto-project-adjudication-ledger/1.0"
 LINE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "SPLINE"}
@@ -107,11 +107,23 @@ def load_stream(path: Path) -> Iterable[dict[str, Any]]:
 
 
 def bbox_intersects(row: dict[str, Any], bounds: dict[str, float] | None) -> bool:
+    """An INSERT is in scope when its transformed definition extent meets the bounds (scope_extent_bbox, the same
+    test as the point adapter's scope_of; registration 20261017-0031); without that extent its own bbox decides."""
     if bounds is None:
         return True
-    bbox = row.get("bbox")
+    extent = row.get("scope_extent_bbox") if row.get("entity_type") == "INSERT" else None
+    use_extent = isinstance(extent, list) and len(extent) >= 4
+    bbox = extent if use_extent else row.get("bbox")
     if isinstance(bbox, list) and len(bbox) >= 4 and all(isinstance(n, (int, float)) and math.isfinite(n) for n in bbox[:4]):
-        return not (bbox[2] < bounds["xmin"] or bbox[0] >= bounds["xmax_exclusive"] or bbox[3] < bounds["ymin"] or bbox[1] >= bounds["ymax_exclusive"])
+        if not (bbox[2] < bounds["xmin"] or bbox[0] >= bounds["xmax_exclusive"] or bbox[3] < bounds["ymin"] or bbox[1] >= bounds["ymax_exclusive"]):
+            return True
+        if use_extent and row.get("scope_extent_notes"):
+            # K3 guard: an extent without fills or with labels at their insertion point prunes only when the
+            # insertion point is outside as well
+            x, y = row.get("x"), row.get("y")
+            return (all(isinstance(n, (int, float)) and not isinstance(n, bool) and math.isfinite(n) for n in (x, y))
+                    and bounds["xmin"] <= x < bounds["xmax_exclusive"] and bounds["ymin"] <= y < bounds["ymax_exclusive"])
+        return False
     return True  # incomplete geometry is unresolved, not silently excluded
 
 
@@ -362,6 +374,35 @@ def transform_row(row: dict[str, Any], matrix: tuple[float, ...], instance_path:
     return cad_geometry.transform_row(row, matrix, instance_path, target_layout)
 
 
+def empty_block_names(manifest: dict[str, Any], definitions: dict[str, Any]) -> set[str]:
+    """Definitions that exist with no entities (serialized, direct_entity_count 0) are not missing (registration
+    20261016-2359): they draw nothing and expand to nothing."""
+    return {str(item["block_name"]) for item in manifest.get("blocks", [])
+            if isinstance(item, dict) and item.get("block_name") and item.get("serialized") is True
+            and item.get("direct_entity_count") == 0 and str(item["block_name"]) not in definitions}
+
+
+def drop_zero_length_parts(geometry: Any) -> tuple[Any, list[int]]:
+    """Repeated vertices give zero-length parts (registration 20261017-0026). Dropping them merges the adjacent
+    vertices, so one bad vertex no longer fails the whole frame. Returns the geometry and the dropped part indexes;
+    the geometry is None when every part had zero length."""
+    if not isinstance(geometry, dict) or not isinstance(geometry.get("parts"), list):
+        return geometry, []
+    kept, dropped = [], []
+    for index, part in enumerate(geometry["parts"]):
+        try:
+            zero = cad_geometry.measure_part(part)[0] <= 0
+        except (KeyError, TypeError, ValueError):
+            zero = False   # malformed parts are judged by the route preparation, as before
+        if zero:
+            dropped.append(index)
+        else:
+            kept.append(part)
+    if not dropped:
+        return geometry, []
+    return ({**geometry, "parts": kept} if kept else None), dropped
+
+
 def expanded_manifest_rows(layout_path: Path, block_path: Path, manifest: dict[str, Any],
                            max_depth: int, failures: list[dict[str, Any]],
                            target_layout: str | None = None, scope_bounds: dict[str, float] | None = None) -> Iterable[dict[str, Any]]:
@@ -369,9 +410,31 @@ def expanded_manifest_rows(layout_path: Path, block_path: Path, manifest: dict[s
     for row in load_stream(block_path):
         definitions.setdefault(str(row.get("parent_block") or ""), []).append(row)
     origins = {str(item["block_name"]): item.get("origin", [0., 0., 0.]) for item in manifest.get("blocks", []) if isinstance(item, dict) and item.get("block_name")}
+    empty = empty_block_names(manifest, definitions)
     extent_cache = {}
+
+    def mark_extent(target, insert, parent_matrix):
+        """scope_extent_bbox: the INSERT's transformed definition extent (2D), the scope test the point adapter's
+        scope_of uses; absent when the definition is missing, empty or unsupported (then the anchor decides).
+        An empty definition is marked so the row is a hint, not an expansion failure or an unrecognised object."""
+        name = str(insert.get("block_name") or "")
+        if name in empty:
+            target["empty_block_definition"] = True
+            return target
+        if insert.get("geometry_issues") or name not in definitions:
+            return target
+        local_box, notes = cad_geometry.definition_extent(name, definitions, origins, max_depth, extent_cache, (), empty)
+        box = cad_geometry.transform_bounds(local_box, compose_matrix(parent_matrix, matrix_for_insert(insert, origins.get(name, [0., 0., 0.]))))
+        if box is not None:
+            target["scope_extent_bbox"] = [box[0], box[1], box[3], box[4]]
+            if notes:
+                target["scope_extent_notes"] = cad_geometry.extent_note_labels(notes)
+        return target
+
     def expand(insert, parent_matrix, path, stack, layout, inherited_layer):
         name = str(insert.get("block_name") or "")
+        if name in empty:
+            return   # draws nothing; the INSERT row itself carries empty_block_definition
         if not name or name not in definitions:
             failures.append({"object_id": insert.get("record_id"), "kind": "missing_block_definition", "block_name": name, "instance_path": path})
             return
@@ -382,9 +445,12 @@ def expanded_manifest_rows(layout_path: Path, block_path: Path, manifest: dict[s
             failures.append({"object_id": insert.get("record_id"), "kind": "unsupported_insert_geometry", "instance_path": path, "issues": insert["geometry_issues"]})
             return
         matrix = compose_matrix(parent_matrix, matrix_for_insert(insert, origins.get(name, [0., 0., 0.])))
-        local_box = cad_geometry.definition_bounds(name, definitions, origins, max_depth, extent_cache)
+        local_box, notes = cad_geometry.definition_extent(name, definitions, origins, max_depth, extent_cache, (), empty)
         box = cad_geometry.transform_bounds(local_box, matrix)
-        if not cad_geometry.bounds_intersect(box, scope_bounds):
+        x, y = insert.get("x"), insert.get("y")
+        anchor = (transform_point([x, y, insert.get("z") or 0.0], parent_matrix)
+                  if notes and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in (x, y)) else None)
+        if not cad_geometry.extent_in_scope(box, notes, anchor, scope_bounds):
             return
         layer = str(insert.get("layer") or "")
         effective_layer = inherited_layer if layer in {"", "0"} else layer
@@ -394,6 +460,8 @@ def expanded_manifest_rows(layout_path: Path, block_path: Path, manifest: dict[s
             if expanded.get("layer") in {"", "0"}:
                 expanded["source_layer"] = expanded.get("layer")
                 expanded["layer"] = effective_layer
+            if expanded.get("entity_type") == "INSERT":
+                mark_extent(expanded, row, matrix)
             yield expanded
             if expanded.get("entity_type") == "INSERT":
                 yield from expand(row, matrix, f"{child_path}/{row.get('record_id')}", (*stack, name), layout, effective_layer)
@@ -401,6 +469,8 @@ def expanded_manifest_rows(layout_path: Path, block_path: Path, manifest: dict[s
         layout = str(row.get("layout") or "Model")
         if target_layout is not None and layout != target_layout:
             continue
+        if row.get("entity_type") == "INSERT":
+            mark_extent(row, row, cad_geometry.IDENTITY)
         yield row
         if row.get("entity_type") == "INSERT":
             yield from expand(row, cad_geometry.IDENTITY, str(row.get("record_id") or "LAYOUT-INSERT"), (), layout, str(row.get("layer") or ""))
@@ -496,6 +566,8 @@ def main() -> int:
         output = args.output_dir.resolve()
         output.mkdir(parents=True, exist_ok=True)
         block_expansion_failures: list[dict[str, Any]] = []
+        empty_block_hits: Counter = Counter()
+        degenerate_segments: list[dict[str, Any]] = []
         prescoped_header: dict[str, Any] | None = None
         if args.cad_manifest:
             stream_path, block_path, cad_manifest = source_from_manifest(args.cad_manifest.resolve())
@@ -685,6 +757,7 @@ def main() -> int:
             if source_record_id in object_dispositions:
                 fail(f"范围内中性对象ID重复: {source_record_id}")
             review_required = entity_type in LINE_TYPES or entity_type in {"CIRCLE", "INSERT"}
+            empty_definition = entity_type == "INSERT" and row.get("empty_block_definition") is True
             object_dispositions[source_record_id] = {
                 "object_id": source_record_id,
                 "source_record_id": source_record_id,
@@ -692,10 +765,16 @@ def main() -> int:
                 "layer": str(row.get("layer") or ""),
                 "block_name": row.get("block_name"),
                 "instance_path": row.get("instance_path"),
-                "disposition": "unresolved" if review_required else "not_applicable",
-                "basis": "未命中冻结专业规则，不能静默排除" if review_required else "当前管网适配器不消费该中性实体类型",
+                "disposition": "unresolved" if review_required and not empty_definition else "not_applicable",
+                "basis": "未命中冻结专业规则，不能静默排除" if review_required and not empty_definition else "当前管网适配器不消费该中性实体类型",
                 "rule_ids": [],
             }
+            if empty_definition:
+                # registration 20261016-2359: an empty definition is a hint; a block rule may still exclude or adopt it below
+                empty_block_hits[str(row.get("block_name") or "")] += 1
+                object_dispositions[source_record_id].update(
+                    empty_definition_hint=True,
+                    basis="空块定义（取证清单 serialized=true、direct_entity_count=0），不画任何图元，不是缺定义；仅提示")
             if entity_type in TEXT_TYPES:
                 text_rows.append(row)
             if entity_type == "INSERT":
@@ -769,10 +848,21 @@ def main() -> int:
             start = row.get("start")
             end = row.get("end")
             raw_length = row.get("raw_length")
+            route_geometry, dropped_parts = drop_zero_length_parts(row.get("geometry"))
+            if dropped_parts and route_geometry is None:
+                recognition_unresolved.append({"object_id": object_id, "kind": "degenerate_segment_geometry", "rule_id": rule["rule_id"],
+                                               "source_record_id": row.get("record_id"), "entity_handle": row.get("entity_handle")})
+                object_dispositions[source_record_id].update({"basis": "图元的各段都是零长度（重复顶点），没有可计算长度", "rule_ids": [rule["rule_id"]]})
+                continue
             if not isinstance(start, list) or not isinstance(end, list) or not isinstance(raw_length, (int, float)) or float(raw_length) <= 0:
                 recognition_unresolved.append({"object_id": object_id, "kind": "missing_segment_geometry", "rule_id": rule["rule_id"], "source_record_id": row.get("record_id")})
                 object_dispositions[source_record_id].update({"basis": "候选管段缺少可计算几何", "rule_ids": [rule["rule_id"]]})
                 continue
+            if dropped_parts:
+                degenerate_segments.append({"object_id": object_id, "source_record_id": row.get("record_id"),
+                                            "entity_handle": row.get("entity_handle"), "layer": row.get("layer"),
+                                            "dropped_part_indexes": dropped_parts, "kept_part_count": len(route_geometry["parts"]),
+                                            "basis": "已剔除退化段：相邻重复顶点构成的零长度段，合并相邻顶点后按其余各段计"})
             decision = str(rule.get("decision", "unresolved"))
             if decision not in {"include", "exclude", "unresolved"}:
                 fail(f"{rule['rule_id']}.decision 无效")
@@ -798,7 +888,7 @@ def main() -> int:
                 "length": float(raw_length) * factor,
                 "source_ids": [f"EV-CAD-{row.get('record_id')}", rule["rule_id"], unit_source_id],
                 "geometry_signature": row.get("geometry_signature"),
-                "geometry": scale_route_geometry(row.get("geometry"), factor),
+                "geometry": scale_route_geometry(route_geometry, factor),
                 "space_id": str(rule.get("space_id") or scope.get("space_id") or layout),
                 "physical_id": row.get("physical_id"),
             }
@@ -1255,9 +1345,13 @@ def main() -> int:
                 "recognition_unresolved": disposition_counts.get("unresolved", 0) + len(block_expansion_failures),
                 "unresolved_events": len(unresolved),
                 "block_expansion_failures": len(block_expansion_failures),
+                "empty_block_instances": sum(empty_block_hits.values()),
+                "degenerate_segments_dropped": sum(len(item["dropped_part_indexes"]) for item in degenerate_segments),
                 "object_dispositions": dict(sorted(disposition_counts.items())),
                 "disposition_closure_count": sum(disposition_counts.values()),
             },
+            "empty_block_definitions": dict(sorted(empty_block_hits.items())),
+            "degenerate_segments": degenerate_segments,
             "ignored_entity_types": dict(sorted(ignored_types.items())),
             "unresolved": unresolved,
             "disposition_closure_complete": sum(disposition_counts.values()) == scoped_rows,

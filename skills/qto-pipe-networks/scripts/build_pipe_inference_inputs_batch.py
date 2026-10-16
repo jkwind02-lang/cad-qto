@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-eviden
 
 import build_pipe_inference_input as adapter
 
-VERSION = "qto-pipe-batch-frame-adapter/1.3.0"
+VERSION = "qto-pipe-batch-frame-adapter/1.4.0"
 MAPPING_SCHEMA = "qto-pipe-batch-family-mapping/1.0"
 FRAMES_SCHEMA = "qto-pipe-batch-frames/1.0"
 SUMMARY_SCHEMA = "qto-pipe-batch-conversion-summary/1.0"
@@ -377,8 +377,13 @@ def path_prefixes(instance_path: str) -> list[str]:
 
 
 def anchor_in(row: dict[str, Any], bounds: dict[str, float]) -> bool | None:
-    """True/False when the row has a usable extent or anchor; None when it has neither."""
-    bbox = row.get("bbox")
+    """True/False when the row has a usable extent or anchor; None when it has neither.
+
+    An INSERT's transformed definition extent (scope_extent_bbox) comes first, as in the point adapter's scope_of,
+    so a base-map block with a far insertion point and its drawing inside a frame belongs to that frame and its
+    family decision covers its children (registration 20261017-0031)."""
+    extent = row.get("scope_extent_bbox") if str(row.get("entity_type") or "").upper() == "INSERT" else None
+    bbox = extent if isinstance(extent, list) and len(extent) >= 4 else row.get("bbox")
     if (isinstance(bbox, list) and len(bbox) >= 4
         and all(isinstance(n, (int, float)) and not isinstance(n, bool) and math.isfinite(n) for n in bbox[:4])
         and bbox[2] >= bbox[0] and bbox[3] >= bbox[1]):
@@ -440,6 +445,7 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
     frame_bounds = {f["frame_id"]: frame_bounds_of(f) for f in frames}
     per_frame = {f["frame_id"]: {"members": {fam["family_id"]: [] for fam in mapping["families"] if family_applies(fam, f)},
                                  "pending": [], "scoped_rows": 0, "entity_counts": Counter(), "text_hits": Counter(),
+                                 "empty_block_hints": Counter(),
                                  "owned_insert_keys": set(), "ancestor_keys": set(), "written_ids": set(),
                                  "body": work_dir / f"{f['frame_id']}.body.ndjson", "body_rows": 0, "expansion_failures": []}
                  for f in frames}
@@ -532,6 +538,9 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
                 if reason == "unmatched_circle":
                     continue  # the adapter treats an unmatched circle as unresolved; it stays visible in its disposition list
                 if reason == "no_family":
+                    if entity_type == "INSERT" and row.get("empty_block_definition") is True:
+                        state["empty_block_hints"][block_name] += 1   # draws nothing: a hint, not a to-do (20261016-2359)
+                        continue
                     state["pending"].append({**item, "reason": "no_family", "family_ids": []})
                     continue
                 active[matched["family_id"]].append(record_id)
@@ -567,6 +576,7 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
     for state in per_frame.values():
         state["entity_counts"] = dict(sorted(state["entity_counts"].items()))
         state["text_hits"] = dict(sorted(state["text_hits"].items()))
+        state["empty_block_hints"] = dict(sorted(state["empty_block_hints"].items()))
     return {"frames": per_frame, "total_rows": total_rows, "expansion_failures": len(expansion_failures),
             "drawing_level_failures": drawing_level, "drawing_level_pending": drawing_pending,
             "drawing_level_excluded": dict(sorted(drawing_excluded.items())), "drawing_level_owned": drawing_owned,
@@ -950,7 +960,8 @@ def main(argv: list[str] | None = None) -> int:
                                           "text_family_hits": state["text_hits"], "pending_count": len(detail),
                                           "pending_groups": len(grouped), "pending_suppressed_by_owner": suppressed,
                                           "pending_top_level_summary": top_level_summary(grouped, 20),
-                                          "block_expansion_failures": len(state["expansion_failures"])}
+                                          "block_expansion_failures": len(state["expansion_failures"]),
+                                          "empty_block_definitions": state["empty_block_hints"]}
                 if state["scoped_rows"] > args.max_scoped_rows:
                     record["warning"] = f"范围内图元 {state['scoped_rows']} 行超过提示上限 {args.max_scoped_rows}；结果仍完整，核对图框坐标是否框大了"
                 if state["scoped_rows"] == 0:
