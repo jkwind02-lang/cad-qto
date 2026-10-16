@@ -2,13 +2,13 @@ import {spawnSync} from 'node:child_process';import fs from 'node:fs';import pat
 const args=process.argv.slice(2),arg=k=>args[args.indexOf(k)+1],root=arg('--root'),report=JSON.parse(fs.readFileSync(arg('--report'),'utf8')),art=report.artifacts,A=path.join(root,'_qto-shared-evidence','assets','review');
 const data=JSON.parse(fs.readFileSync(art.normalized_view,'utf8')),sourceHTML=fs.readFileSync(art.html,'utf8');
 function harness(html,extra={}){
- const all=[],ids={},downloads=[],blobs=new Map(),cache=new Map();
+ const all=[],ids={},downloads=[],blobs=new Map(),cache=new Map(),canvasCalls=[];
  class El{
   constructor(tag='div',id=''){this.tagName=tag;this.id=id;this.children=[];this._text='';this.value='';this.dataset={};this.className='';this.hidden=false;this.disabled=false;this.checked=false;this.style={values:{},setProperty:(k,v)=>this.style.values[k]=v};this.classList={add:c=>{if(!this.className.split(' ').includes(c))this.className+=' '+c;},remove:c=>{this.className=this.className.split(' ').filter(x=>x!==c).join(' ');},toggle:(c,v)=>{if(v===undefined)v=!this.className.split(' ').includes(c);v?this.classList.add(c):this.classList.remove(c);}};all.push(this);}
   set textContent(v){this._text=String(v);this.children=[];}get textContent(){return this._text+this.children.map(c=>c.textContent||'').join('');}get options(){return this.children;}
   append(...c){this.children.push(...c);}replaceChildren(...c){this.children=c;this._text='';}setAttribute(k,v){this[k]=v;}
   getBoundingClientRect(){return this.id==='layout'?{width:1450,height:760,left:0,top:0}:this.className==='nav'?{width:260}:this.className==='review-pane'?{width:490}:{width:680,height:650,left:0,top:0};}
-  getContext(){return new Proxy({measureText:t=>({width:t.length*7})},{get:(t,k)=>k in t?t[k]:()=>{}});}setPointerCapture(){}remove(){this.removed=true;}
+  getContext(){return new Proxy({measureText:t=>({width:t.length*7})},{get:(t,k)=>k in t?t[k]:(...args)=>canvasCalls.push([k,...args])});}setPointerCapture(){}remove(){this.removed=true;}
   click(){if(this.tagName==='a')downloads.push({name:this.download,blob:blobs.get(this.href)});else return this.onclick?.();}toBlob(fn){fn(new Blob(['test-canvas']));}showModal(){this.open=true;}close(){this.open=false;}
  }
  for(const match of html.split('<script id="feedback-seed"')[0].matchAll(/\bid="([^"]+)"/g))ids[match[1]]=new El('div',match[1]);
@@ -20,7 +20,7 @@ function harness(html,extra={}){
  class Image{constructor(){this.complete=false;this.naturalWidth=0;}set src(v){this._src=v;this.complete=true;this.naturalWidth=64;this.onload?.();}}
  class TestURL extends URL{static createObjectURL(b){const k='blob-test-'+blobs.size;blobs.set(k,b);return k;}static revokeObjectURL(){}}
  const ctx=vm.createContext({document,console,Blob,FormData,Response,DecompressionStream,Uint8Array,TextEncoder,crypto,AbortSignal,atob,Image,devicePixelRatio:1,ResizeObserver:class{observe(){}},setTimeout:()=>0,URL:TestURL,fetch:()=>{throw Error('Unexpected network call');},localStorage:{getItem:k=>cache.get(k)||null,setItem:(k,v)=>cache.set(k,v)},...extra});
- return {ctx,ids,cache,downloads,async start(){vm.runInContext(fs.readFileSync(path.join(A,'review-core.js'),'utf8'),ctx);if(ids['problem-config'])vm.runInContext(fs.readFileSync(path.join(A,'problem-feedback.js'),'utf8'),ctx);if(html.includes('id="audit"'))vm.runInContext(fs.readFileSync(path.join(A,'review-audit.js'),'utf8'),ctx);await vm.runInContext(fs.readFileSync(path.join(A,'review-app.js'),'utf8'),ctx);assert.equal(ids.loading.removed,true,ids.loading.textContent);}};
+ return {ctx,ids,cache,downloads,canvasCalls,async start(){vm.runInContext(fs.readFileSync(path.join(A,'review-core.js'),'utf8'),ctx);if(ids['problem-config'])vm.runInContext(fs.readFileSync(path.join(A,'problem-feedback.js'),'utf8'),ctx);if(html.includes('id="audit"'))vm.runInContext(fs.readFileSync(path.join(A,'review-audit.js'),'utf8'),ctx);await vm.runInContext(fs.readFileSync(path.join(A,'review-app.js'),'utf8'),ctx);assert.equal(ids.loading.removed,true,ids.loading.textContent);}};
 }
 const checks=[],h=harness(sourceHTML);await h.start();const e=h.ids;assert.equal(e.professional.options.length,14);assert.equal(e.list.children.length,13);assert.equal(e['member-list'].children.length,3);assert.equal(e['review-result'].value,'');checks.push('13专业筛选与分组初始化；建议不预填为确认');
 assert.equal(e['action-message'].hidden,true);assert.match(e['review-status'].textContent,/^\d+条已保存 · \d+条草稿$/);
@@ -260,6 +260,20 @@ if(art.comparison_html){
  assert.match(xh.ids['symbols-panel'].textContent,/未计 1，同位置 1；已说明：已剔除 1、他图计入 1、同一实物另一图 0/);assert.match(xh.ids['symbols-panel'].textContent,/同一实物另一图/);assert.match(xh.ids['symbols-panel'].textContent,/隐藏层符号 1 个不计入本页，其中 1 个是计数对象/);
  findIn(xh.ids['symbols-panel'],n=>n.className==='link'&&/他图计入/.test(n.title||'')).click();assert.match(xh.ids['action-message'].textContent,/他图计入（电力平面计入）/);
  checks.push('交换DXF底图：图面状态写“本页看不出 n 处，须回原图”及类别和主要图层，中性底图写明缺什么；符号对账列本页计数，点“未计”标红圈并提示，换到没有对账的图页面板收起；有对账说明时另列已剔除、他图计入、同一实物另一图，点数字标红圈并带说明');
+}
+// Affine text retains both glyph axes, including scene handedness; culling uses the transformed height.
+{
+ for(const y_axis of ['up','down']){
+  const d=structuredClone(data),s=d.scenes[0];s.y_axis=y_axis;
+  const b=s.bounds,scale=Math.min(625/(b[2]-b[0]),595/(b[3]-b[1]));
+  s.background=[{kind:'text',point:[(b[0]+b[2])/2,(b[1]+b[3])/2],text:'剪切核验',height:1/scale,text_axes:[[40,3],[4,30]]}];
+  s.background_refs=[];
+  const th=harness(withData(sourceHTML,d));await th.start();th.ids.scene.value=s.id;th.ids.scene.onchange();
+  const sign=y_axis==='up'?-1:1;
+  assert(th.canvasCalls.some(c=>JSON.stringify(c)===JSON.stringify(['transform',40,sign*3,-4,-sign*30,0,0])));
+  assert(th.canvasCalls.some(c=>c[0]==='fillText'&&c[1]==='剪切核验'),'scaled text must survive the pixel-height cutoff');
+ }
+ checks.push('剪切文字：Canvas保留完整双轴，向上/向下坐标符号正确，放大后的字高参与显示筛选');
 }
 // Measuring (scene mapping contract 4 and 13):clicks snap to drawn vertices, segments add up, real length uses length_factor, else 1:1 for mm, else no conversion.
 {

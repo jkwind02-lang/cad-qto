@@ -52,7 +52,7 @@ class _Drawing:
   self.msp = self.doc.modelspace()
   self.layers = {l.dxf.name: l for l in self.doc.layers}
   self.ltscale = self.doc.header.get('$LTSCALE', 1.0) or 1.0
-  self._lt, self._size = {}, {}
+  self._lt, self._size, self._affine = {}, {}, {}
 
  def hidden(self, lay):
   """Off, frozen and non-plotting layers (Defpoints never plots) are neither drawn nor counted as not shown (contract 7.1)."""
@@ -106,6 +106,35 @@ class _Drawing:
     n += self.block_size(ve.dxf.name, stack + (name,)) if t == 'INSERT' else 2 if t == 'LINE' else 1 if t in ('TEXT', 'MTEXT', 'ATTDEF') else 8
   self._size[name] = n
   return n
+
+ def affine_loss(self, e, parent=None, stack=()):
+  """Whether nested INSERT decomposition would lose the definition-to-WCS matrix.
+
+  Compare the transformed INSERT with the actual matrix product, including its base point.
+  A shear can raise, or silently change the matrix; even orthogonal 90-degree nesting can lose scale.
+  The check only visits block references, and is shared by drawing and the sheet broad phase.
+  """
+  from ezdxf.math import Matrix44
+  name = e.dxf.name
+  if name in stack or len(stack) >= MAX_DEPTH: return False
+  try: m = e.matrix44() if parent is None else Matrix44.chain(e.matrix44(), parent)
+  except Exception: return True
+  key = (name, tuple(m))
+  if key in self._affine: return self._affine[key]
+  blk = self.doc.blocks.get(name)
+  lost = False
+  if blk is not None:
+   for child in blk:
+    if child.dxftype() != 'INSERT': continue
+    try:
+     expected = Matrix44.chain(child.matrix44(), m)
+     actual = child.copy().transform(m).matrix44()
+     lost = not all(math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-9) for a, b in zip(expected, actual))
+    except Exception: lost = True
+    if lost or self.affine_loss(child, m, stack + (name,)):
+     lost = True; break
+  self._affine[key] = lost
+  return lost
 
 
 def hatch_lines(h):
@@ -166,11 +195,90 @@ class _Walker:
  def run(self, e):
   self.out, self.not_shown, self.dropped = [], [], Counter()
   self.cls = self.classify(e)
-  self._walk(e, e.dxf.layer, 7, 0)
+  if e.dxftype() == 'INSERT' and self.dw.affine_loss(e):
+   from ezdxf.math import Matrix44
+   self._walk_affine(e, Matrix44(), e.dxf.layer, 7, 0)
+  else: self._walk(e, e.dxf.layer, 7, 0)
   return self.cls, self.out, self.not_shown, self.dropped
 
  def _skip(self, kind, e):
   self.not_shown.append((kind, _anchor(e)))
+
+ def _skip_affine(self, kind, e, m):
+  p = _anchor(e)
+  if p is not None:
+   p = m.transform((*p, 0)); p = (p.x, p.y)
+  self.not_shown.append((kind, p))
+
+ def _walk_affine(self, e, m, eff_layer, byblock, depth):
+  """Walk original definitions without rebuilding an INSERT from rotation and scale."""
+  from ezdxf.math import Matrix44
+  t = e.dxftype(); lay = e.dxf.layer if e.dxf.layer != '0' else eff_layer
+  if self.dw.hidden(lay): return
+  if self.cls == 'large' and t not in ('INSERT', 'DIMENSION') and not (self.large_layers and self.large_layers.search(lay)):
+   self.dropped[lay] += 1; self._skip_affine('other_layers', e, m); return
+  c = e.dxf.get('color', 256)
+  bb = byblock if c == 0 else (c if c != 256 else self.dw.layer_aci(lay))
+  if t in ('INSERT', 'DIMENSION'):
+   if depth >= MAX_DEPTH: self._skip_affine('proxy', e, m); return
+   if t == 'INSERT':
+    # Attached attributes already use their INSERT's parent coordinates.
+    for a in e.attribs:
+     if not a.is_invisible: self._walk_affine(a, m, lay, bb, depth + 1)
+    blk = self.dw.doc.blocks.get(e.dxf.name)
+    if blk is None: self._skip_affine('xref_missing', e, m); return
+    try: child_m = Matrix44.chain(e.matrix44(), m)
+    except Exception: self._skip_affine('proxy', e, m); return
+    for child in blk: self._walk_affine(child, child_m, lay, bb, depth + 1)
+   else:
+    try: ves = list(e.virtual_entities())
+    except Exception: self._skip_affine('proxy', e, m); return
+    for child in ves: self._walk_affine(child, m, lay, bb, depth + 1)
+   return
+  if t in SKIP_SILENT: return
+  if t in UNSHOWN_TYPES: self._skip_affine(UNSHOWN_TYPES[t], e, m); return
+  color = self.dw.color(e, lay, byblock)
+  if t in ('TEXT', 'ATTRIB', 'MTEXT'):
+   start = len(self.out)
+   try: self._text_affine(e, lay, color, m)
+   except Exception:
+    del self.out[start:]; self._skip_affine('proxy', e, m)
+   return
+  if t == 'HATCH' and not e.dxf.get('solid_fill', 0):
+   if self.cls == 'large': self._skip_affine('pattern_hatch', e, m); return
+   self._pattern(e, lay, color, m); return
+  self._geometry(e, t, lay, color, m)
+
+ def _text_affine(self, e, lay, color, m):
+  start = len(self.out)
+  self._text(e, lay, color)
+  for _, item in self.out[start:]:
+   a = math.radians(item.get('rotation', 0)); c, s = math.cos(a), math.sin(a)
+   is_mtext = e.dxftype() == 'MTEXT'
+   width = 1 if is_mtext else e.dxf.get('width', 1)
+   skew = 0 if is_mtext else math.tan(math.radians(e.dxf.get('oblique', 0)))
+   flags = 0 if is_mtext else e.dxf.get('text_generation_flag', 0)
+   bx, by = width * c, width * s
+   ux, uy = skew * c - s, skew * s + c
+   if flags & 2: bx, by = -bx, -by
+   if flags & 4: ux, uy = -ux, -uy
+   # TEXT/ATTRIB use OCS; MTEXT insertion and direction use WCS.
+   if is_mtext:
+    ucs = e.ucs()
+    dy = -s * (item['point'][0] - e.dxf.insert.x) + c * (item['point'][1] - e.dxf.insert.y)
+    p, b, u = ucs.origin + ucs.uy * dy, ucs.ux, ucs.uy
+   else:
+    ocs = e.ocs()
+    ap = e.dxf.align_point if (e.dxf.get('halign', 0) or e.dxf.get('valign', 0)) and e.dxf.hasattr('align_point') else e.dxf.insert
+    p, b, u = ocs.to_wcs((*item['point'], ap.z)), ocs.to_wcs((bx, by, 0)), ocs.to_wcs((ux, uy, 0))
+   p, b, u = m.transform(p), m.transform_direction(b), m.transform_direction(u)
+   size = math.hypot(b.x, b.y) * math.hypot(u.x, u.y)
+   if not math.isfinite(size) or size <= 0 or abs(b.x * u.y - b.y * u.x) <= 1e-12 * size:
+    raise ValueError('文字变换在图纸XY中退化')
+   item['point'] = [p.x, p.y]
+   item['text_axes'] = [[b.x, b.y], [u.x, u.y]]
+   item['rotation'] = 0
+   item.pop('width_factor', None)
 
  def _walk(self, e, eff_layer, byblock, depth):
   t = e.dxftype(); lay = e.dxf.layer
@@ -251,21 +359,27 @@ class _Walker:
   if wf > 0 and abs(wf - 1) > 0.05: item['width_factor'] = wf
   self.out.append((lay, item))
 
- def _pattern(self, e, lay, color):
-  src = self.hsrc.get(id(e))
+ def _pattern(self, e, lay, color, transform=None):
+  src = (e, transform) if transform is not None else self.hsrc.get(id(e))
   try:
    segs = ((src[1].transform(a), src[1].transform(b)) for a, b in hatch_lines(src[0])) if src and src[0] is not None else hatch_lines(e)
    for a, b in segs:
     self.out.append((lay, {'kind': 'line', 'points': [[a.x, a.y], [b.x, b.y]], 'color': color}))
-  except Exception: self._skip('pattern_hatch', e)
+  except Exception:
+   if transform is not None: self._skip_affine('pattern_hatch', e, transform)
+   else: self._skip('pattern_hatch', e)
 
- def _geometry(self, e, t, lay, color):
+ def _geometry(self, e, t, lay, color, transform=None):
   from ezdxf import path as ezpath
   fill = t in ('SOLID', 'TRACE', '3DFACE') or t == 'HATCH'
   try: paths = ezpath.from_hatch(e) if t == 'HATCH' else [ezpath.make_path(e)]
-  except Exception: self._skip('proxy', e); return
+  except Exception:
+   if transform is not None: self._skip_affine('proxy', e, transform)
+   else: self._skip('proxy', e)
+   return
   dash = None if fill else self.dw.dash(e, lay)
   for p in paths:
+   if transform is not None: p = p.transform(transform)
    for sp in p.sub_paths():
     pts = [[v.x, v.y] for v in sp.flattening(self.flat)]
     if len(pts) < 2: continue
@@ -318,10 +432,14 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
   t['restoration'] = Counter(); t['dropped_layers'] = Counter(); t['_symbols'] = []
  inserts = []
  for e in dw.msp:
-  try: ext = bbox.extents([e], cache=cache, fast=True)
-  except Exception: continue
-  if not ext.has_data: continue
-  hit = [t for t in targets if not (ext.extmax.x < t['sheet_bounds'][0] or ext.extmin.x > t['sheet_bounds'][2] or ext.extmax.y < t['sheet_bounds'][1] or ext.extmin.y > t['sheet_bounds'][3])]
+  # The library bbox follows the same lossy nested explosion. Defer affected blocks
+  # to the exact primitive filter below, otherwise a correct endpoint can be discarded.
+  if e.dxftype() == 'INSERT' and dw.affine_loss(e): hit = targets
+  else:
+   try: ext = bbox.extents([e], cache=cache, fast=True)
+   except Exception: continue
+   if not ext.has_data: continue
+   hit = [t for t in targets if not (ext.extmax.x < t['sheet_bounds'][0] or ext.extmin.x > t['sheet_bounds'][2] or ext.extmax.y < t['sheet_bounds'][1] or ext.extmin.y > t['sheet_bounds'][3])]
   if not hit: continue
   if e.dxftype() == 'INSERT':
    ip = e.dxf.insert

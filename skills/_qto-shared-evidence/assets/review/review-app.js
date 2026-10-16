@@ -154,7 +154,17 @@ try{
   const view=pointBounds([world([0,0]),world([cw,ch])]);
   for(const r of backgrounds.get(scene.id)){
    // Text with a drawing height scales with zoom like the original (scene mapping contract 7.3); too small to read is skipped.
-   if(r.kind==='text'){const fs=r.height?r.height*scale*1.25:10;if(r.height&&fs<2.5)continue;const p=screen(r.point),m=(r.height?fs*(r.text||'').length:150)+150;if(p[0]<-m||p[0]>cw+m||p[1]<-m||p[1]>ch+m)continue;ctx.save();ctx.translate(...p);ctx.rotate((r.rotation||0)*Math.PI/180*sign());if(r.width_factor)ctx.scale(r.width_factor,1);ctx.font=fs+'px Microsoft YaHei';ctx.textAlign=r.align||'left';ctx.textBaseline=r.baseline||'alphabetic';ctx.fillStyle=r.color||'#7c909c';ctx.fillText(r.text,0,0);ctx.restore();}
+   if(r.kind==='text'){
+    const fs=r.height?r.height*scale*1.25:10,axes=r.text_axes;
+    const vertical=axes?Math.hypot(...axes[1]):1,stretch=axes?Math.max(vertical,Math.hypot(...axes[0])):Math.max(1,r.width_factor||1);
+    if(r.height&&fs*vertical<2.5)continue;
+    const p=screen(r.point),m=(r.height?fs*stretch*(r.text||'').length:150*stretch)+150;
+    if(p[0]<-m||p[0]>cw+m||p[1]<-m||p[1]>ch+m)continue;
+    ctx.save();ctx.translate(...p);
+    if(axes){const [[bx,by],[ux,uy]]=axes;ctx.transform(bx,sign()*by,-ux,-sign()*uy,0,0);}
+    else{ctx.rotate((r.rotation||0)*Math.PI/180*sign());if(r.width_factor)ctx.scale(r.width_factor,1);}
+    ctx.font=fs+'px Microsoft YaHei';ctx.textAlign=r.align||'left';ctx.textBaseline=r.baseline||'alphabetic';ctx.fillStyle=r.color||'#7c909c';ctx.fillText(r.text,0,0);ctx.restore();
+   }
    else{if(!within(r,view))continue;path(r.points,r.kind==='polygon');if(r.fill){ctx.fillStyle=r.fill;ctx.fill();}ctx.strokeStyle=r.color||'#b4c1ca';ctx.lineWidth=r.width||.7;const dl=r.dash?r.dash.reduce((a,b)=>a+b,0)*scale:0;if(dl>=4)ctx.setLineDash(r.dash.map(v=>Math.max(1,v*scale)));ctx.stroke();if(dl>=4)ctx.setLineDash([]);}
   }
   for(const i of mapItems()){

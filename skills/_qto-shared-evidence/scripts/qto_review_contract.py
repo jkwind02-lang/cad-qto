@@ -78,6 +78,12 @@ def normalize_view(raw, base_dir=None):
    if p.get('align') is not None:require(p['align'] in ['left','center','right'],'底图文字对齐无效')
    if p.get('baseline') is not None:require(p['baseline'] in ['alphabetic','middle','top','bottom'],'底图文字基线无效')
    if p.get('width_factor') is not None:require(number(p['width_factor']) and p['width_factor']>0,'底图文字宽度系数无效')
+   if 'text_axes' in p:
+    axes=p['text_axes']
+    require(p['kind']=='text' and isinstance(axes,list) and len(axes)==2 and all(xy(v) for v in axes),'底图文字变换须为两个有限二维向量')
+    (bx,by),(ux,uy)=axes
+    size=math.hypot(bx,by)*math.hypot(ux,uy)
+    require(math.isfinite(size) and size>0 and abs(bx*uy-by*ux)>1e-12*size,'底图文字变换不能退化')
    if p.get('fill') is not None:require(p['kind']=='polygon' and isinstance(p['fill'],str) and re.fullmatch('#[0-9a-fA-F]{6}',p['fill']) is not None,'底图填充只用于面，颜色写 #rrggbb')
    if p.get('dash') is not None:require(p['kind']!='text' and isinstance(p['dash'],list) and bool(p['dash']) and all(number(v) and v>=0 for v in p['dash']),'底图虚线无效')
   if s.get('length_factor') is not None:require(number(s['length_factor']) and s['length_factor']>0,'图页实长换算系数须为正数')
