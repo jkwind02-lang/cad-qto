@@ -33,6 +33,10 @@ LAYOUT = [
     text('T4', 600, 500, '01-F1-1A-GPB-N-2  600*2000*400'),   # box number followed by its size: main hit for 1A-GPB-N-2
     text('T5', 600, 600, '1A-GPB-N-21'),                      # longer number: near only
     text('T6', 600, 700, '01-F1-1A-GPB-N-3  600*2000*400'),   # near, judged by a text_pattern on the number part
+    text('T7', 700, 500, '01-F2-2B-PPB-N-Z1'),                # another full number: near for 01-F2-1B-PPB-N-Z and 1B-PPB-N-Z
+    text('T8', 700, 600, '01-F2-1B-PPB-N-Z1'),                # a digit after the letter end: another box, near only
+    text('T9', 700, 700, '01-F2-1B-PPB-N-Z'),                 # main hit for both
+    text('T10', 800, 500, 'A1B-PPB-N-Z'),                     # a letter before the digit start: near only for 1B-PPB-N-Z
 ]
 BLOCKS = [
     row('D1', 'LWPOLYLINE', 'E-SYM', parent='ESD', geometry={'parts': []}, bbox3d=[2450 - FAR, 450, 0, 2550 - FAR, 550, 0]),
@@ -111,6 +115,24 @@ def test_box_number_matches_as_whole_words(tmp_path):
     assert [h['handle'] for h in g['result']['samples']] == ['T4']                       # followed by its size
     assert sorted(h['handle'] for h in g['result']['secondary_samples']) == ['T5', 'T6']
     assert b['targets']['pattern_forms'][0] == 'flat_sep' and any('整段词' in note for note in b['targets']['notes'])
+
+
+def test_full_number_near_numbers_and_whole_word_ends(tmp_path):
+    # rechecked on E-B-1 (checkpoint 0): flat() glues F2-1B into F21B, so a near number built from it found no full number
+    # on flat_sep text and old judgments no longer matched; and a letter or digit touching either end is another box
+    items = ITEMS + [{'item_id': 'PF', 'conclusion': '图上无 01-F2-1B-PPB-N-Z 箱', 'kind': 'box', 'term': '01-F2-1B-PPB-N-Z',
+                      'secondary_judgments': [{'text_pattern': '01F22BPPBNZ1', 'judgment': '非同一对象', 'basis': '2B 是另一台箱'}]},
+                     {'item_id': 'PS', 'conclusion': '图上无 1B-PPB-N-Z 箱', 'kind': 'box', 'term': '1B-PPB-N-Z'}]
+    code, s, data, detail = run(tmp_path, items)
+    assert code == 0, s
+    pf, ps = by_id(data)['PF']['result'], by_id(data)['PS']['result']
+    assert [h['handle'] for h in pf['samples']] == ['T9']
+    assert sorted(h['handle'] for h in pf['secondary_samples']) == ['T7', 'T8'] and pf['secondary_judged'] == 1
+    assert [h['handle'] for h in ps['samples']] == ['T9']
+    assert sorted(h['handle'] for h in ps['secondary_samples']) == ['T10', 'T7', 'T8']
+    # legal controls stay main hits: prefix before, size after (test_box_number_matches_as_whole_words)
+    assert [h['handle'] for h in by_id(data)['B']['result']['samples']] == ['T1']
+    assert [h['handle'] for h in by_id(data)['G']['result']['samples']] == ['T4']
 
 
 def test_text_pattern_also_reads_each_whitespace_part(tmp_path):

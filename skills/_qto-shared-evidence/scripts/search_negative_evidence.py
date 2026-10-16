@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qto_cad_geometry as cad_geometry  # noqa: E402
 
-VERSION = '1.1.0'
+VERSION = '1.1.1'
 INPUT_SCHEMA, OUTPUT_SCHEMA = 'qto-negative-search-input/1.0', 'qto-negative-search/1.0'
 KINDS = ('spec', 'tray', 'box', 'model', 'pipe', 'text', 'block')
 SHEET_KINDS = ('平面', '系统图', '表与说明', '图例', '详图', '其他')
@@ -69,6 +69,14 @@ def bounded(core, first, last, whole=False):
     return pre + core + post
 
 
+def word_bounded(core, first, last):
+    """Box numbers on flat_sep text, as whole words: no letter or digit may touch either end, so 1B-PPB-N-Z is not
+    1B-PPB-N-Z1 and 1B-LPB-N-3 is not A1B-LPB-N-3 or 11B-LPB-N-3; a digit end also refuses a decimal point."""
+    pre = r'(?<![A-Z0-9.])' if first.isdigit() else r'(?<![A-Z0-9])' if first.isalnum() else ''
+    post = r'(?![A-Z0-9.])' if last.isdigit() else r'(?![A-Z0-9])' if last.isalnum() else ''
+    return pre + core + post
+
+
 def section_core(term):
     """`4x150+1x70` -> regex on flat text; None when the term has no a×b group."""
     groups = SPEC_GROUP.findall(term)
@@ -107,18 +115,20 @@ def variants(item):
             # whole words on flat_sep (registration 20261017-0015): a separator may sit between any two characters, and
             # the edge test then sees the separator, so a short number inside a full number with a prefix is found
             sep_cores = ['-?'.join(re.escape(ch) for ch in f) for f in forms]
-            main.append((bounded('(?:' + '|'.join(sep_cores) + ')', forms[0][0], forms[0][-1]), 'flat_sep'))
+            main.append((word_bounded('(?:' + '|'.join(sep_cores) + ')', forms[0][0], forms[0][-1]), 'flat_sep'))
         else:
             main.append(bounded('(?:' + '|'.join(cores) + ')', forms[0][0], forms[0][-1]))
         shown += [term, *(item.get('aliases') or [])]
         notes.append('大小写不分，空格、连字符、下划线、直径符号省略' + ('；管材与管径之间可带 DN' if kind == 'pipe' else ''))
         if kind == 'box':
             notes.append('箱号按整段词匹配：前面是连字符、空格、下划线或文字开头时，完整编号里的短号也算命中（如 01-F2-1B-LPB-N-3 里的 '
-                         '1B-LPB-N-3），后面隔开接尺寸的也算（1A-GPB-N-2 600*2000*400）；数字紧邻数字的不算（11B-LPB-N-3 不是 1B-LPB-N-3）；'
+                         '1B-LPB-N-3），后面隔开接尺寸的也算（1A-GPB-N-2 600*2000*400）；两端紧挨字母或数字的不算（11B-LPB-N-3、'
+                         'A1B-LPB-N-3 不是 1B-LPB-N-3，1B-PPB-N-Z1 不是 1B-PPB-N-Z）；'
                          '不带分隔符连写的完整编号（01F21BLPBN3）分不出短号从哪开始，只作次级')
-            units = re.findall(r'\d+|.', forms[0])
-            near = '-?'.join(r'\d+' if u.isdigit() else re.escape(u) for u in units)
-            if any(u.isdigit() for u in units): second.append((bounded(near, forms[0][0], forms[0][-1]), 'flat_sep')); notes.append('近似编号（数字不同）只作次级')
+            # digit runs from the written form: flat() glues F2-1B into F21B, while the text keeps the hyphen there
+            segs = [s for s in flat_sep(term).split('-') if s]
+            near = '-?'.join('-?'.join(r'\d+' if u.isdigit() else re.escape(u) for u in re.findall(r'\d+|.', s)) for s in segs)
+            if any(ch.isdigit() for ch in forms[0]): second.append((bounded(near, forms[0][0], forms[0][-1]), 'flat_sep')); notes.append('近似编号（数字不同或末尾多出编号）只作次级')
     elif kind == 'text':
         for t in [term, *(item.get('aliases') or [])]:
             if t: main.append(re.escape(flat(t))); shown.append(t)
