@@ -25,12 +25,13 @@ from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_
 from search_negative_evidence import MTEXT_CODE
 
 import qto_cad_geometry as cad_geometry
+import qto_segment_graph as segment_graph
 from qto_actor_identity import is_model_identity
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
 
-VERSION = "qto-component-neutral-adapter/1.7.1"
+VERSION = "qto-component-neutral-adapter/1.8.0"
 # Only these two codes can be released by a dynamic_state_adjudication on an include or exclude rule (registration
 # 20261016-1709; exclude added after checkpoint 1);
 # arrays, xrefs and missing definitions stay unresolved whatever the rule says.
@@ -288,15 +289,44 @@ def text_condition(raw: Any, rule_id: str, decision: str) -> dict[str, Any] | No
         fail(f"{label} 必须是对象")
     if decision not in ("include", "exclude"):
         fail(f"{label} 只能写在 include 或 exclude 规则上")
-    radius = finite(raw.get("radius"), f"{label}.radius")
-    if radius <= 0:
-        fail(f"{label}.radius 必须大于0")
+    leader = None if raw.get("leader") is None else leader_condition(raw["leader"], f"{label}.leader")
+    radius = None
+    if leader is None or raw.get("radius") is not None:   # a leader may stand alone; otherwise the radius is required
+        radius = finite(raw.get("radius"), f"{label}.radius")
+        if radius <= 0:
+            fail(f"{label}.radius 必须大于0")
     as_key = raw.get("as_instance_key", False)
     if not isinstance(as_key, bool):
         fail(f"{label}.as_instance_key 必须是 true 或 false")
     return {"pattern": compile_pattern(raw.get("pattern"), f"{label}.pattern"), "radius": radius,
             "layer_re": compile_pattern(raw.get("layer_pattern", ".*"), f"{label}.layer_pattern"),
-            "basis": text(raw.get("basis"), f"{label}.basis"), "as_instance_key": as_key}
+            "basis": text(raw.get("basis"), f"{label}.basis"), "as_instance_key": as_key, "leader": leader}
+
+
+LEADER_MAX_SEGMENTS = 12
+LEADER_UNRESOLVED = "引线未决"
+AMBIGUOUS_SIDE = ("文字共用", "多段文字", LEADER_UNRESOLVED)   # side-note states that decide nothing
+
+
+def leader_condition(raw: Any, label: str) -> dict[str, Any]:
+    """text_condition.leader (fifth batch L2, registration 20261016-1824): follow leader lines from the candidate's
+    drawn box to a text. Tolerances are in output coordinate units like the radius."""
+    if not isinstance(raw, dict):
+        fail(f"{label} 必须是对象")
+    layer_re = compile_pattern(raw.get("layer_pattern"), f"{label}.layer_pattern")
+    touch = finite(raw.get("touch_tolerance"), f"{label}.touch_tolerance")
+    if touch < 0:
+        fail(f"{label}.touch_tolerance 不能为负")
+    reach = finite(raw.get("text_tolerance"), f"{label}.text_tolerance")
+    if reach <= 0:
+        fail(f"{label}.text_tolerance 必须大于0")
+    snap = finite(raw.get("snap_tolerance", 0.0), f"{label}.snap_tolerance")
+    if snap < 0:
+        fail(f"{label}.snap_tolerance 不能为负")
+    most = raw.get("max_segments", LEADER_MAX_SEGMENTS)
+    if isinstance(most, bool) or not isinstance(most, int) or most < 1:
+        fail(f"{label}.max_segments 必须是正整数")
+    return {"layer_re": layer_re, "touch_tolerance": touch, "text_tolerance": reach, "snap_tolerance": snap, "max_segments": most}
 
 
 def clean_text(value: Any) -> str:
@@ -689,16 +719,32 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
     Candidates are the instances a text rule could apply to (block, layer, parent and object_ids match); paths,
     ids and the scope test (scope_of, from the main walk) are exactly as in the main walk. Texts are layout texts plus the texts inside the definitions walked
     through on the way to a candidate (containers); the walk does not enter a candidate block, so its own label is
-    not a side note. Within the radius only: one text near two candidates, or two texts near one candidate, leaves
-    the candidate unresolved; no text lets the text rules fall away. Nothing is bound by nearest distance."""
+    not a side note. Texts inside a neighbouring block's definition count too and carry the insert and handle they
+    come from (registration 20261017-0027). Within the radius only: one text near two candidates, or two texts near
+    one candidate, leaves the candidate unresolved; no text lets the text rules fall away. Nothing is bound by
+    nearest distance.
+
+    Leaders (fifth batch L2, registration 20261016-1824): a rule with text_condition.leader follows the shared
+    segment graph (qto_segment_graph, contract 线段连通图.md) of its leader layers, with the containers on the way
+    to a candidate expanded and the package scope applied, from nodes within touch_tolerance of the candidate's
+    drawn box (the main walk's scope_of box, not the insertion point) to texts within text_tolerance of the
+    leader's other nodes. A node that already has a matching text is that leader's text end, not where it leaves
+    a box. One leader reaching one text binds it (via leader); a leader branching to two texts, two leaders, a
+    leader reaching no text, one longer than max_segments, or a candidate without a drawn box leaves the
+    candidate "引线未决". Leader first: with a radius as well, a radius holding texts but not the leader's text is
+    a conflict (unresolved); no leader at the box lets the radius decide. Texts claimed by leaders and by
+    radii share one claim table, so one text taken by two candidates either way is shared (unresolved)."""
     text_rules = [rule for rule in rules if rule.get("text_cond")]
     if not text_rules:
         return {}, {}
     identity = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0)
     candidates: dict[str, dict[str, Any]] = {}
     texts: list[dict[str, Any]] = []
+    leader_rules = [rule for rule in text_rules if rule["text_cond"]["leader"]]
+    line_rows: list[dict[str, Any]] = []      # layout rows the leader graphs read (line work, leaders, inserts)
+    containers: set[str] = set()              # blocks walked through on the way to a candidate
 
-    def add_text(row: dict[str, Any], matrix: tuple[float, ...], prefix: str) -> None:
+    def add_text(row: dict[str, Any], matrix: tuple[float, ...], prefix: str, source: dict[str, str] | None = None) -> None:
         if str(row.get("entity_type") or "").upper() not in ("TEXT", "MTEXT") or not str(row.get("text") or "").strip():
             return
         raw = transform_point([finite(row.get(axis, 0.0), f"{row.get('record_id')}.{axis}") for axis in ("x", "y", "z")], matrix)
@@ -706,11 +752,13 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
             return
         texts.append({"text_id": f"{prefix}{row.get('entity_handle') or row.get('record_id') or len(texts)}",
                       "text": clean_text(row["text"]), "layer": str(row.get("layer") or ""),
-                      "point": [raw[0] * factor, raw[1] * factor], "in_scope": point_in_bounds(raw, bounds)})
+                      "point": [raw[0] * factor, raw[1] * factor], "raw": [raw[0], raw[1]],
+                      "in_scope": point_in_bounds(raw, bounds), **(source or {})})
 
     def walk(insert: dict[str, Any], parent_matrix: tuple[float, ...], path: str, stack: tuple[str, ...],
              parent_block: str, inherited_layer: str) -> None:
-        if not scope_of(insert, parent_matrix)[0]:
+        in_scope, box, _ = scope_of(insert, parent_matrix)
+        if not in_scope:
             return   # pruned with its subtree exactly as in the main walk, so it claims no side note (Codex retest R2)
         block_name = str(insert.get("block_name") or "")
         layer = str(insert.get("layer") or "")
@@ -723,7 +771,8 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
             anchor = [finite(insert.get(axis, 0.0), f"{insert.get('record_id')}.{axis}") for axis in ("x", "y", "z")]
             raw = transform_point(anchor, parent_matrix)
             if raw is not None:
-                candidates[physical_id] = {"point": [raw[0] * factor, raw[1] * factor], "rules": hits}
+                candidates[physical_id] = {"point": [raw[0] * factor, raw[1] * factor], "rules": hits, "box": box}
+                containers.update(stack)
             return
         if block_name not in definitions or block_name in stack or len(stack) >= max_depth:
             return
@@ -733,52 +782,206 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
                 walk(child, matrix, f"{path}/{block_name}/{child.get('record_id') or 'NO-ID'}", (*stack, block_name),
                      block_name, effective_layer)
             else:
-                add_text(child, matrix, f"{path}/{block_name}/")
+                add_text(child, matrix, f"{path}/{block_name}/",
+                         {"source_insert": f"PT-{path}", "source_block": block_name, "text_handle": str(child.get("entity_handle") or "")})
 
     top = 0
+    leader_types = segment_graph.CURVE_TYPES | segment_graph.LEADER_TYPES | segment_graph.UNSUPPORTED_LEADERS
     for row in load_stream(layout_path):
         if row.get("row_type") != "entity" or row.get("layout") != target_layout:
             continue
-        if str(row.get("entity_type") or "").upper() == "INSERT":
+        entity_type = str(row.get("entity_type") or "").upper()
+        if leader_rules and (entity_type == "INSERT" or (entity_type in leader_types and any(
+                rule["text_cond"]["leader"]["layer_re"].search(str(row.get("layer") or "")) for rule in leader_rules))):
+            line_rows.append(row)
+        if entity_type == "INSERT":
             top += 1
             walk(row, identity, str(row.get("record_id") or f"TOP-{top}"), (), "", str(row.get("layer") or ""))
         else:
             add_text(row, identity, "")
 
-    cell = max(rule["text_cond"]["radius"] for rule in text_rules)
+    def text_item(item: dict[str, Any], distance: float) -> dict[str, Any]:
+        return {"text_id": item["text_id"], "text": item["text"], "layer": item["layer"], "distance": round(distance, 6),
+                **{key: item[key] for key in ("source_insert", "source_block", "text_handle") if key in item}}
+
+    radii = [rule["text_cond"]["radius"] for rule in text_rules if rule["text_cond"]["radius"] is not None]
+    cell = max(radii, default=1.0)
     grid: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
     for item in texts:
         grid[(math.floor(item["point"][0] / cell), math.floor(item["point"][1] / cell))].append(item)
-    claims: dict[str, set[str]] = defaultdict(set)   # text id -> candidates it sits near (for any text rule)
-    near: dict[str, dict[str, list[dict[str, Any]]]] = {}
-    for physical_id, candidate in candidates.items():
+
+    def within_radius(candidate: dict[str, Any], cond: dict[str, Any]) -> list[dict[str, Any]]:
         x, y = candidate["point"]
         gx, gy = math.floor(x / cell), math.floor(y / cell)
-        pool = [item for dx in (-1, 0, 1) for dy in (-1, 0, 1) for item in grid.get((gx + dx, gy + dy), ())]
-        per_rule = {}
+        found = []
+        for item in (item for dx in (-1, 0, 1) for dy in (-1, 0, 1) for item in grid.get((gx + dx, gy + dy), ())):
+            distance = math.hypot(item["point"][0] - x, item["point"][1] - y)
+            if distance <= cond["radius"] and cond["layer_re"].search(item["layer"]) and cond["pattern"].search(item["text"]):
+                found.append(text_item(item, distance))
+        return found
+
+    # One segment graph per leader layer pattern and snap tolerance, in drawing units (tolerances / factor).
+    graphs: dict[tuple, dict[str, Any]] = {}
+    for rule in leader_rules:
+        lead = rule["text_cond"]["leader"]
+        key = (lead["layer_re"].pattern, lead["layer_re"].flags, lead["snap_tolerance"])
+        if key in graphs:
+            graphs[key]["rule_ids"].append(rule["rule_id"])
+            continue
+        got = segment_graph.collect_segments(line_rows, definitions, origins, layer_pattern=lead["layer_re"],
+                                             expand_blocks=sorted(containers), scope=bounds, max_depth=max_depth)
+        graph = segment_graph.build_graph(got["segments"], snap_tolerance=lead["snap_tolerance"] / factor)
+        component_of = {node: comp["component_id"] for comp in graph["components"] for node in comp["node_ids"]}
+        segment_handle = {seg["segment_id"]: seg["handle"] for seg in graph["segments"]}
+        reach = max(r["text_cond"]["leader"]["touch_tolerance"] for r in leader_rules) / factor
+        node_cell = max(reach, max(r["text_cond"]["leader"]["text_tolerance"] for r in leader_rules) / factor, 1e-9)
+        node_grid: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
+        for node in graph["nodes"]:
+            node_grid[(math.floor(node["point"][0] / node_cell), math.floor(node["point"][1] / node_cell))].append(node)
+        graphs[key] = {"rule_ids": [rule["rule_id"]], "graph": graph, "collected": got, "component_of": component_of,
+                       "components": {comp["component_id"]: comp for comp in graph["components"]},
+                       "nodes": {node["node_id"]: node for node in graph["nodes"]},
+                       "segment_handle": segment_handle, "node_grid": node_grid, "node_cell": node_cell}
+
+    def box_distance(point: list[float], box: list[float]) -> float:
+        return math.hypot(max(box[0] - point[0], 0.0, point[0] - box[2]), max(box[1] - point[1], 0.0, point[1] - box[3]))
+
+    def texts_near(point: list[float], cond: dict[str, Any], reach: float) -> list[tuple[float, dict[str, Any]]]:
+        x, y = point[0] * factor, point[1] * factor
+        gx, gy = math.floor(x / cell), math.floor(y / cell)
+        span = int(math.ceil(reach / cell)) if cell > 0 else 1
+        out = []
+        for dx in range(-span, span + 1):
+            for dy in range(-span, span + 1):
+                for item in grid.get((gx + dx, gy + dy), ()):
+                    distance = math.hypot(item["point"][0] - x, item["point"][1] - y)
+                    if distance <= reach and cond["layer_re"].search(item["layer"]) and cond["pattern"].search(item["text"]):
+                        out.append((distance, item))
+        return out
+
+    def trace(candidate: dict[str, Any], rule: dict[str, Any]) -> dict[str, Any]:
+        """Leaders of one candidate under one rule: none, no drawn box, or the touching components with the texts
+        reached from their nodes off the box."""
+        cond = rule["text_cond"]
+        lead = cond["leader"]
+        if candidate["box"] is None:
+            return {"kind": "no_box"}
+        entry = graphs[(lead["layer_re"].pattern, lead["layer_re"].flags, lead["snap_tolerance"])]
+        box, touch = candidate["box"], lead["touch_tolerance"] / factor
+        c = entry["node_cell"]
+        x0, y0, x1, y1 = (math.floor((box[0] - touch) / c), math.floor((box[1] - touch) / c),
+                          math.floor((box[2] + touch) / c), math.floor((box[3] + touch) / c))
+        touching = set()
+        for gx in range(x0, x1 + 1):
+            for gy in range(y0, y1 + 1):
+                for node in entry["node_grid"].get((gx, gy), ()):
+                    if box_distance(node["point"], box) <= touch and not texts_near(node["point"], cond, lead["text_tolerance"]):
+                        touching.add(entry["component_of"][node["node_id"]])
+        if not touching:
+            return {"kind": "none"}
+        comps = []
+        for component_id in sorted(touching):
+            comp = entry["components"][component_id]
+            too_long = len(comp["segment_ids"]) > lead["max_segments"]
+            reached: dict[str, tuple[float, dict[str, Any]]] = {}
+            if not too_long:
+                for node_id in comp["node_ids"]:
+                    point = entry["nodes"][node_id]["point"]
+                    if box_distance(point, box) <= touch:
+                        continue
+                    for distance, item in texts_near(point, cond, lead["text_tolerance"]):
+                        if item["text_id"] not in reached or distance < reached[item["text_id"]][0]:
+                            reached[item["text_id"]] = (distance, item)
+            comps.append({"segment_ids": comp["segment_ids"], "too_long": too_long,
+                          "handles": sorted({entry["segment_handle"][s] for s in comp["segment_ids"]}),
+                          "texts": {tid: dict(text_item(item, distance), via="leader", leader_segment_ids=comp["segment_ids"],
+                                              leader_handles=sorted({entry["segment_handle"][s] for s in comp["segment_ids"]}))
+                                    for tid, (distance, item) in reached.items()}})
+        return {"kind": "traced", "comps": comps}
+
+    claims: dict[str, set[str]] = defaultdict(set)   # text id -> candidates that take it (leader or radius, any text rule)
+    near: dict[str, dict[str, Any]] = {}
+    for physical_id, candidate in candidates.items():
+        per_rule: dict[str, list[dict[str, Any]]] = {}
+        problems: list[dict[str, Any]] = []
+        reached_all: dict[str, dict[str, Any]] = {}
         for rule in candidate["rules"]:
-            cond = rule["text_cond"]
-            found = []
-            for item in pool:
-                distance = math.hypot(item["point"][0] - x, item["point"][1] - y)
-                if distance <= cond["radius"] and cond["layer_re"].search(item["layer"]) and cond["pattern"].search(item["text"]):
-                    found.append({"text_id": item["text_id"], "text": item["text"], "layer": item["layer"],
-                                  "distance": round(distance, 6)})
-                    claims[item["text_id"]].add(physical_id)
-            per_rule[rule["rule_id"]] = found
-        near[physical_id] = per_rule
+            cond, rule_id = rule["text_cond"], rule["rule_id"]
+            by_radius = within_radius(candidate, cond) if cond["radius"] is not None else None
+            if not cond["leader"]:
+                per_rule[rule_id] = by_radius
+                continue
+            traced = trace(candidate, rule)
+            if traced["kind"] == "no_box":
+                problems.append({"rule_id": rule_id, "problem": "候选没有完整图形外框，不追引线"})
+                continue
+            if traced["kind"] == "none":
+                per_rule[rule_id] = by_radius or []       # no leader at the box: the radius decides, if written
+                continue
+            comps = traced["comps"]
+            # A leader is a touching line that reaches a matching text; other lines at the box (cable runs on the
+            # same layer, a neighbour's leader passing by) are listed, not counted as a second leader.
+            leaders = [comp for comp in comps if comp["texts"] or comp["too_long"]]
+            others = [s for comp in comps if not comp["texts"] and not comp["too_long"] for s in comp["segment_ids"]]
+            reached = {tid: item for comp in leaders for tid, item in comp["texts"].items()}
+            reached_all.update(reached)
+            # the same words drawn twice at one leader end are one note: nearest kept, the copies listed
+            distinct: dict[str, dict[str, Any]] = {}
+            for tid, item in sorted(reached.items(), key=lambda kv: (kv[1]["distance"], kv[0])):
+                distinct.setdefault(item["text"], item)
+            segments = [s for comp in (leaders or comps) for s in comp["segment_ids"]]
+            if any(comp["too_long"] for comp in comps):
+                problem = f"引线超过 {cond['leader']['max_segments']} 段"
+            elif len(leaders) > 1:
+                problem = "多条引线"
+            elif not reached:
+                problem = "引线未到文字"
+            elif len(distinct) > 1:
+                problem = "引线分叉到多段文字"
+            elif by_radius and not any(item["text_id"] in reached or item["text"] in distinct for item in by_radius):
+                problem = "引线与半径指向不同文字"
+            else:
+                (item,) = distinct.values()
+                copies = sorted(tid for tid in reached if tid != item["text_id"])
+                per_rule[rule_id] = [dict(item, **({"other_line_segment_ids": others} if others else {}),
+                                          **({"same_text_ids": copies} if copies else {}))]
+                continue
+            problems.append({"rule_id": rule_id, "problem": problem, "leader_segment_ids": segments,
+                             **({"other_line_segment_ids": others} if others and leaders else {})})
+        if any(items for items in per_rule.values()):
+            # a leader that reached no text of this rule's pattern while another rule's leader bound one is not a problem
+            problems = [p for p in problems if p["problem"] != "引线未到文字"]
+        for items in per_rule.values():
+            for item in items or ():
+                claims[item["text_id"]].add(physical_id)
+        for text_id in reached_all:
+            claims[text_id].add(physical_id)
+        near[physical_id] = {"per_rule": {rule_id: items or [] for rule_id, items in per_rule.items()},
+                             "rule_ids": sorted(rule["rule_id"] for rule in candidate["rules"]),
+                             "problems": problems, "reached": reached_all,
+                             "leader": any(rule["text_cond"]["leader"] for rule in candidate["rules"]),
+                             "radius": any(rule["text_cond"]["radius"] is not None for rule in candidate["rules"])}
 
     binding: dict[str, dict[str, Any]] = {}
-    for physical_id, per_rule in near.items():
-        found = {item["text_id"]: item for items in per_rule.values() for item in items}
+    for physical_id, item in near.items():
+        per_rule = item["per_rule"]
+        found = {text["text_id"]: text for texts_ in per_rule.values() for text in texts_}
+        if item["problems"]:
+            listed = {**item["reached"], **found}
+            binding[physical_id] = {"status": LEADER_UNRESOLVED, "rule_ids": item["rule_ids"], "ok": [],
+                                    "texts": sorted(listed.values(), key=lambda t: (t["distance"], t["text_id"])),
+                                    "shared_with": [], "leader_problems": item["problems"],
+                                    "leader": item["leader"], "radius": item["radius"]}
+            continue
         shared = sorted(text_id for text_id in found if len(claims[text_id]) > 1)
         status = "文字共用" if shared else "多段文字" if len(found) > 1 else "已绑定" if found else "无文字"
         binding[physical_id] = {
             "status": status,
-            "rule_ids": sorted(per_rule),
+            "rule_ids": item["rule_ids"],
             "ok": sorted(rule_id for rule_id, items in per_rule.items() if items) if status == "已绑定" else [],
-            "texts": sorted(found.values(), key=lambda item: (item["distance"], item["text_id"])),
+            "texts": sorted(found.values(), key=lambda t: (t["distance"], t["text_id"])),
             "shared_with": sorted(set().union(*(claims[text_id] for text_id in shared)) - {physical_id}) if shared else [],
+            "leader": item["leader"], "radius": item["radius"],
         }
     key_rules = [rule for rule in text_rules if rule["text_cond"]["as_instance_key"]]
     unclaimed_keys = [
@@ -790,15 +993,28 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
         and any(rule["text_cond"]["layer_re"].search(item["layer"]) and rule["text_cond"]["pattern"].search(item["text"])
                 for rule in key_rules)
     ]
-    return binding, {"text_count": len(texts), "candidate_count": len(candidates), "unclaimed_key_texts": unclaimed_keys}
+    leader_graphs = [{"layer_pattern": key[0], "snap_tolerance": key[2], "rule_ids": entry["rule_ids"],
+                      "expanded_blocks": sorted(containers), "counts": entry["graph"]["counts"],
+                      "unsupported": entry["collected"]["unsupported"],
+                      "geometry_problem_count": len(entry["collected"]["geometry_problems"]),
+                      "expansion_problem_count": len(entry["collected"]["expansion_problems"]),
+                      "out_of_scope_parts": entry["collected"]["out_of_scope_parts"]} for key, entry in graphs.items()]
+    return binding, {"text_count": len(texts), "candidate_count": len(candidates), "unclaimed_key_texts": unclaimed_keys,
+                     "leader_graphs": leader_graphs}
 
 
 def side_text_basis(side: dict[str, Any]) -> str:
     texts = "、".join(f"“{item['text']}”" for item in side["texts"][:5])
     if side["status"] == "文字共用":
-        return f"旁注文字共用：{texts} 也在 {len(side['shared_with'])} 个同类候选的半径内，不按远近硬绑"
+        return f"旁注文字共用：{texts} 也被 {len(side['shared_with'])} 个同类候选认领（引线或半径），不按远近硬绑"
     if side["status"] == "多段文字":
-        return f"旁注多段文字：半径内有 {len(side['texts'])} 段符合条件的文字 {texts}，不按远近硬绑"
+        return f"旁注多段文字：有 {len(side['texts'])} 段符合条件的文字 {texts}，不按远近硬绑"
+    if side["status"] == LEADER_UNRESOLVED:
+        reasons = "；".join(f"{p['rule_id']} {p['problem']}" for p in side["leader_problems"])
+        return f"引线未决：{reasons}" + (f"（引线到的文字 {texts}）" if texts else "") + "，不按远近硬绑"
+    if side.get("leader"):
+        return (f"没有引线引到符合旁注条件的文字{'，半径内也没有' if side.get('radius') else ''}（无文字）："
+                f"{'、'.join(side['rule_ids'])}")
     return f"半径内没有符合旁注条件的文字（无文字）：{'、'.join(side['rule_ids'])}"
 
 
@@ -1049,10 +1265,11 @@ def main() -> int:
                 else:
                     side = side_texts.get(physical_id)
                     rule, conflicts = None, []
-                    if side and side["status"] in ("文字共用", "多段文字"):
+                    if side and side["status"] in AMBIGUOUS_SIDE:
                         # Ambiguous side notes decide nothing, not even a fallback rule without text_condition.
                         base.update({"basis": side_text_basis(side), "rule_ids": side["rule_ids"],
-                                     "side_text": {key: side[key] for key in ("status", "texts", "shared_with")}})
+                                     "side_text": {key: side[key] for key in ("status", "texts", "shared_with", "leader_problems")
+                                                   if key in side}})
                     else:
                         rule, conflicts = choose_rule(block_name, effective_layer, parent_block, rules, physical_id,
                                                       side["ok"] if side else ())
@@ -1061,7 +1278,7 @@ def main() -> int:
                     elif rule is None and side and side["status"] == "无文字":
                         base.update({"basis": side_text_basis(side), "rule_ids": side["rule_ids"],
                                      "side_text": {"status": "无文字", "texts": [], "shared_with": []}})
-                    elif rule is None and is_empty and not (side and side["status"] in ("文字共用", "多段文字")):
+                    elif rule is None and is_empty and not (side and side["status"] in AMBIGUOUS_SIDE):
                         base.update({"disposition": "not_applicable", "empty_definition_hint": True,
                                      "basis": "空块定义（取证清单 direct_entity_count=0、已序列化）：块内没有图元，"
                                               "不单独计数；没有规则处置，仅提示"})
@@ -1082,9 +1299,12 @@ def main() -> int:
                             base["basis"] += f"；动态块状态裁决：{released['basis']}"
                         bound = None
                         if rule.get("text_cond"):
-                            bound = dict(side["texts"][0], rule_id=rule["rule_id"], radius=rule["text_cond"]["radius"])
+                            bound = dict(side["texts"][0], rule_id=rule["rule_id"],
+                                         **({"radius": rule["text_cond"]["radius"]} if rule["text_cond"]["radius"] is not None else {}))
                             base["side_text"] = {"status": "已绑定", **bound}
-                            base["basis"] += f"；旁注“{bound['text']}”（距 {bound['distance']:g}）：{rule['text_cond']['basis']}"
+                            how = (f"经引线 {len(bound['leader_segment_ids'])} 段，引线点距文字 {bound['distance']:g}"
+                                   if bound.get("via") == "leader" else f"距 {bound['distance']:g}")
+                            base["basis"] += f"；旁注“{bound['text']}”（{how}）：{rule['text_cond']['basis']}"
                             if rule["text_cond"]["as_instance_key"]:
                                 base["instance_key"] = bound["text"]
                         elif side:
@@ -1111,7 +1331,8 @@ def main() -> int:
                                 "source_record_id": source_record_id,
                             }
                             if bound:
-                                instance["side_text"] = {key: bound[key] for key in ("text", "text_id", "distance", "rule_id")}
+                                instance["side_text"] = {key: bound[key] for key in ("text", "text_id", "distance", "rule_id", "via", "leader_handles")
+                                                         if key in bound}
                                 if "instance_key" in base:
                                     instance["instance_key"] = base["instance_key"]
                             adopted.append(instance)
@@ -1292,6 +1513,7 @@ def main() -> int:
                 "unclaimed_key_texts": side_summary["unclaimed_key_texts"][:50],
                 "duplicate_instance_keys": [{"instance_key": key, "physical_ids": sorted(ids)}
                                             for key, ids in sorted(keyed.items()) if len(ids) > 1],
+                **({"leader_graphs": side_summary["leader_graphs"]} if side_summary.get("leader_graphs") else {}),
             }
 
         # Empty definitions (registration 20261016-2359): not expansion failures; listed, with a hint for those no rule
@@ -1466,19 +1688,23 @@ def main() -> int:
             with side_csv.open("w", encoding="utf-8-sig", newline="") as handle:
                 writer = csv.writer(handle)
                 writer.writerow(["kind", "status", "physical_id", "block_name", "disposition", "rule_ids", "texts",
-                                 "text_ids", "distances", "shared_with", "instance_key", "x", "y", "coordinate_unit"])
+                                 "text_ids", "distances", "shared_with", "instance_key", "x", "y", "coordinate_unit",
+                                 "via", "leader_handles", "leader_problems"])
                 for item in sorted((row for row in dispositions if row.get("side_text")), key=lambda row: row["physical_id"]):
                     side = item["side_text"]
                     found = side.get("texts") if "texts" in side else [side]
                     point = item.get("point") or [None, None]
+                    via = side.get("via") or ("radius" if side["status"] == "已绑定" else "")
                     writer.writerow(["块", side["status"], item["physical_id"], item["block_name"], item["disposition"],
                                      "；".join(item.get("rule_ids") or []), "；".join(t["text"] for t in found),
                                      "；".join(t["text_id"] for t in found), "；".join(f"{t['distance']:g}" for t in found),
                                      "；".join(side.get("shared_with") or []), item.get("instance_key") or "",
-                                     point[0], point[1], item.get("coordinate_unit")])
+                                     point[0], point[1], item.get("coordinate_unit"), via,
+                                     "；".join(side.get("leader_handles") or []),
+                                     "；".join(f"{p['rule_id']} {p['problem']}" for p in side.get("leader_problems") or [])])
                 for item in side_summary["unclaimed_key_texts"]:
                     writer.writerow(["文字", "文字无块", "", "", "", "；".join(item["rule_ids"]), item["text"], item["text_id"],
-                                     "", "", "", item["point"][0], item["point"][1], coordinate_unit])
+                                     "", "", "", item["point"][0], item["point"][1], coordinate_unit, "", "", ""])
             artifacts["side_text_binding_csv"] = str(side_csv)
         report = {
             "schema_version": "qto-component-recognition-report/1.0",

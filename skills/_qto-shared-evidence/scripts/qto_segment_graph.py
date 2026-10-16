@@ -108,8 +108,9 @@ def row_parts(row: dict[str, Any], matrix=None) -> tuple[list[dict[str, Any]], s
 def collect_segments(layout_rows, definitions=None, origins=None, *, layer_pattern: str | None = None,
                      expand_blocks=(), scope: dict[str, float] | None = None, max_depth: int = MAX_DEPTH) -> dict[str, Any]:
     """Segments of one layout. definitions: {block name: [definition rows]}; origins: {block name: origin}. Only
-    blocks named in expand_blocks are walked; a child on layer 0 takes its insert's layer (AutoCAD's ByBlock layer)."""
-    layer_re = re.compile(layer_pattern) if layer_pattern else None
+    blocks named in expand_blocks are walked; a child on layer 0 takes its insert's layer (AutoCAD's ByBlock layer).
+    layer_pattern: a regex string or a compiled pattern (keeps the caller's flags, e.g. ignoring case)."""
+    layer_re = layer_pattern if isinstance(layer_pattern, re.Pattern) else re.compile(layer_pattern) if layer_pattern else None
     definitions, origins, expand = definitions or {}, origins or {}, set(expand_blocks)
     segments: list[dict[str, Any]] = []
     out: dict[str, Any] = {"segments": segments, "degenerate_parts": [], "geometry_problems": [], "unsupported": defaultdict(int),
