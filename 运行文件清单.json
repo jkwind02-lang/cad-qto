@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 294,
+  "runtime_file_count": 295,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -797,8 +797,8 @@
     },
     {
       "path": "qto-electrical-routes/references/计算与证据流程.md",
-      "sha256": "56de5030281d9924f5dcd020b049e2d412b41592ba1d43b6930cab92f290d7bb",
-      "bytes": 2338
+      "sha256": "bd3fc040b53ea387bab1e930d65237a85cd558007356b649f888b821e31d4da4",
+      "bytes": 6620
     },
     {
       "path": "qto-electrical-routes/references/计量口径选择.md",
@@ -821,9 +821,14 @@
       "bytes": 2034
     },
     {
+      "path": "qto-electrical-routes/scripts/trace_drawn_routes.py",
+      "sha256": "4463426d38d56bc367ec469ad26b11fafeff0990e96fbbe0da6d443580316e9e",
+      "bytes": 35918
+    },
+    {
       "path": "qto-electrical-routes/SKILL.md",
-      "sha256": "0d00becbf95cc6e7672e69df830ebd7bb8909c0a6a6aeb006b503d869b80dd76",
-      "bytes": 6514
+      "sha256": "e25f4a2870e2bed7a56abb85b907caeab285c2fcfb8eb49f1cca9b7fa4cbd90d",
+      "bytes": 6856
     },
     {
       "path": "qto-framing-supports/agents/openai.yaml",
