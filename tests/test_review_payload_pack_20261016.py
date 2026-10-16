@@ -53,6 +53,30 @@ def test_pack_without_sets_or_packable_items():
     assert not raw.startswith(c.PACK_MAGIC) and c.unpack_payload(raw) == bad
 
 
+def packed_sets(raw):
+    if not raw.startswith(c.PACK_MAGIC): return set()
+    n = int.from_bytes(raw[8:12], 'big')
+    return {e.get('set') for e in json.loads(raw[12:12 + n])['background_pack']['collections']}
+
+
+@pytest.mark.skipif(not shutil.which('node'), reason='node not available')
+def test_values_beyond_javascript_exact_integers_stay_json(tmp_path):
+    # Codex V1-R2-H04: zigzag deltas and coordinates must stay within 2^53-1, or the page decoder flips signs; such a set stays JSON.
+    cases = {'edge': ([[2 ** 51, 0], [-2 ** 51, 0]], True),                      # last delta zigzags to exactly 2^53-1
+             'over': ([[2 ** 51, 0], [-2 ** 51 - 1, 0]], False),
+             'neg52': ([[-(2 ** 52 + 1), 0], [1, 0]], False),
+             'six': ([[-9876543210.123455, 1.5], [0.25, 3]], False),
+             'normal': ([[-12.5, 3.25], [1e9, -7]], True)}
+    for name, (ps, packs) in cases.items():
+        v = sample(); key = next(iter(v['background_sets']))
+        v['background_sets'][key] = [{'kind': 'line', 'points': ps, 'color': 7}]
+        raw = c.pack_payload(v)
+        assert (key in packed_sets(raw)) == packs, name
+        assert c.unpack_payload(raw) == v
+        js = c.page_decode(raw, CORE)
+        assert js is None and not raw.startswith(c.PACK_MAGIC) or c.payload_backgrounds(js) == c.payload_backgrounds(v), name
+
+
 @pytest.mark.skipif(not shutil.which('node'), reason='node not available')
 def test_page_reads_the_packed_payload_like_python(tmp_path):
     v = sample()

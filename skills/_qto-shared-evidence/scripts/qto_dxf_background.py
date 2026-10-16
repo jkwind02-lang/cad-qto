@@ -108,37 +108,25 @@ class _Drawing:
   return n
 
 
-_HATCH_TWICE = None
+def hatch_lines(h):
+ """Pattern lines of a hatch. ezdxf jiggles the pattern origin with random(); a fixed seed keeps the page the same on every run."""
+ import random
+ from ezdxf.render import hatching
+ st = random.getstate(); random.seed(0)
+ try: return list(hatching.hatch_entity(h))
+ finally: random.setstate(st)
 
 
-def _hatch_scaled_twice():
- """ezdxf 1.4.4 applies a hatch's own pattern scale and angle a second time when it explodes an INSERT
- (DXFPolygon.transform scales the already scaled pattern lines by the new pattern_scale). Checked once on a tiny
- drawing, so a fixed ezdxf is left alone."""
- global _HATCH_TWICE
- if _HATCH_TWICE is None:
-  try:
-   import ezdxf
-   doc = ezdxf.new(); blk = doc.blocks.new('_probe'); h = blk.add_hatch()
-   h.set_pattern_fill('ANSI31', scale=10); h.paths.add_polyline_path([(0, 0), (1, 0), (1, 1)], is_closed=True)
-   ve = next(v for v in doc.modelspace().add_blockref('_probe', (0, 0)).virtual_entities() if v.dxftype() == 'HATCH')
-   a, b = h.pattern.lines[0].offset, ve.pattern.lines[0].offset
-   _HATCH_TWICE = math.hypot(*b) > 5 * math.hypot(*a)
-  except Exception: _HATCH_TWICE = False
- return _HATCH_TWICE
-
-
-def _fix_hatch_patterns(insert, ves):
- """Undo the extra pattern scale and angle on the hatches of an exploded INSERT, so pattern lines keep the original spacing."""
- if not _hatch_scaled_twice(): return
- try:
-  ux = insert.matrix44().transform_direction((1, 0, 0)); s = math.hypot(ux[0], ux[1]); rot = math.degrees(math.atan2(ux[1], ux[0]))
- except Exception: return
- if s <= 0: return
- for v in ves:
-  if v.dxftype() != 'HATCH' or not v.pattern or not v.pattern.lines: continue
-  ps, pa = v.dxf.pattern_scale / s, v.dxf.get('pattern_angle', 0) - rot
-  if ps > 0 and (abs(ps - 1) > 1e-9 or abs(pa) > 1e-9): v.pattern.scale(factor=1 / ps, angle=-pa)
+def _block_hatch_sources(insert, ves, blk):
+ """Pair the exploded hatches of an INSERT with their block definitions and the insert matrix (contract 7.2).
+ Pattern lines are drawn from the definition and moved by the matrix, so mirror, rotation, scale and phase follow the
+ original; ezdxf's own transform of an exploded hatch re-applies the pattern scale and angle and turns a mirror into a rotation."""
+ hv = [v for v in ves if v.dxftype() == 'HATCH']
+ hs = [v for v in blk if v.dxftype() == 'HATCH'] if hv and blk is not None else []
+ if not hv or len(hs) != len(hv): return {}
+ try: m = insert.matrix44()
+ except Exception: return {}
+ return {id(v): (s, m) for v, s in zip(hv, hs)}
 
 
 def _anchor(e):
@@ -160,10 +148,11 @@ class _Walker:
   self.flat = cfg['flatten_mm'] / unit_mm
   self.large_layers = compile_layers(cfg['large_block_layers'])
   self.large_points = cfg['large_block_points']
+  self.hsrc = {}
 
  def classify(self, e):
   if e.dxftype() != 'INSERT': return 'top_level'
-  if e.dxf.handle in self.handles: return 'object_symbol'
+  if str(e.dxf.handle).upper() in self.handles: return 'object_symbol'
   return 'large' if self.dw.block_size(e.dxf.name) > self.large_points else 'small_block'
 
  def run(self, e):
@@ -195,8 +184,10 @@ class _Walker:
     if self.dw.doc.blocks.get(e.dxf.name) is None: self._skip('xref_missing', e); return
    try: ves = list(e.virtual_entities())
    except Exception: self._skip('proxy', e); return
-   if any(ve.dxftype() == 'HATCH' for ve in ves): _fix_hatch_patterns(e, ves)
+   src = _block_hatch_sources(e, ves, self.dw.doc.blocks.get(e.dxf.name)) if t == 'INSERT' else {}
+   self.hsrc.update(src)
    for ve in ves: self._walk(ve, lay, bb, depth + 1)
+   for k in src: self.hsrc.pop(k, None)
    return
   if t in SKIP_SILENT: return
   if t in UNSHOWN_TYPES: self._skip(UNSHOWN_TYPES[t], e); return
@@ -247,9 +238,10 @@ class _Walker:
   self.out.append((lay, item))
 
  def _pattern(self, e, lay, color):
-  from ezdxf.render import hatching
+  src = self.hsrc.get(id(e))
   try:
-   for a, b in hatching.hatch_entity(e):
+   segs = ((src[1].transform(a), src[1].transform(b)) for a, b in hatch_lines(src[0])) if src else hatch_lines(e)
+   for a, b in segs:
     self.out.append((lay, {'kind': 'line', 'points': [[a.x, a.y], [b.x, b.y]], 'color': color}))
   except Exception: self._skip('pattern_hatch', e)
 
@@ -302,6 +294,7 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
  if got.lower() != str(expected_sha256).lower():
   raise DxfBackgroundError(f'交换 DXF 哈希与取证清单不符：{dxf_path}（实际 {got[:12]}…，清单 {str(expected_sha256)[:12]}…）')
  dw = _Drawing(dxf_path)
+ object_handles = {str(h).upper() for h in object_handles}   # handles compare case-blind, like the symbol notes
  from ezdxf import bbox
  cache = bbox.Cache()
  walkers = {}
@@ -319,7 +312,7 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
   if e.dxftype() == 'INSERT':
    ip = e.dxf.insert
    for t in hit:
-    if _inside((ip.x, ip.y), t['sheet_bounds']): t['_symbols'].append((e.dxf.name, e.dxf.handle, e.dxf.layer, (ip.x, ip.y), _label(e)))
+    if _inside((ip.x, ip.y), t['sheet_bounds']): t['_symbols'].append((e.dxf.name, str(e.dxf.handle).upper(), e.dxf.layer, (ip.x, ip.y), _label(e), dw.hidden(e.dxf.layer)))
    inserts.append(e)
   done = {}
   for t in hit:
@@ -340,34 +333,41 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
  # Symbol reconciliation (contract 7.5): blocks the object tables point at, plus blocks on the declared symbol layers.
  # Symbol notes (contract 7.5.1) explain a symbol before it may count as duplicate or uncounted; without notes the output is unchanged.
  notes, used = symbol_notes or {}, set()
- counted_blocks = {e.dxf.name for e in inserts if e.dxf.handle in object_handles}
+ # Symbols on off, frozen or non-plotting layers are not drawn, so they stay out of the sheet count and are listed apart.
+ counted_blocks = {e.dxf.name for e in inserts if str(e.dxf.handle).upper() in object_handles}
  for t in targets:
   sym = t['symbol_layers']; tol = t['cfg']['duplicate_tolerance_mm'] / unit_mm
   rows = defaultdict(list)
-  for name, h, lay, p, lab in t['_symbols']:
-   if name in counted_blocks or (sym and any(r.search(lay) for r in sym)): rows[name].append((h, lay, p, lab))
+  for name, h, lay, p, lab, hid in t['_symbols']:
+   if name in counted_blocks or (sym and any(r.search(lay) for r in sym)): rows[name].append((h, lay, p, lab, hid))
   out = []
   r = (lambda v: int(round(v))) if precision == 0 else (lambda v: round(v, precision))
   pts = lambda ps: [[r(x + t['dx']), r(y + t['dy'])] for x, y in ps]
-  for name, recs in sorted(rows.items()):
+  for name, allrecs in sorted(rows.items()):
+   recs = [x[:4] for x in allrecs if not x[4]]; hidden = [x[:4] for x in allrecs if x[4]]
    seen, dup_pts, unc_pts, counted = [], [], [], 0
    expl, why = {k: [] for k in NOTE_KINDS}, {k: Counter() for k in NOTE_KINDS}
    for h, lay, p, lab in recs:
-    nt = notes.get(str(h).upper())
-    if nt: used.add(str(h).upper())
+    nt = notes.get(h)
+    if nt: used.add(h)
     if nt and nt[0] == 'removed_overlap': expl[nt[0]].append(p); why[nt[0]][nt[1]] += 1; continue
-    if not nt and any(math.hypot(p[0] - q[0], p[1] - q[1]) < tol for q in seen): dup_pts.append(p)
-    seen.append(p)
+    # Only symbols without a note are candidates for "same position", so the result does not depend on drawing order.
+    if not nt:
+     if any(math.hypot(p[0] - q[0], p[1] - q[1]) < tol for q in seen): dup_pts.append(p)
+     seen.append(p)
     if h in object_handles: counted += 1
     elif nt: expl[nt[0]].append(p); why[nt[0]][nt[1]] += 1
     else: unc_pts.append(p)
-   labels = Counter(lab for *_, lab in recs if lab)
-   row = {'block': name, 'label': labels.most_common(1)[0][0] if labels else '', 'layer': Counter(l for _, l, _, _ in recs).most_common(1)[0][0],
+   labels = Counter(lab for *_, lab in (recs or hidden) if lab)
+   row = {'block': name, 'label': labels.most_common(1)[0][0] if labels else '', 'layer': Counter(l for _, l, _, _ in (recs or hidden)).most_common(1)[0][0],
           'on_sheet': len(recs), 'counted': counted, 'uncounted': len(unc_pts), 'duplicates': len(dup_pts),
           'uncounted_points': pts(unc_pts), 'duplicate_points': pts(dup_pts)}
    if notes:
     for k in NOTE_KINDS: row[k] = len(expl[k]); row[k + '_points'] = pts(expl[k])
     row['notes'] = {k: [n for n, _ in why[k].most_common(5)] for k in NOTE_KINDS if why[k]}
+   if hidden:
+    row['hidden'] = len(hidden); row['hidden_points'] = pts([p for _, _, p, _ in hidden])
+    row['hidden_counted'] = sum(1 for h, *_ in hidden if h in object_handles)
    out.append(row)
   t['symbol_reconciliation'] = out
   for k in ('_walker', '_symbols'): t.pop(k, None)

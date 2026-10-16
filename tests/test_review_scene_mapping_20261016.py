@@ -467,7 +467,7 @@ def test_same_handle_on_two_drawings_uses_each_rows_drawing(tmp_path):
 
 # ---------- restored background from the exchange DXF (contract 7.1-7.5) ----------
 
-def make_dxf(path, pipes=10):
+def make_dxf(path, pipes=10, hidden_lamp=False):
     """Synthetic exchange DXF: a counted lamp symbol twice at one point and once not counted, a small switch block with a solid,
     a large building block (walls kept, pipes dropped, its pattern hatch counted), a frame inserted outside the sheet, hidden,
     Defpoints and non-plotting layers, aligned TEXT, two-line MTEXT and a dashed line."""
@@ -491,8 +491,9 @@ def make_dxf(path, pipes=10):
         for a in ins.attribs:
             if a.dxf.tag == 'A': a.is_invisible = True
         handles[name] = ins.dxf.handle
+    if hidden_lamp: handles['LH'] = msp.add_blockref('LAMP', (7000, 2000), dxfattribs={'layer': 'HIDDEN'}).dxf.handle
     msp.add_blockref('SW', (3000, 3000), dxfattribs={'layer': 'E-LIGHT'})
-    msp.add_blockref('BIG', (0, 0), dxfattribs={'layer': 'WALL'})
+    handles['BIG'] = msp.add_blockref('BIG', (0, 0), dxfattribs={'layer': 'WALL'}).dxf.handle
     msp.add_blockref('FRAME', (-4000, 500))
     msp.add_text('配电箱AL1', height=350, dxfattribs={'layer': 'E-LIGHT'}).set_placement((5000, 1000), align=TextEntityAlignment.BOTTOM_CENTER)
     msp.add_mtext('第一行\\P第二行', dxfattribs={'char_height': 200, 'insert': (7000, 4000)})
@@ -506,15 +507,30 @@ def make_dxf(path, pipes=10):
     return handles
 
 
-def dxf_convert(tmp_path, background=None, with_handles=True, dxf_sha=None, dxf_path='D1.dxf', notes=None):
+LAMP_XY = {'L1': ('2000', '2000'), 'L2': ('2000', '2000.4'), 'L3': ('6000', '2000'), 'LH': ('7000', '2000'), 'BIG': ('100', '100')}
+
+
+def dxf_convert(tmp_path, background=None, with_handles=True, dxf_sha=None, dxf_path='D1.dxf', notes=None, lamps=('L1', 'L2'),
+                second=None, hcase=str, hidden_lamp=False):
+    """lamps: fixture symbols listed in D1's object table. second: a copy of D1 as drawing D2 (same handles), with these symbols listed for D2."""
     nroot = neutral(tmp_path); folder = nroot / 'D1'
-    handles = make_dxf(folder / 'D1.dxf')
+    handles = make_dxf(folder / 'D1.dxf', hidden_lamp=hidden_lamp)
     mf = json.loads((folder / 'CAD中性取证清单.json').read_text(encoding='utf-8'))
     mf['exchange_dxf'] = {'path': dxf_path, 'sha256': dxf_sha or hashlib.sha256((folder / 'D1.dxf').read_bytes()).hexdigest()}
     (folder / 'CAD中性取证清单.json').write_text(json.dumps(mf, ensure_ascii=False), encoding='utf-8')
-    write_csv(tmp_path / 'tables' / 'lamps.csv', ['编号', '图页', '句柄', 'x', 'y'], [['L1', 'P1', handles['L1'], '2000', '2000'], ['L2', 'P1', handles['L2'], '2000', '2000.4']])
+    rows = [[n, 'D1', 'P1', hcase(handles[n]), *LAMP_XY[n]] for n in lamps]
+    if second is not None:
+        import shutil
+        shutil.copytree(folder, nroot / 'D2')
+        mf['authoritative_source']['sha256'] = fx.sha('dwg2')
+        (nroot / 'D2' / 'CAD中性取证清单.json').write_text(json.dumps(mf, ensure_ascii=False), encoding='utf-8')
+        rows += [['P-D2', 'D2', 'P1', '', '3000', '3000']] + [[n + '-D2', 'D2', 'P1', handles[n], *LAMP_XY[n]] for n in second]   # D2 always has a row placed by coordinates only
+    write_csv(tmp_path / 'tables' / 'lamps.csv', ['编号', '图纸', '图页', '句柄', 'x', 'y'], rows)
     p, m = mapping(tmp_path, background=background or {'large_block_points': 30})
-    cols = {'object_id': '编号', 'sheet': '图页', 'x': 'x', 'y': 'y', **({'handle': '句柄'} if with_handles else {})}
+    if second is not None:
+        m['drawings'] = [{'id': 'D1'}, {'id': 'D2'}]
+        m['sheets'].append({**copy.deepcopy(m['sheets'][0]), 'constants': {'drawing': 'D2'}})
+    cols = {'object_id': '编号', 'drawing': '图纸', 'sheet': '图页', 'x': 'x', 'y': 'y', **({'handle': '句柄'} if with_handles else {})}
     m['objects'] = [{'key': 'lamp', 'path': 'tables/lamps.csv', 'columns': cols, 'constants': {'title': '灯', 'category': '灯具', 'status': '待复核'}}]
     if notes: m['symbol_notes'] = notes(handles, tmp_path / 'tables')
     p.write_text(json.dumps(m, ensure_ascii=False), encoding='utf-8')
@@ -581,7 +597,7 @@ def test_dxf_symbol_notes_explain_removed_overlaps_other_sheets_and_same_items(t
         return [{'kind': 'removed_overlap', 'path': 'tables/重叠图元.csv', 'filter': {'kind': '^块$'}, 'columns': {'handle': 'handle_b', 'kept_handle': 'handle_a'},
                  'constants': {'drawing': 'D1', 'note': '与 {handle_a} 重叠，计数前剔除'}},
                 {'kind': 'counted_elsewhere', 'path': 'tables/他图计入.csv', 'columns': {'handle': '句柄', 'note': '说明'}}]
-    code, report, v, _ = dxf_convert(tmp_path / 'a', notes=shared)
+    code, report, v, _ = dxf_convert(tmp_path / 'a', notes=shared, lamps=('L1',))      # the counted table is already deduplicated
     assert code == 0, report.get('problems')
     c.normalize_view(v)
     row = next(s for s in v['scenes'] if s['id'] == 'D1|P1')['symbol_reconciliation'][0]
@@ -609,6 +625,108 @@ def test_dxf_symbol_notes_explain_removed_overlaps_other_sheets_and_same_items(t
     msgs = ' | '.join(x['message'] for x in report['problems'])
     assert code == 2 and v is None
     assert '剔除句柄与保留句柄相同' in msgs and '缺 note' in msgs and '不能再写进 same_item_elsewhere' in msgs and '对账说明 kind 只能是' in msgs
+
+
+def symbol_rows(v, sid):
+    return {r['block']: r for r in next(s for s in v['scenes'] if s['id'] == sid)['symbol_reconciliation']}
+
+
+def test_dxf_symbols_are_reconciled_per_drawing_and_case_blind(tmp_path):
+    # Codex V1-R2-H01: D2 is a copy of D1 with the same handles; only D1's table lists L1, L2 and the large block BIG.
+    bg = {'large_block_points': 30, 'symbol_layers': ['^E-LIGHT$']}
+    code, report, v, _ = dxf_convert(tmp_path / 'a', background=bg, lamps=('L1', 'L2', 'BIG'), second=())
+    assert code == 0, report.get('problems')
+    assert symbol_rows(v, 'D1|P1')['LAMP']['counted'] == 2 and 'BIG' in symbol_rows(v, 'D1|P1')
+    d2 = symbol_rows(v, 'D2|P1')
+    assert (d2['LAMP']['counted'], d2['LAMP']['uncounted']) == (0, 3) and 'BIG' not in d2
+    # BIG counted on D1 only: drawn in full there (its pipes), still a large block on D2 (pipes dropped).
+    pipes = lambda sid: any(i['kind'] == 'line' and i['points'][0][0] == 5000 and i['points'][-1][0] == 9000
+                            for i in v['background_sets'][next(s for s in v['scenes'] if s['id'] == sid)['background_refs'][0]])
+    assert pipes('D1|P1') and not pipes('D2|P1')
+    # Both drawings list the lamps: both counted, each on its own drawing.
+    code, report, v, _ = dxf_convert(tmp_path / 'b', background=bg, second=('L1', 'L2'))
+    assert code == 0 and symbol_rows(v, 'D2|P1')['LAMP']['counted'] == 2 and symbol_rows(v, 'D1|P1')['LAMP']['counted'] == 2
+    # Codex V1-R2-H02: object-table handles in lower case still count.
+    code, report, v, _ = dxf_convert(tmp_path / 'c', hcase=str.lower)
+    assert code == 0 and (symbol_rows(v, 'D1|P1')['LAMP']['counted'], symbol_rows(v, 'D1|P1')['LAMP']['uncounted']) == (2, 1)
+
+
+def test_dxf_explained_symbols_never_make_same_position(tmp_path):
+    # Codex V1-R2-H03: L1 and L2 are 0.4 mm apart; whichever one carries a note, the other is not a duplicate.
+    keys = ('on_sheet', 'counted', 'uncounted', 'duplicates')
+    for kind in ('counted_elsewhere', 'same_item_elsewhere', 'removed_overlap'):
+        for who, other in (('L1', 'L2'), ('L2', 'L1')):
+            def notes(h, t, kind=kind, who=who, other=other):
+                write_csv(t / 'n.csv', ['句柄', '保留', '说明'], [[h[who], h[other], '说明']])
+                return [{'kind': kind, 'path': 'tables/n.csv', 'columns': {'handle': '句柄', 'note': '说明', **({'kept_handle': '保留'} if kind == 'removed_overlap' else {})},
+                         'constants': {'drawing': 'D1'}}]
+            code, report, v, _ = dxf_convert(tmp_path / f'{kind}_{who}', notes=notes, lamps=('L3',))
+            row = symbol_rows(v, 'D1|P1')['LAMP']
+            assert code == 0 and {k: row[k] for k in keys} == dict(zip(keys, (3, 1, 1, 0))) and row[kind] == 1, (kind, who)
+    # A counted symbol that also has a note is counted (the table wins) and is not a candidate either.
+    def note_l1(h, t):
+        write_csv(t / 'n.csv', ['句柄', '说明'], [[h['L1'], '电力平面计入']])
+        return [{'kind': 'counted_elsewhere', 'path': 'tables/n.csv', 'columns': {'handle': '句柄', 'note': '说明'}, 'constants': {'drawing': 'D1'}}]
+    code, report, v, _ = dxf_convert(tmp_path / 'counted', notes=note_l1, lamps=('L1', 'L3'))
+    row = symbol_rows(v, 'D1|P1')['LAMP']
+    assert code == 0 and {k: row[k] for k in keys} == dict(zip(keys, (3, 2, 1, 0))) and row['counted_elsewhere'] == 0
+
+
+def test_dxf_removed_overlap_must_not_stay_a_counted_object(tmp_path):
+    # Registration 0723 (contract 7.5.1): a removed handle still in the counted table is an S-5 conflict; the mapping must use the deduplicated table.
+    def removed(h, t):
+        write_csv(t / 'r.csv', ['剔除', '保留'], [[h['L2'], h['L1']]])
+        return [{'kind': 'removed_overlap', 'path': 'tables/r.csv', 'columns': {'handle': '剔除', 'kept_handle': '保留'}, 'constants': {'drawing': 'D1', 'note': '计数前剔除'}}]
+    code, report, v, _ = dxf_convert(tmp_path / 'in', notes=removed, lamps=('L1', 'L2'))
+    assert code == 2 and v is None and any(p['check'] == 'S-5' and '已剔除的句柄仍在计数对象表里' in p['message'] for p in report['problems'])
+    keys = ('on_sheet', 'counted', 'uncounted', 'duplicates', 'removed_overlap')
+    code, report, v, _ = dxf_convert(tmp_path / 'out', notes=removed, lamps=('L1',))
+    row = symbol_rows(v, 'D1|P1')['LAMP']
+    assert code == 0 and {k: row[k] for k in keys} == dict(zip(keys, (3, 1, 1, 0, 1))) and row['uncounted_points'] == [[6000, 2000]]
+    # The kept handle is missing from the table too: it shows as uncounted, nothing is hidden.
+    code, report, v, _ = dxf_convert(tmp_path / 'kept', notes=removed, lamps=('L3',))
+    row = symbol_rows(v, 'D1|P1')['LAMP']
+    assert code == 0 and {k: row[k] for k in keys} == dict(zip(keys, (3, 1, 1, 0, 1))) and row['uncounted_points'] == [[2000, 2000]]
+
+
+def test_dxf_hidden_layer_symbols_are_listed_apart(tmp_path):
+    # A lamp on the switched-off layer is not drawn: out of the sheet count, listed as hidden; a counted object there is flagged.
+    code, report, v, _ = dxf_convert(tmp_path, hidden_lamp=True, lamps=('L1', 'L2', 'LH'))
+    assert code == 0, report.get('problems')
+    c.normalize_view(v)
+    row = symbol_rows(v, 'D1|P1')['LAMP']
+    assert (row['on_sheet'], row['counted'], row['uncounted'], row['hidden'], row['hidden_counted'], row['hidden_points']) == (3, 2, 1, 1, 1, [[7000, 2000]])
+    s = next(s for s in report['scenes'] if s['id'] == 'D1|P1')['symbols']
+    assert (s['hidden'], s['hidden_counted']) == (1, 1)
+    code, report, v, _ = dxf_convert(tmp_path / 'none')
+    assert 'hidden' not in symbol_rows(v, 'D1|P1')['LAMP']
+
+
+@pytest.mark.parametrize('sx,sy,rot,own', [(-2, 2, 30, 15), (2, -2, 15, 15), (2, 2, 30, 15), (1, 1, 0, 0), (-1.5, 1.5, 200, 40)])
+def test_dxf_block_hatch_pattern_follows_the_insert_matrix(tmp_path, sx, sy, rot, own):
+    # Codex V1-R2-H05: pattern lines of a hatch in a block are the definition's lines moved by the insert (mirror, rotation, scale, phase).
+    import ezdxf
+    from qto_dxf_background import build_dxf_backgrounds, hatch_lines
+    doc = ezdxf.new('R2010'); blk = doc.blocks.new('H')
+    h = blk.add_hatch(); h.set_pattern_fill('ANSI31', scale=10, angle=own); h.paths.add_polyline_path([(0, 0), (300, 0), (300, 200), (0, 200)], is_closed=True)
+    ins = (5000, 4000)
+    doc.modelspace().add_blockref('H', ins, dxfattribs={'xscale': sx, 'yscale': sy, 'rotation': rot})
+    path = tmp_path / 'h.dxf'; doc.saveas(path)
+    t = {'scene_id': 'S', 'sheet_bounds': [0, 0, 10000, 8000], 'dx': 0, 'dy': 0, 'include': [], 'exclude': [], 'symbol_layers': [], 'items': [], 'stats': __import__('collections').Counter(),
+         'cfg': {'large_block_points': 2000, 'large_block_layers': [], 'flatten_mm': 1, 'duplicate_tolerance_mm': 1}}
+    build_dxf_backgrounds(path, hashlib.sha256(path.read_bytes()).hexdigest(), [t], set(), 1, 3)
+    ca, sa = math.cos(math.radians(rot)), math.sin(math.radians(rot))
+    move = lambda p: (ins[0] + ca * sx * p[0] - sa * sy * p[1], ins[1] + sa * sx * p[0] + ca * sy * p[1])   # independent of ezdxf's matrix
+    key = lambda p: (round(p[0], 1), round(p[1], 1))
+    norm = lambda a, b: tuple(sorted(((float(a[0]), float(a[1])), (float(b[0]), float(b[1]))), key=key))
+    want = sorted((norm(move(a), move(b)) for a, b in hatch_lines(h)), key=lambda s: (key(s[0]), key(s[1])))
+    got = sorted((norm(*it['points']) for it in t['items'] if it['kind'] == 'line'), key=lambda s: (key(s[0]), key(s[1])))
+    assert len(got) == len(want) and all(math.dist(g[0], w[0]) < 0.05 and math.dist(g[1], w[1]) < 0.05 for g, w in zip(got, want))
+    # Direction: ANSI31 is 45 degrees plus the hatch's own angle, mirrored and rotated with the insert.
+    a0 = own + 45; ux, uy = math.cos(math.radians(a0)) * sx, math.sin(math.radians(a0)) * sy
+    expect = (math.degrees(math.atan2(uy, ux)) + rot) % 180
+    (x1, y1), (x2, y2) = got[0]
+    assert abs(((math.degrees(math.atan2(y2 - y1, x2 - x1)) % 180) - expect + 90) % 180 - 90) < 0.1
 
 
 def test_dxf_background_inputs_must_match(tmp_path):
@@ -646,7 +764,8 @@ def test_contract_checks_restored_display_fields():
            (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(counted=2), '符号对账'),
            (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(uncounted_points=[]), '符号对账'),
            (lambda w: w['scenes'][0].update(length_factor=0), '实长换算'),
-           (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(removed_overlap=1), '符号对账说明类')]
+           (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(removed_overlap=1), '符号对账说明类'),
+           (lambda w: w['scenes'][0]['symbol_reconciliation'][0].update(hidden=2), '隐藏层符号')]
     for change, msg in bad:
         w = copy.deepcopy(v); change(w)
         with pytest.raises(ValueError, match=msg): c.normalize_view(w)

@@ -96,6 +96,7 @@ def normalize_view(raw, base_dir=None):
     ex={k:r.get(k,0) for k in ('removed_overlap','counted_elsewhere','same_item_elsewhere')}
     require(all(isinstance(v,int) and v>=0 and len(r.get(k+'_points') or [])==v and all(xy(p) for p in r.get(k+'_points') or []) for k,v in ex.items()),'符号对账说明类计数与点位不符')
     require(isinstance(r.get('notes',{}),dict) and all(isinstance(v,list) and all(string(n) for n in v) for v in r.get('notes',{}).values()),'符号对账说明无效')
+    hd=r.get('hidden',0);require(isinstance(hd,int) and hd>=0 and len(r.get('hidden_points') or [])==hd and all(xy(p) for p in r.get('hidden_points') or []) and isinstance(r.get('hidden_counted',0),int) and 0<=r.get('hidden_counted',0)<=hd,'隐藏层符号计数与点位不符')
     require(r['counted']+r['uncounted']+sum(ex.values())==r['on_sheet'] and len(up)==r['uncounted'] and len(dp)==r['duplicates'] and all(xy(p) for p in [*up,*dp]),'符号对账行计数与点位不符')
   if s.get('raster_path'):
    require(base_dir is not None,'raster_path需要输入文件目录')
@@ -257,6 +258,26 @@ def _packable(items):
   k=10**nd
   if all(round(c*k)/k==c for p in pts for c in p):return nd
  return None
+# The page decodes with JavaScript numbers: every coordinate, delta and zigzag value must stay within 2^53-1 to be exact there.
+JS_SAFE=2**53-1
+def _pack_set(items,nd,index,styles):
+ """Varint stream of one background set, or None when a value would leave the page decoder's exact range (the set then stays JSON)."""
+ k=10**nd;buf=bytearray();x=y=0;new={}
+ for it in items:
+  st={f:val for f,val in it.items() if f not in ('point','points')};sk=json.dumps(st,ensure_ascii=False,sort_keys=True)
+  if sk not in index and sk not in new:new[sk]=(len(styles)+len(new),st)
+  ps=[it['point']] if 'point' in it else it['points']
+  _varint(index[sk] if sk in index else new[sk][0],buf);_varint(0 if 'point' in it else len(ps),buf)
+  for px,py in ps:
+   X,Y=round(px*k),round(py*k)
+   if abs(X)>JS_SAFE or abs(Y)>JS_SAFE:return None
+   for d in (X-x,Y-y):
+    z=d*2 if d>=0 else -d*2-1
+    if z>JS_SAFE:return None
+    _varint(z,buf)
+   x,y=X,Y
+ for sk,(n,st) in new.items():index[sk]=n;styles.append(st)
+ return buf
 def pack_payload(view):
  v=dict(view);v['scenes']=[dict(s) for s in view['scenes']]
  if isinstance(view.get('background_sets'),dict):v['background_sets']=dict(view['background_sets'])
@@ -265,16 +286,9 @@ def pack_payload(view):
  for where,key,items in targets:
   nd=_packable(items) if items else None
   if nd is None:continue
-  k=10**nd;start=len(binary);x=y=0
-  for it in items:
-   st={f:val for f,val in it.items() if f not in ('point','points')};sk=json.dumps(st,ensure_ascii=False,sort_keys=True)
-   if sk not in index:index[sk]=len(styles);styles.append(st)
-   ps=[it['point']] if 'point' in it else it['points']
-   _varint(index[sk],binary);_varint(0 if 'point' in it else len(ps),binary)
-   for px,py in ps:
-    X,Y=round(px*k),round(py*k)
-    for d in (X-x,Y-y):_varint(d*2 if d>=0 else -d*2-1,binary)
-    x,y=X,Y
+  buf=_pack_set(items,nd,index,styles)
+  if buf is None:continue
+  start=len(binary);binary+=buf
   cols.append({where:key,'count':len(items),'decimals':nd,'start':start,'end':len(binary)})
   if where=='set':v['background_sets'][key]=[]
   else:v['scenes'][key]['background']=[]
@@ -282,6 +296,20 @@ def pack_payload(view):
  v['background_pack']={'format':'qto-background-pack/1','styles':styles,'collections':cols}
  raw=json.dumps(v,ensure_ascii=False,separators=(',',':')).encode()
  return PACK_MAGIC+len(raw).to_bytes(4,'big')+raw+bytes(binary)
+def page_decode(raw,core_js):
+ """Decode a packed payload with the page's own readPayload under node (review view contract 11.1); None when node is missing."""
+ import os,shutil,subprocess,tempfile
+ node=shutil.which('node')
+ if not node or not raw.startswith(PACK_MAGIC):return None
+ code=("const fs=require('fs'),vm=require('vm'),ctx=vm.createContext({Response,Uint8Array,console});"
+       "vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),ctx);"
+       "ctx.QtoReviewCore.readPayload(new Uint8Array(fs.readFileSync(process.argv[2]))).then(d=>process.stdout.write(JSON.stringify(d)),e=>{process.stderr.write(String(e&&e.message||e));process.exit(3);});")
+ with tempfile.TemporaryDirectory() as d:
+  p=os.path.join(d,'payload.bin');Path(p).write_bytes(raw)
+  r=subprocess.run([node,'-e',code,str(core_js),p],stdin=subprocess.DEVNULL,capture_output=True,text=True,encoding='utf-8')
+ require(r.returncode==0,'页面解码器读不出载荷：'+r.stderr[-300:])
+ return json.loads(r.stdout)
+def payload_backgrounds(v):return [v.get('background_sets'),[s.get('background') for s in v['scenes']]]
 def unpack_payload(raw):
  if not raw.startswith(PACK_MAGIC):return json.loads(raw)
  n=int.from_bytes(raw[8:12],'big');v=json.loads(raw[12:12+n]);b=raw[12+n:];pack=v.pop('background_pack');pos=0

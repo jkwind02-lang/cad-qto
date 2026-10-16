@@ -114,12 +114,14 @@ try{
   const total=k=>rows.reduce((a,r)=>a+(r[k]||0),0),head=document.createElement('div');
   // Explained symbols (scene mapping contract 7.5.1) get their own columns and never count as uncounted or same position.
   const NOTES=[['removed_overlap','已剔除'],['counted_elsewhere','他图计入'],['same_item_elsewhere','同一实物另一图']],explained=rows.some(r=>'removed_overlap' in r);
-  head.textContent='符号对账（只对账，不改数量）：本页 '+total('on_sheet')+' 个，已计 '+total('counted')+'，未计 '+total('uncounted')+'，同位置 '+total('duplicates')+(explained?'；已说明：'+NOTES.map(([k,t])=>t+' '+total(k)).join('、'):'');
+  // Symbols on hidden layers (off, frozen, not plotted) are not drawn and stay out of the sheet count (contract 7.5).
+  const hid=rows.some(r=>r.hidden),hc=total('hidden_counted');
+  head.textContent='符号对账（只对账，不改数量）：本页 '+total('on_sheet')+' 个，已计 '+total('counted')+'，未计 '+total('uncounted')+'，同位置 '+total('duplicates')+(explained?'；已说明：'+NOTES.map(([k,t])=>t+' '+total(k)).join('、'):'')+(hid?'；隐藏层符号 '+total('hidden')+' 个不计入本页'+(hc?'，其中 '+hc+' 个是计数对象，图上看不到，须回原图':''):'');
   const table=document.createElement('table'),tr=document.createElement('tr');
-  for(const h of ['符号','图层','本页','已计','未计','同位置',...(explained?NOTES.map(n=>n[1]):[])]){const th=document.createElement('th');th.textContent=h;tr.append(th);}table.append(tr);
+  for(const h of ['符号','图层','本页','已计','未计','同位置',...(explained?NOTES.map(n=>n[1]):[]),...(hid?['隐藏层']:[])]){const th=document.createElement('th');th.textContent=h;tr.append(th);}table.append(tr);
   for(const r of rows){
    const row=document.createElement('tr'),name=(r.label||r.block)+(r.sheet?'（'+r.sheet+'）':'');
-   for(const [v,pts,what,why] of [[name],[r.layer||''],[r.on_sheet],[r.counted],[r.uncounted,r.uncounted_points,'未计'],[r.duplicates,r.duplicate_points,'同位置'],...(explained?NOTES.map(([k,t])=>[r[k],r[k+'_points'],t,(r.notes?.[k]||[]).join('；')]):[])]){
+   for(const [v,pts,what,why] of [[name],[r.layer||''],[r.on_sheet],[r.counted],[r.uncounted,r.uncounted_points,'未计'],[r.duplicates,r.duplicate_points,'同位置'],...(explained?NOTES.map(([k,t])=>[r[k],r[k+'_points'],t,(r.notes?.[k]||[]).join('；')]):[]),...(hid?[[r.hidden||0,r.hidden_points,'隐藏层符号',r.hidden_counted?'其中 '+r.hidden_counted+' 个是计数对象':'']]:[])]){
     const td=document.createElement('td');
     if(pts&&v){const b=document.createElement('button');b.className='link';b.textContent=v;b.title='在图上标出'+what+'的位置'+(why?'。说明：'+why:'');b.onclick=()=>showMarks(pts,name+' '+what+(why?'（'+why+'）':''));td.append(b);}else td.textContent=v??'';
     row.append(td);

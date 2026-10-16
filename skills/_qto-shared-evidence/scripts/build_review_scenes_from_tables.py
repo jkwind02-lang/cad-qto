@@ -411,6 +411,7 @@ def build(m, base, neutral_root, problems, files):
    hk = (xsh['drawing'], xsh['sheet_id']) if xsh else None
    x['scene'], x['dx'], x['dy'] = (home[hk][:3] if hk in home else (f'{hk[0]}|{hk[1]}', 0.0, 0.0)) if xsh else (None, 0.0, 0.0)
    if xsh is None: x['reason'] = 'sheet_unknown'; continue
+   x['drawing'] = xsh['drawing']
    if x['use'] == 'handle':
     d = found.get(xd, {}).get(x['handle'])
     if d is None: x['reason'] = 'handle_not_found'; continue
@@ -550,15 +551,23 @@ def build(m, base, neutral_root, problems, files):
   scenes.append(sc)
  for dr, ts in targets_by_drawing.items():
   scan_layout(drawings[dr]['layout'], set(), ts, resolve_counter)
- # Restored background from the exchange DXF (contract 7.1-7.5); any handle in an object table marks its block as a counted symbol.
- object_handles = {x['handle'] for g in drafts for x in g['rows'] if x.get('handle')}
+ # Restored background from the exchange DXF (contract 7.1-7.5); a handle in an object table marks its block as a counted symbol,
+ # on the row's own drawing only (another drawing may reuse the same handle).
+ object_handles = defaultdict(set)
+ for g in drafts:
+  for x in g['rows']:
+   if x.get('handle') and x.get('drawing'): object_handles[x['drawing']].add(str(x['handle']).upper())
+ # A handle removed before counting (7.5.1) must not also be a counted object: the mapping should use the deduplicated table.
+ for dr, nd in symbol_notes.items():
+  clash = sorted(h for h, v in nd.items() if v[0] == 'removed_overlap' and h in object_handles[dr])
+  if clash: problems.append({'check': 'S-5', 'where': dr, 'message': f"对账说明：{len(clash)} 个已剔除的句柄仍在计数对象表里（如 {'、'.join(clash[:5])}），计数对象表请改用剔重后的表"})
  dxf_ok, notes_used = {}, Counter()
  for dr, ts in dxf_targets.items():
   d = drawings[dr]['dxf']
   if d is None: problems.append({'check': 'S-5', 'where': dr, 'message': '中性取证清单没有交换 DXF（exchange_dxf）；要用中性底图，须在映射写 background.source: "neutral"'}); continue
   if not d['path'].is_file(): problems.append({'check': 'S-5', 'where': dr, 'message': f"交换 DXF 不存在：{d['path']}"}); continue
   try:
-   res = build_dxf_backgrounds(d['path'], d['sha256'], ts, object_handles, UNIT_MM[drawings[dr]['unit']], drawings[dr]['precision'], symbol_notes.get(dr))
+   res = build_dxf_backgrounds(d['path'], d['sha256'], ts, object_handles[dr], UNIT_MM[drawings[dr]['unit']], drawings[dr]['precision'], symbol_notes.get(dr))
    notes_used.update(symbol_notes[dr][h][3] for h in res.get('notes_used', ()))
   except DxfBackgroundError as e: problems.append({'check': 'S-5', 'where': dr, 'message': str(e)}); continue
   except (ImportError, OSError) as e: problems.append({'check': 'S-5', 'where': dr, 'message': f'读交换 DXF 失败：{e}'}); continue
@@ -620,9 +629,9 @@ def build(m, base, neutral_root, problems, files):
                   'failed_rows_in_located_objects': len(failed_in_located), 'pass': not failed_in_located}
  if failed_in_located: problems.append({'check': 'S-4', 'where': '；'.join(failed_in_located[:5]), 'message': '定位失败的行进了已定位对象'})
  checks['S-5'] = {'scenes': len(scenes), 'dxf_checked': dxf_ok, 'scenes_neutral_background': sum(1 for s in scenes if s.get('restoration', {}).get('source') == 'neutral'),
-                  'object_handles': len(object_handles),
+                  'object_handles': sum(len(v) for v in object_handles.values()),
                   **({'symbol_notes': [{**t, 'used_on_these_sheets': notes_used[n]} for n, t in enumerate(notes_info)]} if notes_info else {}),
-                  **({'symbol_note':'对象表没有映射 handle：符号对账认不出哪些符号已计，只列 symbol_layers 图层上的块；按坐标定位的表也请映射 handle 列'} if dxf_targets and not object_handles else {}),
+                  **({'symbol_note':'对象表没有映射 handle：符号对账认不出哪些符号已计，只列 symbol_layers 图层上的块；按坐标定位的表也请映射 handle 列'} if dxf_targets and not any(object_handles.values()) else {}),
                   'pass': all(k in background_sets for s in scenes for k in s.get('background_refs', [])) and all(dr in dxf_ok for dr in dxf_targets)}
  for key in sorted(used_conflicts):
   problems.append({'check': 'S-0', 'where': '；'.join(conflicts[key]), 'message': f'图页 {key[0]}|{key[1]} 在图页表里有几行且内容不同，对象或叠图用到了它，须先在图页表里改正'})
@@ -631,7 +640,8 @@ def build(m, base, neutral_root, problems, files):
          'scenes': [{'id': s['id'], 'title': s['title'], 'objects': dict(Counter(o['kind'] for o in used.get(s['id'], []))), **dict(scene_meta[s['id']]['stats']),
                      **({'bounds_basis': s['bounds_basis']} if s.get('bounds_basis') else {}), 'background_key': scene_meta[s['id']]['key'], 'background_filters': scene_meta[s['id']]['filters'],
                      'restoration': s.get('restoration'), 'dropped_layers': dict((scene_meta[s['id']].get('dropped_layers') or Counter()).most_common(40)),
-                     'symbols': {'blocks': len(s.get('symbol_reconciliation') or []), **{k: sum(r.get(k, 0) for r in s.get('symbol_reconciliation') or []) for k in ('on_sheet', 'counted', 'uncounted', 'duplicates', *(NOTE_KINDS if notes_info else ()))}}}
+                     'symbols': {'blocks': len(s.get('symbol_reconciliation') or []), **{k: sum(r.get(k, 0) for r in s.get('symbol_reconciliation') or []) for k in ('on_sheet', 'counted', 'uncounted', 'duplicates', *(NOTE_KINDS if notes_info else ()),
+                                 *(('hidden', 'hidden_counted') if any(r.get('hidden') for r in s.get('symbol_reconciliation') or []) else ()))}}}
                     for s in scenes],
          'objects': dict(Counter(o['kind'] for o in draws)), 'unlocated': dict(Counter(o.get('unlocated_reason') for o in draws if o['kind'] == 'unlocated')),
          'checks': checks}

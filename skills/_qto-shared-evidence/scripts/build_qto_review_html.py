@@ -3,7 +3,7 @@ import argparse,base64,gzip,html,json,re,textwrap,uuid
 from urllib.parse import urlsplit
 from html.parser import HTMLParser
 from pathlib import Path
-from qto_review_contract import normalize_view,validate_feedback,empty_feedback,extract_json_file,pack_payload,unpack_payload,PACK_MAGIC
+from qto_review_contract import normalize_view,validate_feedback,empty_feedback,extract_json_file,pack_payload,unpack_payload,page_decode,payload_backgrounds,PACK_MAGIC
 
 def plugin_version(root):
  """Common business version: release source record first, else both host manifests; a conflict is reported, never hidden."""
@@ -52,6 +52,9 @@ def build(data_path,output,feedback_path=None,feedback_url=None,feedback_backup_
  page=page.replace('__REVIEW_CORE__',(assets/'review-core.js').read_text(encoding='utf-8')).replace('__REVIEW_AUDIT__',(assets/'review-audit.js').read_text(encoding='utf-8')).replace('__REVIEW_APP__',(assets/'review-app.js').read_text(encoding='utf-8'))
  page=page.replace('__PROBLEM_CONFIG__',json.dumps(config,ensure_ascii=False).replace('<','\\u003c')).replace('__PROBLEM_FEEDBACK__',(assets/'problem-feedback.js').read_text(encoding='utf-8'))
  assert unpack_payload(gzip.decompress(base64.b64decode(payload)))==view,'页面载荷解包后与视图不一致'
+ # The page's own decoder must give the same background too (review view contract 11.1); skipped only when node is missing.
+ js=page_decode(packed,assets/'review-core.js')
+ assert js is None or payload_backgrounds(js)==payload_backgrounds(view),'页面解码器解包后与视图不一致'
  class IdParser(HTMLParser):
   def __init__(self):super().__init__();self.ids=[]
   def handle_starttag(self,tag,attrs):
