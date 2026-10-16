@@ -183,7 +183,8 @@ def test_shared_objects_other_sheet_or_kind_is_not_a_position_mismatch(tmp_path)
 def test_single_package_has_no_shared_objects(tmp_path):
     a, _ = package(tmp_path, 'E-A')
     code, rep, _ = merge(tmp_path, a)
-    assert code == 0 and rep['shared_objects'] == {'objects': 0, 'records': 0, 'by_record_count': {}, 'multi_quantity': 0, 'coordinate_mismatch': 0}
+    assert code == 0 and rep['shared_objects'] == {'objects': 0, 'records': 0, 'by_record_count': {}, 'multi_quantity': 0, 'coordinate_mismatch': 0,
+                                                   'suspected_handle_collisions': 0}
 
 
 def test_views_without_shared_sheets_pass_with_nothing_checked(tmp_path):

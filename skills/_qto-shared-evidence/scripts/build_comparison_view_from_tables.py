@@ -3,7 +3,7 @@
 Only moves and renames values (contract docs/维护/复核页审核视图契约.md, section 12); it never
 computes an engineering quantity. The result is checked by the shared contract before it is written.
 """
-import argparse, copy, csv, hashlib, json, math, os
+import argparse, copy, csv, hashlib, json, math, os, re
 from collections import Counter, defaultdict
 from pathlib import Path
 from qto_review_contract import normalize_view, VIEW_SCHEMA_COMPARISON
@@ -486,18 +486,32 @@ def merge_base_views(paths, out_dir, filters=None):
 
 
 TWIN_TOL = {'mm': 1, 'cm': 0.1, 'm': 0.001}   # same object, same sheet: points this close are one marker on the page (review-app.js)
+HANDLE_LIKE = re.compile(r'[0-9A-Fa-f]{1,16}')   # a bare CAD handle names one object only within its own drawing
 
 
 def shared_object_stats(view, cap=50):
  """Records sharing one object id (scene mapping contract 6): how many objects several records carry; those where two or more records
- carry quantities (may be counted twice across packages); point records of one sheet farther apart than the unit tolerance."""
+ carry quantities (may be counted twice across packages); point records of one sheet farther apart than the unit tolerance.
+ An id that looks like a bare CAD handle is one object per drawing (registration 20261017-0215): the same handle on two drawings is
+ listed as a suspected handle collision, not as one object. Other ids (box numbers, identity keys) stay one object across drawings;
+ so does a handle with a record whose drawing is unknown (unlocated), so a real double count is not hidden."""
+ drawing_of = {s['id']: s.get('source_id') or s['id'].split('|', 1)[0] for s in view.get('scenes', [])}
  by_id = defaultdict(list)
  for o in view.get('objects', []): by_id[o['id']].append(o)
- shared = {k: v for k, v in sorted(by_id.items()) if len(v) > 1}
+ groups, collisions = {}, []
+ for k, v in sorted(by_id.items()):
+  drs = [drawing_of.get(o.get('scene_id')) for o in v]
+  if len(v) > 1 and HANDLE_LIKE.fullmatch(str(k)) and None not in drs and len(set(drs)) > 1:
+   for d in sorted(set(drs)): groups[(k, d)] = [o for o, x in zip(v, drs) if x == d]
+   carrying = sorted({x for o, x in zip(v, drs) if o.get('quantities')})
+   if len(carrying) > 1: collisions.append({'object_id': k, 'drawings': carrying, 'records': [o['catalog_key'] for o in v if o.get('quantities')]})
+  else: groups[(k, None)] = v
+ shared = {key: v for key, v in groups.items() if len(v) > 1}
  units = {s['id']: s.get('coordinate_unit') for s in view.get('scenes', [])}
- multi = [{'object_id': k, 'records': [o['catalog_key'] for o in v if o.get('quantities')]} for k, v in shared.items() if sum(1 for o in v if o.get('quantities')) > 1]
+ multi = [{'object_id': k, **({'drawing': d} if d else {}), 'records': [o['catalog_key'] for o in v if o.get('quantities')]}
+          for (k, d), v in shared.items() if sum(1 for o in v if o.get('quantities')) > 1]
  apart = []
- for k, v in shared.items():
+ for (k, _), v in shared.items():
   per_scene = defaultdict(list)
   for o in v:
    if o.get('kind') == 'point' and o.get('scene_id') and o.get('points'): per_scene[o['scene_id']].append(o)
@@ -511,9 +525,13 @@ def shared_object_stats(view, cap=50):
    if len(clusters) > 1: apart.append({'scene': sid, 'object_id': k, 'positions': len(clusters), 'records': [o['catalog_key'] for o in os_]})
  out = {'objects': len(shared), 'records': sum(len(v) for v in shared.values()),
         'by_record_count': {str(n): c for n, c in sorted(Counter(len(v) for v in shared.values()).items())},
-        'multi_quantity': len(multi), 'coordinate_mismatch': len(apart)}
+        'multi_quantity': len(multi), 'coordinate_mismatch': len(apart), 'suspected_handle_collisions': len(collisions)}
  if multi: out.update(multi_quantity_rows=multi[:cap], warning=f'{len(multi)} 个实物有两条以上记录带数量，可能跨包重复计量，请核对 multi_quantity_rows')
  if apart: out['coordinate_mismatch_rows'] = apart[:cap]
+ if collisions:
+  out.update(suspected_handle_collision_rows=collisions[:cap],
+             collision_note=f'{len(collisions)} 个编号像 CAD 句柄，在不同图纸上重号且各带数量：按不同实物计，不算跨包重复，不计入 multi_quantity；'
+                            '如果它是跨图共用的全局编号，请改成不像句柄的写法（如加图纸或系统前缀），见 suspected_handle_collision_rows')
  return out
 
 
@@ -571,7 +589,8 @@ def main():
  if 'problems' in report: summary['problem_count'] = len(report['problems'])
  if 'mapping_warnings' in report: summary['mapping_warning_count'] = len(report['mapping_warnings'])
  so = report.get('shared_objects') or {}
- if so.get('multi_quantity') or so.get('coordinate_mismatch'): summary['shared_objects'] = {k: so[k] for k in ('objects', 'multi_quantity', 'coordinate_mismatch')}
+ if so.get('multi_quantity') or so.get('coordinate_mismatch') or so.get('suspected_handle_collisions'):
+  summary['shared_objects'] = {k: so[k] for k in ('objects', 'multi_quantity', 'coordinate_mismatch', 'suspected_handle_collisions')}
  print(json.dumps(summary, ensure_ascii=False)); return code
 
 

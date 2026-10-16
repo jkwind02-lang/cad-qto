@@ -92,8 +92,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/复核页待解决与对照审核.md",
-      "sha256": "c5bc3be06a9de45290b3c1df70b963438576799fb0d7145c2023b2d67c087d7c",
-      "bytes": 17787
+      "sha256": "7aabe96e18f4dfd8437be41be2f1a20f959d58cc2d756a94f94fd60b6bac531c",
+      "bytes": 18566
     },
     {
       "path": "_qto-shared-evidence/references/尺寸指向与尺寸链复核.md",
@@ -182,8 +182,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/build_comparison_view_from_tables.py",
-      "sha256": "2bc5445f11713a4e3f7c857bfafc5a12d8e70f81c2695f8f6ba206ecfbcd3697",
-      "bytes": 41422
+      "sha256": "4ba957af422853d43eb3382f22f3981b1ca5492f720b40c2d82cd32576ba7fb6",
+      "bytes": 43178
     },
     {
       "path": "_qto-shared-evidence/scripts/build_qto_review_html.py",
