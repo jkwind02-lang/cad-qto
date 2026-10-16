@@ -898,10 +898,13 @@ def issue_codes_within(row, allowed):
 # Registration 20261017-0031, K3 (decision 10-17, option B with a guard): fills without geometry are skipped and
 # annotations count at their insertion point, so one HATCH or label no longer leaves the whole block unscoped. Such
 # an extent is incomplete: callers keep an instance whose insertion point lies in scope even when this box misses it.
+# Added after checkpoint 0 (decision 10-17): SPLINE, DIMENSION, REGION and other rows without geometry count by a valid
+# extraction bbox3d (often just their anchor point), noted as incomplete too; without one they still leave the block unknown.
 DYNAMIC_STATE_CODES = frozenset({"dynamic_state_not_evaluated", "anonymous_block_state_unverified"})
 EXTENT_FILL_TYPES = frozenset({"HATCH", "SOLID"})
 EXTENT_ANNOTATION_TYPES = frozenset({"TEXT", "MTEXT", "ATTDEF", "ATTRIB", "POINT"})
-EXTENT_NOTES = {"fill_skipped": "包围盒未含填充", "annotation_as_insertion_point": "注记按插入点计"}
+EXTENT_NOTES = {"fill_skipped": "包围盒未含填充", "annotation_as_insertion_point": "注记按插入点计",
+                "no_geometry_by_bbox3d": "无几何对象按取证包围盒计"}
 
 
 def is_empty_definition(item: Any) -> bool:
@@ -921,7 +924,8 @@ def definition_extent(name, definitions, origins, max_depth=16, cache=None, stac
     """(box, notes): the definition's local 3D extent and the incompleteness notes (keys of EXTENT_NOTES).
 
     A missing/unsupported child makes the extent unknown, not artificially small; so do SPLINE, DIMENSION, REGION
-    and other rows without geometry. HATCH/SOLID without geometry are skipped ("fill_skipped"); TEXT, MTEXT, ATTDEF,
+    and other rows without geometry unless the extraction gave them a valid bbox3d, which then counts
+    ("no_geometry_by_bbox3d"). HATCH/SOLID without geometry are skipped ("fill_skipped"); TEXT, MTEXT, ATTDEF,
     ATTRIB and POINT count at their insertion point ("annotation_as_insertion_point"). A definition holding only
     fills and annotations has no extent. empty: definitions known to exist with no entities (manifest serialized,
     direct_entity_count 0); a child insert of one draws nothing and adds nothing (registration 20261016-2359).
@@ -946,6 +950,8 @@ def definition_extent(name, definitions, origins, max_depth=16, cache=None, stac
         if kind == "fill":
             notes.add("fill_skipped")
             continue
+        if kind == "boxed":
+            notes.add("no_geometry_by_bbox3d")
         if kind == "insert":
             child=str(row.get("block_name") or "")
             box, child_notes = definition_extent(child,definitions,origins,max_depth,None,(*stack,name),empty,allowed_insert_codes)
@@ -963,7 +969,8 @@ def definition_extent(name, definitions, origins, max_depth=16, cache=None, stac
 
 def extent_row_kind(row, empty=frozenset(), allowed_insert_codes=frozenset()):
     """How one definition row enters definition_extent: (kind, box). kind is skip (an empty child definition),
-    annotation (box = insertion point), fill (skipped), insert (recurse), solid (box = bbox3d) or unknown."""
+    annotation (box = insertion point), fill (skipped), insert (recurse), solid (box = bbox3d), boxed (a row without
+    geometry that has a valid extraction bbox3d) or unknown."""
     entity_type = str(row.get("entity_type") or "").upper()
     is_insert = entity_type == "INSERT"
     if (is_insert and str(row.get("block_name") or "") in empty
@@ -977,6 +984,8 @@ def extent_row_kind(row, empty=frozenset(), allowed_insert_codes=frozenset()):
         return "annotation", [*anchor, *anchor]
     if entity_type in EXTENT_FILL_TYPES and (unsupported or row.get("geometry") is None or not _valid_box3(row.get("bbox3d"))):
         return "fill", None
+    if not is_insert and row.get("geometry") is None and _valid_box3(row.get("bbox3d")):
+        return "boxed", list(row["bbox3d"])   # SPLINE, DIMENSION, REGION...: the extraction box, often only an anchor
     # In particular, an array INSERT's first cell is not its envelope.
     # Keep the parent unpruned so adapters can retain unresolved instances.
     if unsupported and not (is_insert and issue_codes_within(row, allowed_insert_codes)):
@@ -990,14 +999,14 @@ def extent_row_kind(row, empty=frozenset(), allowed_insert_codes=frozenset()):
 
 class DefinitionExtentFolder:
     """Streaming stand-in for one definition's rows, for callers that cannot keep a large definition stream in
-    memory (the point coverage ledger): non-INSERT rows fold into at most four synthetic rows and INSERT rows are
+    memory (the point coverage ledger): non-INSERT rows fold into at most five synthetic rows and INSERT rows are
     kept with the keys definition_extent reads, so definition_extent over rows() gives the same (box, notes)."""
     INSERT_KEYS = ("record_id", "entity_handle", "entity_type", "block_name", "layer", "x", "y", "z", "rotation",
                    "scale_factors", "extrusion", "insert_matrix_wcs", "geometry_issues", "geometry_issue_codes", "geometry_status")
 
     def __init__(self, empty=frozenset(), allowed_insert_codes=frozenset()):
         self.empty, self.allowed = empty, allowed_insert_codes
-        self.solid = self.annotation = None
+        self.solid = self.annotation = self.boxed = None
         self.fill = self.unknown = False
         self.inserts = []
 
@@ -1017,6 +1026,8 @@ class DefinitionExtentFolder:
             self.annotation = self._union(self.annotation, box)
         elif kind == "solid":
             self.solid = self._union(self.solid, box)
+        elif kind == "boxed":
+            self.boxed = self._union(self.boxed, box)
 
     def rows(self):
         out = []
@@ -1024,6 +1035,8 @@ class DefinitionExtentFolder:
             out.append({"entity_type": "SPLINE", "geometry": None})
         if self.solid is not None:
             out.append({"entity_type": "LINE", "geometry": True, "bbox3d": self.solid})
+        if self.boxed is not None:
+            out.append({"entity_type": "REGION", "geometry": None, "bbox3d": self.boxed})
         if self.annotation is not None:
             for corner in (self.annotation[:3], self.annotation[3:]):
                 out.append({"entity_type": "POINT", "x": corner[0], "y": corner[1], "z": corner[2]})
@@ -1045,7 +1058,7 @@ def extent_note_labels(notes):
 
 # Sheet placement shared by the point coverage ledger and the negative-evidence search (registration 20261017-0012).
 PLACEMENT_GEOMETRY = "图形范围中心"
-PLACEMENT_PARTIAL = "图形范围中心（范围不完整：未含填充或注记按插入点计）"
+PLACEMENT_PARTIAL = "图形范围中心（范围不完整：未含填充、注记按插入点计或无几何对象按取证包围盒计）"
 PLACEMENT_INSERT = "插入点（定不出图形范围）"
 
 

@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qto_cad_geometry as cad_geometry  # noqa: E402
 
-VERSION = '1.1.1'
+VERSION = '1.1.2'
 INPUT_SCHEMA, OUTPUT_SCHEMA = 'qto-negative-search-input/1.0', 'qto-negative-search/1.0'
 KINDS = ('spec', 'tray', 'box', 'model', 'pipe', 'text', 'block')
 SHEET_KINDS = ('平面', '系统图', '表与说明', '图例', '详图', '其他')

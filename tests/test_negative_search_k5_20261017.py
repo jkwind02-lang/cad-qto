@@ -94,8 +94,8 @@ def test_far_base_point_block_is_placed_by_its_geometry_like_the_ledger(tmp_path
     esd = by_id(data)['ESD']['result']
     assert esd['hits'] == 2 and esd['hits_by_sheet_kind'] == {'图例': 2}      # not 台账外 by the far insertion point
     bases = {h['handle']: h['placement_basis'] for h in esd['samples']}
-    assert bases == {'E1': '图形范围中心', 'E2': '图形范围中心（范围不完整：未含填充或注记按插入点计）'}
-    assert esd['placement_basis_counts'] == {'图形范围中心': 1, '图形范围中心（范围不完整：未含填充或注记按插入点计）': 1}
+    assert bases == {'E1': '图形范围中心', 'E2': '图形范围中心（范围不完整：未含填充、注记按插入点计或无几何对象按取证包围盒计）'}
+    assert esd['placement_basis_counts'] == {'图形范围中心': 1, '图形范围中心（范围不完整：未含填充、注记按插入点计或无几何对象按取证包围盒计）': 1}
     # an attribute value travels with its INSERT
     name = by_id(data)['NAME']['result']['samples'][0]
     assert (name['sheet'], name['placement_basis']) == ('LG', '图形范围中心')

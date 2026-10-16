@@ -601,6 +601,7 @@ SOLID_ROW = {'entity_type': 'SOLID', 'geometry': None, 'geometry_status': 'unsup
 TEXT_ROW = {'entity_type': 'TEXT', 'geometry': None, 'x': -500, 'y': 50, 'z': 0, 'bbox3d': [-500, 50, 0, -500, 50, 0]}
 SPLINE_ROW = {'entity_type': 'SPLINE', 'geometry': None, 'geometry_status': 'unsupported',
               'geometry_issues': ['未测'], 'geometry_issue_codes': ['spline_not_measured']}
+DIM_ROW = {'entity_type': 'DIMENSION', 'geometry': None, 'bbox3d': [300, 50, 0, 300, 50, 0]}   # as extracted: its anchor only
 
 
 @pytest.mark.parametrize('rows,box,notes', [
@@ -608,8 +609,15 @@ SPLINE_ROW = {'entity_type': 'SPLINE', 'geometry': None, 'geometry_status': 'uns
     ([LINE_ROW, HATCH_ROW, SOLID_ROW], [0, 0, 0, 100, 100, 0], {'fill_skipped'}),
     ([LINE_ROW, TEXT_ROW], [-500, 0, 0, 100, 100, 0], {'annotation_as_insertion_point'}),
     ([HATCH_ROW, TEXT_ROW], None, set()),                    # only fills and labels: still no extent
-    ([LINE_ROW, HATCH_ROW, SPLINE_ROW], None, set()),          # a spline still leaves the whole block unknown
+    ([LINE_ROW, HATCH_ROW, SPLINE_ROW], None, set()),          # a spline without a box still leaves the block unknown
     ([LINE_ROW, {**TEXT_ROW, 'x': None}], None, set()),         # a label without a position cannot be placed
+    # after checkpoint 0 (decision 10-17): a row without geometry counts by a valid extraction bbox3d, noted incomplete
+    ([LINE_ROW, DIM_ROW], [0, 0, 0, 300, 100, 0], {'no_geometry_by_bbox3d'}),
+    ([LINE_ROW, {**SPLINE_ROW, 'bbox3d': [-50, -20, 0, 40, 10, 0]}], [-50, -20, 0, 100, 100, 0], {'no_geometry_by_bbox3d'}),
+    ([LINE_ROW, {**DIM_ROW, 'bbox3d': [300, 50, 0, 300, 50]}], None, set()),         # a malformed box is no box
+    ([LINE_ROW, {**DIM_ROW, 'bbox3d': [300, 50, 0, float('nan'), 50, 0]}], None, set()),
+    ([LINE_ROW, {**HATCH_ROW, 'bbox3d': [0, 0, 0, 900, 900, 0]}], [0, 0, 0, 100, 100, 0], {'fill_skipped'}),   # fills stay skipped
+    ([HATCH_ROW, TEXT_ROW, DIM_ROW], [-500, 50, 0, 300, 50, 0], {'fill_skipped', 'annotation_as_insertion_point', 'no_geometry_by_bbox3d'}),
 ])
 def test_definition_extent_rules(rows, box, notes):
     got_box, got_notes = geometry.definition_extent('B', {'B': rows}, {})
@@ -620,9 +628,9 @@ def test_definition_extent_rules(rows, box, notes):
 def test_child_notes_reach_the_parent_and_the_streaming_folder_agrees():
     child_insert = {'entity_type': 'INSERT', 'block_name': 'C', 'x': 1000, 'y': 0, 'z': 0,
                     'rotation': 0, 'scale_factors': [1, 1, 1], 'extrusion': [0, 0, 1]}
-    definitions = {'P': [LINE_ROW, child_insert], 'C': [LINE_ROW, HATCH_ROW, TEXT_ROW]}
+    definitions = {'P': [LINE_ROW, child_insert, DIM_ROW], 'C': [LINE_ROW, HATCH_ROW, TEXT_ROW]}
     box, notes = geometry.definition_extent('P', definitions, {})
-    assert box == [0, 0, 0, 1100, 100, 0] and set(notes) == {'fill_skipped', 'annotation_as_insertion_point'}
+    assert box == [0, 0, 0, 1100, 100, 0] and set(notes) == {'fill_skipped', 'annotation_as_insertion_point', 'no_geometry_by_bbox3d'}
     folded = {}
     for name, rows in definitions.items():
         folder = geometry.DefinitionExtentFolder()
@@ -630,7 +638,7 @@ def test_child_notes_reach_the_parent_and_the_streaming_folder_agrees():
             folder.add(row)
         folded[name] = folder.rows()
     assert geometry.definition_extent('P', folded, {}) == (box, notes)
-    assert len(folded['C']) <= 4
+    assert len(folded['C']) <= 5 and any(row['entity_type'] == 'REGION' for row in folded['P'])
 
 
 @pytest.mark.parametrize('box,notes,anchor,kept', [
@@ -715,7 +723,7 @@ def test_k3_coverage_ledger_places_sheets_by_the_same_extent(tmp_path):
     assert done.returncode == 0, done.stdout + done.stderr
     report = json.loads((tmp_path / 'out/点位覆盖台账.json').read_text(encoding='utf-8'))
     # PLAINOUT complete; TXTREACH, HGUARD, HATCHED, HATCHFAR incomplete; FILLTEXT and SPL have no extent
-    assert report['placement_basis_counts'] == {'图形范围中心': 1, '图形范围中心（范围不完整：未含填充或注记按插入点计）': 4,
+    assert report['placement_basis_counts'] == {'图形范围中心': 1, '图形范围中心（范围不完整：未含填充、注记按插入点计或无几何对象按取证包围盒计）': 4,
                                                 '插入点（定不出图形范围）': 2}
     mismatch = {w['id']: (w['insert_sheet'], w['geometry_sheet']) for w in report['warnings']['insert_geometry_sheet_mismatch']}
     assert mismatch == {f"PT-CAD-{h['HGUARD'].upper()}": ('P1', 'R'), f"PT-CAD-{h['PLAINOUT'].upper()}": ('P1', 'R')}

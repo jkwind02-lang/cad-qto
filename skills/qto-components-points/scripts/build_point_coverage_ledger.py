@@ -27,7 +27,7 @@ from search_negative_evidence import OUTPUT_SCHEMA as SEARCH_SCHEMA, record_prob
 
 SCHEMA = "qto-point-coverage-input/1.0"
 LEDGER_SCHEMA = "qto-point-coverage-ledger/1.0"
-VERSION = "qto-point-coverage-ledger/1.3.1"
+VERSION = "qto-point-coverage-ledger/1.3.2"
 DESTINATIONS = ("已计", "有据排除", "待识别", "版本冲突", "无去向")
 DISPOSITION_DEST = {"adopted": "已计", "merged": "已计", "excluded": "有据排除", "not_applicable": "有据排除",
                     "duplicate_excluded": "有据排除", "unresolved": "待识别"}
