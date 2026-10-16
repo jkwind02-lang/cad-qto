@@ -11,7 +11,7 @@
       "name": "cad-qto",
       "source": "./",
       "description": "CAD基础读取、全专业算量与明细复核",
-      "version": "0.3.7"
+      "version": "0.3.8"
     }
   ]
 }
