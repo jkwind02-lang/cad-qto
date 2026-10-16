@@ -35,15 +35,16 @@ def note(space, value, x, y, layer='NOTE'):
     space.add_text(value, dxfattribs={'insert': (x, y), 'height': 100, 'layer': layer})
 
 
-def build(tmp_path, rules_for, draw):
-    """draw(doc, msp) -> {name: physical_id}; rules_for(ids) -> (rules, {rule_id: (decision, object_ids)})."""
+def build(tmp_path, rules_for, draw, scope=None, partial=False):
+    """draw(doc, msp) -> {name: physical_id}; rules_for(ids) -> (rules, {rule_id: (decision, object_ids)}).
+    partial: the extractor reports PARTIAL (exit 3) for a MINSERT and still writes the package."""
     tmp_path.mkdir(parents=True, exist_ok=True)
     doc = ezdxf.new('R2013'); doc.units = 4
     ids = draw(doc, doc.modelspace())
     dxf = tmp_path / 'side.dxf'; doc.saveas(dxf)
     neutral = tmp_path / 'neutral'
     extracted = run(SHARED / 'extract_cad_neutral.py', '--source-dxf', dxf, '--output-dir', neutral)
-    assert extracted.returncode == 0, extracted.stdout + extracted.stderr
+    assert extracted.returncode in ((0, 3) if partial else (0,)), extracted.stdout + extracted.stderr
     src = sha(dxf)
     rules, records = rules_for(ids)
     entries = [{'adjudication_id': f'M-{rid}', 'subject_id': rid, 'professional_owner': 'qto-components-points',
@@ -60,7 +61,7 @@ def build(tmp_path, rules_for, draw):
     lp = tmp_path / 'ledger.json'; lp.write_text(json.dumps(ledger, ensure_ascii=False), encoding='utf-8')
     profile = {'schema_version': 'qto-component-recognition-profile/1.0', 'profile_id': 'P', 'profile_version': '1',
                'expected_source_sha256': src, 'adjudication_ledger': {'ledger_id': 'L', 'ledger_version': '1', 'sha256': sha(lp)},
-               'scope': {'layout': 'Model'}, 'unit': {'factor_to_output': 0.001, 'output_coordinate_unit': 'm', 'source_id': 'INSUNITS=4'},
+               'scope': scope or {'layout': 'Model'}, 'unit': {'factor_to_output': 0.001, 'output_coordinate_unit': 'm', 'source_id': 'INSUNITS=4'},
                'rules': [{'adjudication_id': f'M-{r["rule_id"]}', **r} for r in rules]}
     pp = tmp_path / 'profile.json'; pp.write_text(json.dumps(profile, ensure_ascii=False), encoding='utf-8')
     out = tmp_path / 'out'
@@ -216,6 +217,67 @@ def test_exclude_rule_can_take_a_side_note(tmp_path):
     report, disp, adopted = outcome(result, out)
     assert disp[ids['B2']]['disposition'] == 'excluded' and disp[ids['B2']]['side_text']['text'] == '照明'
     assert ids['B2'] not in adopted and adopted[ids['B0']]['instance_key'] == '1AL1'
+
+
+# ---------- Codex retest R2: the pre-pass prunes by the main walk's scope test ----------
+
+BOUNDS = {'layout': 'Model', 'bounds': {'xmin': 900, 'xmax_exclusive': 1400, 'ymin': -100, 'ymax_exclusive': 100}}
+
+
+def dev_rules(ids):
+    rule = {'rule_id': 'DEV', 'block_pattern': '^(DEV|FAR)$', 'decision': 'include', 'category': '配电箱', 'system': '动力',
+            'spec': '箱', 'unit': '台', 'quantity_level': '规则推算量',
+            'text_condition': {'pattern': r'^DB-\w+$', 'radius': 0.5, 'as_instance_key': True, 'basis': '箱号作实例键'},
+            'network_ports': [{'port_id_suffix': 'NA', 'network_disposition': 'not_applicable', 'reason': '无端口'}]}
+    return [rule], {'DEV': ('include', sorted(ids.values()))}
+
+
+def draw_bounded(second):
+    """Codex's boundary drawing: 50x50 DEV at (1000,0) inside the package, note DB-BOUND at (1300,0); a second
+    candidate 0.3 m on the other side of the note, outside the package (pruned), or a MINSERT there (no complete box)."""
+    def draw(doc, msp):
+        doc.blocks.new('DEV').add_lwpolyline([(-25, -25), (25, -25), (25, 25), (-25, 25)], close=True)
+        ids = {'IN': 'PT-CAD-' + msp.add_blockref('DEV', (1000, 0)).dxf.handle}
+        if second == 'outside':
+            ids['OUT'] = 'PT-CAD-' + msp.add_blockref('DEV', (1600, 0)).dxf.handle
+        elif second == 'minsert':
+            ref = msp.add_blockref('DEV', (1600, 0)); ref.grid(size=(1, 2), spacing=(100, 100))
+            ids['OUT'] = 'PT-CAD-' + ref.dxf.handle
+        elif second == 'far_base':   # base point outside the package, drawing inside it
+            doc.blocks.new('FAR').add_lwpolyline([(-725, -25), (-675, -25), (-675, 25), (-725, 25)], close=True)
+            ids['FAR'] = 'PT-CAD-' + msp.add_blockref('FAR', (1900, 0)).dxf.handle
+            note(msp, 'DB-FAR', 1900, 200)
+        note(msp, 'DB-BOUND', 1300, 0)
+        return ids
+    return draw
+
+
+def test_out_of_package_candidate_does_not_claim_the_note(tmp_path):
+    ids, result, out = build(tmp_path, dev_rules, draw_bounded('outside'), scope=BOUNDS)
+    report, disp, adopted = outcome(result, out)
+    assert sorted(disp) == [ids['IN']]                       # the main walk prunes the outside block
+    assert adopted[ids['IN']]['instance_key'] == 'DB-BOUND'
+    assert adopted[ids['IN']]['side_text']['distance'] == pytest.approx(0.3)
+    assert report['side_text_binding']['status_counts'] == {'已绑定': 1}
+
+
+def test_far_base_point_with_drawing_inside_still_binds(tmp_path):
+    ids, result, out = build(tmp_path, dev_rules, draw_bounded('far_base'), scope=BOUNDS)
+    report, disp, adopted = outcome(result, out)
+    # FAR's drawing sits at 1175..1225, inside the package although its base point (1900,0) is not: an insertion-point
+    # filter would drop it. Distances are measured from the base point: DB-FAR is 0.2 m away, DB-BOUND 0.6 m.
+    assert sorted(disp) == sorted([ids['IN'], ids['FAR']])
+    assert adopted[ids['IN']]['instance_key'] == 'DB-BOUND' and adopted[ids['FAR']]['instance_key'] == 'DB-FAR'
+    assert report['side_text_binding']['status_counts'] == {'已绑定': 2}
+
+
+def test_candidate_without_a_complete_box_is_kept(tmp_path):
+    ids, result, out = build(tmp_path, dev_rules, draw_bounded('minsert'), scope=BOUNDS, partial=True)
+    report, disp, adopted = outcome(result, out)
+    # The MINSERT has no complete envelope, so the main walk keeps it (unresolved) and so does the pre-pass:
+    # it still claims the note, and the inside block stays unresolved rather than being bound by guess.
+    assert disp[ids['OUT']]['disposition'] == 'unresolved'
+    assert disp[ids['IN']]['disposition'] == 'unresolved' and disp[ids['IN']]['side_text']['status'] == '文字共用'
 
 
 # ---------- rejected inputs and the unchanged path ----------

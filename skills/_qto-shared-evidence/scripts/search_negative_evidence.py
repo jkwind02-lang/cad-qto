@@ -12,7 +12,7 @@ import argparse, csv, hashlib, json, re, sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-VERSION = '1.0.0'
+VERSION = '1.0.1'
 INPUT_SCHEMA, OUTPUT_SCHEMA = 'qto-negative-search-input/1.0', 'qto-negative-search/1.0'
 KINDS = ('spec', 'tray', 'box', 'model', 'pipe', 'text', 'block')
 SHEET_KINDS = ('平面', '系统图', '表与说明', '图例', '详图', '其他')
@@ -353,10 +353,11 @@ def build(cfg, base):
                            'sheets': len(sheets[d['id']]), 'sheet_kinds': dict(kinds), **({'neutral': dr['neutral'], 'unserialized_blocks': dr['unserialized_blocks']} if dr else {})})
     searched = {d['id'] for d in drawings if data.get(d['id']) is not None}
     uncovered = [{'drawing': x, 'reason': '没给中性取证包' if x not in ids else '中性取证包读不了'} for x in declared if x not in searched]
-    unread = [{'drawing': d['id'], 'kind': k, 'layer': lay, 'class': cls, 'count': c} for d in drawings if data.get(d['id'])
-              for (k, lay, cls), c in sorted(data[d['id']]['unread'].items())]
+    unread = [{'drawing': d['id'], 'role': d.get('role', 'scope'), 'kind': k, 'layer': lay, 'class': cls, 'count': c}
+              for d in drawings if data.get(d['id']) for (k, lay, cls), c in sorted(data[d['id']]['unread'].items())]
     scope_ids = {d['id'] for d in drawings if d.get('role', 'scope') == 'scope'}
-    may_contain = [u for u in unread if u['class'] == 'may_contain' and u['drawing'] in scope_ids]
+    roles = {d['id']: d.get('role', 'scope') for d in drawings}
+    may_contain = blocking_unread(unread, roles)
     kinds_searched = sorted({s['kind'] for d in drawings if d['id'] in searched and d['id'] in scope_ids for s in sheets[d['id']]})
     records, stale = [], []
     for i in items:
@@ -391,7 +392,7 @@ def build(cfg, base):
                         'layers': '全部图层', 'reads': ['布局图元文字', '块定义文字（按插入次数展开，含嵌套）', '块属性（全部属性值）']},
             'secondary': {'description': var['second_note'], 'patterns': [p.pattern for p in var['second']], 'exclude': [p.pattern for p in var['second_exclude']]} if var['second'] else None,
             'method': f'中性取证包检索：_qto-shared-evidence/scripts/search_negative_evidence.py {VERSION}；布局、块定义（按插入次数展开，含嵌套）、块属性三层，命中按图页表定位',
-            'drawings_searched': sorted(searched), 'sheet_kinds_searched': kinds_searched,
+            'drawings_searched': sorted(searched), 'drawing_roles': roles, 'sheet_kinds_searched': kinds_searched,
             'result': {'hits': n, 'hits_by_sheet_kind': by_kind, 'hits_by_group': by_group, 'context_hits': sum(1 for h in hs if not h['scope']),
                        'samples': hs[:SAMPLES], 'non_drawing_hits': len(stamp), 'non_drawing_samples': stamp[:SAMPLES], 'unplaced_block_hits': [{'drawing': a, 'block': b, 'texts': c} for (a, b), c in sorted(unplaced.items())],
                        'secondary_hits': sn, 'secondary_samples': scoped[:SAMPLES],
@@ -406,6 +407,17 @@ def build(cfg, base):
     return {'schema': OUTPUT_SCHEMA, 'tool': {'script': '_qto-shared-evidence/scripts/search_negative_evidence.py', 'version': VERSION},
             'scope': scope_info, 'records': records, 'reverse_check': reverse,
             'summary': dict(Counter(r['status'] for r in records))}
+
+
+def blocking_unread(unread, roles=None):
+    """Unread objects that keep a search from full coverage: may-contain objects on scope drawings (Codex retest R1).
+    Used by build() and record_problems(), so the generator and both consumers judge alike. A context drawing's unread
+    objects stay listed but decide nothing; an entry counts as context only when it says role context and, where the
+    record gives drawing_roles, that drawing is context there too. Entries without a role (records written before
+    1.0.1) count as scope and still block."""
+    roles = roles if isinstance(roles, dict) else {}
+    return [u for u in unread if isinstance(u, dict) and u.get('class') == 'may_contain'
+            and not (u.get('role') == 'context' and (not roles or roles.get(u.get('drawing')) == 'context'))]
 
 
 def record_problems(rec):
@@ -431,7 +443,7 @@ def record_problems(rec):
         return ['的检索状态非法']
     if (status == 'hit') != (hits > 0):
         return ['的检索状态与命中数不符']
-    if status == 'no_hit_full' and (rec['uncovered'] or any(isinstance(u, dict) and u.get('class') == 'may_contain' for u in result['unread'])):
+    if status == 'no_hit_full' and (rec['uncovered'] or blocking_unread(result['unread'], rec.get('drawing_roles'))):
         return ['有未覆盖的图或可能含图面内容的未读对象，检索状态只能是待确认']
     if status == 'no_hit_full' and result.get('secondary_hits') and (result.get('secondary_unjudged') != 0 or result.get('secondary_same_object') != 0):
         return ['的次级命中没有逐条判为非同一对象，检索状态只能是待确认']
@@ -455,7 +467,7 @@ def csv_row(r, scope):
             '未插入块定义命中': '；'.join(f'{u["drawing"]} {u["block"]} {u["texts"]} 处' for u in res['unplaced_block_hits']) or '无',
             '次级检索': (f'{r["secondary"]["description"]}：{res["secondary_hits"]}；' + sample(res['secondary_samples'])) if r['secondary'] else '无',
             '已有成果比对': '；'.join(f'{e["source"]} {e["id"]} {e["text"]}（{e["match"]}）' for e in res['existing_results']) or '无',
-            '未能读取': '；'.join(f'{u["drawing"]} {u["kind"]} {u["count"]}（{u["layer"] or "无图层"}，{"非图面内容" if u["class"] == "non_drawing" else "可能含图面内容"}）' for u in res['unread']) or '无',
+            '未能读取': '；'.join(f'{u["drawing"]} {u["kind"]} {u["count"]}（{u["layer"] or "无图层"}，{"非图面内容" if u["class"] == "non_drawing" else "可能含图面内容"}{"，参照图，不改状态" if u.get("role") == "context" else ""}）' for u in res['unread']) or '无',
             '未覆盖': '；'.join(f'{u["drawing"]}（{u["reason"]}）' for u in r['uncovered']) or '无',
             '检索状态': r['status_text'] + (f'（{"；".join(r["status_reasons"])}）' if r['status_reasons'] else ''),
             '次级命中判定': '无次级命中' if not res['secondary_hits'] else

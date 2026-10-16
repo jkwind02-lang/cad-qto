@@ -139,7 +139,7 @@ def test_stamps_are_non_drawing_and_nothing_found_is_full_coverage(tmp_path):
     _, _, data, out = run(tmp_path)
     d = by_id(data)['D']
     assert d['result']['hits'] == 0 and d['status'] == 'no_hit_full'
-    assert d['result']['unread'] == [{'drawing': 'D1', 'kind': '代理对象', 'layer': '0-电子印章', 'class': 'non_drawing', 'count': 1}]
+    assert d['result']['unread'] == [{'drawing': 'D1', 'role': 'scope', 'kind': '代理对象', 'layer': '0-电子印章', 'class': 'non_drawing', 'count': 1}]
     assert data['reverse_check']['requested'] == data['reverse_check']['records'] == 4 and not data['reverse_check']['missing']
     rows = list(csv.DictReader(open(out / '否定结论检索记录.csv', encoding='utf-8-sig')))
     assert [r['检索记录编号'] for r in rows] == ['NS-A', 'NS-B', 'NS-C', 'NS-D'] and rows[3]['检索状态'] == '全覆盖未命中'
@@ -154,7 +154,7 @@ def test_missing_drawing_and_unread_drawing_content_make_it_pending(tmp_path):
     ole = LAYOUT + [rec('X2', 'OLE2FRAME', 'E-PLAN', 700, 700)]
     _, _, data, _ = run(tmp_path / 'b', drawings=[package(tmp_path / 'b', 'D1', layout=ole)])
     d = by_id(data)['D']
-    assert d['status'] == 'no_hit_partial' and {'drawing': 'D1', 'kind': '嵌入对象', 'layer': 'E-PLAN', 'class': 'may_contain', 'count': 1} in d['result']['unread']
+    assert d['status'] == 'no_hit_partial' and {'drawing': 'D1', 'role': 'scope', 'kind': '嵌入对象', 'layer': 'E-PLAN', 'class': 'may_contain', 'count': 1} in d['result']['unread']
     over = [{'drawing': 'D1', 'entity_type': 'OLE2FRAME', 'layer': 'E-PLAN', 'class': 'non_drawing', 'basis': '人工核对：图签 logo'}]
     _, _, data, _ = run(tmp_path / 'c', drawings=[package(tmp_path / 'c', 'D1', layout=ole)], unread_overrides=over)
     assert by_id(data)['D']['status'] == 'no_hit_full'

@@ -674,11 +674,11 @@ def review_colocated_instances(dispositions, adopted, endpoint_instances, geomet
 
 def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any]]], origins: dict[str, list[float]],
                     rules: list[dict[str, Any]], target_layout: str, factor: float, max_depth: int,
-                    bounds: dict[str, float] | None) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+                    bounds: dict[str, float] | None, scope_of: Any) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     """Pre-pass for rules with text_condition (registrations 20261015-0830, 1426).
 
-    Candidates are the instances a text rule could apply to (block, layer, parent and object_ids match); paths and
-    ids are built exactly as in the main walk. Texts are layout texts plus the texts inside the definitions walked
+    Candidates are the instances a text rule could apply to (block, layer, parent and object_ids match); paths,
+    ids and the scope test (scope_of, from the main walk) are exactly as in the main walk. Texts are layout texts plus the texts inside the definitions walked
     through on the way to a candidate (containers); the walk does not enter a candidate block, so its own label is
     not a side note. Within the radius only: one text near two candidates, or two texts near one candidate, leaves
     the candidate unresolved; no text lets the text rules fall away. Nothing is bound by nearest distance."""
@@ -701,6 +701,8 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
 
     def walk(insert: dict[str, Any], parent_matrix: tuple[float, ...], path: str, stack: tuple[str, ...],
              parent_block: str, inherited_layer: str) -> None:
+        if not scope_of(insert, parent_matrix)[0]:
+            return   # pruned with its subtree exactly as in the main walk, so it claims no side note (Codex retest R2)
         block_name = str(insert.get("block_name") or "")
         layer = str(insert.get("layer") or "")
         effective_layer = inherited_layer if layer in {"", "0"} and inherited_layer else layer
@@ -871,14 +873,24 @@ def main() -> int:
         geometry: dict[str, dict[str, Any]] = {}
         seen_blocks: dict[str, set[str]] = defaultdict(set)   # block name -> scoped physical ids
         dynamic_released: dict[str, set[str]] = defaultdict(set)   # rule id -> block names released by its adjudication
-        side_texts, side_summary = bind_side_texts(layout_path, definitions, origins, rules, target_layout, factor,
-                                                   max_depth, bounds)
 
         def transformed_box(box, matrix):
             return cad_geometry.transform_bounds(box, matrix)
 
         def definition_box(name, stack=()):
             return cad_geometry.definition_bounds(name, definitions, origins, max_depth, block_boxes, stack)
+
+        def scope_of(insert: dict[str, Any], parent_matrix: tuple[float, ...]) -> tuple[bool, list[float] | None]:
+            """Scope test of one INSERT, shared by the main walk and the side-note pre-pass (Codex retest R2): the
+            transformed geometry box must meet the scope bounds, so a far base point with the drawing inside still
+            counts. Unsupported INSERT geometry (e.g. MINSERT) or no definition box gives no complete instance
+            envelope and cannot justify pruning: the instance stays."""
+            block_name = str(insert.get("block_name") or "")
+            matrix = compose(parent_matrix, matrix_for_insert(insert, origins.get(block_name, [0.0, 0.0, 0.0])))
+            local_box = definition_box(block_name)
+            world_box3d = transformed_box(local_box, matrix) if local_box and not insert.get("geometry_issues") else None
+            world_box = [world_box3d[0], world_box3d[1], world_box3d[3], world_box3d[4]] if world_box3d else None
+            return (bbox_intersects({"bbox": world_box}, bounds) if world_box else True), world_box
 
         def visit(
             insert: dict[str, Any],
@@ -901,12 +913,7 @@ def main() -> int:
             ]
             world_point = transform_point(local_anchor, parent_matrix)
             matrix = compose(parent_matrix, matrix_for_insert(insert, origins.get(block_name, [0.0, 0.0, 0.0])))
-            local_box = definition_box(block_name)
-            # Unsupported INSERT geometry (e.g. MINSERT) has no complete
-            # instance envelope; the first cell cannot justify scope pruning.
-            world_box3d = transformed_box(local_box, matrix) if local_box and not insert.get("geometry_issues") else None
-            world_box = [world_box3d[0], world_box3d[1], world_box3d[3], world_box3d[4]] if world_box3d else None
-            in_scope = bbox_intersects({"bbox": world_box}, bounds) if world_box else True
+            in_scope, world_box = scope_of(insert, parent_matrix)
             if not in_scope:
                 return  # only complete, conservative bounds allow pruning
             physical_id = f"PT-{path}"
@@ -1121,6 +1128,8 @@ def main() -> int:
                     False,
                 )
 
+        side_texts, side_summary = bind_side_texts(layout_path, definitions, origins, rules, target_layout, factor,
+                                                   max_depth, bounds, scope_of)
         top_insert_count = 0
         for row in load_stream(layout_path):
             if (
