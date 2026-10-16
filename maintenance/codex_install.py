@@ -1,4 +1,5 @@
-"""Codex-only install/verify/rollback. Uses the native CLI and fresh skills/list, no model turn.
+"""Codex-side install/verify/rollback, run by whichever host publishes (registration 20261016-1229).
+Uses the native CLI and fresh skills/list, no model turn.
 
 Never edits a plugin cache. A rollback re-installs a verified prior package through
 the same marketplace. Only this plugin's config table is restored, never config.toml.
@@ -321,14 +322,23 @@ def restore_release(section, check, record):
         return
     if verify_dir(current, snapshot, ['**/__pycache__/*.pyc'])['status'] == 'PASS':
         return
+    # A one-host release rollback (install_check release-rollback) moves Claude off this state first.
     if check['hosts']['Claude'].get('status') == '已安装并核对':
-        raise ReleaseError('Claude 已使用本次共同发布来源；须先协调共同发布回退，不能单侧改共同来源')
+        raise ReleaseError('Claude 已使用本次共同发布来源；须先协调共同发布回退（release-rollback），不能单侧改共同来源')
+    section['rollback_displaced_package'] = swap_in_previous_release(current, backup, snapshot, record, 'Codex')
+
+
+def swap_in_previous_release(current, backup, snapshot, record, label):
+    """Put the verified previous package back into the shared release directory; return the displaced path.
+
+    Shared by the Codex rollback and the Claude upgrade rollback of a one-host release install.
+    """
     if verify_dir(current, record)['status'] != 'PASS':
         raise ReleaseError('当前发布目录出现非本批次变化，拒绝覆盖')
     if current == current.parent or current.is_symlink() or getattr(current, 'is_junction', lambda: False)():
         raise ReleaseError('拒绝恢复根目录或目录联接')
-    stage = current.with_name(current.name + '_Codex恢复准备')
-    displaced = current.with_name(current.name + '_Codex回退前发布包')
+    stage = current.with_name(current.name + f'_{label}恢复准备')
+    displaced = current.with_name(current.name + f'_{label}回退前发布包')
     if stage.exists() or displaced.exists():
         raise ReleaseError('恢复临时目录已存在，未覆盖；请核对前次恢复状态')
     # Both exact absolute destinations stay in the known release parent; no recursive move across shells.
@@ -343,7 +353,7 @@ def restore_release(section, check, record):
     except OSError:
         displaced.rename(current)
         raise
-    section['rollback_displaced_package'] = str(displaced)
+    return str(displaced)
 
 
 def cmd_rollback(args, path, check, save):

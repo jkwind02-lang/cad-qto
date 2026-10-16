@@ -26,7 +26,7 @@
    - `python maintenance/release_package.py run-tests` 跑完整回归并按受测指纹记录；提交后指纹相同即可复用，字节有变就补测；
    - 提交信息写明维护宿主、模型和登记编号；
    - `release_package.py build --commit <完整提交号>` 从提交提取临时包，检查缺失、篡改、多余三类问题，生成 `发布来源.json` 和冻结的发布记录；`publish` 再替换唯一发布目录并保留上一版回滚包；
-   - 每个宿主只安装、核对、恢复自己的那一边：`python maintenance/install_check.py init|claude-install|claude-verify|claude-rollback`。Codex 一侧由 Codex 执行并回写，Codex 使用 `codex-install|codex-verify|codex-rollback`；`--codex-home` 指定隔离环境，隔离演练另给 `--check-file`，不覆盖正式核对记录。两边都核对通过才算双宿主发布完成。
+   - 一边发布、两边同步安装（2026-10-16 用户定）：发布宿主 `python maintenance/install_check.py init` 后运行 `release-install`，固定先装核 Claude、再装核 Codex；任一边失败，两边都恢复到本次之前的状态，不写完成。`release-verify` 重核两边，`release-rollback` 整批回退。单侧命令 `claude-install|claude-verify|claude-rollback`、`codex-install|codex-verify|codex-rollback` 只用于复核和单侧修复。隔离演练用 `--claude-config-dir`、`--codex-home`，另给 `--check-file`，不覆盖正式核对记录。两边都核对通过才算双宿主发布完成。
 8. **回写**：在登记文末追加「维护回写」节，逐行写固定字段：处理版本、处理状态（代码已修复 / 单侧已安装 / 双侧发布完成 / 部分修复 / 不修复）、需复跑（项目与包号，没有写"无"）、复跑状态、复跑记录，格式见[维护流程](docs/维护/维护流程.md)。`python maintenance/triage_issues.py --audit` 检查字段；`--resolve <文件>` 只在字段齐全且双侧发布完成（或不修复）时移入 `已处理/`。
 9. **释放锁**：`python maintenance/maint_lock.py release --commit <提交号>`，只有持锁会话能释放。
 
@@ -48,7 +48,7 @@ Git 钩子：每个克隆执行一次 `git config core.hooksPath .githooks`。�
 ## 边界
 
 - Git 推送、云端服务部署、上传项目资料都要用户明确授权，不因维护流程自动进行。
-- Claude 不改 Codex 的全局配置和安装，Codex 不改 Claude 的；共享源码由当前持锁者写入，另一方只读复核。协调结果写回安装核对记录或维护记录，不自动向另一个聊天发消息。
+- 两边的插件安装由持锁的发布宿主经 `install_check.py` 完成，只动本插件的安装项、市场和本插件配置表；不手改另一宿主的缓存，也不改它的其他全局配置。共享源码由当前持锁者写入，另一方只读复核；代码改动的交叉复测仍由改动方以外的宿主做。协调结果写回安装核对记录或维护记录，不自动向另一个聊天发消息。
 - 删除走回收站，先核对绝对路径、引用和占用，只处理清单中的确切目标。
 - 共享方法主体不把某个宿主专有的调用写成唯一可执行路径；宿主适配说明里可以出现 `$qto-*`、`/cad-qto:*` 等写法。
 - 审批：模型自填或无凭据的审批不算人工复核；人工数量复核以 `qto-human-review-evidence/1.0` 凭据为准，见[审批凭据契约](docs/维护/审批凭据契约.md)。

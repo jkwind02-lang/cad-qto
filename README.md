@@ -73,10 +73,10 @@ git clone https://github.com/jkwind02-lang/cad-qto.git
 
 仓库为私有，下载需要具备访问权限。根目录就是插件根目录，保留 `.codex-plugin/plugin.json`、`.claude-plugin/` 和完整 `skills/`；不要只复制单个专业目录。
 
-正式安装不直接装仓库工作区，而是先用 `python maintenance/release_package.py build --commit <提交号> --out <临时目录>` 从已提交版本提取发布包，再发布到本机发布目录后由各宿主安装（见[发布与安装](docs/维护/发布与安装.md)）：
+正式安装不直接装仓库工作区，而是先用 `python maintenance/release_package.py build --commit <提交号> --out <临时目录>` 从已提交版本提取发布包，再发布到本机发布目录，由发布宿主用 `python maintenance/install_check.py release-install` 一次装好两边并逐文件核对（见[发布与安装](docs/维护/发布与安装.md)）：
 
-- Claude Code：`claude plugin marketplace add <发布目录>`，再 `claude plugin install cad-qto@cad-qto-local`；或用 `python maintenance/install_check.py claude-install` 完成安装与逐文件核对。开发调试可用 `claude --plugin-dir <仓库>` 临时加载。
-- Codex：按 Codex 的本地插件流程从发布目录安装（Codex 一侧的安装适配由 Codex 维护）。
+- Claude Code：本地市场 `cad-qto-local`，插件 `cad-qto@cad-qto-local`；单独处理时用 `claude-install|claude-verify|claude-rollback`。开发调试可用 `claude --plugin-dir <仓库>` 临时加载。
+- Codex：个人市场 `personal`，插件 `cad-qto@personal`；单独处理时用 `codex-install|codex-verify|codex-rollback`。
 
 已有同名来源时先核对来源，避免覆盖其他插件。安装后确认实际版本、启用状态和运行路径，不能以GitHub更新替代本机安装验证。
 
