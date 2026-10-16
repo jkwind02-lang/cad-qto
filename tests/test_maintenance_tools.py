@@ -100,7 +100,7 @@ def mini(tmp_path,monkeypatch):
     write(repo/'运行文件清单.json',json.dumps(manifest_for(repo),ensure_ascii=False))
     git(repo,'init','-q');git(repo,'add','-A');git(repo,'commit','-qm','init')
     monkeypatch.setattr(maint_common,'REPO_ROOT',repo);monkeypatch.setattr(rp,'REPO_ROOT',repo)
-    commit=subprocess.run(['git','rev-parse','HEAD'],cwd=repo,capture_output=True,text=True).stdout.strip()
+    commit=subprocess.run(['git','rev-parse','HEAD'],cwd=repo,stdin=subprocess.DEVNULL,capture_output=True,text=True).stdout.strip()
     return repo,maint,commit
 
 
@@ -139,13 +139,13 @@ def test_build_refuses_dirty_tree_tampered_manifest_and_version_mismatch(mini,tm
     write(repo/'skills/_shared/x.py','print(2)\n')
     with pytest.raises(rp.ReleaseError,match='未提交'):
         rp.build(commit,tmp_path/'p1',maint,maint/'r',False,True)
-    git(repo,'commit','-qam','tamper');tampered=subprocess.run(['git','rev-parse','HEAD'],cwd=repo,capture_output=True,text=True).stdout.strip()
+    git(repo,'commit','-qam','tamper');tampered=subprocess.run(['git','rev-parse','HEAD'],cwd=repo,stdin=subprocess.DEVNULL,capture_output=True,text=True).stdout.strip()
     with pytest.raises(rp.ReleaseError,match='tampered'):
         rp.build(tampered,tmp_path/'p2',maint,maint/'r',False,True)
     assert not (tmp_path/'p2').exists()
     write(repo/'.claude-plugin/plugin.json',json.dumps({'name':'cad-qto','version':'0.2.9'}))
     write(repo/'skills/_shared/x.py','print(1)\n');git(repo,'commit','-qam','version')
-    mismatch=subprocess.run(['git','rev-parse','HEAD'],cwd=repo,capture_output=True,text=True).stdout.strip()
+    mismatch=subprocess.run(['git','rev-parse','HEAD'],cwd=repo,stdin=subprocess.DEVNULL,capture_output=True,text=True).stdout.strip()
     with pytest.raises(rp.ReleaseError,match='业务版本不一致'):
         rp.build(mismatch,tmp_path/'p3',maint,maint/'r',False,True)
     with pytest.raises(rp.ReleaseError,match='40'):
@@ -250,3 +250,28 @@ def test_resolve_moves_only_released_complete_entries(tmp_path,capsys):
     report=json.loads(capsys.readouterr().out)
     assert report['处理中']['total']==2 and report['处理中']['complete']==1
     assert report['已处理']=={'total':1,'complete':1,'incomplete':[]}
+
+
+def test_claim_and_resolve_take_file_names_and_full_paths_inside_their_folder(tmp_path,capsys):
+    """登记 20261016-0700：传完整路径不再误报同名；四种情况：完整路径、文件名、不存在、目标确有同名。"""
+    pending=tmp_path/'问题登记/待处理';doing=tmp_path/'问题登记/处理中';pending.mkdir(parents=True);doing.mkdir()
+    for name in ('a.md','b.md','c.md'):
+        (pending/name).write_text(BODY,encoding='utf-8')
+    run=lambda *args:triage_issues.main(['--maint-dir',str(tmp_path),*args])
+    assert run('--claim',str(pending/'a.md'))==0 and (doing/'a.md').exists()
+    assert run('--claim','b.md')==0 and (doing/'b.md').exists()
+    capsys.readouterr()
+    assert run('--claim','c.md','nope.md')==1
+    assert json.loads(capsys.readouterr().err)['refused']=={'nope.md':['待处理没有该登记']}
+    assert (pending/'c.md').exists()   # 整批拒绝，不部分移动
+    (pending/'a.md').write_text(BODY,encoding='utf-8')
+    assert run('--claim','a.md')==1 and '处理中已有同名登记' in capsys.readouterr().err
+    elsewhere=tmp_path/'别处';elsewhere.mkdir();(elsewhere/'c.md').write_text(BODY,encoding='utf-8')
+    assert run('--claim',str(elsewhere/'c.md'))==1 and '只传文件名' in capsys.readouterr().err
+    assert (pending/'c.md').exists() and (elsewhere/'c.md').exists()
+    (doing/'a.md').write_text(BODY+writeback_section(处理状态='双侧发布完成',复跑状态='已发布，待复跑'),encoding='utf-8')
+    assert run('--resolve',str(pending/'a.md'))==1 and '只传文件名' in capsys.readouterr().err
+    assert run('--resolve','nope.md')==1 and '处理中没有该登记' in capsys.readouterr().err
+    assert run('--resolve',str(doing/'a.md'))==0 and (tmp_path/'问题登记/已处理/a.md').exists()
+    (doing/'a.md').write_text(BODY+writeback_section(处理状态='双侧发布完成',复跑状态='已发布，待复跑'),encoding='utf-8')
+    assert run('--resolve','a.md')==1 and '已处理已有同名登记' in capsys.readouterr().err

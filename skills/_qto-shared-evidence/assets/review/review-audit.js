@@ -21,6 +21,8 @@ function attach(api){
  const itemMap=new Map(items.map(i=>[i.id,i])),issueMap=new Map(issues.map(q=>[q.id,q])),commonMap=new Map(commons.map(g=>[g.id,g])),objects=new Map(data.objects.map(o=>[o.catalog_key,o]));
  const kindOf=x=>itemMap.get(x.id)===x?'item':issueMap.get(x.id)===x?'issue':'common';
  const tp=c.display_terms?.third_party||'第三方',term=s=>String(s).split('第三方').join(tp);
+ // 没有任何对照来源时 extra 只表示还没建立对照，不能说成清单外新增（登记 20261016-0131）
+ const EXTRA=c.sources.length?'清单外新增':'独立算量条目（未建立'+tp+'对照）',EXTRA_SHORT=c.sources.length?'清单外':'独立算量';
  const natureLabels=c.nature_labels||{},natures=Object.keys(natureLabels),natureLabel=n=>n?natureLabels[n]||n:UNSORTED;
  const dims=c.dimensions,overDim=dims.find(d=>d.role==='overview'),sectDim=dims.find(d=>d.role==='section'),catDim=dims.find(d=>d.role==='category');
  const filterDims=dims.filter(d=>d.role==='filter'),techDims=dims.filter(d=>d.role==='technical');   // technical values only show under 技术来源
@@ -131,7 +133,7 @@ function attach(api){
   const box=byId('audit-filters');box.replaceChildren();
   if(overDim)box.append(select(overDim.title,[['全部','全部'],...overDim.values.map(v=>[v.id,v.title])],overview,v=>{overview=v;refresh();}));
   if(mode==='results'){
-   if(third.length&&extras.length)box.append(select('范围',[['全部','全部'],['third_party','有'+tp+'对应'],['extra','清单外新增']],F.scope,v=>{F.scope=v;refresh();}));
+   if(third.length&&extras.length)box.append(select('范围',[['全部','全部'],['third_party','有'+tp+'对应'],['extra',EXTRA]],F.scope,v=>{F.scope=v;refresh();}));
    box.append(select('依据状况',[['全部','全部'],['firm','全部有依据'],['est','含估算'],['pending','有待定']],F.evidence,v=>{F.evidence=v;refresh();}));
    const seen=[...natures,null].filter(n=>items.some(i=>pendingTargets(i).some(x=>natureOf(x)===n)));
    if(seen.length)box.append(select('问题性质',[['全部','全部'],...seen.map(n=>[n||UNSORTED,natureLabel(n)])],F.nature,v=>{F.nature=v;refresh();}));
@@ -147,7 +149,8 @@ function attach(api){
    if(incompleteItems.length)box.append(check(INCOMPLETE,F.incomplete,v=>{F.incomplete=v;refresh();}));
    if(c.sources.length>1)box.append(check('来源间结论不一致',F.disagree,v=>{F.disagree=v;refresh();}));
   }
-  if(mode!=='resolve')for(const d of filterDims)box.append(select(d.title,[['全部','全部'],...d.values.map(v=>[v.id,v.title])],F.dims[d.id]||'全部',v=>{F.dims[d.id]=v;refresh();}));
+  // 筛选跨模式沿用，问题页也显示，看得见、能清除（登记 20261016-0342）
+  for(const d of filterDims)box.append(select(d.title,[['全部','全部'],...d.values.map(v=>[v.id,v.title])],F.dims[d.id]||'全部',v=>{F.dims[d.id]=v;refresh();}));
  }
  const common=x=>inOverview(x)&&dimsOK(x)&&searched(x);
  const resultOK=i=>common(i)&&(F.scope==='全部'||i.kind===F.scope)&&(F.evidence==='全部'||(F.evidence==='firm'?evidenceOf(i)==='firm':F.evidence==='est'?estOf(i)>0:hasPending(i)))&&(F.nature==='全部'||pendingTargets(i).some(x=>(natureOf(x)||UNSORTED)===F.nature));
@@ -192,7 +195,7 @@ function attach(api){
  const excludedText=i=>i.ours.excluded_quantity!=null?num(i.ours.excluded_quantity)+' '+i.ours.unit:'';
  function resultRow(i){
   const subs=[el('small',null,levelsText(i))],tags=el('small');
-  if(i.kind==='extra')tags.append(el('span','badge','清单外新增'));
+  if(i.kind==='extra')tags.append(el('span','badge',EXTRA));
   if(excludedText(i))tags.append(el('span','badge','另有已定不计 '+excludedText(i)));
   if(unlinked(i))tags.append(el('span','badge bad','未挂问题'));
   const byNature=new Map();for(const x of pendingTargets(i)){const n=natureOf(x)||UNSORTED;if(!byNature.has(n))byNature.set(n,[]);byNature.get(n).push(x);}
@@ -278,7 +281,7 @@ function attach(api){
    const concl={};for(const i of th){const x=shownOf(seg(i));if(x)concl[x]=(concl[x]||0)+1;}
    const att=k=>th.filter(i=>k.includes(seg(i)?.attribution)).length;
    const card=btn('',()=>{overview=v;current=null;render();route();},'card'+(v===overview?' on':''));card.append(el('b',null,t));
-   card.append(el('div',null,'成果：条目 '+its.length+(extras.length?'（清单外 '+its.filter(i=>i.kind==='extra').length+'）':'')+' · 含估算 '+its.filter(i=>estOf(i)>0).length+' · 有待定 '+its.filter(hasPending).length));
+   card.append(el('div',null,'成果：条目 '+its.length+(extras.length?'（'+EXTRA_SHORT+' '+its.filter(i=>i.kind==='extra').length+'）':'')+' · 含估算 '+its.filter(i=>estOf(i)>0).length+' · 有待定 '+its.filter(hasPending).length));
    const byN=[...natures,null].map(n=>[n,wait.filter(x=>natureOf(x)===n).length]).filter(([,k])=>k);
    card.append(el('div',null,'待解决：'+(byN.length?byN.map(([n,k])=>natureLabel(n)+' '+k).join(' · '):'无')+(un.length?' · 未挂问题 '+un.length:'')));
    if(third.length)card.append(el('div','minor','对照：清单的问题 '+att(['list','both'])+' · 本次依据不足 '+att(['ours','both'])+' · '+Object.entries(concl).map(([k,n])=>term(k)+' '+n).join(' · ')));
@@ -294,7 +297,7 @@ function attach(api){
   const box=byId('audit-detail');box.append(el('h2',null,nameOf(i)));
   if(featOf(i))box.append(el('div','minor',featOf(i)));
   const tags=el('div');for(const d of [overDim,sectDim,catDim,...filterDims].filter(Boolean)){const v=vals(i,d);if(v.length)tags.append(el('span','badge',d.title+' '+v.map(x=>dimTitle(d,x)).join('、')));}
-  if(i.kind==='extra')tags.append(el('span','badge','清单外新增'));for(const t of i.uncertain||[])tags.append(el('span','badge warn',t));if(unlinked(i))tags.append(el('span','badge bad','未挂问题'));box.append(tags);
+  if(i.kind==='extra')tags.append(el('span','badge',EXTRA));for(const t of i.uncertain||[])tags.append(el('span','badge warn',t));if(unlinked(i))tags.append(el('span','badge bad','未挂问题'));box.append(tags);
   if(covering(i).length)box.append(para('共性答复',inheritText(i)));
   if(overlap(i))box.append(el('div','hint warn','同一条目有两处答复，请核对：一处按现做法、一处不按现做法'));
   // Our result first, third party as comparison; the comparison audit mode keeps the third-party table on top.
@@ -350,7 +353,7 @@ function attach(api){
   memberBox.append(el('h3',null,(spec?.title||'成员')+'（'+ms.length+'）'+(r.aggregation==='sum_members'?' · 本行 = 成员“'+r.member_quantity_name+'”之和':r.aggregation==='declared'?' · '+(r.aggregation_reason||''):'')));
   memberBox.append(table([...cols.map(x=>x.title),'回图'],ms.map(o=>[...cols.map(x=>{const v=val(o,x.key);return v==null?'':typeof v==='number'?num(v):String(v);}),o.kind!=='unlocated'&&hasScenes?btn('回图',()=>{at=Math.max(0,located.indexOf(o));mapState='open';map();},'link'):'未定位'+(core.unlocatedText(o)?'：'+core.unlocatedText(o):'')])));
  }
- const involved=ids=>table(['条目',...(overDim?[overDim.title]:[]),'单位',...LEVELS.map(x=>x.replace('量','')),'合计',tp+'量','结论'],ids.map(id=>itemMap.get(id)).filter(Boolean).map(i=>{const s=i.kind==='third_party'?seg(i)||i.third_parties[0]:null;return [itemLink(i.id),...(overDim?[vals(i,overDim).map(v=>dimTitle(overDim,v)).join('、')]:[]),i.ours.unit,...LEVELS.map(x=>num(i.ours.levels[x])),num(i.ours.total),s?num(s.quantity)+(s.unit!==i.ours.unit?' '+s.unit:''):'清单外',s?conclusionText(s):''];}));
+ const involved=ids=>table(['条目',...(overDim?[overDim.title]:[]),'单位',...LEVELS.map(x=>x.replace('量','')),'合计',tp+'量','结论'],ids.map(id=>itemMap.get(id)).filter(Boolean).map(i=>{const s=i.kind==='third_party'?seg(i)||i.third_parties[0]:null;return [itemLink(i.id),...(overDim?[vals(i,overDim).map(v=>dimTitle(overDim,v)).join('、')]:[]),i.ours.unit,...LEVELS.map(x=>num(i.ours.levels[x])),num(i.ours.total),s?num(s.quantity)+(s.unit!==i.ours.unit?' '+s.unit:''):EXTRA_SHORT,s?conclusionText(s):''];}));
  function optionsTable(x){return table(['做法','影响（专业算好的，与现做法差多少；不求和）',''],x.options.map(o=>[o.id+' '+o.text,impactText(o.impact)||'—',o.id===x.current_option?'现做法':'']));}
  function issueDetail(q){
   const box=byId('audit-detail');box.append(el('h2',null,q.id+' · '+q.title));

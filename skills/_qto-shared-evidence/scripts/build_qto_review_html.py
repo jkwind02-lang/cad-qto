@@ -1,5 +1,5 @@
 """Build a portable review page from professional-owned results. No quantity mutation."""
-import argparse,base64,gzip,html,json,re,textwrap,uuid
+import argparse,base64,gzip,html,json,re,uuid
 from urllib.parse import urlsplit
 from html.parser import HTMLParser
 from pathlib import Path
@@ -19,6 +19,12 @@ def plugin_version(root):
  if not found:return '未提供'
  if len(set(found.values()))>1:raise ValueError('两份插件清单的业务版本不一致：'+'，'.join(f'{k}={v}' for k,v in found.items()))
  return next(iter(found.values())) or '未提供'
+
+def wrap_base64(data,width=180):
+ """Base64 in fixed-width lines. Same text textwrap.wrap gave for whitespace-free Base64, but linear:
+ textwrap copies the remaining suffix after every line, which took ~16 min on a 27 MB gzip payload (登记 复核页大载荷封装耗时偏长)."""
+ text=base64.b64encode(data).decode()
+ return '\n'.join(text[i:i+width] for i in range(0,len(text),width))
 
 def build(data_path,output,feedback_path=None,feedback_url=None,feedback_backup_url=None,feedback_provider=None):
  data_path=Path(data_path).resolve();output=Path(output).resolve()
@@ -46,7 +52,7 @@ def build(data_path,output,feedback_path=None,feedback_url=None,feedback_backup_
  config={'url':endpoint,'provider':provider,'backup_url':backup,'client_id':str(uuid.uuid4()),'plugin_version':version}
  template=(assets/'review-shell.html').read_text(encoding='utf-8')
  raw=json.dumps(view,ensure_ascii=False,separators=(',',':')).encode();packed=pack_payload(view);packed_gz=gzip.compress(packed,mtime=0)
- payload='\n'.join(textwrap.wrap(base64.b64encode(packed_gz).decode(),180))
+ payload=wrap_base64(packed_gz)
  page=template.replace('__PAGE_TITLE__',html.escape(view['title'])).replace('__PAYLOAD__',payload)
  page=page.replace('__FEEDBACK__',json.dumps(feedback,ensure_ascii=False,indent=0).replace('<','\\u003c'))
  page=page.replace('__REVIEW_CORE__',(assets/'review-core.js').read_text(encoding='utf-8')).replace('__REVIEW_AUDIT__',(assets/'review-audit.js').read_text(encoding='utf-8')).replace('__REVIEW_APP__',(assets/'review-app.js').read_text(encoding='utf-8'))

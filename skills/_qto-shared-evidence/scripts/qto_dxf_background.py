@@ -296,7 +296,7 @@ class _Walker:
      alay = a.dxf.layer if a.dxf.layer != '0' else lay
      if self.dw.hidden(alay): continue
      if self.cls == 'large' and not (self.large_layers and self.large_layers.search(alay)): self.dropped[alay] += 1; self._skip('other_layers', a); continue
-     self._text(a, alay, self.dw.color(a, alay, bb))
+     self._text_any(a, alay, self.dw.color(a, alay, bb))
     if self.dw.doc.blocks.get(e.dxf.name) is None: self._skip('xref_missing', e); return
    try: ves = list(e.virtual_entities())
    except Exception: self._skip('proxy', e); return
@@ -314,11 +314,23 @@ class _Walker:
   if t in SKIP_SILENT: return
   if t in UNSHOWN_TYPES: self._skip(UNSHOWN_TYPES[t], e); return
   color = self.dw.color(e, lay, byblock)
-  if t in ('TEXT', 'ATTRIB', 'MTEXT'): self._text(e, lay, color); return
+  if t in ('TEXT', 'ATTRIB', 'MTEXT'): self._text_any(e, lay, color); return
   if t == 'HATCH' and not e.dxf.get('solid_fill', 0):
    if self.cls == 'large': self._skip('pattern_hatch', e); return
    self._pattern(e, lay, color); return
   self._geometry(e, t, lay, color)
+
+ def _text_any(self, e, lay, color):
+  """Text on the ordinary path. A mirrored INSERT hands down TEXT/ATTRIB/MTEXT whose extrusion is no longer +Z: their OCS
+  anchors and reading axes go through OCS→WCS like the affine path (登记 20261016-1129). +Z text keeps the plain primitive."""
+  ex = e.dxf.get('extrusion')
+  if ex is None or (abs(ex[0]) <= 1e-12 and abs(ex[1]) <= 1e-12 and ex[2] > 0):
+   self._text(e, lay, color); return
+  from ezdxf.math import Matrix44
+  start = len(self.out)
+  try: self._text_affine(e, lay, color, Matrix44())
+  except Exception:
+   del self.out[start:]; self._skip('proxy', e)
 
  def _height(self, e, h):
   """Text height in drawing units; 0 means "use the text style's fixed height"; None when neither is known."""

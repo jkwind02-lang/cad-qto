@@ -28,6 +28,14 @@ RERUN_STATES = re.compile(r'^(未发布，待复跑|已发布，待复跑|已复
 RESOLVABLE = re.compile(r'^(双侧发布完成|不修复：.+)$')
 
 
+def entry_name(given: str, folder: Path) -> tuple[str, str | None]:
+    """--claim / --resolve 按文件名找登记；给了路径时只认正好在 folder 下的，否则报“只传文件名”。"""
+    name = Path(given).name
+    if name == given or Path(given).parent.resolve() == folder.resolve():
+        return name, None
+    return name, f'只传文件名（这份不在 {folder.name}/ 下）：{given}'
+
+
 def front_matter(path: Path) -> dict:
     text = path.read_text(encoding='utf-8-sig')
     match = re.match(r'---\n(.*?)\n---', text, re.S)
@@ -98,7 +106,7 @@ def triage(maint_dir: Path) -> dict:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description='整理插件问题登记')
     parser.add_argument('--maint-dir')
-    parser.add_argument('--claim', nargs='*', default=[], help='移入 处理中/ 的登记文件名')
+    parser.add_argument('--claim', nargs='*', default=[], help='移入 处理中/ 的登记文件名（给路径时须正好在 待处理/ 下）；任一份不能移就整批不动')
     parser.add_argument('--resolve', nargs='*', default=[],
                         help='维护回写字段齐全且处理状态为双侧发布完成或不修复时，从 处理中/ 移入 已处理/')
     parser.add_argument('--audit', action='store_true', help='列出 处理中/、已处理/ 中维护回写字段不全的登记')
@@ -109,38 +117,50 @@ def main(argv=None) -> int:
     if args.audit:
         print(json.dumps(audit(maint_dir), ensure_ascii=False, indent=2))
         return 0
+    pending, doing, done = (maint_dir / '问题登记' / state for state in ('待处理', '处理中', '已处理'))
     if args.resolve:
-        refused = {}
-        for name in args.resolve:
-            source = maint_dir / '问题登记' / '处理中' / name
+        refused, names = {}, []
+        for given in args.resolve:
+            name, bad = entry_name(given, doing)
+            names.append(name)
+            if bad:
+                refused[given] = [bad]
+                continue
+            source = doing / name
             if not source.exists():
-                refused[name] = ['处理中没有该登记']
+                refused[given] = ['处理中没有该登记']
                 continue
             result = writeback(source.read_text(encoding='utf-8-sig'))
             problems = list(result['problems'])
             if not problems and not RESOLVABLE.match(result['fields']['处理状态']):
                 problems.append(f"处理状态为{result['fields']['处理状态']}，双侧发布完成或不修复后才移入已处理")
-            if (maint_dir / '问题登记' / '已处理' / name).exists():
+            if (done / name).exists():
                 problems.append('已处理已有同名登记')
             if problems:
-                refused[name] = problems
+                refused[given] = problems
         if refused:
             print(json.dumps({'status': 'REFUSED', 'refused': refused}, ensure_ascii=False, indent=2), file=sys.stderr)
             return 1
-        for name in args.resolve:
-            (maint_dir / '问题登记' / '处理中' / name).rename(maint_dir / '问题登记' / '已处理' / name)
-        print(json.dumps({'status': 'RESOLVED', 'resolved': args.resolve}, ensure_ascii=False, indent=2))
+        for name in names:
+            (doing / name).rename(done / name)
+        print(json.dumps({'status': 'RESOLVED', 'resolved': names}, ensure_ascii=False, indent=2))
         return 0
-    moved = []
-    for name in args.claim:
-        source = maint_dir / '问题登记' / '待处理' / name
-        target = maint_dir / '问题登记' / '处理中' / name
-        if target.exists():
-            print(f'处理中已有同名登记，未移动：{name}', file=sys.stderr)
-            return 1
-        source.rename(target)
-        moved.append(name)
-    print(json.dumps({**triage(maint_dir), 'claimed': moved}, ensure_ascii=False, indent=2))
+    refused, names = {}, []
+    for given in args.claim:
+        name, bad = entry_name(given, pending)
+        names.append(name)
+        if bad:
+            refused[given] = [bad]
+        elif not (pending / name).exists():
+            refused[given] = ['待处理没有该登记']
+        elif (doing / name).exists():
+            refused[given] = ['处理中已有同名登记']
+    if refused:   # 整批拒绝，不部分移动
+        print(json.dumps({'status': 'REFUSED', 'refused': refused}, ensure_ascii=False, indent=2), file=sys.stderr)
+        return 1
+    for name in names:
+        (pending / name).rename(doing / name)
+    print(json.dumps({**triage(maint_dir), 'claimed': names}, ensure_ascii=False, indent=2))
     return 0
 
 

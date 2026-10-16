@@ -214,6 +214,20 @@ if(art.comparison_html){
  va.show('I1');{const d=vx['audit-detail'].textContent;assert.match(d,/已定不计：图标二期，本期不计/);assert.match(d,/Q2 · 已处理事项/);assert.match(d,/分包/);assert.match(d,/有多种判断方式/);assert.match(d,/品类 线管/);}
  assert(find(vx['audit-detail'],n=>n.textContent==='逐回路台账 3'&&n.onclick));
  checks.push('成果按楼栋、分部、品类三级分类；已定不计在行上标出、成果末尾单列并默认收起，详情里排在计入行之后并可跳到依据；技术维度只进技术来源、不进筛选');
+ // 登记 20261016-0342：成果页设的分包筛选切到待解决问题后仍显示、可清除；清除后问题列表与未筛选时相同。
+ {const dh=harness(chtml);await dh.start();const dx=dh.ids,da=dh.ctx.QtoReviewAudit.active,pkg=()=>find(dx['audit-filters'],n=>n.tagName==='select'&&n.children.some(o=>o.value==='E1'));
+  da.setMode('resolve');const all=dx['audit-list'].textContent;assert(pkg(),'问题页显示分包选择器');
+  da.setMode('results');pkg().value='E1';pkg().onchange();da.setMode('resolve');
+  assert.equal(pkg().value,'E1');assert.notEqual(dx['audit-list'].textContent,all);
+  pkg().value='全部';pkg().onchange();assert.equal(dx['audit-list'].textContent,all);
+  checks.push('成果页设的分包、楼层筛选切到待解决问题后照样显示、可清除，不暗中缩小问题列表');}
+ // 登记 20261016-0131：没有任何对照来源时 extra 显示“独立算量条目（未建立第三方对照）”，不说清单外；有来源时照旧（见上文 E1 的“清单外新增”）。
+ {const raw=JSON.parse(fs.readFileSync(art.comparison_view,'utf8')),cc=raw.comparison;cc.sources=[];cc.items=cc.items.filter(i=>i.kind==='extra');
+  for(const i of cc.items)i.features=String(i.features||'').replace('（清单外）','');cc.issues=cc.issues.filter(q=>(q.item_ids||[]).every(id=>cc.items.some(i=>i.id===id)));
+  const nh=harness(withData(chtml,normalize(raw)));await nh.start();const nx=nh.ids,na=nh.ctx.QtoReviewAudit.active,nrow=k=>find(nx['audit-list'],n=>n.dataset?.key===k);
+  assert.match(nrow('对照条目|E1').textContent,/独立算量条目（未建立清单对照）/);assert.doesNotMatch(nx['audit-list'].textContent,/清单外/);
+  na.show('E1');assert.match(nx['audit-detail'].textContent,/独立算量条目（未建立清单对照）/);assert.doesNotMatch(nx['audit-detail'].textContent,/清单外/);
+  checks.push('没有对照来源的独立算量条目标“独立算量条目（未建立第三方对照）”，不标清单外新增；有来源时仍标清单外新增');}
  va.setMode('audit');assert.match(vrow('对照条目|I2').textContent,/含已定不计 1 个/);assert.match(vx['audit-list'].textContent,/其中 1 条含已定不计/);va.show('清单的问题|清单多计');assert.match(vx['audit-detail'].textContent,/含已定不计 1 条/);assert.match(vx['audit-detail'].textContent,/1 个：甲供不计（口径 K5）/);
  checks.push('清单的问题整组答复界面标出含已定不计的条目并列出依据');
  va.setMode('results');find(vrow('对照条目|I1'),n=>n.textContent==='有多种判断方式'&&n.onclick).click();assert.deepEqual([va.state().mode,va.state().current],['resolve','G1']);
