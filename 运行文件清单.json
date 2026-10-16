@@ -427,8 +427,8 @@
     },
     {
       "path": "qto-components-points/references/点位覆盖台账.md",
-      "sha256": "b5713cbd376fda4c18842937fc759d046b2e1afbb69758e5c3b95bb02425e1cc",
-      "bytes": 12785
+      "sha256": "0b495b95418e5e4bdeec7b3844e081a214863936471006fc9bb8d1240d550baa",
+      "bytes": 13147
     },
     {
       "path": "qto-components-points/references/结果检查与输出.md",
@@ -462,8 +462,8 @@
     },
     {
       "path": "qto-components-points/scripts/build_point_coverage_ledger.py",
-      "sha256": "5f5c193869156b70fb265fc7baf062b1d34e5ce148faf6875b52e3b077d0f410",
-      "bytes": 72239
+      "sha256": "e3ae336c59e448cb216aa11deaaea9b940e85da16580618a205fe9eeb1137874",
+      "bytes": 73030
     },
     {
       "path": "qto-components-points/scripts/count_reconciled_instances.py",

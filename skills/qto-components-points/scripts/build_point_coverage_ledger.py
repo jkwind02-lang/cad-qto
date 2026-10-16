@@ -27,7 +27,7 @@ from search_negative_evidence import OUTPUT_SCHEMA as SEARCH_SCHEMA, record_prob
 
 SCHEMA = "qto-point-coverage-input/1.0"
 LEDGER_SCHEMA = "qto-point-coverage-ledger/1.0"
-VERSION = "qto-point-coverage-ledger/1.3.0"
+VERSION = "qto-point-coverage-ledger/1.3.1"
 DESTINATIONS = ("已计", "有据排除", "待识别", "版本冲突", "无去向")
 DISPOSITION_DEST = {"adopted": "已计", "merged": "已计", "excluded": "有据排除", "not_applicable": "有据排除",
                     "duplicate_excluded": "有据排除", "unresolved": "待识别"}
@@ -691,15 +691,30 @@ class Ledger:
             if c["kind"] == "块" and c.get("top_level") and c["sheet_kind"] == LEGEND_KIND:
                 by_drawing[c["drawing"]].append(c)
         plan_of = self.plan_candidates()
+        filled = self.read_legend()
+        # a handle already in the filled table keeps its row number, new ones take numbers that table does not use: a
+        # block that leaves or joins a legend sheet (a placement change, a re-extraction) renumbers nothing else
+        kept = {(r["drawing"], r["legend_handle"].strip().upper()): r["legend_row"] for r in filled
+                if r["symbol_kind"] == "块" and r["legend_handle"].strip()}
+        used: dict[str, set[str]] = defaultdict(set)
+        for r in filled:
+            used[r["drawing"]].add(r["legend_row"])
         for drawing in sorted(by_drawing):
             # numbered by insertion point, as in 1.0, so existing filled tables keep their row numbers
             copies = sorted(by_drawing[drawing], key=lambda c: (c["sheet"], -(c["insert_y"] if c.get("insert_y") is not None else c["y"]),
                                                                 c["insert_x"] if c.get("insert_x") is not None else c["x"]))
-            for n, c in enumerate(copies, start=1):
+            n = 0
+            for c in copies:
+                number = kept.get((drawing, (c["handle"] or "").upper()))
+                if number is None:
+                    n += 1
+                    while f"A{n:03d}" in used[drawing]:
+                        n += 1
+                    number = f"A{n:03d}"
                 same = [p for p in plan_of[drawing] if base_symbol(p["symbol"]) == base_symbol(c["symbol"])]
                 cats = {p["category"] for p in same if p["destination"] == "已计"}
                 prefill = bool(same) and all(p["destination"] == "已计" for p in same) and len(cats) == 1
-                auto.append({"drawing": drawing, "legend_row": f"A{n:03d}", "legend_handle": c["handle"] or "", "legend_text": "",
+                auto.append({"drawing": drawing, "legend_row": number, "legend_handle": c["handle"] or "", "legend_text": "",
                              "symbol": c["symbol"], "symbol_kind": "块", "matched_symbols": "", "plan_count": str(len(same)),
                              "count_source": "自动", "variant_flag": "", "destination": "已计" if prefill else "",
                              "target_or_reason": next(iter(cats)) if prefill else "", "suspected_category": "", "search_record_id": ""})
@@ -710,8 +725,7 @@ class Ledger:
             for row in auto:
                 if row["drawing"] == drawing and len(rows_of[base_symbol(row["symbol"])]) > 1:
                     row["variant_flag"] = "同块多变体（" + "、".join(rows_of[base_symbol(row["symbol"])]) + "）"
-        filled = self.read_legend()
-        index = {(r["drawing"], r["legend_handle"].upper()): r for r in auto}
+        index ={(r["drawing"], r["legend_handle"].upper()): r for r in auto}
         rows = list(auto)
         for row in filled:
             key = (row["drawing"], row["legend_handle"].strip().upper())

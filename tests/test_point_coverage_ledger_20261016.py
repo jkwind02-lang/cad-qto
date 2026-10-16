@@ -151,6 +151,37 @@ def test_filled_legend_rows_drive_no_destination_and_suspected_classes(drawing, 
     assert report['class_completeness']['灯具']['complete'] is False and report['class_completeness']['接地端子板']['complete'] is False
 
 
+def test_filled_legend_numbers_survive_a_block_leaving_the_legend_sheet(drawing, tmp_path):
+    # checkpoint 0 (fifth batch) on the electrical B group: after K3 the A1 frames no longer sat on the legend sheet, the
+    # remaining legend copies were renumbered from A001 and collided with the filled rows -> C-6 stopped the whole ledger
+    h = drawing['h']
+    write(tmp_path / 'legend.csv', FIELDS, [
+        ['D1', 'A001', 'FFFF', '图框', 'FRAME', '块', '', '', '', '不计', '图框，非点位', '', ''],   # left the legend sheet
+        ['D1', 'A002', h['LG_BOX'], '配电箱', 'BOX', '块', '', '', '', '', '', '', ''],
+        ['D1', 'A003', h['LG_LAMP'], '吸顶灯', 'LAMP', '块', '', '', '', '待识别', '', '灯具', ''],
+    ])
+    done, report, legend = ledger(tmp_path, tables_input(drawing, tmp_path, legend_coverage='legend.csv'))
+    assert done.returncode == 0, done.stdout + done.stderr
+    rows = {r['legend_row']: r for r in legend}
+    assert set(rows) == {'A001', 'A002', 'A003'}
+    assert rows['A002']['legend_handle'].upper() == h['LG_BOX'].upper() and rows['A002']['count_source'] == '自动'
+    assert rows['A003']['legend_handle'].upper() == h['LG_LAMP'].upper() and rows['A003']['suspected_category'] == '灯具'
+    assert rows['A001']['count_source'] == '手填'
+    assert report['warnings']['legend_handle_not_on_legend_sheet'] == [{'drawing': 'D1', 'legend_row': 'A001', 'legend_handle': 'FFFF'}]
+    # a block new on the legend sheet takes a number the filled table does not use; the filled LAMP keeps A001
+    again = tmp_path / 'again'; again.mkdir()
+    write(again / 'legend.csv', FIELDS, [['D1', 'A001', h['LG_LAMP'], '吸顶灯', 'LAMP', '块', '', '', '', '待识别', '', '灯具', '']])
+    done, report, legend = ledger(again, tables_input(drawing, again, legend_coverage='legend.csv'))
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert {r['legend_handle'].upper(): r['legend_row'] for r in legend} == {h['LG_LAMP'].upper(): 'A001', h['LG_BOX'].upper(): 'A002'}
+    # legal control: a filled table that itself repeats a number is still an input problem
+    third = tmp_path / 'third'; third.mkdir()
+    write(third / 'legend.csv', FIELDS, [['D1', 'A001', h['LG_BOX'], '', 'BOX', '块', '', '', '', '', '', '', ''],
+                                          ['D1', 'A001', 'FFFF', '', 'FRAME', '块', '', '', '', '', '', '', '']])
+    done, report, _ = ledger(third, tables_input(drawing, third, legend_coverage='legend.csv'))
+    assert done.returncode != 0 and '图例行号重复' in done.stdout + done.stderr
+
+
 @pytest.mark.parametrize('destination', ['已计', '归他专业', '待识别', '不计'])
 @pytest.mark.parametrize('search', ['', 'SR-ZERO-1'])
 def test_zero_legend_row_needs_a_search_record_whatever_its_destination(tmp_path, destination, search):
