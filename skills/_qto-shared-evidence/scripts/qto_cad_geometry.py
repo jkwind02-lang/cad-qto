@@ -898,13 +898,15 @@ def issue_codes_within(row, allowed):
 # Registration 20261017-0031, K3 (decision 10-17, option B with a guard): fills without geometry are skipped and
 # annotations count at their insertion point, so one HATCH or label no longer leaves the whole block unscoped. Such
 # an extent is incomplete: callers keep an instance whose insertion point lies in scope even when this box misses it.
-# Added after checkpoint 0 (decision 10-17): SPLINE, DIMENSION, REGION and other rows without geometry count by a valid
-# extraction bbox3d (often just their anchor point), noted as incomplete too; without one they still leave the block unknown.
+# After checkpoints 0 and 1 (decision 10-17): SPLINE, DIMENSION, REGION and other rows without geometry count by a
+# valid extraction bbox3d like measured rows (complete); a point-like bbox3d (zero width and height) is an annotation.
+# Without a bbox3d such a row leaves the block unknown when scoping (pruning keeps it), while sheet placement
+# (skip_unknown, the coverage ledger and the negative-evidence search) skips it as 0.3.10 did and notes an estimate.
 DYNAMIC_STATE_CODES = frozenset({"dynamic_state_not_evaluated", "anonymous_block_state_unverified"})
 EXTENT_FILL_TYPES = frozenset({"HATCH", "SOLID"})
 EXTENT_ANNOTATION_TYPES = frozenset({"TEXT", "MTEXT", "ATTDEF", "ATTRIB", "POINT"})
 EXTENT_NOTES = {"fill_skipped": "包围盒未含填充", "annotation_as_insertion_point": "注记按插入点计",
-                "no_geometry_by_bbox3d": "无几何对象按取证包围盒计"}
+                "unknown_skipped": "跳过取不到范围的对象（估算）"}
 
 
 def is_empty_definition(item: Any) -> bool:
@@ -920,28 +922,34 @@ def _valid_box3(box):
 
 
 def definition_extent(name, definitions, origins, max_depth=16, cache=None, stack=(), empty=frozenset(),
-                      allowed_insert_codes=frozenset()):
+                      allowed_insert_codes=frozenset(), skip_unknown=False):
     """(box, notes): the definition's local 3D extent and the incompleteness notes (keys of EXTENT_NOTES).
 
-    A missing/unsupported child makes the extent unknown, not artificially small; so do SPLINE, DIMENSION, REGION
-    and other rows without geometry unless the extraction gave them a valid bbox3d, which then counts
-    ("no_geometry_by_bbox3d"). HATCH/SOLID without geometry are skipped ("fill_skipped"); TEXT, MTEXT, ATTDEF,
-    ATTRIB and POINT count at their insertion point ("annotation_as_insertion_point"). A definition holding only
-    fills and annotations has no extent. empty: definitions known to exist with no entities (manifest serialized,
-    direct_entity_count 0); a child insert of one draws nothing and adds nothing (registration 20261016-2359).
-    allowed_insert_codes: issue codes of a child INSERT whose definition extent is still used, e.g. the
-    dynamic-state codes (registration 20261017-0027)."""
+    Scoping (the default): a missing/unsupported child makes the extent unknown, not artificially small; so do
+    SPLINE, DIMENSION, REGION and other rows without geometry unless the extraction gave them a valid bbox3d, which
+    then counts like a measured row (a point-like one as an annotation). HATCH/SOLID without geometry are skipped
+    ("fill_skipped"); TEXT, MTEXT, ATTDEF, ATTRIB and POINT count at their insertion point
+    ("annotation_as_insertion_point"). A definition holding only fills and annotations has no extent.
+    skip_unknown (sheet placement only, never pruning): such rows and unreadable children are skipped instead and
+    the rest gives an estimate ("unknown_skipped"), as the 0.3.10 coverage ledger placed sheets.
+    empty: definitions known to exist with no entities (manifest serialized, direct_entity_count 0); a child insert
+    of one draws nothing and adds nothing (registration 20261016-2359). allowed_insert_codes: issue codes of a child
+    INSERT whose definition extent is still used, e.g. the dynamic-state codes (registration 20261017-0027)."""
     unknown = (None, frozenset())
     if name in stack or len(stack) >= max_depth or name not in definitions:
         return unknown
-    if not stack and cache is not None and name in cache:
-        return cache[name]
+    key = (name, "placement") if skip_unknown else name
+    if not stack and cache is not None and key in cache:
+        return cache[key]
     boxes, notes, solid = [], set(), False
     for row in definitions[name]:
         kind, box = extent_row_kind(row, empty, allowed_insert_codes)
         if kind == "skip":
             continue
         if kind == "unknown":
+            if skip_unknown:
+                notes.add("unknown_skipped")
+                continue
             return unknown
         if kind == "annotation":
             boxes.append(box)
@@ -950,12 +958,14 @@ def definition_extent(name, definitions, origins, max_depth=16, cache=None, stac
         if kind == "fill":
             notes.add("fill_skipped")
             continue
-        if kind == "boxed":
-            notes.add("no_geometry_by_bbox3d")
         if kind == "insert":
             child=str(row.get("block_name") or "")
-            box, child_notes = definition_extent(child,definitions,origins,max_depth,None,(*stack,name),empty,allowed_insert_codes)
+            box, child_notes = definition_extent(child,definitions,origins,max_depth,None,(*stack,name),empty,allowed_insert_codes,
+                                                 skip_unknown)
             if box is None:
+                if skip_unknown:
+                    notes.add("unknown_skipped")
+                    continue
                 return unknown
             box=transform_bounds(box,matrix_for_insert(row,origins.get(child,[0.,0.,0.])))
             notes |= child_notes
@@ -963,13 +973,13 @@ def definition_extent(name, definitions, origins, max_depth=16, cache=None, stac
         solid = True
     result=(([min(b[i] for b in boxes) for i in range(3)]+[max(b[i+3] for b in boxes) for i in range(3)]), frozenset(notes)) if solid else unknown
     if not stack and cache is not None:
-        cache[name]=result
+        cache[key]=result
     return result
 
 
 def extent_row_kind(row, empty=frozenset(), allowed_insert_codes=frozenset()):
     """How one definition row enters definition_extent: (kind, box). kind is skip (an empty child definition),
-    annotation (box = insertion point), fill (skipped), insert (recurse), solid (box = bbox3d), boxed (a row without
+    annotation (box = insertion point), fill (skipped), insert (recurse), solid (box = bbox3d, also for a row without
     geometry that has a valid extraction bbox3d) or unknown."""
     entity_type = str(row.get("entity_type") or "").upper()
     is_insert = entity_type == "INSERT"
@@ -985,7 +995,9 @@ def extent_row_kind(row, empty=frozenset(), allowed_insert_codes=frozenset()):
     if entity_type in EXTENT_FILL_TYPES and (unsupported or row.get("geometry") is None or not _valid_box3(row.get("bbox3d"))):
         return "fill", None
     if not is_insert and row.get("geometry") is None and _valid_box3(row.get("bbox3d")):
-        return "boxed", list(row["bbox3d"])   # SPLINE, DIMENSION, REGION...: the extraction box, often only an anchor
+        box = list(row["bbox3d"])          # SPLINE, DIMENSION, REGION...: the extraction box
+        point_like = box[3] - box[0] == 0 and box[4] - box[1] == 0
+        return ("annotation" if point_like else "solid"), box   # a bare anchor counts like a label (decision 10-17)
     # In particular, an array INSERT's first cell is not its envelope.
     # Keep the parent unpruned so adapters can retain unresolved instances.
     if unsupported and not (is_insert and issue_codes_within(row, allowed_insert_codes)):
@@ -1006,7 +1018,7 @@ class DefinitionExtentFolder:
 
     def __init__(self, empty=frozenset(), allowed_insert_codes=frozenset()):
         self.empty, self.allowed = empty, allowed_insert_codes
-        self.solid = self.annotation = self.boxed = None
+        self.solid = self.annotation = None
         self.fill = self.unknown = False
         self.inserts = []
 
@@ -1026,8 +1038,6 @@ class DefinitionExtentFolder:
             self.annotation = self._union(self.annotation, box)
         elif kind == "solid":
             self.solid = self._union(self.solid, box)
-        elif kind == "boxed":
-            self.boxed = self._union(self.boxed, box)
 
     def rows(self):
         out = []
@@ -1035,8 +1045,6 @@ class DefinitionExtentFolder:
             out.append({"entity_type": "SPLINE", "geometry": None})
         if self.solid is not None:
             out.append({"entity_type": "LINE", "geometry": True, "bbox3d": self.solid})
-        if self.boxed is not None:
-            out.append({"entity_type": "REGION", "geometry": None, "bbox3d": self.boxed})
         if self.annotation is not None:
             for corner in (self.annotation[:3], self.annotation[3:]):
                 out.append({"entity_type": "POINT", "x": corner[0], "y": corner[1], "z": corner[2]})
@@ -1058,15 +1066,17 @@ def extent_note_labels(notes):
 
 # Sheet placement shared by the point coverage ledger and the negative-evidence search (registration 20261017-0012).
 PLACEMENT_GEOMETRY = "图形范围中心"
-PLACEMENT_PARTIAL = "图形范围中心（范围不完整：未含填充、注记按插入点计或无几何对象按取证包围盒计）"
+PLACEMENT_PARTIAL = "图形范围中心（范围不完整：未含填充或注记按插入点计）"
+PLACEMENT_ESTIMATED = "图形范围中心（范围不完整（估算）：跳过了取不到范围的对象）"
 PLACEMENT_INSERT = "插入点（定不出图形范围）"
 
 
 def placement_point(world_box, notes, insert_point):
-    """((x, y), basis): the centre of a transformed definition extent (3D box from transform_bounds), else the insertion
-    point."""
+    """((x, y), basis): the centre of a transformed definition extent (3D box from transform_bounds; for placement the
+    extent comes from definition_extent(..., skip_unknown=True)), else the insertion point."""
     if world_box is not None:
-        return ((world_box[0] + world_box[3]) / 2, (world_box[1] + world_box[4]) / 2), (PLACEMENT_PARTIAL if notes else PLACEMENT_GEOMETRY)
+        basis = (PLACEMENT_ESTIMATED if "unknown_skipped" in (notes or ()) else PLACEMENT_PARTIAL if notes else PLACEMENT_GEOMETRY)
+        return ((world_box[0] + world_box[3]) / 2, (world_box[1] + world_box[4]) / 2), basis
     return (insert_point[0], insert_point[1]), PLACEMENT_INSERT
 
 

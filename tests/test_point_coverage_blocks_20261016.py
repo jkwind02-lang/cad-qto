@@ -239,7 +239,7 @@ def test_far_base_point_block_is_placed_by_its_geometry(drawing, tmp_path):
     assert len(mismatch) == 2                                            # symmetric blocks: insert and geometry agree
     # ESD holds an ATTDEF: since K3 (20261017-0031) it counts at its insertion point and the extent is marked incomplete
     assert report['placement_basis_counts']['图形范围中心'] == len(TOP) - 2
-    assert report['placement_basis_counts']['图形范围中心（范围不完整：未含填充、注记按插入点计或无几何对象按取证包围盒计）'] == 2
+    assert report['placement_basis_counts']['图形范围中心（范围不完整：未含填充或注记按插入点计）'] == 2
 
 
 def test_report_source_uses_the_adapter_geometry_box(tmp_path):

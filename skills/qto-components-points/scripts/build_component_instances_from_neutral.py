@@ -31,7 +31,7 @@ from qto_actor_identity import is_model_identity
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
 
-VERSION = "qto-component-neutral-adapter/1.8.0"
+VERSION = "qto-component-neutral-adapter/1.8.1"
 # Only these two codes can be released by a dynamic_state_adjudication on an include or exclude rule (registration
 # 20261016-1709; exclude added after checkpoint 1);
 # arrays, xrefs and missing definitions stay unresolved whatever the rule says.

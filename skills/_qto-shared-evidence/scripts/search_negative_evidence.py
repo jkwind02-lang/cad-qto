@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qto_cad_geometry as cad_geometry  # noqa: E402
 
-VERSION = '1.1.2'
+VERSION = '1.1.3'
 INPUT_SCHEMA, OUTPUT_SCHEMA = 'qto-negative-search-input/1.0', 'qto-negative-search/1.0'
 KINDS = ('spec', 'tray', 'box', 'model', 'pipe', 'text', 'block')
 SHEET_KINDS = ('平面', '系统图', '表与说明', '图例', '详图', '其他')
@@ -250,9 +250,11 @@ def read_drawing(d, base, non_drawing, overrides, problems):
     extents = {}
 
     def extent(name):
-        """(local box, notes) by cad_geometry.definition_extent, the rule of the adapters and the coverage ledger."""
+        """(local box, notes) by cad_geometry.definition_extent for sheet placement (skip_unknown), the rule of the
+        coverage ledger."""
         try:
-            return cad_geometry.definition_extent(name, definitions, origins, MAX_DEPTH, extents, (), empty, cad_geometry.DYNAMIC_STATE_CODES)
+            return cad_geometry.definition_extent(name, definitions, origins, MAX_DEPTH, extents, (), empty, cad_geometry.DYNAMIC_STATE_CODES,
+                                                  skip_unknown=True)
         except (ValueError, TypeError, IndexError):
             return None, frozenset()
     return {'occ': occ, 'blocks': binst, 'parents': parents, 'tops': tops, 'inserted': inserted, 'unread': unread, 'extent': extent,

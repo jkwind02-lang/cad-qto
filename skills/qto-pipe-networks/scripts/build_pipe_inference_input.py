@@ -30,7 +30,7 @@ from qto_cad_source_contract import (check_unit_factor, verify_source_file, unit
 
 from qto_pipe_topology import RouteIndex, route_distance, project_route, geometry_parts, scale_route_geometry
 
-VERSION = "qto-pipe-neutral-adapter/1.9.0"
+VERSION = "qto-pipe-neutral-adapter/1.9.1"
 PROFILE_SCHEMA = "qto-pipe-recognition-profile/1.1"
 LEDGER_SCHEMA = "qto-project-adjudication-ledger/1.0"
 LINE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "SPLINE"}

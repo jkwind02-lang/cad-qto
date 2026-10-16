@@ -94,11 +94,26 @@ def test_far_base_point_block_is_placed_by_its_geometry_like_the_ledger(tmp_path
     esd = by_id(data)['ESD']['result']
     assert esd['hits'] == 2 and esd['hits_by_sheet_kind'] == {'图例': 2}      # not 台账外 by the far insertion point
     bases = {h['handle']: h['placement_basis'] for h in esd['samples']}
-    assert bases == {'E1': '图形范围中心', 'E2': '图形范围中心（范围不完整：未含填充、注记按插入点计或无几何对象按取证包围盒计）'}
-    assert esd['placement_basis_counts'] == {'图形范围中心': 1, '图形范围中心（范围不完整：未含填充、注记按插入点计或无几何对象按取证包围盒计）': 1}
+    assert bases == {'E1': '图形范围中心', 'E2': '图形范围中心（范围不完整：未含填充或注记按插入点计）'}
+    assert esd['placement_basis_counts'] == {'图形范围中心': 1, '图形范围中心（范围不完整：未含填充或注记按插入点计）': 1}
     # an attribute value travels with its INSERT
     name = by_id(data)['NAME']['result']['samples'][0]
     assert (name['sheet'], name['placement_basis']) == ('LG', '图形范围中心')
+
+
+def test_unmeasured_row_is_skipped_for_the_sheet_like_the_ledger(tmp_path, monkeypatch):
+    """Decision 10-17 (K3 follow-up): a block holding an unmeasured SPLINE is placed by its other rows (an estimate),
+    the same function and label as the coverage ledger, not by its far insertion point."""
+    mod = sys.modules[__name__]
+    monkeypatch.setattr(mod, 'LAYOUT', LAYOUT + [row('E3', 'INSERT', 'E-SYM', block_name='ESDS', x=FAR, y=0, insert_matrix_wcs=m(FAR, 0))])
+    monkeypatch.setattr(mod, 'BLOCKS', BLOCKS + [
+        row('D4', 'LWPOLYLINE', 'E-SYM', parent='ESDS', geometry={'parts': []}, bbox3d=[2450 - FAR, 450, 0, 2550 - FAR, 550, 0]),
+        row('D5', 'SPLINE', 'E-SYM', parent='ESDS', geometry=None, geometry_status='unsupported', geometry_issues=['未测'])])
+    code, s, data, detail = run(tmp_path, [{'item_id': 'ESD', 'conclusion': '图上无 静电释放装置', 'kind': 'block', 'block_names': ['^ESDS$']}])
+    assert code == 0, s
+    esd = by_id(data)['ESD']['result']
+    assert esd['hits'] == 1 and esd['hits_by_sheet_kind'] == {'图例': 1}
+    assert esd['placement_basis_counts'] == {'图形范围中心（范围不完整（估算）：跳过了取不到范围的对象）': 1}
 
 
 def test_overlapping_sheets_take_the_smallest_and_text_keeps_its_own_point(tmp_path):

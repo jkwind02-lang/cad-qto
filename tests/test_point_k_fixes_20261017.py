@@ -611,13 +611,15 @@ DIM_ROW = {'entity_type': 'DIMENSION', 'geometry': None, 'bbox3d': [300, 50, 0, 
     ([HATCH_ROW, TEXT_ROW], None, set()),                    # only fills and labels: still no extent
     ([LINE_ROW, HATCH_ROW, SPLINE_ROW], None, set()),          # a spline without a box still leaves the block unknown
     ([LINE_ROW, {**TEXT_ROW, 'x': None}], None, set()),         # a label without a position cannot be placed
-    # after checkpoint 0 (decision 10-17): a row without geometry counts by a valid extraction bbox3d, noted incomplete
-    ([LINE_ROW, DIM_ROW], [0, 0, 0, 300, 100, 0], {'no_geometry_by_bbox3d'}),
-    ([LINE_ROW, {**SPLINE_ROW, 'bbox3d': [-50, -20, 0, 40, 10, 0]}], [-50, -20, 0, 100, 100, 0], {'no_geometry_by_bbox3d'}),
+    # after checkpoints 0 and 1 (decision 10-17): a row without geometry counts by a valid extraction bbox3d like a
+    # measured row (complete); a point-like one is an annotation
+    ([LINE_ROW, {**SPLINE_ROW, 'bbox3d': [-50, -20, 0, 40, 10, 0]}], [-50, -20, 0, 100, 100, 0], set()),
+    ([LINE_ROW, {**DIM_ROW, 'bbox3d': [300, 50, 0, 600, 50, 0]}], [0, 0, 0, 600, 100, 0], set()),   # a flat box still has length
+    ([LINE_ROW, DIM_ROW], [0, 0, 0, 300, 100, 0], {'annotation_as_insertion_point'}),             # an anchor only
     ([LINE_ROW, {**DIM_ROW, 'bbox3d': [300, 50, 0, 300, 50]}], None, set()),         # a malformed box is no box
     ([LINE_ROW, {**DIM_ROW, 'bbox3d': [300, 50, 0, float('nan'), 50, 0]}], None, set()),
     ([LINE_ROW, {**HATCH_ROW, 'bbox3d': [0, 0, 0, 900, 900, 0]}], [0, 0, 0, 100, 100, 0], {'fill_skipped'}),   # fills stay skipped
-    ([HATCH_ROW, TEXT_ROW, DIM_ROW], [-500, 50, 0, 300, 50, 0], {'fill_skipped', 'annotation_as_insertion_point', 'no_geometry_by_bbox3d'}),
+    ([HATCH_ROW, TEXT_ROW, DIM_ROW], None, set()),            # fills, a label and an anchor: still no extent
 ])
 def test_definition_extent_rules(rows, box, notes):
     got_box, got_notes = geometry.definition_extent('B', {'B': rows}, {})
@@ -630,7 +632,8 @@ def test_child_notes_reach_the_parent_and_the_streaming_folder_agrees():
                     'rotation': 0, 'scale_factors': [1, 1, 1], 'extrusion': [0, 0, 1]}
     definitions = {'P': [LINE_ROW, child_insert, DIM_ROW], 'C': [LINE_ROW, HATCH_ROW, TEXT_ROW]}
     box, notes = geometry.definition_extent('P', definitions, {})
-    assert box == [0, 0, 0, 1100, 100, 0] and set(notes) == {'fill_skipped', 'annotation_as_insertion_point', 'no_geometry_by_bbox3d'}
+    assert box == [0, 0, 0, 1100, 100, 0] and set(notes) == {'fill_skipped', 'annotation_as_insertion_point'}
+    definitions['Q'] = [LINE_ROW, SPLINE_ROW, {**child_insert, 'block_name': 'GONE'}, child_insert]
     folded = {}
     for name, rows in definitions.items():
         folder = geometry.DefinitionExtentFolder()
@@ -638,7 +641,32 @@ def test_child_notes_reach_the_parent_and_the_streaming_folder_agrees():
             folder.add(row)
         folded[name] = folder.rows()
     assert geometry.definition_extent('P', folded, {}) == (box, notes)
-    assert len(folded['C']) <= 5 and any(row['entity_type'] == 'REGION' for row in folded['P'])
+    assert len(folded['C']) <= 5
+    for skip in (False, True):     # the folder keeps what the placement estimate skips
+        assert geometry.definition_extent('Q', folded, {}, skip_unknown=skip) == geometry.definition_extent('Q', definitions, {}, skip_unknown=skip)
+
+
+@pytest.mark.parametrize('rows,box,notes', [
+    ([LINE_ROW, SPLINE_ROW], [0, 0, 0, 100, 100, 0], {'unknown_skipped'}),
+    ([LINE_ROW, HATCH_ROW, SPLINE_ROW], [0, 0, 0, 100, 100, 0], {'fill_skipped', 'unknown_skipped'}),
+    ([LINE_ROW, {'entity_type': 'INSERT', 'block_name': 'GONE', 'x': 0, 'y': 0, 'z': 0}], [0, 0, 0, 100, 100, 0], {'unknown_skipped'}),
+    ([SPLINE_ROW, TEXT_ROW], None, set()),                    # nothing measurable left: still the insertion point
+    ([LINE_ROW], [0, 0, 0, 100, 100, 0], set()),
+])
+def test_sheet_placement_skips_rows_without_any_box_but_pruning_does_not(rows, box, notes):
+    """Decision 10-17 (K3 follow-up): placement skips rows without a box as 0.3.10 did and notes an estimate; scoping
+    keeps the extent unknown so pruning stays conservative. One cache serves both without mixing them."""
+    cache = {}
+    scoped = geometry.definition_extent('B', {'B': rows}, {}, cache=cache)
+    placed = geometry.definition_extent('B', {'B': rows}, {}, cache=cache, skip_unknown=True)
+    assert placed[0] == box and set(placed[1]) == notes
+    if 'unknown_skipped' in notes:
+        assert scoped == (None, frozenset())
+    assert geometry.definition_extent('B', {'B': rows}, {}, cache=cache) == scoped
+    if box is not None:
+        _, basis = geometry.placement_point(box, placed[1], [0, 0])
+        assert basis == ('图形范围中心（范围不完整（估算）：跳过了取不到范围的对象）' if 'unknown_skipped' in notes
+                         else '图形范围中心（范围不完整：未含填充或注记按插入点计）' if notes else '图形范围中心')
 
 
 @pytest.mark.parametrize('box,notes,anchor,kept', [
@@ -669,6 +697,7 @@ def k3_doc():
     b = doc.blocks.new('HATCHED'); square(b); hatch(b)
     b = doc.blocks.new('FILLTEXT'); hatch(b); b.add_text('X', dxfattribs={'insert': (0, 0)})
     b = doc.blocks.new('SPL'); square(b); b.add_spline([(0, 0), (30, 40), (60, 0), (90, 40)])
+    b = doc.blocks.new('SPLOUT'); square(b, 15000); b.add_spline([(15000, 0), (15030, 40), (15060, 0), (15090, 40)])
     msp = doc.modelspace()
     at = {'TXTREACH': (20000, 5000),   # base and square outside, the label lands at (5000, 5000) inside
           'HGUARD': (5000, 5000),      # base inside, square at (20000, 5000) outside, fill skipped
@@ -676,7 +705,8 @@ def k3_doc():
           'HATCHED': (3000, 3000),     # inside
           'HATCHFAR': (50000, 5000),   # HATCHED block far outside: now pruned (the registration's case)
           'FILLTEXT': (60000, 5000),   # fills and labels only: no extent, kept
-          'SPL': (70000, 5000)}        # spline: no extent, kept
+          'SPL': (70000, 5000),        # spline: no extent, kept
+          'SPLOUT': (5000, 7000)}      # base inside, square and spline outside: placed by the square (estimate)
     handles = {key: msp.add_blockref('HATCHED' if key == 'HATCHFAR' else key, xy).dxf.handle for key, xy in at.items()}
     return doc, handles
 
@@ -722,8 +752,11 @@ def test_k3_coverage_ledger_places_sheets_by_the_same_extent(tmp_path):
     done = run(POINTS / 'build_point_coverage_ledger.py', '--input', tmp_path / 'input.json', '--output-dir', tmp_path / 'out')
     assert done.returncode == 0, done.stdout + done.stderr
     report = json.loads((tmp_path / 'out/点位覆盖台账.json').read_text(encoding='utf-8'))
-    # PLAINOUT complete; TXTREACH, HGUARD, HATCHED, HATCHFAR incomplete; FILLTEXT and SPL have no extent
-    assert report['placement_basis_counts'] == {'图形范围中心': 1, '图形范围中心（范围不完整：未含填充、注记按插入点计或无几何对象按取证包围盒计）': 4,
-                                                '插入点（定不出图形范围）': 2}
+    # PLAINOUT complete; TXTREACH, HGUARD, HATCHED, HATCHFAR incomplete; SPL and SPLOUT placed by their square with the
+    # unmeasured spline skipped (decision 10-17, as 0.3.10 placed sheets); FILLTEXT has nothing measurable
+    assert report['placement_basis_counts'] == {'图形范围中心': 1, '图形范围中心（范围不完整：未含填充或注记按插入点计）': 4,
+                                                '图形范围中心（范围不完整（估算）：跳过了取不到范围的对象）': 2,
+                                                '插入点（定不出图形范围）': 1}
     mismatch = {w['id']: (w['insert_sheet'], w['geometry_sheet']) for w in report['warnings']['insert_geometry_sheet_mismatch']}
-    assert mismatch == {f"PT-CAD-{h['HGUARD'].upper()}": ('P1', 'R'), f"PT-CAD-{h['PLAINOUT'].upper()}": ('P1', 'R')}
+    assert mismatch == {f"PT-CAD-{h['HGUARD'].upper()}": ('P1', 'R'), f"PT-CAD-{h['PLAINOUT'].upper()}": ('P1', 'R'),
+                        f"PT-CAD-{h['SPLOUT'].upper()}": ('P1', 'R')}

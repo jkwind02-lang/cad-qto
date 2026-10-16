@@ -27,7 +27,7 @@ from search_negative_evidence import OUTPUT_SCHEMA as SEARCH_SCHEMA, record_prob
 
 SCHEMA = "qto-point-coverage-input/1.0"
 LEDGER_SCHEMA = "qto-point-coverage-ledger/1.0"
-VERSION = "qto-point-coverage-ledger/1.3.2"
+VERSION = "qto-point-coverage-ledger/1.3.3"
 DESTINATIONS = ("已计", "有据排除", "待识别", "版本冲突", "无去向")
 DISPOSITION_DEST = {"adopted": "已计", "merged": "已计", "excluded": "有据排除", "not_applicable": "有据排除",
                     "duplicate_excluded": "有据排除", "unresolved": "待识别"}
@@ -51,7 +51,7 @@ GEOMETRY_BASIS, PARTIAL_BASIS, INSERT_BASIS = (cad_geometry.PLACEMENT_GEOMETRY, 
                                                cad_geometry.PLACEMENT_INSERT)
 DYNAMIC_BASIS = "插入点（动态块图形范围不参与定位）"
 GUARD_BASIS = "插入点（范围不完整且落在包外，按插入点保留）"
-GEOMETRY_BASES = (GEOMETRY_BASIS, PARTIAL_BASIS)
+GEOMETRY_BASES = (GEOMETRY_BASIS, PARTIAL_BASIS, cad_geometry.PLACEMENT_ESTIMATED)
 COUNT_KEYS = ("drawing", "handle", "category", "sheet")
 EXCLUSION_KEYS = ("drawing", "handle", "basis")
 TOP_FIELDS = {"schema_version", "scope_id", "drawings", "count_tables", "handle_exclusions", "sheets", "legend_coverage",
@@ -270,9 +270,10 @@ class Ledger:
             return None
 
     def extent(self, blocks: dict[str, Any], meta: dict[str, Any], name: str, memo: dict[Any, Any]):
-        """(local box, notes) of a block definition by the adapters' rules (cad_geometry.definition_extent, K3 of
-        registration 20261017-0031): fills skipped, labels at their insertion point, any other unmeasured row or an
-        unreadable child leaves the box unknown and the insertion point places the instance."""
+        """(local box, notes) of a block definition for sheet placement (cad_geometry.definition_extent with
+        skip_unknown, K3 of registration 20261017-0031 and decision 10-17): fills skipped, labels at their insertion
+        point, rows without any box and unreadable children skipped as in 0.3.10 (an estimate, noted); only a block
+        with nothing measurable left is placed by its insertion point."""
         if ("definitions",) not in memo:   # tuple keys never meet a block name
             memo[("definitions",)] = {n: entry["folder"].rows() for n, entry in blocks.items()}
             memo[("origins",)] = {n: (m.get("origin") or [0.0, 0.0, 0.0]) for n, m in meta.items()}
@@ -280,7 +281,7 @@ class Ledger:
             memo[("empty",)] = next((entry["folder"].empty for entry in blocks.values()), frozenset())
         try:
             return cad_geometry.definition_extent(name, memo[("definitions",)], memo[("origins",)], MAX_DEPTH, memo[("cache",)],
-                                                  (), memo[("empty",)], cad_geometry.DYNAMIC_STATE_CODES)
+                                                  (), memo[("empty",)], cad_geometry.DYNAMIC_STATE_CODES, skip_unknown=True)
         except (ValueError, TypeError, IndexError):
             return None, frozenset()
 
