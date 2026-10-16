@@ -277,8 +277,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_dxf_background.py",
-      "sha256": "9b1c26a8cbdd6849bd96a310dba44c41a6ac4b5b82394d08216ce2679fefcea1",
-      "bytes": 18419
+      "sha256": "016b2e576763fa09993a1629087de361612f9be000f5972f892e972fe8bcbd59",
+      "bytes": 19055
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_elevation_facts.py",

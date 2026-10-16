@@ -117,16 +117,24 @@ def hatch_lines(h):
  finally: random.setstate(st)
 
 
-def _block_hatch_sources(insert, ves, blk):
- """Pair the exploded hatches of an INSERT with their block definitions and the insert matrix (contract 7.2).
- Pattern lines are drawn from the definition and moved by the matrix, so mirror, rotation, scale and phase follow the
- original; ezdxf's own transform of an exploded hatch re-applies the pattern scale and angle and turns a mirror into a rotation."""
- hv = [v for v in ves if v.dxftype() == 'HATCH']
- hs = [v for v in blk if v.dxftype() == 'HATCH'] if hv and blk is not None else []
- if not hv or len(hs) != len(hv): return {}
- try: m = insert.matrix44()
- except Exception: return {}
- return {id(v): (s, m) for v, s in zip(hv, hs)}
+def _block_sources(m, ves, blk):
+ """Pair the exploded hatches and nested INSERTs of an INSERT with their block definitions (contract 7.2).
+ m maps this block's definition coordinates to WCS and is multiplied level by level from the definitions' own insert matrices,
+ so a non-uniform scale over a rotated nested block keeps its shear. Pattern lines are computed in the definition and moved by m:
+ ezdxf's exploded hatch re-applies the pattern scale and angle, turns a mirror into a rotation, and an exploded nested INSERT
+ is rebuilt from scale and rotation, which cannot hold a shear."""
+ kinds = ('HATCH', 'INSERT')
+ vs = [v for v in ves if v.dxftype() in kinds]
+ ds = [x for x in blk if x.dxftype() in kinds] if vs and blk is not None else []
+ if not vs or len(ds) != len(vs) or any(a.dxftype() != b.dxftype() for a, b in zip(vs, ds)): return {}
+ from ezdxf.math import Matrix44
+ out = {}
+ for v, s in zip(vs, ds):
+  if v.dxftype() == 'HATCH': out[id(v)] = (s, m)
+  else:
+   try: out[id(v)] = (None, Matrix44.chain(s.matrix44(), m))
+   except Exception: pass
+ return out
 
 
 def _anchor(e):
@@ -184,7 +192,13 @@ class _Walker:
     if self.dw.doc.blocks.get(e.dxf.name) is None: self._skip('xref_missing', e); return
    try: ves = list(e.virtual_entities())
    except Exception: self._skip('proxy', e); return
-   src = _block_hatch_sources(e, ves, self.dw.doc.blocks.get(e.dxf.name)) if t == 'INSERT' else {}
+   src = {}
+   if t == 'INSERT':
+    m = self.hsrc[id(e)][1] if id(e) in self.hsrc else None   # a nested INSERT carries the product of the matrices above it
+    if m is None:
+     try: m = e.matrix44()
+     except Exception: m = None
+    if m is not None: src = _block_sources(m, ves, self.dw.doc.blocks.get(e.dxf.name))
    self.hsrc.update(src)
    for ve in ves: self._walk(ve, lay, bb, depth + 1)
    for k in src: self.hsrc.pop(k, None)
@@ -240,7 +254,7 @@ class _Walker:
  def _pattern(self, e, lay, color):
   src = self.hsrc.get(id(e))
   try:
-   segs = ((src[1].transform(a), src[1].transform(b)) for a, b in hatch_lines(src[0])) if src else hatch_lines(e)
+   segs = ((src[1].transform(a), src[1].transform(b)) for a, b in hatch_lines(src[0])) if src and src[0] is not None else hatch_lines(e)
    for a, b in segs:
     self.out.append((lay, {'kind': 'line', 'points': [[a.x, a.y], [b.x, b.y]], 'color': color}))
   except Exception: self._skip('pattern_hatch', e)

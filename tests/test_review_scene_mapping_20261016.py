@@ -729,6 +729,51 @@ def test_dxf_block_hatch_pattern_follows_the_insert_matrix(tmp_path, sx, sy, rot
     assert abs(((math.degrees(math.atan2(y2 - y1, x2 - x1)) % 180) - expect + 90) % 180 - 90) < 0.1
 
 
+NESTED_HATCH = {  # innermost first: (insert point, xscale, yscale, rotation) of each level
+    'codex_shear': [((300, 400), 1, 1, 25), ((2000, 3000), 2, 0.75, 33)],
+    'uniform_outer_inner_90': [((300, 400), 1, 1, 90), ((2000, 3000), 2, 2, 33)],
+    'inner_unrotated': [((300, 400), 1, 1, 0), ((2000, 3000), 2, 0.75, 33)],
+    'mirror_uniform': [((300, 400), 1, 1, 25), ((2000, 3000), -1.5, 1.5, 20)],
+    'three_levels': [((300, 400), 1, 1, 25), ((100, -50), 1.2, 0.8, 10), ((2000, 3000), 2, 0.75, 33)],
+}
+
+
+@pytest.mark.parametrize('name', sorted(NESTED_HATCH))
+def test_dxf_nested_block_hatch_uses_the_full_cumulative_matrix(tmp_path, name):
+    # Codex V1-R3-H01: a non-uniform scale over a rotated nested block is a shear; the pattern must follow the full affine product.
+    import ezdxf
+    from qto_dxf_background import build_dxf_backgrounds, hatch_lines
+    chain = NESTED_HATCH[name]
+    doc = ezdxf.new('R2010'); leaf = doc.blocks.new('LEAF')
+    h = leaf.add_hatch(); h.set_pattern_fill('ANSI31', scale=10, angle=15); h.paths.add_polyline_path([(0, 0), (300, 0), (300, 200), (0, 200)], is_closed=True)
+    inner = 'LEAF'
+    for k, (p, sx, sy, rot) in enumerate(chain[:-1]):
+        b = doc.blocks.new(f'L{k}'); b.add_blockref(inner, p, dxfattribs={'xscale': sx, 'yscale': sy, 'rotation': rot}); inner = f'L{k}'
+    p, sx, sy, rot = chain[-1]
+    doc.modelspace().add_blockref(inner, p, dxfattribs={'xscale': sx, 'yscale': sy, 'rotation': rot})
+    path = tmp_path / 'n.dxf'; doc.saveas(path)
+    t = {'scene_id': 'S', 'sheet_bounds': [-5000, -5000, 10000, 10000], 'dx': 0, 'dy': 0, 'include': [], 'exclude': [], 'symbol_layers': [], 'items': [],
+         'stats': __import__('collections').Counter(), 'cfg': {'large_block_points': 2000, 'large_block_layers': [], 'flatten_mm': 1, 'duplicate_tolerance_mm': 1}}
+    build_dxf_backgrounds(path, hashlib.sha256(path.read_bytes()).hexdigest(), [t], set(), 1, 3)
+
+    def move(q):   # level by level, independent of ezdxf's matrices
+        x, y = q[0], q[1]
+        for (ix, iy), sx, sy, rot in chain:
+            c, s = math.cos(math.radians(rot)), math.sin(math.radians(rot))
+            x, y = ix + c * sx * x - s * sy * y, iy + s * sx * x + c * sy * y
+        return x, y
+    key = lambda q: (round(q[0], 1), round(q[1], 1))
+    norm = lambda a, b: tuple(sorted(((float(a[0]), float(a[1])), (float(b[0]), float(b[1]))), key=key))
+    order = lambda s: (key(s[0]), key(s[1]))
+    want = sorted((norm(move(a), move(b)) for a, b in hatch_lines(h)), key=order)
+    got = sorted((norm(*it['points']) for it in t['items'] if it['kind'] == 'line'), key=order)
+    ang = lambda s: math.degrees(math.atan2(s[1][1] - s[0][1], s[1][0] - s[0][0])) % 180
+    assert len(got) == len(want) == 12
+    for g, w in zip(got, want):
+        assert math.dist(g[0], w[0]) < 0.05 and math.dist(g[1], w[1]) < 0.05, (name, g, w)
+        assert abs((ang(g) - ang(w) + 90) % 180 - 90) < 0.05, name
+
+
 def test_dxf_background_inputs_must_match(tmp_path):
     code, report, v, _ = dxf_convert(tmp_path / 'sha', dxf_sha='0' * 64)
     assert code == 2 and v is None and any(p['check'] == 'S-5' and '哈希与取证清单不符' in p['message'] for p in report['problems'])
