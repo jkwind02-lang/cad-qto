@@ -27,6 +27,29 @@ def rows(values,label):
         if key in result:raise ValueError(label+'编号重复:'+key)
         result[key]=r
     return result
+def logical_circuits(circuit_rows,byid):
+    """Segments of one logical circuit (e.g. cable to the first lamp, then wire) chain head to tail without overlap."""
+    groups=defaultdict(list)
+    for key,r in circuit_rows.items():
+        if r.get('logical_circuit_id') is not None:groups[text(r['logical_circuit_id'],key+'.logical_circuit_id')].append(key)
+    out=[]
+    for lid,keys in sorted(groups.items()):
+        segs={k:circuit_rows[k] for k in keys}
+        if len({s['system'] for s in segs.values()})>1:raise ValueError('同一逻辑回路的各段系统不一致:'+lid)
+        starts=defaultdict(list);ends=defaultdict(list)
+        for k,s in segs.items():starts[s['start_node']].append(k);ends[s['end_node']].append(k)
+        if any(len(v)>1 for v in [*starts.values(),*ends.values()]):raise ValueError('同一逻辑回路有分叉或重复段，分支须另立逻辑回路:'+lid)
+        heads=[k for k,s in segs.items() if s['start_node'] not in ends]
+        order=heads[:1]
+        while order and segs[order[-1]]['end_node'] in starts and len(order)<=len(segs):order.append(starts[segs[order[-1]]['end_node']][0])
+        if len(heads)!=1 or len(order)!=len(segs):raise ValueError('同一逻辑回路的各段须首尾相接成一条:'+lid)
+        seen=set()
+        for k in order:
+            if seen&set(segs[k]['path_ids']):raise ValueError('同一逻辑回路的各段路径重叠:'+lid+'/'+k)
+            seen|=set(segs[k]['path_ids'])
+        out.append({'logical_circuit_id':lid,'segment_ids':order,'start_node':segs[order[0]]['start_node'],'end_node':segs[order[-1]]['end_node'],
+            'segments':[{'id':k,'kind':byid[k]['kind'],'spec':byid[k]['spec'],'parallel_count':byid[k]['parallel_count'],'length_m':byid[k]['length_m']} for k in order]})
+    return out
 def calculate(d):
     if d.get('schema')!=SCHEMA or d.get('unit')!='m':raise ValueError('路径契约或单位错误；先明确换算为m')
     project=text(d.get('project_id'),'project_id');paths=rows(d.get('paths'),'paths')
@@ -80,12 +103,14 @@ def calculate(d):
                 'length_components_each_m':parts,'extra_each_m':extra,'length_m':total,'unit':'m',
                 'calculation':f'{count} * ({path_length} + {extra})','source_ids':r['source_ids'],
                 'cable_core_count':r.get('cable_core_count'),'quantity_level':'规则推算量','official_adoption':False})
+            if usage_key=='circuit_ids':items[-1]['logical_circuit_id']=r.get('logical_circuit_id')
+    logical=logical_circuits(circuit_rows,{r['id']:r for r in items})
     summaries=defaultdict(list)
     for r in items:summaries[(r['kind'],r['system'],r['spec'])].append(r['length_m'])
     unused=sorted(set(paths)-set(usage))
     return {'schema':'qto-electrical-path-result/1.0','project_id':project,'status':'REVIEW_REQUIRED' if unused else 'REFERENCE_ONLY',
         'items':items,'summary':[{'kind':k[0],'system':k[1],'spec':k[2],'unit':'m','length_m':math.fsum(v)} for k,v in sorted(summaries.items())],
-        'shared_path_usage':dict(usage),'unused_path_ids':unused,'business_adoption_allowed':False,
+        'shared_path_usage':dict(usage),'unused_path_ids':unused,'logical_circuits':logical,'business_adoption_allowed':False,
         'meaning':'已识别路径的参考复算；通道与回路分别计量，芯数不乘入电缆长度；未使用路径需模型解释归属，未证明原图完整'}
 def main():
     p=argparse.ArgumentParser();p.add_argument('input',type=Path);p.add_argument('--output',type=Path);a=p.parse_args()

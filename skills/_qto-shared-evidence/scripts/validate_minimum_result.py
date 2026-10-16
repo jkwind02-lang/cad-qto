@@ -13,6 +13,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from model_recognition_basis import validate_working_basis
 from recompute_qto_dependencies import check_result_dependencies
+from search_negative_evidence import STATUS as SEARCH_STATUS, record_problems
 
 
 TOP_REQUIRED = (
@@ -583,7 +584,63 @@ def validate_document(data: Any) -> list[str]:
             if not nonempty(item.get(field)):
                 errors.append(f"{identifier}缺少非空字段: {field}")
 
+    errors.extend(check_negative_conclusions(data, results))
     errors.extend(check_result_dependencies(data))
+    return errors
+
+
+def check_negative_conclusions(data: dict, results: dict[str, Any]) -> list[str]:
+    """Negative conclusions ("图上无") need search records (通用成果字段与状态, 否定结论与检索证据 and invariant 15).
+    Conditional: only result items that write 否定结论 are checked; records come from search_negative_evidence.py."""
+    errors: list[str] = []
+    raw = data.get("否定结论检索记录")
+    records: dict[str, Any] = {}
+    if raw is not None and not isinstance(raw, list):
+        return ["否定结论检索记录必须是数组"]
+    for n, rec in enumerate(raw or []):
+        rid = rec.get("record_id") if isinstance(rec, dict) else None
+        if not nonempty(rid):
+            errors.append(f"否定结论检索记录[{n}]缺少 record_id")
+            continue
+        if rid in records:
+            errors.append(f"否定结论检索记录编号重复: {rid}")
+            continue
+        records[rid] = rec
+        errors.extend(f"否定结论检索记录{rid}{problem}" for problem in record_problems(rec))
+    for identifier, item in results.items():
+        neg = item.get("否定结论")
+        if neg is None:
+            continue
+        if not isinstance(neg, dict):
+            errors.append(f"{identifier}.否定结论必须为对象或null")
+            continue
+        if not nonempty(neg.get("结论")):
+            errors.append(f"{identifier}的否定结论缺少结论原文")
+        refs = neg.get("检索记录")
+        if not isinstance(refs, list) or not refs:
+            errors.append(f"{identifier}的否定结论没有检索记录，只能列为待确认的未决事项")
+            continue
+        absent = [r for r in refs if r not in records]
+        for r in absent:
+            errors.append(f"{identifier}引用的否定结论检索记录不存在: {r}")
+        found = [records[r] for r in refs if r in records]
+        if absent or any(r.get("status") not in SEARCH_STATUS for r in found):
+            continue
+        statuses = {r["status"] for r in found}
+        zero = item.get("零值复核")
+        confirmed_zero = isinstance(zero, dict) and zero.get("复核结论") == "已确认零值"
+        if "hit" in statuses:
+            errors.append(f"{identifier}的检索记录有命中，否定结论不成立；命中不属本项时，在检索输入里把相应图纸设为参照或排除图页后重检")
+        elif "no_hit_partial" in statuses:
+            if confirmed_zero:
+                errors.append(f"{identifier}的检索记录为待确认，不能写已确认零值")
+            if item.get("状态") not in {"待确认", "证据不足"}:
+                errors.append(f"{identifier}的检索记录为待确认，成果状态只能是待确认或证据不足")
+        bill = neg.get("清单量")
+        if bill is not None and not numeric(bill):
+            errors.append(f"{identifier}的否定结论清单量必须是数或null")
+        elif numeric(bill) and bill > 0 and not any("表与说明" in (r.get("sheet_kinds_searched") or []) for r in found):
+            errors.append(f"{identifier}清单有量而判图上无，检索记录须检索过表与说明类图页（设计说明）")
     return errors
 
 

@@ -23,10 +23,11 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from build_review_scenes_from_tables import read_rows, SHEET_KEYS, SHEET_KINDS  # noqa: E402
 import qto_cad_geometry as cad_geometry  # noqa: E402
+from search_negative_evidence import OUTPUT_SCHEMA as SEARCH_SCHEMA, record_problems  # noqa: E402
 
 SCHEMA = "qto-point-coverage-input/1.0"
 LEDGER_SCHEMA = "qto-point-coverage-ledger/1.0"
-VERSION = "qto-point-coverage-ledger/1.1.0"
+VERSION = "qto-point-coverage-ledger/1.2.0"
 DESTINATIONS = ("已计", "有据排除", "待识别", "版本冲突", "无去向")
 DISPOSITION_DEST = {"adopted": "已计", "merged": "已计", "excluded": "有据排除", "not_applicable": "有据排除",
                     "duplicate_excluded": "有据排除", "unresolved": "待识别"}
@@ -48,7 +49,7 @@ GEOMETRY_BASIS, INSERT_BASIS, DYNAMIC_BASIS = "图形范围中心", "插入点�
 COUNT_KEYS = ("drawing", "handle", "category", "sheet")
 EXCLUSION_KEYS = ("drawing", "handle", "basis")
 TOP_FIELDS = {"schema_version", "scope_id", "drawings", "count_tables", "handle_exclusions", "sheets", "legend_coverage",
-              "version_conflicts", "excluded_classes", "auto_exclude_sheet_kinds", "detail_copy_sheets"}
+              "version_conflicts", "excluded_classes", "auto_exclude_sheet_kinds", "detail_copy_sheets", "search_records"}
 HANDLE_RE = re.compile(r'"entity_handle":\s*"([^"]*)"')
 # Same path id as the adapter: PT-CAD-<top handle>/<block>/CAD-<child handle>, one /<block>/CAD-<handle> per level.
 # AutoCAD block names cannot contain / or \, so the separators are unambiguous.
@@ -126,6 +127,7 @@ class Ledger:
         self.files: list[dict[str, Any]] = []
         self.candidates: list[dict[str, Any]] = []
         self.warnings: dict[str, list[Any]] = defaultdict(list)
+        self.search_records: dict[str, dict[str, Any]] | None = None
         self.sources: dict[str, str] = {}
         self.auto_kinds: list[str] = list(DEFAULT_AUTO_EXCLUDE)
         self.class_rules: list[tuple[dict[str, Any], Any, Any, str | None]] = []
@@ -780,6 +782,53 @@ class Ledger:
                 for number in numbers:
                     by_row[(drawing, number)]["_conflict"] = f"matched_symbols 冲突：{key} 同时对应 {'、'.join(numbers)}"
 
+    def read_search_records(self) -> dict[str, dict[str, Any]] | None:
+        """search_records: search_negative_evidence.py outputs (one path or a list). None when not given."""
+        value = self.data.get("search_records")
+        if value in (None, "", []):
+            return None
+        paths = value if isinstance(value, list) else [value]
+        records: dict[str, dict[str, Any]] = {}
+        for item in paths:
+            path = self.path(str(item))
+            if not path.is_file():
+                self.problem("C-7", str(item), "检索记录文件不存在"); continue
+            try:
+                data = load_json(path)
+            except ValueError as exc:
+                self.problem("C-7", str(path), f"检索记录文件读不了：{exc}"); continue
+            if not isinstance(data, dict) or data.get("schema") != SEARCH_SCHEMA or not isinstance(data.get("records"), list):
+                self.problem("C-7", str(path), f"须是 {SEARCH_SCHEMA}（search_negative_evidence.py 的输出），records 是数组"); continue
+            self.files.append({"role": "search_records", "path": str(path), "sha256": sha256(path)})
+            for n, rec in enumerate(data["records"]):
+                rid = rec.get("record_id") if isinstance(rec, dict) else None
+                if not nonempty(rid):
+                    self.problem("C-7", f"{path.name} records[{n}]", "缺少 record_id"); continue
+                if rid in records:
+                    self.problem("C-7", f"{path.name} records[{n}]", f"检索记录编号重复：{rid}"); continue
+                records[rid] = rec
+        return records
+
+    def search_issue(self, r: dict[str, str], records: dict[str, dict[str, Any]] | None) -> str | None:
+        """Why a zero-instance row's search records do not confirm the zero; None when they do."""
+        ids = [s for s in re.split(r"[；;,，\s]+", r["search_record_id"]) if s]
+        if records is None:
+            self.warnings["search_record_ids_not_checked"].append(
+                {"drawing": r["drawing"], "legend_row": r["legend_row"], "search_record_id": r["search_record_id"]})
+            return None
+        for rid in ids:
+            rec = records.get(rid)
+            if rec is None:
+                return f"检索记录 {rid} 不在 search_records 里"
+            problems = record_problems(rec)
+            if problems:
+                return f"检索记录 {rid}{problems[0]}"
+            if rec["status"] == "hit":
+                return f"检索记录 {rid} 有命中 {rec['result']['hits']} 处，实例数为 0 不成立"
+            if rec["status"] == "no_hit_partial":
+                return f"检索记录 {rid} 为待确认（有未覆盖的图或可能含图面内容的未读对象），实例数为 0 未确认"
+        return None
+
     def read_legend(self) -> list[dict[str, str]]:
         value = self.data.get("legend_coverage")
         if value in (None, ""):
@@ -825,9 +874,11 @@ class Ledger:
                 continue   # a hand-added block row only carries a suspected class; it is not a legend row
             count = int(r["plan_count"]) if re.fullmatch(r"\d+", r["plan_count"]) else 0
             unconfirmed = count == 0 and not r["search_record_id"]   # every destination, not only 不计 (cross-check B4A-B1-01)
-            if not r["destination"] or unconfirmed or r.get("_conflict"):
+            issue = self.search_issue(r, self.search_records) if count == 0 and r["search_record_id"] else None
+            if not r["destination"] or unconfirmed or issue or r.get("_conflict"):
                 reason = (r["_conflict"] if r.get("_conflict") else
-                          "实例数为 0、没有检索记录（待确认）" if unconfirmed and r["destination"] else "去向为空")
+                          "实例数为 0、没有检索记录（待确认）" if unconfirmed and r["destination"] else
+                          issue if issue and r["destination"] else "去向为空")
                 pending.append({"drawing": r["drawing"], "legend_row": r["legend_row"], "symbol": r["symbol"], "reason": reason})
             if r["symbol_kind"] != "非块" or count == 0 or r.get("_claims"):
                 continue   # a non-block row matched to blocks: those blocks are already candidates
@@ -887,6 +938,7 @@ class Ledger:
         self.place(sheets)
         self.apply_rules(self.sheet_kind_rules(sheets, drawings))
         self.unexpanded_warnings()
+        self.search_records = self.read_search_records()
         legend_rows = self.legend()
         if self.problems:
             raise InputProblems(self.problems)
@@ -938,6 +990,7 @@ class Ledger:
                                               for (d, s), n in sorted(self.unconfirmed_detail.items())],
                 "expanded_containers": {d: dict(sorted(n.items())) for d, n in sorted(self.expanded.items()) if n},
                 "placement_basis_counts": dict(sorted(placement.items())),
+                "search_records": {"given": self.search_records is not None, "records": len(self.search_records or {})},
                 "groups": group_rows, "legend_rows": legend_rows}
 
     def completeness(self) -> dict[str, Any]:
