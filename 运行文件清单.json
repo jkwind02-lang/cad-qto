@@ -17,8 +17,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
-      "sha256": "91c993b03856d6644fc6ba7509826377df227a1fd1f209ffecfb201973431d22",
-      "bytes": 36616
+      "sha256": "7df4190801f33202a5a706077facf3a080d18dd64486f77ae562da98f49db75f",
+      "bytes": 37475
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-audit.js",
@@ -57,8 +57,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
-      "sha256": "aee52dc77e72234d0503ee7d903d6b48a6fe0029a82401949d1cce5f99671fa8",
-      "bytes": 22591
+      "sha256": "af112d9b3d4f7cbaef0ee88b3ea29ac59cefe7020d53b03f41af87c51d70145b",
+      "bytes": 22869
     },
     {
       "path": "_qto-shared-evidence/references/PDF图片与表格提取.md",
@@ -187,8 +187,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/build_review_scenes_from_tables.py",
-      "sha256": "05f3f6452b5254cc6109eee2acef522785d7b1332d97c4f2d3cae6a012857dda",
-      "bytes": 50926
+      "sha256": "5d2ff6ca458d7012ab789e704da84e1abeaa808ed0ce64a10bd1c393992977e3",
+      "bytes": 51278
     },
     {
       "path": "_qto-shared-evidence/scripts/cad_native/__init__.py",
@@ -277,8 +277,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_dxf_background.py",
-      "sha256": "9600fea4217fef219a61aa254a93c3dd456669d9d55be79d510b688d5659d1c7",
-      "bytes": 25240
+      "sha256": "071848a466679942b5811312419fb2342ecf0b967ce0cd07d8063975e0a43a1c",
+      "bytes": 27859
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_elevation_facts.py",
@@ -322,8 +322,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
-      "sha256": "7edbd94125e8b6b08b5bf2a8d2c94a6c3cb1ed11d8dcd2c4242bfa68b69c6cc3",
-      "bytes": 26766
+      "sha256": "def9afdaab8079c3612a490d1d8c28338c6573193b2c129fb013e71061286d0b",
+      "bytes": 27499
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_revision.py",
@@ -417,8 +417,8 @@
     },
     {
       "path": "qto-components-points/references/点位覆盖台账.md",
-      "sha256": "feec08eab1363e4369ebc57354bd9c9e318148c96d6ad29f04b30b798e0cfc24",
-      "bytes": 6516
+      "sha256": "0924588dc002b9b63cf87ef7bf675a81397b8dbb84daeb7e46b325898492b28e",
+      "bytes": 10662
     },
     {
       "path": "qto-components-points/references/结果检查与输出.md",
@@ -432,8 +432,8 @@
     },
     {
       "path": "qto-components-points/references/计算与证据流程.md",
-      "sha256": "180bd475c0f28b623d2ad39227cd9df04c2a787f00efa6fdab0f07300aecdf51",
-      "bytes": 6202
+      "sha256": "781cb59246ae94ee00b4f890b51c282bffe4e39510f2efdb09b1ac6b52cdb6a4",
+      "bytes": 7313
     },
     {
       "path": "qto-components-points/references/跨专业端点事实.md",
@@ -442,8 +442,8 @@
     },
     {
       "path": "qto-components-points/scripts/build_component_instances_from_neutral.py",
-      "sha256": "066ec245d73fc584002d26950fe742a0d64e6f2e166efb5f3dd9ebbbeee333ee",
-      "bytes": 63026
+      "sha256": "55e4124343abf7444f3f3a4f779ae495202aee47f6b5074264489801d3049b19",
+      "bytes": 70094
     },
     {
       "path": "qto-components-points/scripts/build_network_endpoint_handoff.py",
@@ -452,8 +452,8 @@
     },
     {
       "path": "qto-components-points/scripts/build_point_coverage_ledger.py",
-      "sha256": "ab5fce967784cf9f0f9972c50abc09906d18d427c91cf8ee925ac640d13d3089",
-      "bytes": 35626
+      "sha256": "9024b724fe628afc46c9d1cc2c028c0e2492fbf1712c4c8e8cc406c9f807d8fc",
+      "bytes": 66512
     },
     {
       "path": "qto-components-points/scripts/count_reconciled_instances.py",
@@ -742,8 +742,8 @@
     },
     {
       "path": "qto-electrical-routes/references/复核页审核视图接入.md",
-      "sha256": "2fa04b6fe2356877e73dadde8cb627015a523b3d61250206812496056c97fc61",
-      "bytes": 13477
+      "sha256": "007c6f0924348815f7c9471dc7a80efc81e8932d8a166ef72d8b680d88d6576e",
+      "bytes": 13696
     },
     {
       "path": "qto-electrical-routes/references/常规计算逻辑.md",

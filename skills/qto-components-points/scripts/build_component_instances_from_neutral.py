@@ -29,7 +29,12 @@ from qto_actor_identity import is_model_identity
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
 
-VERSION = "qto-component-neutral-adapter/1.4.0"
+VERSION = "qto-component-neutral-adapter/1.5.0"
+# Only these two codes can be released by a dynamic_state_adjudication on an include rule (registration 20261016-1709);
+# arrays, xrefs and missing definitions stay unresolved whatever the rule says.
+DYNAMIC_STATE_CODES = {"dynamic_state_not_evaluated", "anonymous_block_state_unverified"}
+# Exact block names only: a pattern would let one sentence release every dynamic block of a drawing.
+WILDCARD_RE = re.compile(r"\.\*|[?\[\]|^]|(?<!^)\*")
 # Same-place review tolerances are physical (registration 20261016-1044 R2): millimetres per output coordinate unit
 # come from the declared unit name, else from the drawing INSUNITS and factor_to_output.
 UNIT_MM = {"mm": 1.0, "millimeter": 1.0, "millimeters": 1.0, "毫米": 1.0, "cm": 10.0, "centimeter": 10.0,
@@ -170,7 +175,47 @@ def load_ledger(path: Path, expected_source: str) -> tuple[dict[str, Any], dict[
     return ledger, entries
 
 
-def normalize_rules(values: Any, entries: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def dynamic_adjudication(raw: Any, rule_id: str, decision: str, evidence_ids: set[str] | None) -> dict[str, Any] | None:
+    """Validated dynamic_state_adjudication: exact block names, a basis and evidence; optional instance list."""
+    if raw is None:
+        return None
+    label = f"{rule_id}.dynamic_state_adjudication"
+    if decision != "include":
+        fail(f"{label} 只能写在 include 规则上")
+    if not isinstance(raw, dict):
+        fail(f"{label} 必须是对象")
+    names = raw.get("block_names")
+    if not isinstance(names, list) or not names:
+        fail(f"{label}.block_names 必须是非空数组（精确块名）")
+    block_names = []
+    for index, name in enumerate(names):
+        value = text(name, f"{label}.block_names[{index}]")
+        if WILDCARD_RE.search(value) or not value.strip("*"):
+            fail(f"{label}.block_names[{index}]={value!r} 像通配；动态块裁决只收精确块名")
+        if value in block_names:
+            fail(f"{label}.block_names 重复：{value}")
+        block_names.append(value)
+    basis = text(raw.get("basis"), f"{label}.basis")
+    evidence = raw.get("evidence_ids")
+    if not isinstance(evidence, list) or not evidence:
+        fail(f"{label}.evidence_ids 必须是非空数组")
+    evidence = [text(item, f"{label}.evidence_ids[{index}]") for index, item in enumerate(evidence)]
+    if evidence_ids is not None:
+        unknown = sorted(set(evidence) - evidence_ids)
+        if unknown:
+            fail(f"{label}.evidence_ids 引用了识别记录里没有的证据：{'、'.join(unknown)}")
+    object_ids = raw.get("object_ids")
+    if object_ids is not None:
+        if not isinstance(object_ids, list) or not object_ids:
+            fail(f"{label}.object_ids 写了就必须是非空数组")
+        object_ids = [text(item, f"{label}.object_ids[{index}]") for index, item in enumerate(object_ids)]
+        if len(set(object_ids)) != len(object_ids):
+            fail(f"{label}.object_ids 有重复")
+    return {"block_names": block_names, "basis": basis, "evidence_ids": evidence,
+            "object_ids": None if object_ids is None else set(object_ids)}
+
+
+def normalize_rules(values: Any, entries: dict[str, dict[str, Any]], evidence_ids: set[str] | None = None) -> list[dict[str, Any]]:
     if not isinstance(values, list):
         fail("rules 必须是数组")
     rules = []
@@ -190,6 +235,7 @@ def normalize_rules(values: Any, entries: dict[str, dict[str, Any]]) -> list[dic
                 "block_re": compile_pattern(rule.get("block_pattern", ".*"), f"{rule_id}.block_pattern"),
                 "layer_re": compile_pattern(rule.get("layer_pattern", ".*"), f"{rule_id}.layer_pattern"),
                 "parent_re": compile_pattern(rule.get("parent_block_pattern", ".*"), f"{rule_id}.parent_block_pattern"),
+                "dynamic_adjudication": dynamic_adjudication(rule.get("dynamic_state_adjudication"), rule_id, decision, evidence_ids),
             }
         )
         if decision != "unresolved":
@@ -624,7 +670,9 @@ def main() -> int:
             fail("识别配置与项目裁决台账ID不一致")
         if text(ledger_ref.get("ledger_version"), "adjudication_ledger.ledger_version") != ledger["ledger_version"]:
             fail("识别配置与项目裁决台账版本不一致")
-        rules = normalize_rules(profile.get("rules"), entries)
+        known_evidence = ({str(item.get("evidence_id")) for item in ledger.get("evidence") or [] if isinstance(item, dict)}
+                          if ledger.get("schema_version") == MODEL_LEDGER_SCHEMA else None)
+        rules = normalize_rules(profile.get("rules"), entries, known_evidence)
 
         scope = profile.get("scope")
         if not isinstance(scope, dict):
@@ -670,6 +718,8 @@ def main() -> int:
         failures: list[dict[str, Any]] = []
         block_boxes: dict[str, list[float] | None] = {}
         geometry: dict[str, dict[str, Any]] = {}
+        seen_blocks: dict[str, set[str]] = defaultdict(set)   # block name -> scoped physical ids
+        dynamic_released: dict[str, set[str]] = defaultdict(set)   # rule id -> block names released by its adjudication
 
         def transformed_box(box, matrix):
             return cad_geometry.transform_bounds(box, matrix)
@@ -706,14 +756,30 @@ def main() -> int:
             in_scope = bbox_intersects({"bbox": world_box}, bounds) if world_box else True
             if not in_scope:
                 return  # only complete, conservative bounds allow pruning
-            if insert.get("geometry_issues"):
-                dispositions.append({"object_id": f"PT-{path}", "physical_id": f"PT-{path}", "source_record_id": source_record_id,
-                                     "block_name": block_name, "layer": effective_layer, "parent_block": parent_block or None,
-                                     "point": [value * factor for value in world_point], "coordinate_unit": coordinate_unit,
-                                     "disposition": "unresolved", "basis": "; ".join(insert["geometry_issues"]), "rule_ids": [], "instance_path": path})
-                failures.append({"kind": "unsupported_insert_geometry", "instance_path": path, "issues": insert["geometry_issues"]})
-                return
             physical_id = f"PT-{path}"
+            seen_blocks[block_name].add(physical_id)
+            released = None
+            if insert.get("geometry_issues"):
+                # Decided on issue codes, not on the issue wording; text without matching codes stays unresolved.
+                codes = insert.get("geometry_issue_codes")
+                if (not suppressed_by and isinstance(codes, list) and codes and len(codes) == len(insert["geometry_issues"])
+                        and set(codes) <= DYNAMIC_STATE_CODES):
+                    rule, conflicts = choose_rule(block_name, effective_layer, parent_block, rules, physical_id)
+                    adjudication = rule.get("dynamic_adjudication") if rule and not conflicts and rule["decision"] == "include" else None
+                    if (adjudication and block_name in adjudication["block_names"]
+                            and (adjudication["object_ids"] is None or physical_id in adjudication["object_ids"])):
+                        released = {"rule_id": rule["rule_id"], "basis": adjudication["basis"],
+                                    "evidence_ids": adjudication["evidence_ids"], "geometry_issue_codes": sorted(set(codes)),
+                                    "location_basis": "插入点；动态块图形范围不可信，不参与范围裁剪和外形归并"}
+                        dynamic_released[rule["rule_id"]].add(block_name)
+                if released is None:
+                    dispositions.append({"object_id": physical_id, "physical_id": physical_id, "source_record_id": source_record_id,
+                                         "block_name": block_name, "layer": effective_layer, "parent_block": parent_block or None,
+                                         "point": [value * factor for value in world_point], "coordinate_unit": coordinate_unit,
+                                         "disposition": "unresolved", "basis": "; ".join(insert["geometry_issues"]), "rule_ids": [],
+                                         "geometry_issue_codes": codes if isinstance(codes, list) else None, "instance_path": path})
+                    failures.append({"kind": "unsupported_insert_geometry", "instance_path": path, "issues": insert["geometry_issues"]})
+                    return
             next_suppressed = suppressed_by
             angle, mirrored = orientation(matrix)
             geometry[physical_id] = {"angle": angle, "mirrored": mirrored,
@@ -731,7 +797,8 @@ def main() -> int:
                     "point": [value * factor for value in world_point],
                     "coordinate_unit": coordinate_unit,
                     "scope_geometry_bbox": world_box,
-                    "scope_location_basis": "transformed_geometry_extent" if world_box else "insertion_anchor_fallback_requires_review",
+                    "scope_location_basis": "transformed_geometry_extent" if world_box else (
+                        "insertion_anchor_dynamic_state_adjudicated" if released else "insertion_anchor_fallback_requires_review"),
                     "point_basis": "insertion_anchor_not_verified_connection_port",
                     "disposition": "unresolved",
                     "basis": "未命中冻结点位识别规则",
@@ -758,6 +825,9 @@ def main() -> int:
                                 "basis": str(rule.get("basis") or f"冻结识别规则 {rule['rule_id']}"),
                             }
                         )
+                        if released:
+                            base["dynamic_state_adjudication"] = released
+                            base["basis"] += f"；动态块状态裁决：{released['basis']}"
                         if decision == "include":
                             base["disposition"] = "adopted"
                             evidence = f"EV-CAD-{source_record_id}|{rule['authority']['source_id']}|{unit_source_id}"
@@ -887,6 +957,31 @@ def main() -> int:
                     None,
                     True,
                 )
+
+        # A dynamic-state adjudication must name blocks and instances that exist in scope; a typo or a stale list
+        # is an input error, not a silent no-op (registration 20261016-1709).
+        dynamic_summary = []
+        for rule in rules:
+            adjudication = rule.get("dynamic_adjudication")
+            if not adjudication:
+                continue
+            label = f"{rule['rule_id']}.dynamic_state_adjudication"
+            missing = [name for name in adjudication["block_names"] if name not in seen_blocks]
+            if missing:
+                fail(f"{label}.block_names 在本图范围内没有实例：{'、'.join(missing)}")
+            if adjudication["object_ids"] is not None:
+                known = set().union(*(seen_blocks[name] for name in adjudication["block_names"]))
+                stray = sorted(adjudication["object_ids"] - known)
+                if stray:
+                    fail(f"{label}.object_ids 引用了本图范围内不存在、或块名不在 block_names 里的实例：{'、'.join(stray)}")
+            released_count = sum(1 for item in dispositions
+                                 if (item.get("dynamic_state_adjudication") or {}).get("rule_id") == rule["rule_id"])
+            dynamic_summary.append({"rule_id": rule["rule_id"], "block_names": adjudication["block_names"],
+                                    "object_ids": None if adjudication["object_ids"] is None else sorted(adjudication["object_ids"]),
+                                    "basis": adjudication["basis"], "evidence_ids": adjudication["evidence_ids"],
+                                    "released_instance_count": released_count,
+                                    "unused_block_names": [name for name in adjudication["block_names"]
+                                                           if name not in dynamic_released[rule["rule_id"]]]})
 
         physical_ids = [item["physical_id"] for item in adopted]
         if len(physical_ids) != len(set(physical_ids)):
@@ -1072,7 +1167,9 @@ def main() -> int:
                 "duplicate_excluded_count": duplicate_review["duplicate_excluded_count"],
                 "duplicate_scale_status": duplicate_review["scale_status"],
                 "near_tolerance_mm_effective": duplicate_review["near_tolerance_mm_effective"],
+                "dynamic_state_adjudicated_count": sum(item["released_instance_count"] for item in dynamic_summary),
             },
+            "dynamic_state_adjudication": dynamic_summary,
             "instance_grouping": grouping,
             "duplicate_review": duplicate_review,
             "disposition_closure_complete": sum(disposition_counts.values()) == len(dispositions),

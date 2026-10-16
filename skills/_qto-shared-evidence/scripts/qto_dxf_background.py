@@ -424,6 +424,36 @@ def _label(insert):
  return next((v for v in vals if v), '')
 
 
+def _nested_inserts(dw, e, cache):
+ """INSERTs inside one top-level INSERT, depth first: (name, handle, effective layer, world insertion point, parent index or -1).
+ Layer 0 inherits the parent's layer; hidden layers and missing definitions end their branch, like the drawing walk."""
+ from ezdxf.math import Matrix44
+
+ def children(name):
+  if name not in cache:
+   blk, rows = dw.doc.blocks.get(name), []
+   for x in (blk.query('INSERT') if blk is not None else ()):
+    try: rows.append((x.dxf.name, str(x.dxf.handle).upper(), x.dxf.layer, x.matrix44(), x.ocs().to_wcs(x.dxf.insert)))
+    except Exception: continue
+   cache[name] = rows
+  return cache[name]
+
+ out = []
+
+ def walk(name, m, lay, parent, depth):
+  if depth >= MAX_DEPTH: return
+  for cname, h, clay, cm, ip in children(name):
+   eff = clay if clay != '0' else lay
+   if dw.hidden(eff): continue
+   p = m.transform(ip); out.append((cname, h, eff, (p.x, p.y), parent))
+   walk(cname, Matrix44.chain(cm, m), eff, len(out) - 1, depth + 1)
+
+ try: m0 = e.matrix44()
+ except Exception: return out
+ walk(e.dxf.name, m0, e.dxf.layer, -1, 1)
+ return out
+
+
 def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, unit_mm, precision, symbol_notes=None):
  """Fill each target's items, restoration, dropped layers and symbol reconciliation from one DXF.
 
@@ -441,8 +471,8 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
  for t in targets:
   sig = json.dumps(t['cfg'], sort_keys=True, ensure_ascii=False)
   t['_walker'] = walkers.setdefault(sig, _Walker(dw, t['cfg'], object_handles, unit_mm))
-  t['restoration'] = Counter(); t['dropped_layers'] = Counter(); t['_symbols'] = []
- inserts = []
+  t['restoration'] = Counter(); t['dropped_layers'] = Counter(); t['_symbols'] = []; t['_in_block'] = defaultdict(list)
+ inserts, tops = [], []
  for e in dw.msp:
   # The library bbox follows the same lossy nested explosion. Defer affected blocks
   # to the exact primitive filter below, otherwise a correct endpoint can be discarded.
@@ -457,7 +487,7 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
    ip = e.dxf.insert
    for t in hit:
     if _inside((ip.x, ip.y), t['sheet_bounds']): t['_symbols'].append((e.dxf.name, str(e.dxf.handle).upper(), e.dxf.layer, (ip.x, ip.y), _label(e), dw.hidden(e.dxf.layer)))
-   inserts.append(e)
+   inserts.append(e); tops.append((e, hit))
   done = {}
   for t in hit:
    w = t['_walker']
@@ -479,6 +509,25 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
  notes, used = symbol_notes or {}, set()
  # Symbols on off, frozen or non-plotting layers are not drawn, so they stay out of the sheet count and are listed apart.
  counted_blocks = {e.dxf.name for e in inserts if str(e.dxf.handle).upper() in object_handles}
+ # Symbols drawn inside blocks (floor blocks and the like) are not reconciled yet (contract 7.5): count them per sheet, whatever
+ # large_block_layers keeps on the page, so the reconciliation never reads all zero. A symbol inside a matched one is part of it.
+ counted_any = counted_blocks | ({x.dxf.name for blk in dw.doc.blocks if not blk.is_any_layout for x in blk.query('INSERT')
+                                  if str(x.dxf.handle).upper() in object_handles} if object_handles else set())
+ if not counted_any and not any(t['symbol_layers'] for t in targets): tops = []
+ ncache = {}
+ for e, hit in tops:
+  if dw.hidden(e.dxf.layer): continue
+  recs = None
+  for t in hit:
+   sym = t['symbol_layers']
+   if e.dxf.name in counted_blocks or (sym and any(r.search(e.dxf.layer) for r in sym)): continue
+   if recs is None: recs = _nested_inserts(dw, e, ncache)
+   taken = [False] * len(recs)
+   for i, (name, _, lay, p, par) in enumerate(recs):
+    if par >= 0 and taken[par]: taken[i] = True; continue
+    if name in counted_any or (sym and any(r.search(lay) for r in sym)):
+     taken[i] = True
+     if _inside(p, t['sheet_bounds']): t['_in_block'][name].append(p)
  for t in targets:
   sym = t['symbol_layers']; tol = t['cfg']['duplicate_tolerance_mm'] / unit_mm
   rows = defaultdict(list)
@@ -514,7 +563,11 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
     row['hidden_counted'] = sum(1 for h, *_ in hidden if h in object_handles)
    out.append(row)
   t['symbol_reconciliation'] = out
-  for k in ('_walker', '_symbols'): t.pop(k, None)
+  ib = t['_in_block']
+  if ib:
+   t['in_block_symbols'] = {'total': sum(map(len, ib.values())),
+                            'blocks': [{'block': n, 'count': len(ps), 'points': pts(ps)} for n, ps in sorted(ib.items(), key=lambda kv: (-len(kv[1]), kv[0]))]}
+  for k in ('_walker', '_symbols', '_in_block'): t.pop(k, None)
  return {'sha256': got, 'notes_used': used}
 
 

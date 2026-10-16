@@ -579,6 +579,8 @@ def build(m, base, neutral_root, problems, files):
    sc['restoration'] = restoration_summary(ts)
    rows = [{**r, 'sheet': t['sheet']} if len(ts) > 1 else r for t in ts for r in t.get('symbol_reconciliation') or []]
    if rows: sc['symbol_reconciliation'] = rows
+   ib = [{**b, 'sheet': t['sheet']} if len(ts) > 1 else b for t in ts for b in (t.get('in_block_symbols') or {}).get('blocks', [])]
+   if ib: sc['symbol_in_block'] = {'total': sum(b['count'] for b in ib), 'blocks': ib}
    meta['dropped_layers'] = sum((t.get('dropped_layers') or Counter() for t in ts), Counter())
   else: sc['restoration'] = {'source': 'neutral', 'note': NEUTRAL_NOTE}
   key = hashlib.sha256(json.dumps([drawings[meta['drawing']]['sha256'], dxf_ok.get(meta['drawing']) if ts else None, meta['filters']], ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:16]
@@ -641,7 +643,8 @@ def build(m, base, neutral_root, problems, files):
                      **({'bounds_basis': s['bounds_basis']} if s.get('bounds_basis') else {}), 'background_key': scene_meta[s['id']]['key'], 'background_filters': scene_meta[s['id']]['filters'],
                      'restoration': s.get('restoration'), 'dropped_layers': dict((scene_meta[s['id']].get('dropped_layers') or Counter()).most_common(40)),
                      'symbols': {'blocks': len(s.get('symbol_reconciliation') or []), **{k: sum(r.get(k, 0) for r in s.get('symbol_reconciliation') or []) for k in ('on_sheet', 'counted', 'uncounted', 'duplicates', *(NOTE_KINDS if notes_info else ()),
-                                 *(('hidden', 'hidden_counted') if any(r.get('hidden') for r in s.get('symbol_reconciliation') or []) else ()))}}}
+                                 *(('hidden', 'hidden_counted') if any(r.get('hidden') for r in s.get('symbol_reconciliation') or []) else ()))},
+                                 **({'in_block_not_reconciled': s['symbol_in_block']['total']} if s.get('symbol_in_block') else {})}}
                     for s in scenes],
          'objects': dict(Counter(o['kind'] for o in draws)), 'unlocated': dict(Counter(o.get('unlocated_reason') for o in draws if o['kind'] == 'unlocated')),
          'checks': checks}

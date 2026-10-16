@@ -109,8 +109,8 @@ try{
  // The panel folds away so it does not cover the rings; the toolbar button opens it again (closing it there clears the rings).
  function showMarks(pts,what){marks=pts||[];if(!marks.length){draw();return;}$('symbols-panel').hidden=true;$('symbols').classList.remove('on');const b=pointBounds(marks),pad=Math.max((scene.bounds[2]-scene.bounds[0])*.03,1);fitBounds([b[0]-pad,b[1]-pad,b[2]+pad,b[3]+pad]);status(what+'：'+marks.length+' 处，已在图上标红圈。');}
  function renderSymbols(){
-  const rows=scene?.symbol_reconciliation||[],panel=$('symbols-panel');$('symbols').hidden=!rows.length;panel.replaceChildren();
-  if(!rows.length){panel.hidden=true;$('symbols').classList.remove('on');return;}
+  const rows=scene?.symbol_reconciliation||[],ib=scene?.symbol_in_block,panel=$('symbols-panel');$('symbols').hidden=!rows.length&&!ib;panel.replaceChildren();
+  if(!rows.length&&!ib){panel.hidden=true;$('symbols').classList.remove('on');return;}
   const total=k=>rows.reduce((a,r)=>a+(r[k]||0),0),head=document.createElement('div');
   // Explained symbols (scene mapping contract 7.5.1) get their own columns and never count as uncounted or same position.
   const NOTES=[['removed_overlap','已剔除'],['counted_elsewhere','他图计入'],['same_item_elsewhere','同一实物另一图']],explained=rows.some(r=>'removed_overlap' in r);
@@ -128,7 +128,14 @@ try{
    }
    row.children[0].title='块名 '+r.block;table.append(row);
   }
-  panel.append(head,table);
+  if(rows.length)panel.append(head,table);
+  if(ib)panel.append(inBlock(ib));
+ }
+ // Symbols drawn inside floor blocks and the like are not reconciled yet (contract 7.5): show how many, so the panel never reads all zero.
+ function inBlock(ib){
+  const d=document.createElement('div'),t=s=>{const x=document.createElement('span');x.textContent=s;return x;};d.append(t('块内 '+ib.total+' 个符号未参与对账（画在楼层块等块里）：'));
+  ib.blocks.forEach((b,i)=>{const btn=document.createElement('button');btn.className='link';btn.textContent=b.block+(b.sheet?'（'+b.sheet+'）':'')+' '+b.count;btn.title='在图上标出块内 '+b.block+' 的位置';btn.onclick=()=>showMarks(b.points,'块内未对账 '+b.block);if(i)d.append(t('、'));d.append(btn);});
+  d.append(t('。已计、未计要回原图或看覆盖台账。'));return d;
  }
  $('symbols').onclick=()=>{const p=$('symbols-panel');p.hidden=!p.hidden;$('symbols').classList.toggle('on',!p.hidden);if(p.hidden){marks=[];draw();}};
  function focus(i){

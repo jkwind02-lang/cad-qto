@@ -273,6 +273,14 @@ if(art.comparison_html){
  const xh=harness(withData(sourceHTML,xd));await xh.start();xh.ids.scene.value=s0.id;xh.ids.scene.onchange();xh.ids.symbols.click();
  assert.match(xh.ids['symbols-panel'].textContent,/未计 1，同位置 1；已说明：已剔除 1、他图计入 1、同一实物另一图 0/);assert.match(xh.ids['symbols-panel'].textContent,/同一实物另一图/);assert.match(xh.ids['symbols-panel'].textContent,/隐藏层符号 1 个不计入本页，其中 1 个是计数对象/);
  findIn(xh.ids['symbols-panel'],n=>n.className==='link'&&/他图计入/.test(n.title||'')).click();assert.match(xh.ids['action-message'].textContent,/他图计入（电力平面计入）/);
+ // Symbols inside floor blocks (contract 7.5, registration 1403): only counted and located; a scene with only those still shows the button.
+ const ib={total:3,blocks:[{block:'TB',count:2,points:[p,p]},{block:'GPB',count:1,points:[p]}]},id2=structuredClone(d);id2.scenes.find(s=>s.id===s0.id).symbol_in_block=ib;
+ const ih=harness(withData(sourceHTML,id2));await ih.start();ih.ids.scene.value=s0.id;ih.ids.scene.onchange();ih.ids.symbols.click();
+ assert.match(ih.ids['symbols-panel'].textContent,/本页 3 个，已计 2/);assert.match(ih.ids['symbols-panel'].textContent,/块内 3 个符号未参与对账（画在楼层块等块里）：TB 2、GPB 1。/);
+ findIn(ih.ids['symbols-panel'],n=>n.className==='link'&&/块内 TB/.test(n.title||'')).click();assert.match(ih.ids['action-message'].textContent,/块内未对账 TB：2 处，已在图上标红圈/);
+ const od=structuredClone(data),os=od.scenes[0];delete os.symbol_reconciliation;os.symbol_in_block=ib;const oh=harness(withData(sourceHTML,od));await oh.start();oh.ids.scene.value=os.id;oh.ids.scene.onchange();
+ assert.equal(oh.ids.symbols.hidden,false);oh.ids.symbols.click();assert.match(oh.ids['symbols-panel'].textContent,/^块内 3 个符号未参与对账/);
+ checks.push('块内符号：面板写“块内 N 个符号未参与对账”并按块名列个数，点数字标红圈；只有块内符号的图页也显示符号对账按钮');
  checks.push('交换DXF底图：图面状态写“本页看不出 n 处，须回原图”及类别和主要图层，中性底图写明缺什么；符号对账列本页计数，点“未计”标红圈并提示，换到没有对账的图页面板收起；有对账说明时另列已剔除、他图计入、同一实物另一图，点数字标红圈并带说明');
 }
 // Affine text retains both glyph axes, including scene handedness; culling uses the transformed height.

@@ -104,6 +104,13 @@ def normalize_view(raw, base_dir=None):
     require(isinstance(r.get('notes',{}),dict) and all(isinstance(v,list) and all(string(n) for n in v) for v in r.get('notes',{}).values()),'符号对账说明无效')
     hd=r.get('hidden',0);require(isinstance(hd,int) and hd>=0 and len(r.get('hidden_points') or [])==hd and all(xy(p) for p in r.get('hidden_points') or []) and isinstance(r.get('hidden_counted',0),int) and 0<=r.get('hidden_counted',0)<=hd,'隐藏层符号计数与点位不符')
     require(r['counted']+r['uncounted']+sum(ex.values())==r['on_sheet'] and len(up)==r['uncounted'] and len(dp)==r['duplicates'] and all(xy(p) for p in [*up,*dp]),'符号对账行计数与点位不符')
+  # Symbols inside blocks that the reconciliation does not reach yet (contract 7.5): only counted and located.
+  ib=s.get('symbol_in_block')
+  if ib is not None:
+   bl=ib.get('blocks') if isinstance(ib,dict) else None
+   require(isinstance(bl,list) and bool(bl) and all(isinstance(b,dict) and string(b.get('block')) and isinstance(b.get('count'),int) and not isinstance(b['count'],bool) and b['count']>0
+                                                     and isinstance(b.get('points'),list) and len(b['points'])==b['count'] and all(xy(p) for p in b['points']) and (b.get('sheet') is None or string(b['sheet'])) for b in bl)
+           and ib.get('total')==sum(b['count'] for b in bl),'块内未对账符号计数与点位不符')
   if s.get('raster_path'):
    require(base_dir is not None,'raster_path需要输入文件目录')
    path=(Path(base_dir)/s['raster_path']).resolve();raw_image=path.read_bytes()
