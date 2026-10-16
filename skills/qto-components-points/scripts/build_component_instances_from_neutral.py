@@ -22,6 +22,7 @@ from typing import Any, Iterable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_entries, applies_to, recognition_basis
+from search_negative_evidence import MTEXT_CODE
 
 import qto_cad_geometry as cad_geometry
 from qto_actor_identity import is_model_identity
@@ -29,7 +30,7 @@ from qto_actor_identity import is_model_identity
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
 
-VERSION = "qto-component-neutral-adapter/1.5.0"
+VERSION = "qto-component-neutral-adapter/1.6.0"
 # Only these two codes can be released by a dynamic_state_adjudication on an include or exclude rule (registration
 # 20261016-1709; exclude added after checkpoint 1);
 # arrays, xrefs and missing definitions stay unresolved whatever the rule says.
@@ -237,6 +238,7 @@ def normalize_rules(values: Any, entries: dict[str, dict[str, Any]], evidence_id
                 "layer_re": compile_pattern(rule.get("layer_pattern", ".*"), f"{rule_id}.layer_pattern"),
                 "parent_re": compile_pattern(rule.get("parent_block_pattern", ".*"), f"{rule_id}.parent_block_pattern"),
                 "dynamic_adjudication": dynamic_adjudication(rule.get("dynamic_state_adjudication"), rule_id, decision, evidence_ids),
+                "text_cond": text_condition(rule.get("text_condition"), rule_id, decision),
             }
         )
         if decision != "unresolved":
@@ -267,13 +269,42 @@ def normalize_rules(values: Any, entries: dict[str, dict[str, Any]], evidence_id
     return rules
 
 
-def choose_rule(block: str, layer: str, parent_block: str, rules: list[dict[str, Any]], object_id: str | None = None) -> tuple[dict[str, Any] | None, list[str]]:
+def text_condition(raw: Any, rule_id: str, decision: str) -> dict[str, Any] | None:
+    """Side-note text that must sit near an instance for the rule to apply (registrations 20261015-0830, 1426).
+    The radius is in output coordinate units; the pattern is searched in the text without MTEXT codes, ignoring case."""
+    if raw is None:
+        return None
+    label = f"{rule_id}.text_condition"
+    if not isinstance(raw, dict):
+        fail(f"{label} 必须是对象")
+    if decision not in ("include", "exclude"):
+        fail(f"{label} 只能写在 include 或 exclude 规则上")
+    radius = finite(raw.get("radius"), f"{label}.radius")
+    if radius <= 0:
+        fail(f"{label}.radius 必须大于0")
+    as_key = raw.get("as_instance_key", False)
+    if not isinstance(as_key, bool):
+        fail(f"{label}.as_instance_key 必须是 true 或 false")
+    return {"pattern": compile_pattern(raw.get("pattern"), f"{label}.pattern"), "radius": radius,
+            "layer_re": compile_pattern(raw.get("layer_pattern", ".*"), f"{label}.layer_pattern"),
+            "basis": text(raw.get("basis"), f"{label}.basis"), "as_instance_key": as_key}
+
+
+def clean_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", MTEXT_CODE.sub(" ", str(value))).strip()
+
+
+def choose_rule(block: str, layer: str, parent_block: str, rules: list[dict[str, Any]], object_id: str | None = None,
+                text_ok: Iterable[str] = ()) -> tuple[dict[str, Any] | None, list[str]]:
+    """text_ok: rules whose text_condition this instance satisfies (bind_side_texts); other text rules do not apply."""
+    text_ok = set(text_ok)
     matches = [
         rule for rule in rules
         if rule["block_re"].search(block)
         and rule["layer_re"].search(layer)
         and rule["parent_re"].search(parent_block)
         and applies_to(rule, object_id)
+        and (rule.get("text_cond") is None or rule["rule_id"] in text_ok)
     ]
     if not matches:
         return None, []
@@ -641,6 +672,125 @@ def review_colocated_instances(dispositions, adopted, endpoint_instances, geomet
             "duplicate_excluded_count": len(dropped), "groups": groups}
 
 
+def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any]]], origins: dict[str, list[float]],
+                    rules: list[dict[str, Any]], target_layout: str, factor: float, max_depth: int,
+                    bounds: dict[str, float] | None) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    """Pre-pass for rules with text_condition (registrations 20261015-0830, 1426).
+
+    Candidates are the instances a text rule could apply to (block, layer, parent and object_ids match); paths and
+    ids are built exactly as in the main walk. Texts are layout texts plus the texts inside the definitions walked
+    through on the way to a candidate (containers); the walk does not enter a candidate block, so its own label is
+    not a side note. Within the radius only: one text near two candidates, or two texts near one candidate, leaves
+    the candidate unresolved; no text lets the text rules fall away. Nothing is bound by nearest distance."""
+    text_rules = [rule for rule in rules if rule.get("text_cond")]
+    if not text_rules:
+        return {}, {}
+    identity = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0)
+    candidates: dict[str, dict[str, Any]] = {}
+    texts: list[dict[str, Any]] = []
+
+    def add_text(row: dict[str, Any], matrix: tuple[float, ...], prefix: str) -> None:
+        if str(row.get("entity_type") or "").upper() not in ("TEXT", "MTEXT") or not str(row.get("text") or "").strip():
+            return
+        raw = transform_point([finite(row.get(axis, 0.0), f"{row.get('record_id')}.{axis}") for axis in ("x", "y", "z")], matrix)
+        if raw is None:
+            return
+        texts.append({"text_id": f"{prefix}{row.get('entity_handle') or row.get('record_id') or len(texts)}",
+                      "text": clean_text(row["text"]), "layer": str(row.get("layer") or ""),
+                      "point": [raw[0] * factor, raw[1] * factor], "in_scope": point_in_bounds(raw, bounds)})
+
+    def walk(insert: dict[str, Any], parent_matrix: tuple[float, ...], path: str, stack: tuple[str, ...],
+             parent_block: str, inherited_layer: str) -> None:
+        block_name = str(insert.get("block_name") or "")
+        layer = str(insert.get("layer") or "")
+        effective_layer = inherited_layer if layer in {"", "0"} and inherited_layer else layer
+        physical_id = f"PT-{path}"
+        hits = [rule for rule in text_rules
+                if rule["block_re"].search(block_name) and rule["layer_re"].search(effective_layer)
+                and rule["parent_re"].search(parent_block) and applies_to(rule, physical_id)]
+        if hits:
+            anchor = [finite(insert.get(axis, 0.0), f"{insert.get('record_id')}.{axis}") for axis in ("x", "y", "z")]
+            raw = transform_point(anchor, parent_matrix)
+            if raw is not None:
+                candidates[physical_id] = {"point": [raw[0] * factor, raw[1] * factor], "rules": hits}
+            return
+        if block_name not in definitions or block_name in stack or len(stack) >= max_depth:
+            return
+        matrix = compose(parent_matrix, matrix_for_insert(insert, origins.get(block_name, [0.0, 0.0, 0.0])))
+        for child in definitions[block_name]:
+            if str(child.get("entity_type") or "").upper() == "INSERT":
+                walk(child, matrix, f"{path}/{block_name}/{child.get('record_id') or 'NO-ID'}", (*stack, block_name),
+                     block_name, effective_layer)
+            else:
+                add_text(child, matrix, f"{path}/{block_name}/")
+
+    top = 0
+    for row in load_stream(layout_path):
+        if row.get("row_type") != "entity" or row.get("layout") != target_layout:
+            continue
+        if str(row.get("entity_type") or "").upper() == "INSERT":
+            top += 1
+            walk(row, identity, str(row.get("record_id") or f"TOP-{top}"), (), "", str(row.get("layer") or ""))
+        else:
+            add_text(row, identity, "")
+
+    cell = max(rule["text_cond"]["radius"] for rule in text_rules)
+    grid: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
+    for item in texts:
+        grid[(math.floor(item["point"][0] / cell), math.floor(item["point"][1] / cell))].append(item)
+    claims: dict[str, set[str]] = defaultdict(set)   # text id -> candidates it sits near (for any text rule)
+    near: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for physical_id, candidate in candidates.items():
+        x, y = candidate["point"]
+        gx, gy = math.floor(x / cell), math.floor(y / cell)
+        pool = [item for dx in (-1, 0, 1) for dy in (-1, 0, 1) for item in grid.get((gx + dx, gy + dy), ())]
+        per_rule = {}
+        for rule in candidate["rules"]:
+            cond = rule["text_cond"]
+            found = []
+            for item in pool:
+                distance = math.hypot(item["point"][0] - x, item["point"][1] - y)
+                if distance <= cond["radius"] and cond["layer_re"].search(item["layer"]) and cond["pattern"].search(item["text"]):
+                    found.append({"text_id": item["text_id"], "text": item["text"], "layer": item["layer"],
+                                  "distance": round(distance, 6)})
+                    claims[item["text_id"]].add(physical_id)
+            per_rule[rule["rule_id"]] = found
+        near[physical_id] = per_rule
+
+    binding: dict[str, dict[str, Any]] = {}
+    for physical_id, per_rule in near.items():
+        found = {item["text_id"]: item for items in per_rule.values() for item in items}
+        shared = sorted(text_id for text_id in found if len(claims[text_id]) > 1)
+        status = "文字共用" if shared else "多段文字" if len(found) > 1 else "已绑定" if found else "无文字"
+        binding[physical_id] = {
+            "status": status,
+            "rule_ids": sorted(per_rule),
+            "ok": sorted(rule_id for rule_id, items in per_rule.items() if items) if status == "已绑定" else [],
+            "texts": sorted(found.values(), key=lambda item: (item["distance"], item["text_id"])),
+            "shared_with": sorted(set().union(*(claims[text_id] for text_id in shared)) - {physical_id}) if shared else [],
+        }
+    key_rules = [rule for rule in text_rules if rule["text_cond"]["as_instance_key"]]
+    unclaimed_keys = [
+        {"text_id": item["text_id"], "text": item["text"], "layer": item["layer"], "point": item["point"],
+         "rule_ids": [rule["rule_id"] for rule in key_rules
+                      if rule["text_cond"]["layer_re"].search(item["layer"]) and rule["text_cond"]["pattern"].search(item["text"])]}
+        for item in texts
+        if item["in_scope"] and item["text_id"] not in claims
+        and any(rule["text_cond"]["layer_re"].search(item["layer"]) and rule["text_cond"]["pattern"].search(item["text"])
+                for rule in key_rules)
+    ]
+    return binding, {"text_count": len(texts), "candidate_count": len(candidates), "unclaimed_key_texts": unclaimed_keys}
+
+
+def side_text_basis(side: dict[str, Any]) -> str:
+    texts = "、".join(f"“{item['text']}”" for item in side["texts"][:5])
+    if side["status"] == "文字共用":
+        return f"旁注文字共用：{texts} 也在 {len(side['shared_with'])} 个同类候选的半径内，不按远近硬绑"
+    if side["status"] == "多段文字":
+        return f"旁注多段文字：半径内有 {len(side['texts'])} 段符合条件的文字 {texts}，不按远近硬绑"
+    return f"半径内没有符合旁注条件的文字（无文字）：{'、'.join(side['rule_ids'])}"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="从CAD中性块事实构建点位实例、数量输入与端点交接")
     parser.add_argument("--cad-manifest", required=True, type=Path)
@@ -721,6 +871,8 @@ def main() -> int:
         geometry: dict[str, dict[str, Any]] = {}
         seen_blocks: dict[str, set[str]] = defaultdict(set)   # block name -> scoped physical ids
         dynamic_released: dict[str, set[str]] = defaultdict(set)   # rule id -> block names released by its adjudication
+        side_texts, side_summary = bind_side_texts(layout_path, definitions, origins, rules, target_layout, factor,
+                                                   max_depth, bounds)
 
         def transformed_box(box, matrix):
             return cad_geometry.transform_bounds(box, matrix)
@@ -765,7 +917,8 @@ def main() -> int:
                 codes = insert.get("geometry_issue_codes")
                 if (not suppressed_by and isinstance(codes, list) and codes and len(codes) == len(insert["geometry_issues"])
                         and set(codes) <= DYNAMIC_STATE_CODES):
-                    rule, conflicts = choose_rule(block_name, effective_layer, parent_block, rules, physical_id)
+                    rule, conflicts = choose_rule(block_name, effective_layer, parent_block, rules, physical_id,
+                                                  (side_texts.get(physical_id) or {}).get("ok", ()))
                     adjudication = (rule.get("dynamic_adjudication") if rule and not conflicts and rule["decision"] in ("include", "exclude")
                                     else None)
                     if (adjudication and block_name in adjudication["block_names"]
@@ -814,9 +967,20 @@ def main() -> int:
                         }
                     )
                 else:
-                    rule, conflicts = choose_rule(block_name, effective_layer, parent_block, rules, physical_id)
+                    side = side_texts.get(physical_id)
+                    rule, conflicts = None, []
+                    if side and side["status"] in ("文字共用", "多段文字"):
+                        # Ambiguous side notes decide nothing, not even a fallback rule without text_condition.
+                        base.update({"basis": side_text_basis(side), "rule_ids": side["rule_ids"],
+                                     "side_text": {key: side[key] for key in ("status", "texts", "shared_with")}})
+                    else:
+                        rule, conflicts = choose_rule(block_name, effective_layer, parent_block, rules, physical_id,
+                                                      side["ok"] if side else ())
                     if conflicts:
                         base.update({"basis": "同优先级识别规则冲突", "rule_ids": conflicts})
+                    elif rule is None and side and side["status"] == "无文字":
+                        base.update({"basis": side_text_basis(side), "rule_ids": side["rule_ids"],
+                                     "side_text": {"status": "无文字", "texts": [], "shared_with": []}})
                     elif rule:
                         decision = rule["decision"]
                         base.update(
@@ -830,6 +994,18 @@ def main() -> int:
                         if released:
                             base["dynamic_state_adjudication"] = released
                             base["basis"] += f"；动态块状态裁决：{released['basis']}"
+                        bound = None
+                        if rule.get("text_cond"):
+                            bound = dict(side["texts"][0], rule_id=rule["rule_id"], radius=rule["text_cond"]["radius"])
+                            base["side_text"] = {"status": "已绑定", **bound}
+                            base["basis"] += f"；旁注“{bound['text']}”（距 {bound['distance']:g}）：{rule['text_cond']['basis']}"
+                            if rule["text_cond"]["as_instance_key"]:
+                                base["instance_key"] = bound["text"]
+                        elif side:
+                            # A rule without text_condition took the candidate: no side note (the usual fallback),
+                            # or a note that a higher-priority rule overrode.
+                            base["side_text"] = {"status": "无文字" if side["status"] == "无文字" else "有旁注未采用",
+                                                 "texts": side["texts"], "shared_with": []}
                         if decision == "include":
                             base["disposition"] = "adopted"
                             evidence = f"EV-CAD-{source_record_id}|{rule['authority']['source_id']}|{unit_source_id}"
@@ -848,6 +1024,10 @@ def main() -> int:
                                 "layer": effective_layer,
                                 "source_record_id": source_record_id,
                             }
+                            if bound:
+                                instance["side_text"] = {key: bound[key] for key in ("text", "text_id", "distance", "rule_id")}
+                                if "instance_key" in base:
+                                    instance["instance_key"] = base["instance_key"]
                             adopted.append(instance)
                             raw_ports = rule.get("network_ports")
                             if raw_ports is None:
@@ -984,6 +1164,26 @@ def main() -> int:
                                     "released_instance_count": released_count,
                                     "unused_block_names": [name for name in adjudication["block_names"]
                                                            if name not in dynamic_released[rule["rule_id"]]]})
+
+        # Side-note binding summary: candidates by status, key texts no block claimed, keys on two adopted blocks
+        # (registrations 20261015-0830, 1426). Only listed; ambiguous or missing notes already left blocks unresolved.
+        side_binding = None
+        if side_summary:
+            side_rows = [item for item in dispositions if item.get("side_text")]
+            keyed: dict[str, list[str]] = defaultdict(list)
+            for item in adopted:
+                if item.get("instance_key") is not None:
+                    keyed[item["instance_key"]].append(item["physical_id"])
+            side_binding = {
+                "text_rule_ids": [rule["rule_id"] for rule in rules if rule.get("text_cond")],
+                "texts_considered": side_summary["text_count"],
+                "candidate_instance_count": len(side_rows),
+                "status_counts": dict(sorted(Counter(item["side_text"]["status"] for item in side_rows).items())),
+                "unclaimed_key_text_count": len(side_summary["unclaimed_key_texts"]),
+                "unclaimed_key_texts": side_summary["unclaimed_key_texts"][:50],
+                "duplicate_instance_keys": [{"instance_key": key, "physical_ids": sorted(ids)}
+                                            for key, ids in sorted(keyed.items()) if len(ids) > 1],
+            }
 
         physical_ids = [item["physical_id"] for item in adopted]
         if len(physical_ids) != len(set(physical_ids)):
@@ -1132,6 +1332,25 @@ def main() -> int:
             writer.writerows(sorted(rows, key=lambda row: (row[0], row[6])))
         artifacts["unresolved_full_csv"] = str(unresolved_csv)
         artifacts["unresolved_full_csv_sha256"] = sha256(unresolved_csv)
+        if side_binding is not None:
+            side_csv = output / "点位旁注绑定.csv"
+            with side_csv.open("w", encoding="utf-8-sig", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["kind", "status", "physical_id", "block_name", "disposition", "rule_ids", "texts",
+                                 "text_ids", "distances", "shared_with", "instance_key", "x", "y", "coordinate_unit"])
+                for item in sorted((row for row in dispositions if row.get("side_text")), key=lambda row: row["physical_id"]):
+                    side = item["side_text"]
+                    found = side.get("texts") if "texts" in side else [side]
+                    point = item.get("point") or [None, None]
+                    writer.writerow(["块", side["status"], item["physical_id"], item["block_name"], item["disposition"],
+                                     "；".join(item.get("rule_ids") or []), "；".join(t["text"] for t in found),
+                                     "；".join(t["text_id"] for t in found), "；".join(f"{t['distance']:g}" for t in found),
+                                     "；".join(side.get("shared_with") or []), item.get("instance_key") or "",
+                                     point[0], point[1], item.get("coordinate_unit")])
+                for item in side_summary["unclaimed_key_texts"]:
+                    writer.writerow(["文字", "文字无块", "", "", "", "；".join(item["rule_ids"]), item["text"], item["text_id"],
+                                     "", "", "", item["point"][0], item["point"][1], coordinate_unit])
+            artifacts["side_text_binding_csv"] = str(side_csv)
         report = {
             "schema_version": "qto-component-recognition-report/1.0",
             "adapter_version": VERSION,
@@ -1172,6 +1391,7 @@ def main() -> int:
                 "dynamic_state_adjudicated_count": sum(item["released_instance_count"] for item in dynamic_summary),
             },
             "dynamic_state_adjudication": dynamic_summary,
+            **({"side_text_binding": side_binding} if side_binding is not None else {}),
             "instance_grouping": grouping,
             "duplicate_review": duplicate_review,
             "disposition_closure_complete": sum(disposition_counts.values()) == len(dispositions),
