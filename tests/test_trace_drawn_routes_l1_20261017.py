@@ -112,6 +112,14 @@ def draw_main(doc, msp):
     msp.add_lwpolyline([(0, 120000), (2000, 120000), (2000, 122000)], dxfattribs=WIRE)   # traced between two points
     h['A13'] = ins(msp, 'BOX', 0, 130000)                                              # a point route leaving a box edge
     msp.add_line((300, 130000), (3000, 130000), dxfattribs=WIRE)
+    h['A14'], h['D16'], h['D17'] = ins(msp, 'BOX', 0, 140000), ins(msp, 'DEV', 8100, 140000), ins(msp, 'DEV', 6000, 142000)
+    h['TR'] = msp.add_line((300, 140000), (8000, 140000), dxfattribs=WIRE).dxf.handle    # one trunk line
+    msp.add_lwpolyline([(4000, 140000), (4000, 142000), (5900, 142000)], dxfattribs=WIRE)   # a branch ending on its middle
+    h['A15'], h['B15'] = ins(msp, 'BOX', 0, 150000), ins(msp, 'BOX', 10000, 150000)   # one line, two boxes, each route
+    h['DX'], h['DY'] = ins(msp, 'DEV', 5000, 151000), ins(msp, 'DEV', 8000, 149000)   # running its own part of it
+    h['L15'] = msp.add_line((300, 150000), (9700, 150000), dxfattribs=WIRE).dxf.handle
+    msp.add_lwpolyline([(3000, 150000), (3000, 151000), (4900, 151000)], dxfattribs=WIRE)
+    msp.add_lwpolyline([(7000, 150000), (7000, 149000), (7900, 149000)], dxfattribs=WIRE)
     floor = doc.blocks.new('FLOOR')                                                    # box, device and line in a floor block
     inner_box, inner_dev = ins(floor, 'BOX', 0, 0), ins(floor, 'DEV', 6000, 0)
     floor.add_line((300, 0), (5900, 0), dxfattribs=WIRE)
@@ -120,7 +128,8 @@ def draw_main(doc, msp):
     return h
 
 
-MAIN_ROUTES = [('R1', 'A1', 'D1'), ('R2', 'A2', 'D2'), ('R3', 'A2', 'D3'), ('R4', 'A3', 'D4'), ('R5', 'A3', 'D5'),
+MAIN_ROUTES = [('RT', 'A14', 'D17'), ('RT2', 'A14', 'D16'), ('RA', 'A15', 'DX'), ('RB', 'B15', 'DY'),
+               ('R1', 'A1', 'D1'), ('R2', 'A2', 'D2'), ('R3', 'A2', 'D3'), ('R4', 'A3', 'D4'), ('R5', 'A3', 'D5'),
                ('R6', 'A4', 'D6'), ('R7', 'A4', 'D7'), ('R8', 'A5', 'D8'), ('R9', 'A6', 'D9'), ('R10', 'A7', 'D10'),
                ('R11', 'A8', 'D11'), ('R12', 'A9', 'D12'), ('R14', 'A11', 'D14'), ('R15', 'A12', 'D15'), ('RF', 'FA', 'FD')]
 
@@ -159,11 +168,38 @@ def test_shared_line_is_listed_parallel_lines_are_not(main):
     h, code, routes, result, paths, lines, todo, tmp = main
     assert routes['R2']['length_m'] == pytest.approx(5.6) and routes['R3']['length_m'] == pytest.approx(7.6)
     shared = {row['handle']: row['route_ids'] for row in result['shared_segments']}
-    assert shared == {h['S']: ['R2', 'R3']}
+    assert shared == {h['S']: ['R2', 'R3'], h['TR']: ['RT', 'RT2']}
     for rid in ('R2', 'R3'):
         assert [f['flag'] for f in routes[rid]['review_flags']] == ['与别的回路共用走线段'], rid
     assert routes['R4']['length_m'] == pytest.approx(5.6) and routes['R5']['length_m'] == pytest.approx(6.1)
     assert not routes['R4']['review_flags'] and not routes['R5']['review_flags']
+
+
+def test_a_branch_ending_on_a_trunk_takes_only_the_trunk_part_it_runs(main):
+    h, code, routes, result, paths, lines, todo, tmp = main
+    rt = routes['RT']                                   # 3.7 m of the trunk, then the 3.9 m branch
+    assert rt['status'] == '已追踪' and rt['length_m'] == pytest.approx(7.6) and len(rt['t_junctions']) == 1
+    first = rt['segments'][0]
+    assert first['handle'] == h['TR'] and first['length_m'] == pytest.approx(3.7)
+    assert first['fraction_range'] == pytest.approx([0.0, 3700 / 7700])
+    assert routes['RT2']['length_m'] == pytest.approx(7.7) and 'fraction_range' not in routes['RT2']['segments'][0]
+    for rid, length in (('RA', 5.6), ('RB', 4.6)):      # two parts of one line that do not overlap are not shared
+        assert routes[rid]['length_m'] == pytest.approx(length) and not routes[rid]['review_flags'], rid
+    rt_lines = [row for row in lines if row['route_id'] == 'RT']
+    assert [float(rt_lines[0][k]) for k in ('x1', 'y1', 'x2', 'y2')] == pytest.approx([300, 140000, 4000, 140000])
+
+
+def test_t_junctions_can_be_switched_off(tmp_path):
+    doc = new_doc(); msp = doc.modelspace()
+    a, d = ins(msp, 'BOX', 0, 0), ins(msp, 'DEV', 6000, 2000)
+    msp.add_line((300, 0), (8000, 0), dxfattribs=WIRE)
+    msp.add_lwpolyline([(4000, 0), (4000, 2000), (5900, 2000)], dxfattribs=WIRE)
+    manifest = extract(tmp_path, doc)
+    code, result, paths, lines, todo = trace(tmp_path, manifest, [{'route_id': 'T', 'from': inst(a), 'to': inst(d)}],
+                                             t_junctions=False)
+    route = result['routes'][0]
+    assert route['status'] == '待办' and route['problems'][0]['problem'] == '网络断开'
+    assert len(route['problems'][0]['t_contact_hints']) == 1
 
 
 def test_crossings_and_wide_gaps_break_and_small_gaps_bridge(main):

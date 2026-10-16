@@ -184,12 +184,15 @@ def parse_request(request: dict[str, Any]) -> dict[str, Any]:
     max_depth = int(request.get("max_depth", 16))
     if max_depth < 1:
         fail("max_depth 必须大于0")
+    t_junctions = request.get("t_junctions", True)
+    if not isinstance(t_junctions, bool):
+        fail("t_junctions 须为 true 或 false")
     return {
         "layout": text(request.get("layout", "Model"), "layout"), "factor": factor,
         "unit_source_id": text(unit.get("source_id"), "unit.source_id"), "bounds": bounds,
         "route_re": pattern(request.get("route_layers"), "route_layers"),
         "box_re": pattern(request["box_block_pattern"], "box_block_pattern") if request.get("box_block_pattern") else None,
-        "expand": set(expand), "max_depth": max_depth,
+        "expand": set(expand), "max_depth": max_depth, "t_junctions": t_junctions,
         "snap": tolerance(request, "snap_tolerance", 0.005), "gap": tolerance(request, "gap_tolerance", 0.0),
         "gap_angle_deg": tolerance(request, "gap_angle_deg", 10.0), "endpoint": tolerance(request, "endpoint_tolerance"),
         "equal": tolerance(request, "equal_length_tolerance", 0.001),
@@ -339,17 +342,61 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
     graph = segment_graph.build_graph(got["segments"], snap_tolerance=req["snap"] / f, gap_tolerance=req["gap"] / f,
                                       gap_angle_deg=req["gap_angle_deg"])
     segs = {s["segment_id"]: s for s in graph["segments"]}
-    nodes = {n["node_id"]: n for n in graph["nodes"]}
-    comps = {c["component_id"]: c for c in graph["components"]}
-    comp_of_node = {n: c["component_id"] for c in graph["components"] for n in c["node_ids"]}
-    adjacency: dict[str, list[tuple[str, float, str, str]]] = defaultdict(list)
+    point_of = {n["node_id"]: n["point"] for n in graph["nodes"]}
+
+    # A free end lying on the middle of another straight line (an L0 T contact) is a branch of the drawn run
+    # (electrical rule; request t_junctions, default on): that line is cut there and only the part run is counted.
+    used_t, hint_t = [], []
+    cuts: dict[str, dict[float, str]] = defaultdict(dict)
+    for t in graph["t_contacts"]:
+        host = segs[t["on_segment_id"]]
+        if not req["t_junctions"] or host["kind"] != "line":
+            hint_t.append(t)
+            continue
+        key = round(t["fraction"], 9)
+        vid = cuts[host["segment_id"]].get(key)
+        if vid is None:
+            vid = cuts[host["segment_id"]][key] = f"T-{sum(len(v) for v in cuts.values()) + 1:05d}"
+            a, b = host["start"], host["end"]
+            point_of[vid] = [a[k] + key * (b[k] - a[k]) for k in range(3)]
+        used_t.append({**t, "virtual_node_id": vid})
+    edges: list[dict[str, Any]] = []
+    adjacency: dict[str, list[tuple[str, float, int]]] = defaultdict(list)
+
+    def add(a: str, b: str, weight: float, edge: dict[str, Any]) -> None:
+        edges.append({**edge, "nodes": (a, b), "weight": weight})
+        adjacency[a].append((b, weight, len(edges) - 1)); adjacency[b].append((a, weight, len(edges) - 1))
     for s in graph["segments"]:
-        adjacency[s["start_node"]].append((s["end_node"], s["length"], "segment", s["segment_id"]))
-        adjacency[s["end_node"]].append((s["start_node"], s["length"], "segment", s["segment_id"]))
+        chain = [(0.0, s["start_node"]), *sorted(cuts.get(s["segment_id"], {}).items()), (1.0, s["end_node"])]
+        for (fa, na), (fb, nb) in zip(chain, chain[1:]):
+            add(na, nb, (fb - fa) * s["length"], {"kind": "segment", "segment_id": s["segment_id"], "f": (fa, fb)})
     bridges = {g["bridge_id"]: g for g in graph["gap_bridged"]}
     for g in graph["gap_bridged"]:
-        adjacency[g["from_node"]].append((g["to_node"], g["length"], "gap", g["bridge_id"]))
-        adjacency[g["to_node"]].append((g["from_node"], g["length"], "gap", g["bridge_id"]))
+        add(g["from_node"], g["to_node"], g["length"], {"kind": "gap", "bridge_id": g["bridge_id"]})
+    for t in used_t:
+        add(t["node_id"], t["virtual_node_id"], t["distance"], {"kind": "t", "t": t})
+    # connected parts of this network (segments, bridges and T junctions)
+    link = {n: n for n in point_of}
+
+    def find(x: str) -> str:
+        while link[x] != x:
+            link[x] = link[link[x]]; x = link[x]
+        return x
+    for e in edges:
+        ra, rb = find(e["nodes"][0]), find(e["nodes"][1])
+        if ra != rb:
+            link[max(ra, rb)] = min(ra, rb)
+    part_nodes: dict[str, list[str]] = defaultdict(list)
+    for n in point_of:
+        part_nodes[find(n)].append(n)
+    part_edges: dict[str, list[int]] = defaultdict(list)
+    for i, e in enumerate(edges):
+        part_edges[find(e["nodes"][0])].append(i)
+    degree: dict[str, int] = defaultdict(int)
+    for e in edges:
+        degree[e["nodes"][0]] += 1; degree[e["nodes"][1]] += 1
+    real_nodes = graph["nodes"]
+
     box_list = drawing.boxes(req["box_re"], expand)
     box_index = BoundsIndex(box_list) if box_list else None
     tol = req["endpoint"] / f
@@ -363,10 +410,11 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         return "point", end["anchor"][:2]
 
     def attach(end: dict[str, Any]) -> tuple[dict[str, float], float | None]:
+        """Line ends (real nodes) within the endpoint tolerance of the outline (0 inside it) or of the point."""
         kind, geo = shape(end)
         far = (lambda p: math.dist(p[:2], geo)) if kind == "point" else (lambda p: box_distance(p, geo))
         near, best = {}, None
-        for node in graph["nodes"]:
+        for node in real_nodes:
             d = far(node["point"])
             best = d if best is None or d < best else best
             if d <= tol:
@@ -400,7 +448,7 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         eps = req["equal"] / f
         dist = {n: 0.0 for n in sources}
         count = {n: 1 for n in sources}
-        pred: dict[str, list[tuple[str, str, str]]] = {n: [] for n in sources}
+        pred: dict[str, list[tuple[str, int]]] = {n: [] for n in sources}
         heap = [(0.0, n) for n in sorted(sources)]
         done, best = set(), None
         while heap:
@@ -412,31 +460,69 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
             done.add(u)
             if u in targets and (best is None or d < best):
                 best = d
-            for v, w, kind, edge_id in adjacency.get(u, ()):
+            for v, w, i in adjacency.get(u, ()):
                 nd = d + w
                 if v not in dist or nd < dist[v] - eps:
-                    dist[v], count[v], pred[v] = nd, count[u], [(u, kind, edge_id)]
+                    dist[v], count[v], pred[v] = nd, count[u], [(u, i)]
                     heapq.heappush(heap, (nd, v))
-                elif abs(nd - dist[v]) <= eps and v not in done and (u, kind, edge_id) not in pred[v]:
-                    count[v] += count[u]; pred[v].append((u, kind, edge_id))
+                elif abs(nd - dist[v]) <= eps and v not in done and (u, i) not in pred[v]:
+                    count[v] += count[u]; pred[v].append((u, i))
         if best is None:
             return {"found": False}
         reached = [t for t in targets if t in dist and dist[t] <= best + eps]
-        total = sum(count[t] for t in reached)
         target = min(reached, key=lambda t: (dist[t], t))
         steps, node = [], target
         while pred.get(node):
-            u, kind, edge_id = pred[node][0]
-            steps.append((u, node, kind, edge_id)); node = u
-        return {"found": True, "count": total, "length": dist[target], "steps": steps[::-1], "start": node, "target": target}
+            u, i = pred[node][0]
+            steps.append((u, node, i)); node = u
+        return {"found": True, "count": sum(count[t] for t in reached), "length": dist[target], "steps": steps[::-1],
+                "start": node, "target": target}
 
     def nearest_gap(sources: dict[str, float], targets: dict[str, float]) -> float | None:
-        a_comps = {comp_of_node[n] for n in sources}
-        b_nodes = [nodes[n]["point"] for c in {comp_of_node[n] for n in targets} for n in comps[c]["node_ids"]]
-        a_nodes = [nodes[n]["point"] for c in a_comps for n in (comps[c]["dangling_node_ids"] or comps[c]["node_ids"])]
+        a_parts, b_parts = {find(n) for n in sources}, {find(n) for n in targets}
+        a_nodes = [point_of[n] for c in a_parts for n in ([x for x in part_nodes[c] if degree[x] == 1] or part_nodes[c])]
+        b_nodes = [point_of[n] for c in b_parts for n in part_nodes[c]]
         if not a_nodes or not b_nodes or len(a_nodes) * len(b_nodes) > 4_000_000:
             return None
         return min(math.dist(p[:2], q[:2]) for p in a_nodes for q in b_nodes) * f
+
+    def pieces_of(steps: list[tuple[str, str, int]]) -> list[dict[str, Any]]:
+        """Walked edges in order; consecutive parts of one line join into one piece (fraction_range when partial)."""
+        out: list[dict[str, Any]] = []
+        for u, v, i in steps:
+            e = edges[i]
+            if e["kind"] == "segment":
+                fa, fb = e["f"] if e["nodes"][0] == u else e["f"][::-1]
+                last = out[-1] if out else None
+                if last and last["kind"] == "segment" and last["segment_id"] == e["segment_id"] and abs(last["_f"][1] - fa) < 1e-12:
+                    last["_f"] = (last["_f"][0], fb); last["_to"] = v
+                    continue
+                out.append({"kind": "segment", "segment_id": e["segment_id"], "_f": (fa, fb), "_from": u, "_to": v})
+            elif e["kind"] == "gap":
+                out.append({"kind": "gap", "bridge_id": e["bridge_id"], "_from": u, "_to": v, "length": e["weight"]})
+            else:
+                out.append({"kind": "t", "t": e["t"], "_from": u, "_to": v})
+        result = []
+        for p in out:
+            a, b = point_of[p["_from"]], point_of[p["_to"]]
+            if p["kind"] == "segment":
+                s = segs[p["segment_id"]]
+                lo, hi = sorted(p["_f"])
+                row = {"kind": "segment", "segment_id": p["segment_id"], "handle": s["handle"], "layer": s["layer"],
+                       "entity_type": s["entity_type"], "length_m": (hi - lo) * s["length"] * f, "from_point": m(a), "to_point": m(b),
+                       "crosses_scope_edge": s["crosses_scope_edge"], "_range": (lo, hi)}
+                if (lo, hi) != (0.0, 1.0):
+                    row["fraction_range"] = [lo, hi]
+            elif p["kind"] == "gap":
+                row = {"kind": "gap", "bridge_id": p["bridge_id"], "length_m": p["length"] * f, "from_point": m(a), "to_point": m(b)}
+            else:
+                t = p["t"]
+                row = {"kind": "t", "free_end_segment_id": t["segment_id"], "on_segment_id": t["on_segment_id"],
+                       "on_handle": segs[t["on_segment_id"]]["handle"], "fraction": t["fraction"], "distance_m": t["distance"] * f,
+                       "point": m(point_of[t["virtual_node_id"]])}
+            row["drawing_from"], row["drawing_to"] = a[:2], b[:2]
+            result.append(row)
+        return result
 
     results, paths, used = [], [], defaultdict(list)
     for route in req["routes"]:
@@ -464,37 +550,31 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         if out["problems"]:
             out["status"] = "待办"; results.append(out); continue
         if route["to"] is None:
-            members = sorted({comp_of_node[n] for n in near["from"]})
-            out["components"] = [{"component_id": c, "segment_count": len(comps[c]["segment_ids"]), "length_m": comps[c]["length"] * f,
-                                  "bridge_ids": comps[c]["bridge_ids"], "layers": comps[c]["layers"],
-                                  "dangling_points": [m(nodes[n]["point"]) for n in comps[c]["dangling_node_ids"]],
-                                  "segment_ids": comps[c]["segment_ids"]} for c in members]
+            members = sorted({find(n) for n in near["from"]})
+            out["components"] = []
+            for c in members:
+                seg_edges = [edges[i] for i in part_edges[c] if edges[i]["kind"] == "segment"]
+                ids = sorted({e["segment_id"] for e in seg_edges})
+                out["components"].append({
+                    "segment_count": len(ids), "length_m": math.fsum(e["weight"] for e in seg_edges) * f,
+                    "bridge_ids": sorted(edges[i]["bridge_id"] for i in part_edges[c] if edges[i]["kind"] == "gap"),
+                    "t_junction_count": sum(edges[i]["kind"] == "t" for i in part_edges[c]),
+                    "layers": sorted({segs[s]["layer"] for s in ids}),
+                    "dangling_points": [m(point_of[n]) for n in sorted(part_nodes[c]) if degree[n] == 1], "segment_ids": ids})
             out["status"] = "分量"; results.append(out); continue
         if set(near["from"]) & set(near["to"]):
             out["problems"].append({"problem": "起终点挂在同一节点", "node_ids": sorted(set(near["from"]) & set(near["to"]))})
             out["status"] = "待办"; results.append(out); continue
         found = shortest(near["from"], near["to"])
         if not found["found"]:
-            hints = [t for t in graph["t_contacts"] if comp_of_node.get(t["node_id"]) in
-                     {comp_of_node[n] for n in [*near["from"], *near["to"]]}][:10]
+            involved = {find(n) for n in [*near["from"], *near["to"]]}
             out["problems"].append({"problem": "网络断开", "nearest_gap_m": nearest_gap(near["from"], near["to"]),
-                                    "t_contact_hints": hints})
+                                    "t_contact_hints": [t for t in hint_t if find(t["node_id"]) in involved][:10]})
             out["status"] = "待办"; results.append(out); continue
         if found["count"] > 1:
             out["problems"].append({"problem": "多条等长路径", "count": found["count"], "length_m": found["length"] * f})
             out["status"] = "待办"; results.append(out); continue
-        pieces, edge_ids = [], []
-        for u, v, kind, edge_id in found["steps"]:
-            a, b = nodes[u]["point"], nodes[v]["point"]
-            if kind == "segment":
-                s = segs[edge_id]
-                pieces.append({"kind": "segment", "segment_id": edge_id, "handle": s["handle"], "layer": s["layer"],
-                               "entity_type": s["entity_type"], "length_m": s["length"] * f, "from_point": m(a), "to_point": m(b),
-                               "drawing_from": a[:2], "drawing_to": b[:2], "crosses_scope_edge": s["crosses_scope_edge"]})
-            else:
-                pieces.append({"kind": "gap", "bridge_id": edge_id, "length_m": bridges[edge_id]["length"] * f,
-                               "from_point": m(a), "to_point": m(b), "drawing_from": a[:2], "drawing_to": b[:2]})
-            edge_ids.append(edge_id)
+        pieces = pieces_of(found["steps"])
         over_edge = [p["segment_id"] for p in pieces if p["kind"] == "segment" and p["crosses_scope_edge"]]
         if over_edge:
             out["problems"].append({"problem": "路径经过范围边", "segment_ids": over_edge,
@@ -505,11 +585,13 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         passed = set()
         if box_index is not None:
             for node_id in (found["start"], found["target"]):
-                p = nodes[node_id]["point"]
+                p = point_of[node_id]
                 for key in box_index.query_box([p[0] - tol, p[1] - tol, p[0] + tol, p[1] + tol]):
                     if box_distance(p, list(box_index.boxes[key])) <= tol:
                         own.add(key)
             for p in pieces:
+                if p["kind"] == "t":
+                    continue
                 a, b = p["drawing_from"], p["drawing_to"]
                 for key in box_index.query_box([min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1])]):
                     if key not in own and chord_hits_box(a, b, box_index.boxes[key]):
@@ -517,22 +599,25 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         if passed:
             out["review_flags"].append({"flag": "经过别的箱", "instance_ids": sorted(passed),
                                         "detail": "回路可能在那只箱断开或串接，核对系统图"})
-        comp = comps[comp_of_node[found["start"]]]
-        if len(comp["segment_ids"]) + len(comp["bridge_ids"]) >= len(comp["node_ids"]):
-            out["review_flags"].append({"flag": "走线网络有环，取最短", "component_id": comp["component_id"]})
+        start_part = find(found["start"])
+        if len(part_edges[start_part]) >= len(part_nodes[start_part]):
+            out["review_flags"].append({"flag": "走线网络有环，取最短"})
         drawn = math.fsum(p["length_m"] for p in pieces if p["kind"] == "segment")
         gaps = math.fsum(p["length_m"] for p in pieces if p["kind"] == "gap")
+        clean = lambda p: {k: v for k, v in p.items() if not k.startswith("drawing_") and not k.startswith("_")}   # noqa: E731
         out.update(status="已追踪", path_id=f"DRAWN-{rid}", drawn_length_m=drawn, bridged_gap_length_m=gaps,
-                   length_m=drawn + gaps, segments=[{k: v for k, v in p.items() if not k.startswith("drawing_")}
-                                                    for p in pieces if p["kind"] == "segment"],
-                   bridged_gaps=[{k: v for k, v in p.items() if not k.startswith("drawing_")} for p in pieces if p["kind"] == "gap"],
-                   _pieces=pieces)
+                   length_m=drawn + gaps, segments=[clean(p) for p in pieces if p["kind"] == "segment"],
+                   bridged_gaps=[clean(p) for p in pieces if p["kind"] == "gap"],
+                   t_junctions=[clean(p) for p in pieces if p["kind"] == "t"], _pieces=pieces)
         for p in pieces:
             if p["kind"] == "segment":
-                used[p["segment_id"]].append(rid)
+                used[p["segment_id"]].append((rid, *p["_range"]))
         results.append(out)
-    shared = [{"segment_id": sid, "handle": segs[sid]["handle"], "route_ids": sorted(set(rids))}
-              for sid, rids in sorted(used.items()) if len(set(rids)) > 1]
+    shared = []
+    for sid, uses in sorted(used.items()):
+        overlapping = {a[0] for a in uses for b in uses if a[0] != b[0] and min(a[2], b[2]) - max(a[1], b[1]) > 1e-9}
+        if overlapping:
+            shared.append({"segment_id": sid, "handle": segs[sid]["handle"], "route_ids": sorted(overlapping)})
     by_route = defaultdict(list)
     for row in shared:
         for rid in row["route_ids"]:
@@ -550,9 +635,11 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                           "length_basis": "actual_drawn_path", "source_ids": [prefix + s["segment_id"] for s in out["segments"]],
                           "source_handles": handles, "drawn_length_m": out["drawn_length_m"],
                           "bridged_gap_length_m": out["bridged_gap_length_m"], "circuit_label": out["circuit_label"],
-                          "review_flags": [f["flag"] for f in out["review_flags"]]})
+                          "partial_segments": [{"segment_id": s["segment_id"], "fraction_range": s["fraction_range"]}
+                                               for s in out["segments"] if "fraction_range" in s],
+                          "review_flags": [flag["flag"] for flag in out["review_flags"]]})
     return {"graph": graph, "collected": got, "routes": results, "paths": paths, "shared": shared, "box_count": len(box_list),
-            "expanded": sorted(expand)}
+            "expanded": sorted(expand), "t_junctions_used": len(used_t), "t_contacts_hint_only": len(hint_t)}
 
 
 def write_csv(path: Path, header: list[str], rows: list[list[Any]]) -> None:
@@ -584,7 +671,9 @@ def main() -> int:
                            "tolerances_m": {"snap": req["snap"], "gap": req["gap"], "endpoint": req["endpoint"], "equal_length": req["equal"]},
                            "gap_angle_deg": req["gap_angle_deg"], "graph_parameters_drawing_units": graph["parameters"],
                            "expanded_blocks": traced["expanded"],
-                           "box_block_pattern": req["box_re"].pattern if req["box_re"] else None, "box_instances": traced["box_count"]},
+                           "box_block_pattern": req["box_re"].pattern if req["box_re"] else None, "box_instances": traced["box_count"],
+                           "t_junctions": req["t_junctions"], "t_junctions_used": traced["t_junctions_used"],
+                           "t_contacts_hint_only": traced["t_contacts_hint_only"]},
             "graph": {"counts": graph["counts"], "degenerate_parts": got["degenerate_parts"], "geometry_problems": got["geometry_problems"],
                       "unsupported": got["unsupported"], "expansion_problems": got["expansion_problems"],
                       "out_of_scope_parts": got["out_of_scope_parts"], "ambiguous_gaps": graph["ambiguous_gaps"],
@@ -598,6 +687,8 @@ def main() -> int:
         lines, todo_rows = [], []
         for r in traced["routes"]:
             for p in r.get("_pieces", ()):
+                if p["kind"] == "t":
+                    continue
                 a, b = p["drawing_from"], p["drawing_to"]
                 lines.append([r["route_id"], req["drawing_id"], p["kind"], p.get("segment_id") or p.get("bridge_id"), p.get("handle", ""),
                               p.get("layer", ""), a[0], a[1], b[0], b[1], p["length_m"]])
