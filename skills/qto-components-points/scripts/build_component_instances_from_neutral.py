@@ -8,6 +8,7 @@ profile. Working recognition and independent human adjudication stay separate.
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import math
@@ -1016,6 +1017,24 @@ def main() -> int:
             }
             for key, count in group_counter.most_common(15)
         ]
+        # 全部未决实例一行一个，不截前 15；续作和覆盖台账从这里看全量（登记 R3，点位覆盖台账契约第 2 节）
+        ranked = {key: rank for rank, (key, _) in enumerate(group_counter.most_common(), start=1)}
+        unresolved_csv = output / "点位未决全量.csv"
+        with unresolved_csv.open("w", encoding="utf-8-sig", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["group_rank", "group_count", "block_name", "layer", "parent_block", "basis",
+                             "physical_id", "x", "y", "coordinate_unit", "instance_path"])
+            rows = []
+            for item in dispositions:
+                if item["disposition"] != "unresolved":
+                    continue
+                key = (item["block_name"], item["layer"], str(item.get("parent_block") or ""), item["basis"])
+                point = item.get("point") or [None, None]
+                rows.append([ranked[key], group_counter[key], *key, item["physical_id"], point[0], point[1],
+                             item.get("coordinate_unit"), item.get("instance_path")])
+            writer.writerows(sorted(rows, key=lambda row: (row[0], row[6])))
+        artifacts["unresolved_full_csv"] = str(unresolved_csv)
+        artifacts["unresolved_full_csv_sha256"] = sha256(unresolved_csv)
         report = {
             "schema_version": "qto-component-recognition-report/1.0",
             "adapter_version": VERSION,
@@ -1061,6 +1080,8 @@ def main() -> int:
             "unmatched_recognition_object_ids": missing_model_objects,
             "endpoint_unresolved_count": handoff_result.get("unresolved_count", 0),
             "unresolved_groups_top15": unresolved_groups,
+            "unresolved_group_count": len(group_counter),
+            "unresolved_instance_count": sum(group_counter.values()),
             "block_expansion_failures": failures[:50],
             "artifacts": artifacts,
             "business_adoption_allowed": False,

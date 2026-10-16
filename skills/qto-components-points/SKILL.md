@@ -25,7 +25,7 @@ description: 构件门窗、设备及机电末端点位计数与明细复核，�
 4. 先由模型看图并结合图例、编号、可见几何和位置识别物理实例；从 CAD 中性事实起算时用 `scripts/build_component_instances_from_neutral.py` 展开嵌套块，以本轮模型工作识别记录（或确有的独立裁决台账）绑定规则和适用实例。格式见公共 [模型工作识别记录](../_qto-shared-evidence/references/模型工作识别记录格式.md)。模型判断可进入工作计数，不能写成人工核定；已有本轮可追溯实例账时直接复用。
 5. 实例 ID 去重且类别、规格闭合后，用 `scripts/count_reconciled_instances.py` 复核数量和明确尺寸派生量；脚本不把图例、表格计划数或重复图块变成实例。先用插件脚本，不另写计数脚本。汇总只采用 `work_quantity_ready=true` 的计数：输入是适配器产出的 `点位唯一实例计数输入.json`（带 `geometry_review` 凭据，实例集指纹相符、未处置重复组为 0、工作包完整）。自造或改过的实例列表（`geometry_review` 为 `absent` 或 `mismatch`）只算算术复核，要回到适配器重做同位置审查；新增一批点位不继承旧批的审查。`work_quantity_ready` 只表示工作量可进汇总，`business_adoption_allowed` 才管正式采用，两者不能互相代替。
 6. 需要向管网、风管或电气线路提供连接约束时读取 [跨专业端点事实](references/跨专业端点事实.md)，并运行 `scripts/build_network_endpoint_handoff.py` 对来源实例逐一标记 deliver、not_applicable 或 unresolved。交接必须保留坐标/拓扑位置、端口角色、直接或候选规格、传播范围、证据与假定编号；不得只输出类别和数量。设备数量仍由本 Skill 唯一统计。
-7. 按 [结果检查与输出](references/结果检查与输出.md) 和公共 [成果约定](../_qto-shared-evidence/references/通用成果字段与状态.md) 输出；成熟度按 [案例与接入清单](references/案例与接入清单.md)。
+7. 交付某类数量前跑[点位覆盖台账](references/点位覆盖台账.md)：图纸集合里每个候选、图例每一行都有去向，台账才算完整，才能说这一类算完了。按 [结果检查与输出](references/结果检查与输出.md) 和公共 [成果约定](../_qto-shared-evidence/references/通用成果字段与状态.md) 输出；成熟度按 [案例与接入清单](references/案例与接入清单.md)。
 
 ## 正式采用停止与局部继续
 

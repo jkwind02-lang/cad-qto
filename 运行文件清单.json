@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 288,
+  "runtime_file_count": 290,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -416,9 +416,14 @@
       "bytes": 613
     },
     {
+      "path": "qto-components-points/references/点位覆盖台账.md",
+      "sha256": "feec08eab1363e4369ebc57354bd9c9e318148c96d6ad29f04b30b798e0cfc24",
+      "bytes": 6516
+    },
+    {
       "path": "qto-components-points/references/结果检查与输出.md",
-      "sha256": "dadd0d46e6de7c7065d14c19e90f3f87b50fd0895537249f073b6d92dd6c49af",
-      "bytes": 2632
+      "sha256": "16fc7cfc8ac641344895dfd9aa1e4481a31f23d620fc617b8411f64790db9b86",
+      "bytes": 3008
     },
     {
       "path": "qto-components-points/references/范围与对象边界.md",
@@ -427,8 +432,8 @@
     },
     {
       "path": "qto-components-points/references/计算与证据流程.md",
-      "sha256": "413ae730c2355913c90181a8f293e149368c32b7f31874d2f5eb5cb7a8d92638",
-      "bytes": 5663
+      "sha256": "180bd475c0f28b623d2ad39227cd9df04c2a787f00efa6fdab0f07300aecdf51",
+      "bytes": 6202
     },
     {
       "path": "qto-components-points/references/跨专业端点事实.md",
@@ -437,13 +442,18 @@
     },
     {
       "path": "qto-components-points/scripts/build_component_instances_from_neutral.py",
-      "sha256": "53a351e0a2faeb034c9db12a437d89c494b4e9500dee4f822bbd447d3b893927",
-      "bytes": 61539
+      "sha256": "066ec245d73fc584002d26950fe742a0d64e6f2e166efb5f3dd9ebbbeee333ee",
+      "bytes": 63026
     },
     {
       "path": "qto-components-points/scripts/build_network_endpoint_handoff.py",
       "sha256": "cba3bbd13516ad9092968cfcbd27507ab553e8f20c3392a70929ad2d1abd42b4",
       "bytes": 12974
+    },
+    {
+      "path": "qto-components-points/scripts/build_point_coverage_ledger.py",
+      "sha256": "f19d98c55e915f14b1baaebb596480177cf0364e63ba61eabc2e2b15b0d27ed8",
+      "bytes": 35602
     },
     {
       "path": "qto-components-points/scripts/count_reconciled_instances.py",
@@ -457,8 +467,8 @@
     },
     {
       "path": "qto-components-points/SKILL.md",
-      "sha256": "362343ac814f70f725c33915fb7e55e607d6298173603be0cd1ec2941216dbba",
-      "bytes": 7214
+      "sha256": "15b3985f4f70d301e05634600a58a5b5cabf89942a39961318ce46e22bf74769",
+      "bytes": 7406
     },
     {
       "path": "qto-concrete-formwork/agents/openai.yaml",
