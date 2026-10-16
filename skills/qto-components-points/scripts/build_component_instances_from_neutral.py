@@ -891,6 +891,7 @@ def main() -> int:
         geometry: dict[str, dict[str, Any]] = {}
         seen_blocks: dict[str, set[str]] = defaultdict(set)   # block name -> scoped physical ids
         dynamic_released: dict[str, set[str]] = defaultdict(set)   # rule id -> block names released by its adjudication
+        pruned: dict[str, str] = {}   # physical id -> block name of instances cut by the bounds, with their whole subtree
 
         def transformed_box(box, matrix):
             return cad_geometry.transform_bounds(box, matrix)
@@ -964,6 +965,7 @@ def main() -> int:
             matrix = compose(parent_matrix, matrix_for_insert(insert, origins.get(block_name, [0.0, 0.0, 0.0])))
             in_scope, world_box, extent_notes = scope_of(insert, parent_matrix)
             if not in_scope:
+                pruned[f"PT-{path}"] = block_name
                 return  # only complete, conservative bounds allow pruning
             guard_kept = bool(extent_notes) and not bbox_intersects({"bbox": world_box}, bounds)
             for note in extent_notes:
@@ -1226,20 +1228,36 @@ def main() -> int:
                 )
 
         # A dynamic-state adjudication must name blocks and instances that exist in scope; a typo or a stale list
-        # is an input error, not a silent no-op (registration 20261016-1709).
+        # is an input error, not a silent no-op (registration 20261016-1709). Since dynamic blocks are cut by the bounds
+        # too (K2), a name or instance that lies only in what the bounds cut is listed as out of scope, not refused.
+        pruned_names, todo = set(pruned.values()), list(set(pruned.values()))
+        while todo:
+            for child in definitions.get(todo.pop(), ()):
+                name = str(child.get("block_name") or "") if str(child.get("entity_type") or "").upper() == "INSERT" else ""
+                if name and name not in pruned_names:
+                    pruned_names.add(name); todo.append(name)
+
+        def cut_by_bounds(physical_id: str) -> bool:
+            parts = physical_id.split("/")
+            return any("/".join(parts[:end]) in pruned for end in range(1, len(parts) + 1, 2))
+
         dynamic_summary = []
         for rule in rules:
             adjudication = rule.get("dynamic_adjudication")
             if not adjudication:
                 continue
             label = f"{rule['rule_id']}.dynamic_state_adjudication"
-            missing = [name for name in adjudication["block_names"] if name not in seen_blocks]
+            unseen = [name for name in adjudication["block_names"] if name not in seen_blocks]
+            missing = [name for name in unseen if name not in pruned_names]
             if missing:
                 fail(f"{label}.block_names 在本图范围内没有实例：{'、'.join(missing)}")
+            stray_cut = []
             if adjudication["object_ids"] is not None:
                 names = adjudication["block_names"] or list(seen_blocks)
                 known = set().union(*(seen_blocks[name] for name in names))
-                stray = sorted(adjudication["object_ids"] - known)
+                stray_all = sorted(adjudication["object_ids"] - known)
+                stray_cut = [item for item in stray_all if cut_by_bounds(item)]
+                stray = [item for item in stray_all if not cut_by_bounds(item)]
                 if stray and adjudication["block_names"]:
                     fail(f"{label}.object_ids 引用了本图范围内不存在、或块名不在 block_names 里的实例：{'、'.join(stray)}")
                 if stray:
@@ -1251,7 +1269,9 @@ def main() -> int:
                                     "basis": adjudication["basis"], "evidence_ids": adjudication["evidence_ids"],
                                     "released_instance_count": released_count,
                                     "unused_block_names": [name for name in adjudication["block_names"]
-                                                           if name not in dynamic_released[rule["rule_id"]]]})
+                                                           if name not in dynamic_released[rule["rule_id"]]],
+                                    "out_of_scope_block_names": [name for name in unseen if name in pruned_names],
+                                    "out_of_scope_object_ids": stray_cut})
 
         # Side-note binding summary: candidates by status, key texts no block claimed, keys on two adopted blocks
         # (registrations 20261015-0830, 1426). Only listed; ambiguous or missing notes already left blocks unresolved.

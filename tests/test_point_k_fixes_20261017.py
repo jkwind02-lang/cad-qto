@@ -426,6 +426,63 @@ def test_dynamic_block_without_a_complete_extent_is_still_kept(tmp_path):
     assert row['scope_geometry_bbox'] is None and row['scope_location_basis'] == 'insertion_anchor_fallback_requires_review'
 
 
+def far_dynamic_doc():
+    doc = ezdxf.new('R2013'); doc.units = 4
+    doc.blocks.new('TB').add_lwpolyline(SQUARE, close=True)
+    doc.blocks.new('FAR').add_lwpolyline(SQUARE, close=True)
+    doc.blocks.new('FARKID').add_lwpolyline(SQUARE, close=True)
+    nest = doc.blocks.new('NEST'); nest.add_lwpolyline(SQUARE, close=True)
+    kid = nest.add_blockref('FARKID', (0, 0)).dxf.handle
+    doc.blocks.new('UNUSED').add_lwpolyline(SQUARE, close=True)   # defined, never inserted
+    msp = doc.modelspace()
+    tb = msp.add_blockref('TB', (0, 0)).dxf.handle
+    far = msp.add_blockref('FAR', (8000, 0)).dxf.handle
+    nest_h = msp.add_blockref('NEST', (9000, 0)).dxf.handle
+    return doc, tb, far, f'PT-CAD-{nest_h}/NEST/CAD-{kid}'
+
+
+def far_rules(adjudication):
+    return [{'rule_id': 'TB', 'block_pattern': '^TB$', 'decision': 'include'},
+            {'rule_id': 'EX', 'block_pattern': '^(FAR|FARKID|NEST|UNUSED|FARX)$', 'decision': 'exclude',
+             'dynamic_state_adjudication': {'basis': '底图块整块排除', 'evidence_ids': ['VIS'], **adjudication}}]
+
+
+@pytest.mark.parametrize('adjudication, field, expected', [
+    ({'block_names': ['FAR', 'FARKID']}, 'out_of_scope_block_names', ['FAR', 'FARKID']),   # FARKID only inside the cut NEST
+    ({'object_ids': ['FAR-ID', 'KID-ID']}, 'out_of_scope_object_ids', ['FAR-ID', 'KID-ID']),
+])
+def test_an_adjudication_naming_what_the_bounds_cut_is_listed_not_refused(tmp_path, adjudication, field, expected):
+    # 0.3.10 configs adjudicated far dynamic blocks while dynamic blocks were never cut; since K2 they are (D043 *U47)
+    doc, tb, far, kid_id = far_dynamic_doc()
+    ids = {'FAR-ID': f'PT-CAD-{far}', 'KID-ID': kid_id}
+    dxf, neutral = extract(tmp_path, doc)
+    patch_codes(neutral, 'layout_entities', {far: [DYN]})
+    if 'object_ids' in adjudication:
+        adjudication = {'object_ids': [ids[x] for x in adjudication['object_ids']]}
+        expected = sorted(ids[x] for x in expected)
+    result, out = adapt(tmp_path, dxf, neutral, far_rules(adjudication), bounds=(-500, -500, 500, 500))
+    assert result.returncode in (0, 1), result.stderr
+    report, disp, _ = outcome(result, out)
+    assert report['dynamic_state_adjudication'][0][field] == expected
+    assert disp[f'PT-CAD-{tb}']['disposition'] == 'adopted'
+
+
+@pytest.mark.parametrize('name', ['FARX', 'UNUSED'])
+def test_an_adjudication_naming_no_instance_at_all_is_still_refused(tmp_path, name):
+    # legal control: a typo, or a block defined but never inserted, is still an input error (registration 20261016-1709)
+    doc, *_ = far_dynamic_doc()
+    dxf, neutral = extract(tmp_path, doc)
+    result, _ = adapt(tmp_path, dxf, neutral, far_rules({'block_names': [name]}), bounds=(-500, -500, 500, 500))
+    assert result.returncode == 2 and '在本图范围内没有实例' in result.stderr and name in result.stderr
+
+
+def test_an_adjudication_naming_an_id_that_never_existed_is_still_refused(tmp_path):
+    doc, *_ = far_dynamic_doc()
+    dxf, neutral = extract(tmp_path, doc)
+    result, _ = adapt(tmp_path, dxf, neutral, far_rules({'object_ids': ['PT-CAD-FFFF']}), bounds=(-500, -500, 500, 500))
+    assert result.returncode == 2 and '不存在' in result.stderr
+
+
 def test_dynamic_children_no_longer_unbound_their_container(tmp_path):
     doc, inner, ids, floor_id, _, _ = floor_doc()
     dxf, neutral = extract(tmp_path, doc)
