@@ -422,8 +422,8 @@
     },
     {
       "path": "qto-components-points/references/结果检查与输出.md",
-      "sha256": "16fc7cfc8ac641344895dfd9aa1e4481a31f23d620fc617b8411f64790db9b86",
-      "bytes": 3008
+      "sha256": "a9ccdfb7e3c4c746246ca9d8ec4a0811f0f41ac0b7444fde42aa41f0478323ae",
+      "bytes": 3122
     },
     {
       "path": "qto-components-points/references/范围与对象边界.md",
@@ -452,8 +452,8 @@
     },
     {
       "path": "qto-components-points/scripts/build_point_coverage_ledger.py",
-      "sha256": "f19d98c55e915f14b1baaebb596480177cf0364e63ba61eabc2e2b15b0d27ed8",
-      "bytes": 35602
+      "sha256": "ab5fce967784cf9f0f9972c50abc09906d18d427c91cf8ee925ac640d13d3089",
+      "bytes": 35626
     },
     {
       "path": "qto-components-points/scripts/count_reconciled_instances.py",
@@ -462,8 +462,8 @@
     },
     {
       "path": "qto-components-points/scripts/point_geometry_review.py",
-      "sha256": "31f66c40bc4247610d124b01db18fe1c83549927411b320701d2ef41d956b5a9",
-      "bytes": 2876
+      "sha256": "90e6c7e1e41df00b3a66b29b6cc7c401da36230e49987a663058a3d9093f77ed",
+      "bytes": 3217
     },
     {
       "path": "qto-components-points/SKILL.md",

@@ -11,6 +11,7 @@ import json
 from typing import Any
 
 SCHEMA = "qto-point-geometry-review/1.0"
+READY_SCALES = ("bound", "explicit_output_units")   # the adapter's only statuses that ran the same-place review
 
 
 def instance_set_sha256(rows: list[dict[str, Any]]) -> str:
@@ -42,8 +43,11 @@ def evaluate(rows: list[dict[str, Any]], receipt: Any) -> dict[str, Any]:
         return {"status": "mismatch", "work_quantity_ready": False, "reason": "；".join(problems),
                 "instance_set_sha256": actual}
     blockers = []
-    if receipt.get("scale_status") == "unbound":
+    scale = receipt.get("scale_status")
+    if scale == "unbound":
         blockers.append("同位置审查尺度未绑定")
+    elif scale not in READY_SCALES:   # missing, empty or unknown: not proof that the review ran at a known scale
+        blockers.append(f"凭据的尺度状态 {scale!r} 不是 {' 或 '.join(READY_SCALES)}")
     if receipt.get("pending_group_count") != 0:
         blockers.append(f"未处置重复候选组 {receipt.get('pending_group_count')}")
     if receipt.get("workpackage_complete") is not True:

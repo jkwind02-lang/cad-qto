@@ -10,6 +10,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 from test_point_tolerance_units_20261016 import MM_OUT, DRAWING_OUT, POINTS, build
 
 COUNTER = POINTS / 'count_reconciled_instances.py'
@@ -99,6 +101,27 @@ def test_k02_duplicate_id_is_still_rejected(tmp_path):
     row = {'physical_id': 'K02-1', 'category': '灯具', 'system': 'S', 'spec': '应急灯', 'unit': '个', 'evidence': '自造'}
     code, out = count(tmp_path, {'reconciled_instances': [row, dict(row)], 'recognition_basis': basis})
     assert code == 2 and out['status'] == 'INPUT_REQUIRED'
+
+
+@pytest.mark.parametrize('scale', [None, '', 'guessed', 'BOUND'])
+def test_missing_or_unknown_scale_status_is_not_ready(tmp_path, scale):
+    # Cross-check B4A-R1-01: only the literal "unbound" used to block; a receipt without a known scale passed.
+    data = adapter_input(resolved(tmp_path))
+    if scale is None:
+        del data['geometry_review']['scale_status']
+    else:
+        data['geometry_review']['scale_status'] = scale
+    code, out = count(tmp_path, data)
+    assert code == 0 and out['geometry_review']['status'] == 'matched' and out['work_quantity_ready'] is False
+    assert '尺度状态' in out['geometry_review']['reason']
+
+
+@pytest.mark.parametrize('scale', ['bound', 'explicit_output_units'])
+def test_known_review_scales_stay_ready(tmp_path, scale):
+    data = adapter_input(resolved(tmp_path))
+    data['geometry_review']['scale_status'] = scale
+    code, out = count(tmp_path, data)
+    assert code == 0 and out['work_quantity_ready'] is True
 
 
 def test_receipt_of_another_schema_is_a_mismatch(tmp_path):

@@ -397,7 +397,7 @@ class Ledger:
             if r["symbol_kind"] == "块" and not r["legend_handle"]:
                 continue   # a hand-added block row only carries a suspected class; it is not a legend row
             count = int(r["plan_count"]) if re.fullmatch(r"\d+", r["plan_count"]) else 0
-            unconfirmed = count == 0 and not r["search_record_id"] and r["destination"] in ("", "不计")
+            unconfirmed = count == 0 and not r["search_record_id"]   # every destination, not only 不计 (cross-check B4A-B1-01)
             if not r["destination"] or unconfirmed:
                 pending.append({"drawing": r["drawing"], "legend_row": r["legend_row"], "symbol": r["symbol"],
                                 "reason": "实例数为 0、没有检索记录（待确认）" if unconfirmed and r["destination"] else "去向为空"})

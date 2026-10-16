@@ -151,6 +151,22 @@ def test_filled_legend_rows_drive_no_destination_and_suspected_classes(drawing, 
     assert report['class_completeness']['灯具']['complete'] is False and report['class_completeness']['接地端子板']['complete'] is False
 
 
+@pytest.mark.parametrize('destination', ['已计', '归他专业', '待识别', '不计'])
+@pytest.mark.parametrize('search', ['', 'SR-ZERO-1'])
+def test_zero_legend_row_needs_a_search_record_whatever_its_destination(tmp_path, destination, search):
+    # Cross-check B4A-B1-01: only empty / 不计 zero rows used to be held; 已计、归他专业、待识别 slipped through as COMPLETE.
+    write(tmp_path / 'legend.csv', FIELDS, [['D0', 'Z1', '', '测试图符', '<HATCH>', '非块', '0', '', '', destination,
+                                              '合成：本图未见', '', search]])
+    done, report, _ = ledger(tmp_path, {'schema_version': 'qto-point-coverage-input/1.0', 'drawings': [{'drawing': 'D0'}],
+                                        'legend_coverage': 'legend.csv'})
+    assert done.returncode == 0, done.stderr
+    pending = {r['legend_row']: r['reason'] for r in report['legend_rows_without_destination']}
+    if search:   # legal control: a zero row backed by a search record has a destination
+        assert pending == {} and report['status'] == 'COMPLETE' and report['coverage_complete'] is True
+    else:
+        assert '待确认' in pending['Z1'] and report['status'] == 'INCOMPLETE' and report['coverage_complete'] is False
+
+
 @pytest.mark.parametrize('case', ['missing', 'in_block', 'twice', 'counted_and_excluded', 'both_sources'])
 def test_bad_tables_are_input_problems(drawing, tmp_path, case):
     h = drawing['h']

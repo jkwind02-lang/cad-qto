@@ -132,6 +132,23 @@ def test_missing_lock_fails_before_any_install(tmp_path, monkeypatch):
         ic.cmd_release_install(args)
 
 
+@pytest.mark.parametrize('command', ['release-verify', 'release-rollback'])
+def test_missing_lock_refuses_verify_and_rollback_before_touching_either_host(tmp_path, monkeypatch, capsys, command):
+    # Cross-check B4A-M3-01: both entries used to run the Claude half first and meet the lock only on the Codex half.
+    args, path = make_check(tmp_path, claude='已安装并核对', codex='已安装并核对')
+    before = path.read_bytes()
+    def no_lock():
+        raise ReleaseError('Codex 安装操作需要本会话维护锁')
+    monkeypatch.setattr(codex_install, 'require_owner', no_lock)
+    for name in ('cmd_claude_verify', 'cmd_claude_rollback', 'cmd_claude_install'):
+        monkeypatch.setattr(ic, name, lambda *a, n=name: pytest.fail(f'{n} must not run without the lock'))
+    monkeypatch.setattr(ic, 'cmd_codex', lambda *a, **k: pytest.fail('Codex side must not run without the lock'))
+    assert ic.main([command, '--record', str(args.record)]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result['status'] == 'FAIL' and '维护锁' in result['error']
+    assert path.read_bytes() == before
+
+
 def write_tree(root, files):
     for name, text in files.items():
         p = root/name

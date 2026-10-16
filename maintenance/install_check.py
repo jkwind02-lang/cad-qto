@@ -343,6 +343,8 @@ def cmd_release_install(args) -> dict:
 
 
 def cmd_release_verify(args) -> dict:
+    import codex_install
+    codex_install.require_owner()  # before the Claude side rewrites its part of the check record
     results = {'Claude': run_step(lambda: cmd_claude_verify(args)),
                'Codex': run_step(lambda: cmd_codex(args, 'codex-verify'))}
     ok = all(r['status'] == 'PASS' for r in results.values())
@@ -351,6 +353,8 @@ def cmd_release_verify(args) -> dict:
 
 
 def cmd_release_rollback(args) -> dict:
+    import codex_install
+    codex_install.require_owner()  # before any host is marked 待回退 or Claude is rolled back
     path = operation_path(args)
     rollback = rollback_both(args, path)
     check = write_log(path, status='已整批回退' if rollback['status'] == 'PASS' else '整批回退：恢复未完成',
