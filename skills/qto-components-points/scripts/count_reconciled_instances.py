@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Count already reconciled unique instances; never performs semantic matching."""
+"""Count already reconciled unique instances; never performs semantic matching.
+
+Arithmetic and exit codes do not depend on geometry. The output also says whether the input carries the adapter's
+geometry review receipt (point_geometry_review): work_quantity_ready is true only when the receipt matches this exact
+instance set, no duplicate group is pending and the workpackage is complete. It is not business adoption.
+"""
 import argparse,collections,json,math,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"_qto-shared-evidence"/"scripts"))
+sys.path.insert(0,str(Path(__file__).resolve().parent))
 from model_recognition_basis import validate_working_basis
+import point_geometry_review
 def num(v):return isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v)
 def main():
  p=argparse.ArgumentParser();p.add_argument("input",type=Path);a=p.parse_args()
@@ -24,7 +31,8 @@ def main():
   out=[]
   for k,g in sorted(groups.items()):
    out.append({"category":k[0],"system":k[1],"spec":k[2],"unit":k[3],"quantity_level":k[4],"count":g["count"],"derived_area_m2":round(g["area_m2"],6) if g["area_complete"] else None})
-  print(json.dumps({"status":"REFERENCE_ONLY","business_adoption_allowed":False,"recognition_basis":data.get("recognition_basis"),"unique_instance_count":len(seen),"groups":out},ensure_ascii=False,indent=2));return 0
+  review=point_geometry_review.evaluate(rows,data.get("geometry_review"))
+  print(json.dumps({"status":"REFERENCE_ONLY","business_adoption_allowed":False,"work_quantity_ready":review["work_quantity_ready"],"geometry_review":review,"recognition_basis":data.get("recognition_basis"),"unique_instance_count":len(seen),"groups":out},ensure_ascii=False,indent=2));return 0
  except (OSError,ValueError,json.JSONDecodeError) as e:
   print(json.dumps({"status":"INPUT_REQUIRED","stop":True,"error":str(e)},ensure_ascii=False,indent=2));return 2
 if __name__=="__main__":sys.exit(main())

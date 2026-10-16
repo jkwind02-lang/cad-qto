@@ -25,7 +25,19 @@ from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_
 import qto_cad_geometry as cad_geometry
 from qto_actor_identity import is_model_identity
 
-VERSION = "qto-component-neutral-adapter/1.3.1"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import point_geometry_review as geometry_receipt
+
+VERSION = "qto-component-neutral-adapter/1.4.0"
+# Same-place review tolerances are physical (registration 20261016-1044 R2): millimetres per output coordinate unit
+# come from the declared unit name, else from the drawing INSUNITS and factor_to_output.
+UNIT_MM = {"mm": 1.0, "millimeter": 1.0, "millimeters": 1.0, "毫米": 1.0, "cm": 10.0, "centimeter": 10.0,
+           "centimeters": 10.0, "厘米": 10.0, "m": 1000.0, "meter": 1000.0, "meters": 1000.0, "米": 1000.0,
+           "km": 1e6, "kilometers": 1e6, "in": 25.4, "inch": 25.4, "inches": 25.4, "ft": 304.8, "feet": 304.8,
+           "yards": 914.4, "miles": 1609344.0}
+INSUNITS_MM = {1: 25.4, 2: 304.8, 3: 1609344.0, 4: 1.0, 5: 10.0, 6: 1000.0, 7: 1e6, 10: 914.4}
+DEFAULT_NEAR_MM = 50.0
+DEFAULT_EXACT_MM = 0.001
 PROFILE_SCHEMA = "qto-component-recognition-profile/1.0"
 LEDGER_SCHEMA = "qto-project-adjudication-ledger/1.0"
 CONFIRMATION_SOURCES = {
@@ -282,6 +294,83 @@ def tolerance_value(raw: Any, label: str, default: float) -> float:
     return value
 
 
+def output_unit_scale(unit: dict[str, Any], factor: float, drawing_unit: Any) -> dict[str, Any]:
+    """Millimetres per output coordinate unit and how that was established; None when it cannot be told.
+
+    A declared m/cm/mm name that contradicts INSUNITS x factor_to_output is an input error unless the profile
+    gives unit.unit_conflict_basis (real drawings often carry a wrong INSUNITS); INSUNITS=0 or unknown only
+    leaves the scale to the declared name.
+    """
+    name = str(unit.get("output_coordinate_unit", "m")).strip()
+    declared = UNIT_MM.get(name.lower())
+    drawing = drawing_unit if isinstance(drawing_unit, dict) else {}
+    code = drawing.get("insunits_code")
+    drawing_mm = INSUNITS_MM.get(code) if isinstance(code, int) else None
+    if drawing_mm is None and drawing.get("raw_unit") is not None:
+        drawing_mm = UNIT_MM.get(str(drawing["raw_unit"]).strip().lower())
+    inferred = drawing_mm / factor if drawing_mm else None
+    notes = []
+    if declared is not None and inferred is not None and not math.isclose(declared, inferred, rel_tol=1e-6):
+        message = (f"unit.output_coordinate_unit={name}（每单位 {declared:g} mm）与图纸单位 INSUNITS={code} / "
+                   f"{drawing.get('raw_unit')} × factor_to_output={factor:g}（每输出单位 {inferred:g} mm）矛盾")
+        conflict_basis = unit.get("unit_conflict_basis")
+        if not (isinstance(conflict_basis, str) and conflict_basis.strip()):
+            fail(message + "；核对单位，或在 unit.unit_conflict_basis 写明以声明单位为准的依据")
+        notes.append(f"{message}；按声明单位，依据：{conflict_basis.strip()}")
+    if declared is not None:
+        return {"output_unit_mm": declared, "scale_basis": f"声明输出单位 {name}", "notes": notes}
+    if inferred is not None:
+        return {"output_unit_mm": inferred,
+                "scale_basis": f"图纸单位 INSUNITS={code} / {drawing.get('raw_unit')} × factor_to_output={factor:g}",
+                "notes": notes}
+    notes.append(f"输出单位 {name} 不是 m、cm、mm 等可换算名称，图纸 INSUNITS={code} 也推不出尺度")
+    return {"output_unit_mm": None, "scale_basis": "unbound", "notes": notes}
+
+
+def resolve_duplicate_tolerances(check: dict[str, Any], scale: dict[str, Any]) -> dict[str, Any]:
+    """Output-unit radii for the same-place review, bound to millimetres; scale_status=unbound skips the review.
+
+    Explicit output-unit values (near_tolerance / exact_tolerance) need tolerance_basis; *_mm values and the
+    50 mm default need a known scale.
+    """
+    unit_mm = scale["output_unit_mm"]
+    basis = check.get("tolerance_basis")
+    basis = basis.strip() if isinstance(basis, str) and basis.strip() else None
+    resolved: dict[str, Any] = {}
+    for key, default_mm in (("near", DEFAULT_NEAR_MM), ("exact", DEFAULT_EXACT_MM)):
+        raw, raw_mm = check.get(f"{key}_tolerance"), check.get(f"{key}_tolerance_mm")
+        if raw is not None and raw_mm is not None:
+            fail(f"duplicate_check.{key}_tolerance 与 {key}_tolerance_mm 只能写一个")
+        if raw is not None:
+            if basis is None:
+                fail(f"duplicate_check.{key}_tolerance 按输出坐标单位理解，必须同时写 tolerance_basis")
+            value = tolerance_value(raw, f"duplicate_check.{key}_tolerance", 0.0)
+            resolved[key] = (value, "显式（输出坐标单位）")
+        else:
+            value_mm = tolerance_value(raw_mm, f"duplicate_check.{key}_tolerance_mm", default_mm)
+            source = "显式（毫米）" if raw_mm is not None else f"默认 {default_mm:g} mm"
+            resolved[key] = (None if unit_mm is None else value_mm / unit_mm, source, value_mm)
+    if unit_mm is None and resolved["near"][0] is not None and resolved["exact"][0] is None and \
+            check.get("exact_tolerance_mm") is None:
+        # an explicit near radius without a scale: only exact coincidence counts as "coincident"
+        resolved["exact"] = (0.0, "推不出尺度，完全重合按 0")
+    if any(item[0] is None for item in resolved.values()):
+        return {"scale_status": "unbound", "output_unit_mm": None, "scale_basis": scale["scale_basis"],
+                "scale_notes": scale["notes"], "near_tolerance": None, "exact_tolerance": None,
+                "near_tolerance_mm_effective": None, "exact_tolerance_mm_effective": None,
+                "tolerance_source": {key: item[1] for key, item in resolved.items()},
+                "tolerance_basis": basis or "推不出每输出单位折合多少毫米，未做同位置审查；按本图写 near_tolerance（输出坐标单位）和 tolerance_basis"}
+    near, exact = resolved["near"][0], resolved["exact"][0]
+    # explicit output-unit radii with a basis stay usable when the scale is unknown; they are just not convertible
+    return {"scale_status": "bound" if unit_mm is not None else "explicit_output_units", "output_unit_mm": unit_mm, "scale_basis": scale["scale_basis"],
+            "scale_notes": scale["notes"], "near_tolerance": near, "exact_tolerance": exact,
+            "near_tolerance_mm_effective": None if unit_mm is None else near * unit_mm,
+            "exact_tolerance_mm_effective": None if unit_mm is None else exact * unit_mm,
+            "tolerance_source": {key: item[1] for key, item in resolved.items()},
+            "tolerance_basis": basis or (f"默认值：完全重合 {DEFAULT_EXACT_MM:g} mm、近似重合 {DEFAULT_NEAR_MM:g} mm（物理尺寸，"
+                                         f"按每输出单位 {unit_mm:g} mm 换算）")}
+
+
 def merge_instance_groups(dispositions, adopted, endpoint_instances, geometry, raw_groups) -> dict[str, Any]:
     """Merge the sub-blocks of one exploded object (e.g. 天正分解块 Body/Cent/Hand) into the primary member's instance.
 
@@ -382,19 +471,27 @@ def merge_instance_groups(dispositions, adopted, endpoint_instances, geometry, r
     return {"declared": True, "groups": groups, "merged_member_count": len(merged_ids), "unresolved_groups": unresolved}
 
 
-def review_colocated_instances(dispositions, adopted, endpoint_instances, geometry, raw_check, raw_resolutions) -> dict[str, Any]:
+def review_colocated_instances(dispositions, adopted, endpoint_instances, geometry, raw_check, raw_resolutions,
+                               scale) -> dict[str, Any]:
     """Flag adopted instances that coincide or nearly coincide; never drop one without a declared resolution.
 
     Same block + same orientation within tolerance -> duplicate candidate; same category with a different block, or the
-    same block turned or mirrored, at the same place -> suspected same physical object. Tolerances are in output
-    coordinate units.
+    same block turned or mirrored, at the same place -> suspected same physical object. Radii are physical (default
+    50 mm near, 0.001 mm exact) converted to output coordinate units; without a scale the review is not run and the
+    workpackage stays incomplete (scale_status=unbound).
     """
     check = raw_check if isinstance(raw_check, dict) else {}
     if raw_check is not None and not isinstance(raw_check, dict):
         fail("duplicate_check 必须是对象")
-    exact = tolerance_value(check.get("exact_tolerance"), "duplicate_check.exact_tolerance", 1e-6)
-    near = tolerance_value(check.get("near_tolerance"), "duplicate_check.near_tolerance", 0.05)
     angle_tolerance = tolerance_value(check.get("angle_tolerance_deg"), "duplicate_check.angle_tolerance_deg", 0.5)
+    bound = resolve_duplicate_tolerances(check, scale)
+    if bound["scale_status"] == "unbound":
+        if raw_resolutions:
+            fail("同位置审查的尺度未绑定，duplicate_resolutions 无组可处置；先按本图声明 near_tolerance 与 tolerance_basis")
+        return {**bound, "angle_tolerance_deg": angle_tolerance, "review_performed": False,
+                "candidate_group_count": 0, "pending_group_count": 0, "pending_instance_count": 0,
+                "duplicate_excluded_count": 0, "groups": []}
+    exact, near = bound["exact_tolerance"], bound["near_tolerance"]
     if near < exact:
         fail("duplicate_check.near_tolerance 不能小于 exact_tolerance")
     radius = max(near, exact)
@@ -490,8 +587,7 @@ def review_colocated_instances(dispositions, adopted, endpoint_instances, geomet
         if group["resolution"] != "pending" and not set(group["keep"]) <= adopted_ids:
             fail(f"重复候选组 {group['group_id']} 声明保留 {group['keep']}，但采用实例中缺少其中的成员")
     pending = [group for group in groups if group["resolution"] == "pending"]
-    return {"exact_tolerance": exact, "near_tolerance": near, "angle_tolerance_deg": angle_tolerance,
-            "tolerance_basis": check.get("tolerance_basis") or "默认值：完全重合 1e-6、近似重合 0.05（输出坐标单位）",
+    return {**bound, "angle_tolerance_deg": angle_tolerance, "review_performed": True,
             "candidate_group_count": len(groups), "pending_group_count": len(pending),
             "pending_instance_count": sum(len(group["physical_ids"]) for group in pending),
             "duplicate_excluded_count": len(dropped), "groups": groups}
@@ -552,6 +648,7 @@ def main() -> int:
             fail("unit.factor_to_output 必须大于0")
         coordinate_unit = text(unit.get("output_coordinate_unit", "m"), "unit.output_coordinate_unit")
         unit_source_id = text(unit.get("source_id"), "unit.source_id")
+        scale = output_unit_scale(unit, factor, manifest.get("drawing_unit"))
         max_depth = int((profile.get("block_expansion") or {}).get("max_depth", 16))
         if max_depth < 1:
             fail("block_expansion.max_depth 必须大于0")
@@ -796,7 +893,9 @@ def main() -> int:
         # 先按声明合并同位置子块，再对剩余采用实例做同位置重复审查；未处置的重复候选使工作包不完整
         grouping = merge_instance_groups(dispositions, adopted, endpoint_instances, geometry, profile.get("instance_grouping"))
         duplicate_review = review_colocated_instances(dispositions, adopted, endpoint_instances, geometry,
-                                                      profile.get("duplicate_check"), profile.get("duplicate_resolutions"))
+                                                      profile.get("duplicate_check"), profile.get("duplicate_resolutions"),
+                                                      scale)
+        scale_unbound = duplicate_review["scale_status"] == "unbound"
         disposition_by_id = {item["physical_id"]: item for item in dispositions}
         for group in duplicate_review["groups"]:
             for physical_id in group["physical_ids"]:
@@ -812,19 +911,35 @@ def main() -> int:
         with disposition_path.open("w", encoding="utf-8") as handle:
             for item in sorted(dispositions, key=lambda value: value["physical_id"]):
                 handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
-        count_input = {
-            "schema_version": "qto-reconciled-instance-input/1.0",
-            "reconciled_instances": adopted,
-            "recognition_basis": recognition_basis(ledger, ledger_path),
-        }
-        count_input_path = output / "点位唯一实例计数输入.json"
-        count_input_path.write_text(json.dumps(count_input, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         # 模型识别台账列出、块适配器却没有承接的对象（非块图符、范围外等）是来源缺口：
         # 主报告与端点交接用同一个完整性判定，缺口 ID 随交接传给消费方。
         model_object_ids = {oid for entry in entries.values() if entry.get("decision_origin") == "model" for oid in entry["object_ids"]}
         missing_model_objects = sorted(model_object_ids - {item["physical_id"] for item in dispositions})
         source_complete = (bool(rules) and not disposition_counts.get("unresolved", 0) and not failures and not missing_model_objects
-                           and not pending_duplicates and not grouping["unresolved_groups"])
+                           and not pending_duplicates and not grouping["unresolved_groups"] and not scale_unbound)
+        # 计数输入带几何审查凭据：计数器重算实例集指纹，自造或改过的实例列表对不上（登记 R1）
+        count_input = {
+            "schema_version": "qto-reconciled-instance-input/1.0",
+            "reconciled_instances": adopted,
+            "recognition_basis": recognition_basis(ledger, ledger_path),
+            "geometry_review": {
+                "schema": geometry_receipt.SCHEMA,
+                "adapter_version": VERSION,
+                "profile_sha256": sha256(profile_path),
+                "source_sha256": expected_source,
+                "instance_set_sha256": geometry_receipt.instance_set_sha256(adopted),
+                "instance_count": len(adopted),
+                "output_coordinate_unit": coordinate_unit,
+                "scale_status": duplicate_review["scale_status"],
+                "near_tolerance_mm_effective": duplicate_review["near_tolerance_mm_effective"],
+                "candidate_group_count": duplicate_review["candidate_group_count"],
+                "pending_group_count": duplicate_review["pending_group_count"],
+                "duplicate_excluded_count": duplicate_review["duplicate_excluded_count"],
+                "workpackage_complete": source_complete,
+            },
+        }
+        count_input_path = output / "点位唯一实例计数输入.json"
+        count_input_path.write_text(json.dumps(count_input, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         endpoint_input = {
             "schema_version": "qto-network-endpoint-handoff-input/1.1",
             "recognition_basis": recognition_basis(ledger, ledger_path),
@@ -936,6 +1051,8 @@ def main() -> int:
                 "duplicate_candidate_group_count": duplicate_review["candidate_group_count"],
                 "duplicate_pending_instance_count": pending_duplicates,
                 "duplicate_excluded_count": duplicate_review["duplicate_excluded_count"],
+                "duplicate_scale_status": duplicate_review["scale_status"],
+                "near_tolerance_mm_effective": duplicate_review["near_tolerance_mm_effective"],
             },
             "instance_grouping": grouping,
             "duplicate_review": duplicate_review,

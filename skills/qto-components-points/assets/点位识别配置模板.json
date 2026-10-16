@@ -23,7 +23,7 @@
     "source_id": "填写单位证据ID"
   },
   "block_expansion": {"max_depth": 16},
-  "duplicate_check": {"exact_tolerance": 0.000001, "near_tolerance": 0.05, "angle_tolerance_deg": 0.5, "tolerance_basis": "默认值；按本图最小设备间距改写时写明依据"},
+  "duplicate_check": {"exact_tolerance_mm": 0.001, "near_tolerance_mm": 50, "angle_tolerance_deg": 0.5, "tolerance_basis": "默认值（物理毫米，按输出单位自动换算）；按本图最小设备间距改写时写明依据"},
   "duplicate_resolutions": [],
   "instance_grouping": [],
   "consumer_skill": "qto-pipe-networks",

@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 287,
+  "runtime_file_count": 288,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -387,8 +387,8 @@
     },
     {
       "path": "qto-components-points/assets/点位识别配置模板.json",
-      "sha256": "96decb0b3c6f4197d73a9cb175e7ab7805bce07fd3d38d670238ab0a6502a8fc",
-      "bytes": 1199
+      "sha256": "a081da286715f3c709c33a62c9eb15b6bfd286e199263363825162c9ce1906f8",
+      "bytes": 1248
     },
     {
       "path": "qto-components-points/assets/项目裁决台账模板.json",
@@ -417,8 +417,8 @@
     },
     {
       "path": "qto-components-points/references/结果检查与输出.md",
-      "sha256": "c157666a9d9c0f3cd3cd6e0ebf80503f1994d17c1a316ef3edf588c4cf3ad1cb",
-      "bytes": 2323
+      "sha256": "dadd0d46e6de7c7065d14c19e90f3f87b50fd0895537249f073b6d92dd6c49af",
+      "bytes": 2632
     },
     {
       "path": "qto-components-points/references/范围与对象边界.md",
@@ -427,8 +427,8 @@
     },
     {
       "path": "qto-components-points/references/计算与证据流程.md",
-      "sha256": "081e25178bc2e64125b04a4f8d38dfcd9a34a7e2b0817187bb2f11184e871b6a",
-      "bytes": 4265
+      "sha256": "413ae730c2355913c90181a8f293e149368c32b7f31874d2f5eb5cb7a8d92638",
+      "bytes": 5663
     },
     {
       "path": "qto-components-points/references/跨专业端点事实.md",
@@ -437,8 +437,8 @@
     },
     {
       "path": "qto-components-points/scripts/build_component_instances_from_neutral.py",
-      "sha256": "3138afafc1afe746cc32c1d122e9c6fd9976acb80d44b98e30c2477d21292050",
-      "bytes": 53208
+      "sha256": "53a351e0a2faeb034c9db12a437d89c494b4e9500dee4f822bbd447d3b893927",
+      "bytes": 61539
     },
     {
       "path": "qto-components-points/scripts/build_network_endpoint_handoff.py",
@@ -447,13 +447,18 @@
     },
     {
       "path": "qto-components-points/scripts/count_reconciled_instances.py",
-      "sha256": "3ca4ea0b2ba6adcb3d4b60575913cbf9f7c49afec7205d2619435107e8014f05",
-      "bytes": 2200
+      "sha256": "eb8913071be15d7628b6c8ac53eecff86d8158ba3ee066a7922b214ccf0d0f1a",
+      "bytes": 2776
+    },
+    {
+      "path": "qto-components-points/scripts/point_geometry_review.py",
+      "sha256": "31f66c40bc4247610d124b01db18fe1c83549927411b320701d2ef41d956b5a9",
+      "bytes": 2876
     },
     {
       "path": "qto-components-points/SKILL.md",
-      "sha256": "7e0ef21ab89def38e3d59a7d3162d06a05836de474836e474d491daf7c7d8de8",
-      "bytes": 6624
+      "sha256": "362343ac814f70f725c33915fb7e55e607d6298173603be0cd1ec2941216dbba",
+      "bytes": 7214
     },
     {
       "path": "qto-concrete-formwork/agents/openai.yaml",
