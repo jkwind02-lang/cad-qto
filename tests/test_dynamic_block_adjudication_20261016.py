@@ -96,6 +96,8 @@ def build(tmp_path, adjudication='default', inner_codes=None, top_codes=None, ru
                 'cross_check': '按图面布置核对', 'uncertainties': ['合成']}
     objects = ids + [top_id] if listed is None else listed
     entries = [entry('M-TB', 'TB', objects)] + [entry(f'M-{r["rule_id"]}', r['rule_id'], r.pop('_objects')) for r in extra_rules]
+    if (rule_extra or {}).get('decision') in ('exclude', 'container'):   # the model record states the same decision as the rule
+        entries[0]['decision'] = rule_extra['decision']
     ledger = {'schema_version': 'qto-model-recognition-ledger/1.0', 'ledger_id': 'L', 'ledger_version': '1',
               'source_sha256': src, 'adoption_scope': 'working', 'review_status': 'unreviewed',
               'evidence': [{'evidence_id': 'G', 'path': str(dxf), 'sha256': src, 'source_sha256': src,
@@ -251,9 +253,28 @@ def test_malformed_adjudication_is_rejected(tmp_path, adjudication, message):
     assert not (out / '点位识别报告.json').exists()
 
 
-def test_adjudication_on_a_non_include_rule_is_rejected(tmp_path):
-    _, _, result, _ = build(tmp_path, rule_extra={'decision': 'exclude'})
-    assert result.returncode == 2 and '只能写在 include 规则上' in result.stderr
+@pytest.mark.parametrize('decision', ['container', 'unresolved'])
+def test_adjudication_on_a_rule_that_neither_includes_nor_excludes_is_rejected(tmp_path, decision):
+    _, _, result, _ = build(tmp_path, rule_extra={'decision': decision})
+    assert result.returncode == 2 and '只能写在 include 或 exclude 规则上' in result.stderr
+
+
+def test_exclude_rule_with_adjudication_excludes_dynamic_boxes_and_marks_them(tmp_path):
+    # checkpoint 1: an exclusion rule may carry the same adjudication (exact names, basis, registered evidence)
+    ids, top_id, result, out = build(tmp_path, rule_extra={'decision': 'exclude'})
+    report, disp, _ = outcome(result, out)
+    assert [disp[i]['disposition'] for i in ids] == ['excluded'] * 4
+    assert all(disp[i]['dynamic_state_adjudication']['rule_id'] == 'TB' for i in ids)
+    assert disp[top_id]['disposition'] == 'excluded' and 'dynamic_state_adjudication' not in disp[top_id]
+    assert report['counts']['dynamic_state_adjudicated_count'] == 4 and report['point_workpackage_complete'] is True
+
+
+def test_exclude_rule_without_adjudication_leaves_dynamic_boxes_unresolved(tmp_path):
+    ids, top_id, result, out = build(tmp_path, adjudication=None, rule_extra={'decision': 'exclude'})
+    report, disp, _ = outcome(result, out)
+    assert [disp[i]['disposition'] for i in ids] == ['unresolved'] * 4
+    assert disp[top_id]['disposition'] == 'excluded'
+    assert report['counts']['dynamic_state_adjudicated_count'] == 0 and report['point_workpackage_complete'] is False
 
 
 def test_adjudication_object_of_another_block_is_rejected(tmp_path):

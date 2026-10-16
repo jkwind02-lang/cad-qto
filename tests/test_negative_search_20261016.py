@@ -89,9 +89,37 @@ def test_full_spec_hit_is_placed_on_its_sheet(tmp_path):
 def test_spec_boundaries_part_of_longer_spec_and_excluded_family(tmp_path):
     _, _, data, _ = run(tmp_path)
     b = by_id(data)['B']
-    assert b['result']['hits'] == 0 and b['status'] == 'no_hit_full' and b['status_text'] == '全覆盖未命中'   # 4x1500 and 4x150+1x70 are not 4x150
+    assert b['result']['hits'] == 0                                                                       # 4x1500 and 4x150+1x70 are not 4x150
     assert {h['handle'] for h in b['result']['secondary_samples']} == {'A1', 'A4'}                       # longer specs only as secondary; KVV excluded
     assert any('4x150' in f for f in b['targets']['written_forms']) and '4×150' in b['targets']['written_forms']
+    # checkpoint 2: secondary hits not yet judged keep it pending
+    assert b['status'] == 'no_hit_partial' and b['status_reasons'] == ['次级命中 2 处未判定'] and b['result']['secondary_unjudged'] == 2
+
+
+def test_secondary_hits_must_all_be_judged_other_objects_for_full_coverage(tmp_path):
+    items = [dict(ITEMS[1], secondary_judgments=[
+        {'handle': 'A1', 'judgment': '非同一对象', 'basis': '4x150+1x70 是五芯干线，本条是四芯支线'},
+        {'text_pattern': r'^ZB.*2\(4X150', 'judgment': '非同一对象', 'basis': '并联两根的干线，另有清单项'}])]
+    _, _, data, out = run(tmp_path, items=items)
+    b = by_id(data)['B']
+    assert b['status'] == 'no_hit_full' and b['status_reasons'] == []
+    assert b['result']['secondary_judged'] == 2 and b['result']['secondary_unjudged'] == 0 and b['result']['secondary_same_object'] == 0
+    assert [j['matched'] for j in b['secondary_judgments']] == [1, 1]
+    row = list(csv.DictReader(open(out / '否定结论检索记录.csv', encoding='utf-8-sig')))[0]
+    assert row['检索状态'] == '全覆盖未命中' and row['次级命中判定'].startswith('已判 2（非同一对象 2，同一对象 0），未判 0；A1 非同一对象 1 处')
+    # one hit judged the same object: still pending, never full coverage
+    items[0]['secondary_judgments'][0]['judgment'] = '同一对象'
+    _, _, data, out = run(tmp_path / 'same', items=items)
+    b = by_id(data)['B']
+    assert b['status'] == 'no_hit_partial' and b['status_reasons'] == ['次级命中 1 处判为同一对象']
+    assert list(csv.DictReader(open(out / '否定结论检索记录.csv', encoding='utf-8-sig')))[0]['检索状态'] == '待确认（次级命中 1 处判为同一对象）'
+    # a judgment that names no secondary hit is an input problem, not a silent no-op
+    items[0]['secondary_judgments'].append({'handle': 'ZZ9', 'judgment': '非同一对象', 'basis': '旧判定'})
+    code, s, data, _ = run(tmp_path / 'stale', items=items)
+    assert code == 2 and data is None and any('secondary_judgments[2] 没有对上任何次级命中' in p for p in s['problems'])
+    items[0]['secondary_judgments'] = [{'handle': 'A1', 'text_pattern': 'X', 'judgment': '非同一对象', 'basis': 'x'}, {'handle': 'A4', 'judgment': '是', 'basis': 'x'}]
+    code, s, _, _ = run(tmp_path / 'bad', items=items)
+    assert code == 2 and sum('二选一' in p for p in s['problems']) == 2
 
 
 def test_nested_blocks_count_by_insertions_attributes_and_tables(tmp_path):
@@ -135,9 +163,12 @@ def test_missing_drawing_and_unread_drawing_content_make_it_pending(tmp_path):
 def test_context_drawings_and_excluded_sheets_do_not_flip_the_status(tmp_path):
     d1 = package(tmp_path, 'D1', layout=[r for r in LAYOUT if r['entity_handle'] != 'A1'])
     d2 = {**package(tmp_path, 'D2'), 'group': '相邻楼栋', 'role': 'context'}
-    _, _, data, _ = run(tmp_path, drawings=[d1, d2])
+    # A4 (ZB-YJV 2(4x150+1x70)) on D1 is an in-scope secondary hit; judged another object so only the context hit is at stake
+    items = [dict(ITEMS[0], secondary_judgments=[{'drawing': 'D1', 'handle': 'A4', 'judgment': '非同一对象', 'basis': '型号不同的并联干线'}])]
+    _, _, data, _ = run(tmp_path, drawings=[d1, d2], items=items)
     a = by_id(data)['A']
     assert a['status'] == 'no_hit_full' and a['result']['hits'] == 0 and a['result']['context_hits'] == 1 and a['result']['hits_by_group'] == {'相邻楼栋': 1}
+    assert a['result']['secondary_hits'] == 1   # the context drawing's secondary hits are not counted or judged
     d3 = {**package(tmp_path / 'x', 'D1'), 'exclude_sheet_titles': '配电系统图'}
     _, _, data, _ = run(tmp_path / 'x', drawings=[d3])
     assert by_id(data)['A']['result']['hits'] == 0 and by_id(data)['A']['result']['context_hits'] == 1

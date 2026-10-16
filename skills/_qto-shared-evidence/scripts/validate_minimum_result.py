@@ -585,6 +585,7 @@ def validate_document(data: Any) -> list[str]:
                 errors.append(f"{identifier}缺少非空字段: {field}")
 
     errors.extend(check_negative_conclusions(data, results))
+    errors.extend(check_plugin_usage(data))
     errors.extend(check_result_dependencies(data))
     return errors
 
@@ -644,6 +645,61 @@ def check_negative_conclusions(data: dict, results: dict[str, Any]) -> list[str]
     return errors
 
 
+PLUGIN_USAGE = "插件使用与临时处理"
+PLUGIN_USAGE_COLUMNS = ("环节", "涉及Skill与插件脚本", "卡点", "改用方法与位置", "影响数量", "登记")
+REGISTRATION_FILE = re.compile(r"\d{8}-\d{4}_.+\.md")
+
+
+def check_plugin_usage(data: dict) -> list[str]:
+    """Plugin usage and workarounds (通用成果字段与状态; registrations 20261015-0825, 0759, 1407).
+    Conditional: the section's fields are checked when present; a missing section is only a warning in this
+    version (document_warnings)."""
+    section = data.get(PLUGIN_USAGE)
+    if section is None:
+        return []
+    if not isinstance(section, dict):
+        return [f"{PLUGIN_USAGE}必须是对象"]
+    errors: list[str] = []
+    if not (isinstance(section.get("插件版本"), str) and re.fullmatch(r"\d+\.\d+\.\d+", section["插件版本"])):
+        errors.append(f"{PLUGIN_USAGE}.插件版本须形如 0.3.10")
+    if not (isinstance(section.get("提交"), str) and re.fullmatch(r"[0-9a-f]{7,40}", section["提交"])):
+        errors.append(f"{PLUGIN_USAGE}.提交须是 7～40 位十六进制提交号")
+    changes = section.get("换版")
+    if changes is not None and not isinstance(changes, list):
+        errors.append(f"{PLUGIN_USAGE}.换版必须是数组")
+        changes = []
+    for n, change in enumerate(changes or []):
+        missing = [k for k in ("插件版本", "提交", "换版点") if not (isinstance(change, dict) and nonempty(change.get(k)))]
+        if missing:
+            errors.append(f"{PLUGIN_USAGE}.换版[{n}]缺少: {'、'.join(missing)}")
+    rows = section.get("记录")
+    if not isinstance(rows, list) or not rows:
+        errors.append(f"{PLUGIN_USAGE}.记录须是非空数组，没有卡点写一行“无”")
+        return errors
+    for n, row in enumerate(rows):
+        missing = [k for k in PLUGIN_USAGE_COLUMNS if not (isinstance(row, dict) and nonempty(row.get(k)))]
+        if missing:
+            errors.append(f"{PLUGIN_USAGE}.记录[{n}]缺少: {'、'.join(missing)}")
+            continue
+        register = str(row["登记"]).strip()
+        if not (register in ("待协调登记", "无") or REGISTRATION_FILE.fullmatch(register)
+                or (register.startswith("不进插件：") and register[len("不进插件："):].strip())):
+            errors.append(f"{PLUGIN_USAGE}.记录[{n}]的登记只能是登记文件名、待协调登记、不进插件：<理由> 或 无")
+    if len(rows) > 1 and any(isinstance(r, dict) and str(r.get("登记", "")).strip() == "无" for r in rows):
+        errors.append(f"{PLUGIN_USAGE}.记录写了“无”，整表只能有这一行")
+    return errors
+
+
+def document_warnings(data: Any) -> list[str]:
+    """Reminders that do not fail this version; the next version makes them required."""
+    if not isinstance(data, dict) or data.get(PLUGIN_USAGE) is not None:
+        return []
+    results = data.get("工程量结果")
+    has_number = isinstance(results, list) and any(
+        isinstance(q, dict) and isinstance(q.get("结果"), dict) and numeric(q["结果"].get("数值")) for q in results)
+    return [f"成果有数值，但没有“{PLUGIN_USAGE}”一节（本版先提醒，下一版升为必填）"] if has_number else []
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("files", nargs="+", type=Path)
@@ -694,6 +750,7 @@ def main() -> int:
     reports = []
     failed = False
     for path in args.files:
+        warnings: list[str] = []
         try:
             data = json.loads(
                 path.read_text(encoding="utf-8"),
@@ -709,6 +766,7 @@ def main() -> int:
             ]
             if not schema_errors:
                 errors.extend(validate_document(data))
+            warnings = document_warnings(data)
         except (OSError, ValueError) as exc:
             errors = [f"文件不可读或不是有效 JSON: {exc}"]
         status = "PASS" if not errors else "FAIL"
@@ -719,6 +777,7 @@ def main() -> int:
                 "status": status,
                 "error_count": len(errors),
                 "errors": errors,
+                "warnings": warnings,
             }
         )
 

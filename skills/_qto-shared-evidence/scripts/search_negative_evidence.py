@@ -18,6 +18,7 @@ KINDS = ('spec', 'tray', 'box', 'model', 'pipe', 'text', 'block')
 SHEET_KINDS = ('平面', '系统图', '表与说明', '图例', '详图', '其他')
 OFF_SHEET = '台账外'
 STATUS = {'no_hit_full': '全覆盖未命中', 'no_hit_partial': '待确认', 'hit': '有命中'}
+JUDGMENTS = ('非同一对象', '同一对象')
 UNREAD_TYPES = {'ACAD_PROXY_ENTITY': '代理对象', 'PROXY': '代理对象', 'OLE2FRAME': '嵌入对象', 'OLEFRAME': '嵌入对象', 'IMAGE': '图片', 'PDFUNDERLAY': '底图参考', 'DWFUNDERLAY': '底图参考', 'DGNUNDERLAY': '底图参考'}
 NON_DRAWING = r'印章|签章|水印|签名|会签|STAMP|SEAL|WATERMARK|SIGNATURE'
 MAX_DEPTH, SAMPLES = 16, 10
@@ -275,6 +276,23 @@ def existing(item, var, tables):
     return out
 
 
+def judge(sec, judgments):
+    """Each in-scope secondary hit takes the first judgment naming it: by top handle (optionally drawing, inner_handle)
+    or by a regex on its flat text. Returns how many hits each judgment took."""
+    used = Counter()
+    for h in sec:
+        if not h['scope']: continue
+        for k, j in enumerate(judgments):
+            if j.get('handle'):
+                ok = (str(j['handle']).upper() == str(h['handle'] or '').upper() and j.get('drawing') in (None, h['drawing'])
+                      and (j.get('inner_handle') is None or str(j['inner_handle']).upper() == str(h['inner_handle'] or '').upper()))
+            else:
+                ok = re.search(j['text_pattern'], flat(h['text'] or '')) is not None
+            if ok:
+                h['judgment'], h['judgment_basis'] = j['judgment'], j['basis']; used[k] += 1; break
+    return used
+
+
 def summarize(hs, scope_only=True):
     xs = [h for h in hs if h['scope']] if scope_only else hs
     return len(xs), dict(Counter(h['sheet_kind'] for h in xs)), dict(Counter(h['group'] for h in hs))
@@ -309,6 +327,14 @@ def build(cfg, base):
         if not str(i.get('conclusion') or '').strip(): problems.append(f'{i["item_id"]} 要写 conclusion（否定结论原文）')
         try: vars_[i['item_id']] = variants(i)
         except (ValueError, re.error) as e: problems.append(f'{i["item_id"]} 写法有误：{e}')
+        for k, j in enumerate(i.get('secondary_judgments') or []):
+            where = f'{i["item_id"]}.secondary_judgments[{k}]'
+            if (not isinstance(j, dict) or j.get('judgment') not in JUDGMENTS or not str(j.get('basis') or '').strip()
+                    or bool(j.get('handle')) == bool(j.get('text_pattern'))):
+                problems.append(f'{where} 要写 judgment（{" 或 ".join(JUDGMENTS)}）、basis（依据），handle 与 text_pattern 二选一'); continue
+            if j.get('text_pattern'):
+                try: re.compile(j['text_pattern'])
+                except re.error as e: problems.append(f'{where}.text_pattern 不是正则：{e}')
     tables = []
     for n, t in enumerate(cfg.get('existing_results') or []):
         try:
@@ -332,7 +358,7 @@ def build(cfg, base):
     scope_ids = {d['id'] for d in drawings if d.get('role', 'scope') == 'scope'}
     may_contain = [u for u in unread if u['class'] == 'may_contain' and u['drawing'] in scope_ids]
     kinds_searched = sorted({s['kind'] for d in drawings if d['id'] in searched and d['id'] in scope_ids for s in sheets[d['id']]})
-    records = []
+    records, stale = [], []
     for i in items:
         var = vars_[i['item_id']]
         hs, sec, unplaced = search(i, var, drawings, data, sheets)
@@ -347,7 +373,17 @@ def build(cfg, base):
         sec = rest
         n, by_kind, by_group = summarize(hs)
         sn, _, _ = summarize(sec)
-        status = 'hit' if n else 'no_hit_partial' if uncovered or may_contain else 'no_hit_full'
+        judgments = i.get('secondary_judgments') or []
+        used = judge(sec, judgments)
+        stale += [f'{i["item_id"]}.secondary_judgments[{k}] 没有对上任何次级命中（句柄或写法写错，或判定已过时）' for k in range(len(judgments)) if not used[k]]
+        scoped = [h for h in sec if h['scope']]
+        same = sum(1 for h in scoped if h.get('judgment') == '同一对象')
+        unjudged = sum(1 for h in scoped if not h.get('judgment'))
+        # Full coverage also needs every secondary hit judged 非同一对象 (checkpoint 2: double counts hide in same-section rewrites).
+        reasons = ([f'未覆盖的图 {len(uncovered)} 张'] if uncovered else []) + \
+                  ([f'可能含图面内容的未读对象 {sum(u["count"] for u in may_contain)} 个'] if may_contain else []) + \
+                  ([f'次级命中 {unjudged} 处未判定'] if unjudged else []) + ([f'次级命中 {same} 处判为同一对象'] if same else [])
+        status = 'hit' if n else 'no_hit_partial' if reasons else 'no_hit_full'
         records.append({
             'record_id': 'NS-' + str(i['item_id']), 'item_id': i['item_id'], 'item': {k: i[k] for k in ('package', 'building', 'bill_no', 'name', 'features', 'bill_quantity') if k in i},
             'conclusion': i['conclusion'], 'kind': i['kind'], 'term': i.get('term'),
@@ -358,9 +394,13 @@ def build(cfg, base):
             'drawings_searched': sorted(searched), 'sheet_kinds_searched': kinds_searched,
             'result': {'hits': n, 'hits_by_sheet_kind': by_kind, 'hits_by_group': by_group, 'context_hits': sum(1 for h in hs if not h['scope']),
                        'samples': hs[:SAMPLES], 'non_drawing_hits': len(stamp), 'non_drawing_samples': stamp[:SAMPLES], 'unplaced_block_hits': [{'drawing': a, 'block': b, 'texts': c} for (a, b), c in sorted(unplaced.items())],
-                       'secondary_hits': sn, 'secondary_samples': [h for h in sec if h['scope']][:SAMPLES],
+                       'secondary_hits': sn, 'secondary_samples': scoped[:SAMPLES],
+                       'secondary_judged': sn - unjudged, 'secondary_same_object': same, 'secondary_unjudged': unjudged,
+                       'secondary_unjudged_samples': [h for h in scoped if not h.get('judgment')][:SAMPLES],
                        'existing_results': existing(i, var, tables)[:50], 'unread': unread},
-            'uncovered': uncovered, 'status': status, 'status_text': STATUS[status]})
+            'secondary_judgments': [dict(j, matched=used[k]) for k, j in enumerate(judgments)],
+            'uncovered': uncovered, 'status': status, 'status_text': STATUS[status], 'status_reasons': reasons if status == 'no_hit_partial' else []})
+    if stale: raise InputError(stale)
     reverse = {'requested': len(items), 'records': len(records), 'missing': [i['item_id'] for i in items if not any(r['item_id'] == i['item_id'] for r in records)],
                'declared_drawings': declared, 'searched_drawings': sorted(searched), 'outside_declared': sorted(searched - set(declared))}
     return {'schema': OUTPUT_SCHEMA, 'tool': {'script': '_qto-shared-evidence/scripts/search_negative_evidence.py', 'version': VERSION},
@@ -393,10 +433,12 @@ def record_problems(rec):
         return ['的检索状态与命中数不符']
     if status == 'no_hit_full' and (rec['uncovered'] or any(isinstance(u, dict) and u.get('class') == 'may_contain' for u in result['unread'])):
         return ['有未覆盖的图或可能含图面内容的未读对象，检索状态只能是待确认']
+    if status == 'no_hit_full' and result.get('secondary_hits') and (result.get('secondary_unjudged') != 0 or result.get('secondary_same_object') != 0):
+        return ['的次级命中没有逐条判为非同一对象，检索状态只能是待确认']
     return []
 
 
-CSV_COLUMNS = ['检索记录编号','对应条目', '结论', '检索图纸', '检索对象', '方法', '结果', '命中样例', '未插入块定义命中', '次级检索', '已有成果比对', '未能读取', '未覆盖', '检索状态']
+CSV_COLUMNS = ['检索记录编号','对应条目', '结论', '检索图纸', '检索对象', '方法', '结果', '命中样例', '未插入块定义命中', '次级检索', '已有成果比对', '未能读取', '未覆盖', '检索状态', '次级命中判定']
 
 
 def csv_row(r, scope):
@@ -415,7 +457,10 @@ def csv_row(r, scope):
             '已有成果比对': '；'.join(f'{e["source"]} {e["id"]} {e["text"]}（{e["match"]}）' for e in res['existing_results']) or '无',
             '未能读取': '；'.join(f'{u["drawing"]} {u["kind"]} {u["count"]}（{u["layer"] or "无图层"}，{"非图面内容" if u["class"] == "non_drawing" else "可能含图面内容"}）' for u in res['unread']) or '无',
             '未覆盖': '；'.join(f'{u["drawing"]}（{u["reason"]}）' for u in r['uncovered']) or '无',
-            '检索状态': r['status_text']}
+            '检索状态': r['status_text'] + (f'（{"；".join(r["status_reasons"])}）' if r['status_reasons'] else ''),
+            '次级命中判定': '无次级命中' if not res['secondary_hits'] else
+                f'已判 {res["secondary_judged"]}（非同一对象 {res["secondary_judged"] - res["secondary_same_object"]}，同一对象 {res["secondary_same_object"]}），未判 {res["secondary_unjudged"]}'
+                + ''.join(f'；{j.get("handle") or j.get("text_pattern")} {j["judgment"]} {j["matched"]} 处：{j["basis"]}' for j in r['secondary_judgments'])}
 
 
 def main():

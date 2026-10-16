@@ -134,6 +134,8 @@ def test_record_must_carry_the_six_parts(base, records, field, tamper, label):
     (lambda r: r['result'].update(hits=2), '检索状态与命中数不符'),
     (lambda r: r.update(uncovered=[{'drawing': 'D9', 'reason': '没给中性取证包'}]), '检索状态只能是待确认'),
     (lambda r: r['result']['unread'].append({'drawing': 'D1', 'kind': '嵌入对象', 'layer': 'E-PLAN', 'class': 'may_contain', 'count': 1}), '检索状态只能是待确认'),
+    (lambda r: r['result'].update(secondary_hits=2, secondary_judged=1, secondary_unjudged=1), '次级命中没有逐条判为非同一对象'),
+    (lambda r: r['result'].update(secondary_hits=2, secondary_judged=2, secondary_same_object=1, secondary_unjudged=0), '次级命中没有逐条判为非同一对象'),
 ])
 def test_record_status_must_match_what_was_found(base, records, tamper, fragment):
     d = doc(base, records)

@@ -38,7 +38,7 @@ FILLED = ("legend_text", "matched_symbols", "destination", "target_or_reason", "
 LEGEND_DESTINATIONS = ("已计", "归他专业", "不计", "待识别", "")
 LEDGER_COLUMNS = ("drawing", "sheet", "sheet_title", "symbol", "symbol_kind", "layer", "parent_block", "destination",
                   "count", "category_or_basis", "suspected_category", "sample_ids")
-LEGEND_KIND, DETAIL_KIND, SYSTEM_KIND = "图例", "详图", "系统图"
+LEGEND_KIND, DETAIL_KIND, SYSTEM_KIND, PLAN_KIND = "图例", "详图", "系统图", "平面"
 # Sheet kinds whose pending candidates may be excluded as a whole (registration 20261016-1728, 1800). Detail sheets are
 # not here: a detail drawing can be the only place an object is shown, so each one is confirmed in detail_copy_sheets.
 AUTO_EXCLUDABLE = (LEGEND_KIND, SYSTEM_KIND)
@@ -608,16 +608,18 @@ class Ledger:
                 # not confirmed: may be the only drawing of the object, so it stays pending with a hint (1800)
                 if c["destination"] == "待识别":
                     c["basis"] = f"{c['basis']}；详图页，可能是复制件，确认后写 detail_copy_sheets"
-                    self.unconfirmed_detail[(c["drawing"], c["sheet"])] += c["count"]
                 elif c["destination"] == "已计":
                     self.warnings["counted_on_legend_or_detail_sheet"].append({"id": c["id"], "sheet": c["sheet"], "symbol": c["symbol"]})
-            for ex, block, layer, kind in rules:
-                if self.class_hits(ex, block, layer, kind, c):
+            for ex, block, layer, rule_kind in rules:
+                if self.class_hits(ex, block, layer, rule_kind, c):
                     if c["destination"] == "待识别":
                         c["destination"], c["basis"] = "有据排除", f"{ex['class_id']} {ex['basis']}"
                     elif c["destination"] == "已计":
                         self.warnings["counted_matches_excluded_class"].append({"id": c["id"], "class_id": ex["class_id"]})
                     break
+            # counted after the class rules: a frame block they exclude is no longer pending (checkpoint 1 fix)
+            if kind == DETAIL_KIND and detail is None and c["destination"] == "待识别":
+                self.unconfirmed_detail[(c["drawing"], c["sheet"])] += c["count"]
 
     @staticmethod
     def class_hits(ex, block, layer, kind, c) -> bool:
@@ -649,6 +651,26 @@ class Ledger:
                         self.warnings["excluded_class_hits_legend_symbol"].append(
                             {"class_id": ex["class_id"], "drawing": drawing, "symbol": symbol, "legend_rows": sorted(set(rows)),
                              "hint": "图例里列了这个块，整类排除可能把实物排掉；核对后改写规则，去向不变"})
+
+    def class_counted_warnings(self) -> None:
+        """A class rule excluded plan-sheet objects whose name (xref prefix stripped) is counted elsewhere in this input:
+        the rule may have swept real objects away (D014 8C5 push button box, checkpoint 1). Hint only, destination kept."""
+        counted: dict[str, set[str]] = defaultdict(set)
+        for c in self.candidates:
+            if c["destination"] == "已计":
+                counted[base_symbol(c["symbol"])].add(c["drawing"])
+        class_ids = {ex["class_id"] for ex, *_ in self.class_rules}
+        groups: dict[tuple[str, str, str, str], list[dict[str, Any]]] = defaultdict(list)
+        for c in self.candidates:
+            class_id = (c["basis"] or "").split(" ", 1)[0]
+            if (c["destination"] == "有据排除" and c["sheet_kind"] == PLAN_KIND and class_id in class_ids
+                    and base_symbol(c["symbol"]) in counted):
+                groups[(class_id, c["drawing"], c["sheet"], c["symbol"])].append(c)
+        for (class_id, drawing, sheet, symbol), rows in sorted(groups.items()):
+            self.warnings["excluded_class_hits_counted_symbol"].append(
+                {"class_id": class_id, "drawing": drawing, "sheet": sheet, "symbol": symbol, "excluded_count": sum(c["count"] for c in rows),
+                 "counted_on": sorted(counted[base_symbol(symbol)]), "sample_ids": [c["id"] for c in rows[:3]],
+                 "hint": "整类排除把平面页上的这个块排掉了，同名块在本输入别处已计；核对是不是实物，去向不变"})
 
     def regex(self, value: Any, where: str) -> re.Pattern[str] | None:
         if value in (None, ""):
@@ -944,6 +966,7 @@ class Ledger:
             raise InputProblems(self.problems)
         self.class_legend_warnings(legend_rows)
         pending = self.legend_to_ledger(legend_rows)
+        self.class_counted_warnings()   # after legend rows: non-block rows counted from the legend count too
         for row in legend_rows:
             for key in ("_claims", "_explicit", "_conflict"):
                 row.pop(key, None)

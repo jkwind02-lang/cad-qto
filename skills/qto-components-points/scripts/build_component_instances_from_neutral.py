@@ -30,7 +30,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
 
 VERSION = "qto-component-neutral-adapter/1.5.0"
-# Only these two codes can be released by a dynamic_state_adjudication on an include rule (registration 20261016-1709);
+# Only these two codes can be released by a dynamic_state_adjudication on an include or exclude rule (registration
+# 20261016-1709; exclude added after checkpoint 1);
 # arrays, xrefs and missing definitions stay unresolved whatever the rule says.
 DYNAMIC_STATE_CODES = {"dynamic_state_not_evaluated", "anonymous_block_state_unverified"}
 # Exact block names only: a pattern would let one sentence release every dynamic block of a drawing.
@@ -180,8 +181,8 @@ def dynamic_adjudication(raw: Any, rule_id: str, decision: str, evidence_ids: se
     if raw is None:
         return None
     label = f"{rule_id}.dynamic_state_adjudication"
-    if decision != "include":
-        fail(f"{label} 只能写在 include 规则上")
+    if decision not in ("include", "exclude"):
+        fail(f"{label} 只能写在 include 或 exclude 规则上")
     if not isinstance(raw, dict):
         fail(f"{label} 必须是对象")
     names = raw.get("block_names")
@@ -765,7 +766,8 @@ def main() -> int:
                 if (not suppressed_by and isinstance(codes, list) and codes and len(codes) == len(insert["geometry_issues"])
                         and set(codes) <= DYNAMIC_STATE_CODES):
                     rule, conflicts = choose_rule(block_name, effective_layer, parent_block, rules, physical_id)
-                    adjudication = rule.get("dynamic_adjudication") if rule and not conflicts and rule["decision"] == "include" else None
+                    adjudication = (rule.get("dynamic_adjudication") if rule and not conflicts and rule["decision"] in ("include", "exclude")
+                                    else None)
                     if (adjudication and block_name in adjudication["block_names"]
                             and (adjudication["object_ids"] is None or physical_id in adjudication["object_ids"])):
                         released = {"rule_id": rule["rule_id"], "basis": adjudication["basis"],
