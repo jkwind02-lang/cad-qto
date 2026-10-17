@@ -9,6 +9,9 @@
 - 第二张合成图（复验 D003、D022、D023 后补）：图页框只框图面区、图框中心落在框外，但图框与它重合过半 → 不报；
   图框中心在图页上、重合只有四分之一 → 不报；图页框比图框大一圈、伸进相邻图框 200 → 相邻图框照报；A0 图框里嵌着的图签（展开后的子候选）随外框，不单核，单列个数；
   只有填充、定不出范围的图框，插入点不在任何图页里 → 报 frame_extent_unknown，记“没核”，不算漏页；
+- 报出的每个图框（可能漏页、定不出范围、整图没有图页表）逐条进 frame_todo 和 图框待办.csv（FR- 编号、图号、句柄、块名、
+  插入点、范围）；frame_dispositions 按句柄（大小写不论）或编号写处置（封面、目录、空白、已补进图页表、其他，basis 必填），
+  写了的不再报、单列 disposed；没对上任何报出图框的处置 → frame_dispositions_unused；坏处置 → C-5；
 - 整张图没有图页表：整图报 frames_without_sheet_table；frame_blocks 写块名正则，或引用 excluded_classes 的规则号，
   引用的规则号不存在 → 输入问题；没写 frame_blocks 时不核，结论写明没核；
 - 图例页上命中 frame_blocks 的块不生成图例行，计数；填过的图框图例行丢掉并列出；
@@ -148,6 +151,50 @@ def test_a_sheet_boxing_only_the_drawing_area_nested_title_blocks_and_frames_wit
     _, again, _ = ledger(drawing2, tmp_path / 'next', sheets='sheets_next.csv', expand=('A0',), frame_blocks=rules)
     assert again['frame_coverage']['uncovered_frame_count'] == 0 and 'frame_outside_sheet_table' not in again['warnings']
     assert again['frame_coverage']['conclusion'] == '1 个图框定不出范围，没核；其余图框都在图页表里'
+
+
+def test_every_reported_frame_is_a_to_do_row_until_the_project_writes_its_disposition(drawing2, tmp_path):
+    h = drawing2['h']
+    rules = [{'block_pattern': '^(A0|A1|A2|TB)$'}]
+    _, report, _ = ledger(drawing2, tmp_path / 'todo', expand=('A0',), frame_blocks=rules)
+    todo = report['frame_todo']
+    assert [(t['todo_id'], t['kind'], t['handle'], t['block_name']) for t in todo] == [
+        ('FR-0001', '可能漏页', h['F_NEXT'].upper(), 'A1'), ('FR-0002', '定不出范围', h['F_FILL'].upper(), 'A2')]
+    assert todo[0]['insert_x'] == pytest.approx(30000) and [todo[0][k] for k in ('x1', 'y1', 'x2', 'y2')] == pytest.approx([30000, 0, 40000, 10000])
+    assert todo[1]['x1'] is None and report['frame_coverage']['todo_count'] == 2
+    with open(tmp_path / 'todo/out/图框待办.csv', encoding='utf-8-sig', newline='') as f:
+        rows = list(csv.DictReader(f))
+    assert [r['todo_id'] for r in rows] == ['FR-0001', 'FR-0002'] and rows[0]['drawing'] == 'D1' and rows[1]['kind'] == '定不出范围'
+    fill_id = todo[1]['id']
+    given = [{'drawing': 'D1', 'handle': h['F_NEXT'].lower(), 'disposition': '空白', 'basis': '核图：空白图框，没有内容'},
+             {'drawing': 'D1', 'id': fill_id, 'disposition': '其他', 'basis': '核图：填充示意，不是图页'},
+             {'drawing': 'D1', 'handle': 'FFFF', 'disposition': '封面', 'basis': '写错的句柄'}]
+    _, after, _ = ledger(drawing2, tmp_path / 'done', expand=('A0',), frame_blocks=rules, frame_dispositions=given)
+    fc = after['frame_coverage']
+    assert fc['uncovered_frame_count'] == 0 and fc['unchecked_frame_count'] == 0 and fc['todo_count'] == 0 and after['frame_todo'] == []
+    assert [(d['handle'], d['disposition'], d['kind']) for d in fc['disposed']] == [
+        (h['F_NEXT'].upper(), '空白', '可能漏页'), (h['F_FILL'].upper(), '其他', '定不出范围')]
+    assert fc['conclusion'] == '图框都在图页表里；2 个已写处置，不再报'
+    assert 'frame_outside_sheet_table' not in after['warnings'] and 'frame_extent_unknown' not in after['warnings']
+    (unused,) = after['warnings']['frame_dispositions_unused']
+    assert unused['frame'] == 'FFFF' and unused['where'] == 'frame_dispositions[2]'
+
+
+@pytest.mark.parametrize('items, frames, message', [
+    ([{'drawing': 'D1', 'handle': 'AB', 'disposition': '图例', 'basis': 'x'}], True, 'disposition 只能是'),
+    ([{'drawing': 'D1', 'handle': 'AB', 'disposition': '封面', 'basis': ' '}], True, 'basis 必填'),
+    ([{'drawing': 'D1', 'handle': 'AB', 'id': 'PT-CAD-AB', 'disposition': '封面', 'basis': 'x'}], True, '之一'),
+    ([{'handle': 'AB', 'disposition': '封面', 'basis': 'x'}], True, '之一'),
+    ([{'drawing': 'D1', 'handle': 'ab', 'disposition': '封面', 'basis': 'x'}, {'drawing': 'D1', 'handle': 'AB', 'disposition': '空白', 'basis': 'y'}],
+     True, '两条处置'),
+    ({'drawing': 'D1'}, True, '须是数组'),
+    ([{'drawing': 'D1', 'handle': 'AB', 'disposition': '封面', 'basis': 'x'}], False, '没写 frame_blocks')])
+def test_bad_frame_dispositions_are_input_problems(drawing2, tmp_path, items, frames, message):
+    extra = {'frame_blocks': [{'block_pattern': '^A1$'}]} if frames else {}
+    done, report, _ = ledger(drawing2, tmp_path, frame_dispositions=items, **extra)
+    assert done.returncode == 2 and report is None
+    problems = json.loads(done.stderr)['problems']
+    assert any(p['check'] == 'C-5' and p['where'].startswith('frame_dispositions') and message in p['message'] for p in problems), problems
 
 
 def test_no_frame_rule_means_not_checked_and_bad_rules_are_input_problems(drawing, tmp_path):

@@ -56,7 +56,10 @@ COUNT_KEYS = ("drawing", "handle", "category", "sheet")
 EXCLUSION_KEYS = ("drawing", "handle", "basis")
 TOP_FIELDS = {"schema_version", "scope_id", "drawings", "count_tables", "handle_exclusions", "sheets", "legend_coverage",
               "version_conflicts", "excluded_classes", "auto_exclude_sheet_kinds", "detail_copy_sheets", "search_records",
-              "frame_blocks"}
+              "frame_blocks", "frame_dispositions"}
+FRAME_DISPOSITIONS = ("封面", "目录", "空白", "已补进图页表", "其他")
+FRAME_TODO_COLUMNS = ("todo_id", "drawing", "kind", "id", "handle", "block_name", "insert_x", "insert_y", "x1", "y1", "x2", "y2",
+                      "placement_basis", "hint")
 HANDLE_RE = re.compile(r'"entity_handle":\s*"([^"]*)"')
 # Same path id as the adapter: PT-CAD-<top handle>/<block>/CAD-<child handle>, one /<block>/CAD-<handle> per level.
 # AutoCAD block names cannot contain / or \, so the separators are unambiguous.
@@ -133,6 +136,9 @@ class Ledger:
         self.frame_coverage: dict[str, Any] = {"checked": False, "conclusion": "没写 frame_blocks，没核图框是否都在图页表里"}
         self.legend_frames: Counter[str] = Counter()
         self.legend_frame_rows_dropped: list[dict[str, str]] = []
+        self.frame_dispositions: dict[tuple[str, str], dict[str, Any]] = {}
+        self.frame_todo: list[dict[str, Any]] = []
+        self.frame_disposed: list[dict[str, Any]] = []
         self.auto_excluded: Counter[str] = Counter()
         self.unconfirmed_detail: Counter[tuple[str, str]] = Counter()
         self.nested: dict[str, tuple[dict[str, Any], list[dict[str, Any]]]] = {}   # drawing -> (block index, unexpanded tops)
@@ -654,6 +660,30 @@ class Ledger:
                 if block is not None:
                     self.frames.append((drawing or "*", block, None, block.pattern))
 
+    def frame_disposition_rules(self) -> None:
+        """frame_dispositions (checkpoint 3): the project's answer to one reported frame - a cover, a catalogue, a blank
+        frame, a sheet now added to the table, or other - always with its basis; a disposed frame is no longer reported."""
+        items = self.data.get("frame_dispositions")
+        if items is None:
+            return
+        if self.data.get("frame_blocks") is None:
+            self.problem("C-5", "frame_dispositions", "写了 frame_dispositions 却没写 frame_blocks：不核图框就没有可处置的图框"); return
+        if not isinstance(items, list):
+            self.problem("C-5", "frame_dispositions", "须是数组：每项写 drawing、handle 或 id、disposition、basis"); return
+        for i, item in enumerate(items):
+            where = f"frame_dispositions[{i}]"
+            if not isinstance(item, dict) or not nonempty(item.get("drawing")) or nonempty(item.get("handle")) == nonempty(item.get("id")):
+                self.problem("C-5", where, "每项写 drawing，再写 handle（顶层图框句柄）或 id（候选编号）之一"); continue
+            if item.get("disposition") not in FRAME_DISPOSITIONS:
+                self.problem("C-5", where, f"disposition 只能是 {'、'.join(FRAME_DISPOSITIONS)}"); continue
+            if not nonempty(item.get("basis")):
+                self.problem("C-5", where, "basis 必填：写清这张图框为什么不用进图页表，或已补进哪张图页"); continue
+            frame = str(item["handle"]).strip().upper() if nonempty(item.get("handle")) else str(item["id"]).strip()
+            key = (str(item["drawing"]).strip(), frame)
+            if key in self.frame_dispositions:
+                self.problem("C-5", where, f"同一图框写了两条处置：{key[0]} {frame}"); continue
+            self.frame_dispositions[key] = {"disposition": item["disposition"], "basis": str(item["basis"]).strip(), "where": where}
+
     def is_frame(self, c: dict[str, Any]) -> bool:
         return c["kind"] == "块" and any(drawing in ("*", c["drawing"]) and (block is None or block.search(c["symbol"]))
                                          and (layer is None or layer.search(c["layer"])) for drawing, block, layer, _ in self.frames)
@@ -690,36 +720,63 @@ class Ledger:
             return False
 
         frames = [c for c in found if not inside_frame(c["id"])]
-        uncovered, unchecked = 0, 0
-        for drawing in sorted(d for d, kind in drawings.items() if kind != "legend_only" and not sheets.get(d)):
-            own = [c for c in frames if c["drawing"] == drawing]
-            uncovered += len(own)
-            self.warnings["frames_without_sheet_table"].append({"drawing": drawing, "frame_count": len(own), "sample_ids": [c["id"] for c in own[:3]],
-                                                                "hint": "这张图没有图页表，图框和图页都没核：写图页表后重算"})
-        for c in frames:
+        reported: list[tuple[str, dict[str, Any], str]] = []
+        for c in sorted(frames, key=lambda f: (f["drawing"], f["id"])):
             sheet_list = sheets.get(c["drawing"])
-            if not sheet_list or c["sheet"] != UNSHEETED:
+            if not sheet_list:
+                if drawings.get(c["drawing"]) != "legend_only":
+                    reported.append(("整图没有图页表", c, "这张图没有图页表，图框和图页都没核：写图页表后重算"))
+                continue
+            if c["sheet"] != UNSHEETED:
                 continue
             box = c.get("box")
             if box is not None and box[2] > box[0] and box[3] > box[1]:
-                if self.frame_on_sheet(box, sheet_list):
-                    continue
-                uncovered += 1
-                key, hint = "frame_outside_sheet_table", "图框不在图页表的任何图页里，可能漏了这张图页：补页后重算"
+                if not self.frame_on_sheet(box, sheet_list):
+                    reported.append(("可能漏页", c, "图框不在图页表的任何图页里，可能漏了这张图页：补页后重算，或在 frame_dispositions 写处置"))
             else:
-                unchecked += 1
-                key, hint = "frame_extent_unknown", "图框定不出图形范围，插入点（图框角点）不在任何图页里，没法核：核图后补图页表，或补全图框范围"
-            self.warnings[key].append({
-                "drawing": c["drawing"], "id": c["id"], "handle": c["handle"], "block_name": c["symbol"],
-                "insert_point": [c.get("insert_x"), c.get("insert_y")], "geometry_centre": [c["x"], c["y"]],
-                "geometry_box": box, "placement_basis": c.get("placement_basis"), "hint": hint})
+                reported.append(("定不出范围", c, "图框定不出图形范围，插入点（图框角点）不在任何图页里，没法核：核图后补图页表、"
+                                               "补全图框范围，或在 frame_dispositions 写处置"))
+        # every reported frame is one to-do row (checkpoint 3), unless the project wrote its disposition
+        warning_key = {"可能漏页": "frame_outside_sheet_table", "定不出范围": "frame_extent_unknown"}
+        used: set[tuple[str, str]] = set()
+        counts: Counter[str] = Counter()
+        for kind, c, hint in reported:
+            key = next((k for k in ((c["drawing"], c["handle"] or ""), (c["drawing"], c["id"])) if k in self.frame_dispositions), None)
+            row = {"drawing": c["drawing"], "id": c["id"], "handle": c["handle"], "block_name": c["symbol"],
+                   "insert_point": [c.get("insert_x"), c.get("insert_y")], "geometry_centre": [c["x"], c["y"]],
+                   "geometry_box": c.get("box"), "placement_basis": c.get("placement_basis")}
+            if key is not None:
+                used.add(key)
+                given = self.frame_dispositions[key]
+                self.frame_disposed.append({**row, "kind": kind, "disposition": given["disposition"], "basis": given["basis"]})
+                continue
+            counts[kind] += 1
+            if kind in warning_key:
+                self.warnings[warning_key[kind]].append({**row, "hint": hint})
+            box = c.get("box") or [None, None, None, None]
+            self.frame_todo.append({"todo_id": f"FR-{len(self.frame_todo) + 1:04d}", "drawing": c["drawing"], "kind": kind, "id": c["id"],
+                                    "handle": c["handle"], "block_name": c["symbol"], "insert_x": c.get("insert_x"),
+                                    "insert_y": c.get("insert_y"), "x1": box[0], "y1": box[1], "x2": box[2], "y2": box[3],
+                                    "placement_basis": c.get("placement_basis"), "hint": hint})
+        for drawing in sorted(d for d, kind in drawings.items() if kind != "legend_only" and not sheets.get(d)):
+            own = [t for t in self.frame_todo if t["drawing"] == drawing]
+            self.warnings["frames_without_sheet_table"].append({"drawing": drawing, "frame_count": len(own), "sample_ids": [t["id"] for t in own[:3]],
+                                                                "hint": "这张图没有图页表，图框和图页都没核：写图页表后重算"})
+        for key, given in sorted(self.frame_dispositions.items()):
+            if key not in used:
+                self.warnings["frame_dispositions_unused"].append({"drawing": key[0], "frame": key[1], "where": given["where"],
+                                                                   "hint": "这条处置没有对上报出的图框（句柄或编号写错，或图框已在图页表里）：核对后删掉"})
+        uncovered, unchecked = counts["可能漏页"] + counts["整图没有图页表"], counts["定不出范围"]
         if uncovered:
             conclusion = f"可能漏页：{uncovered} 个图框不在图页表里" + (f"；另有 {unchecked} 个图框定不出范围，没核" if unchecked else "")
         else:
             conclusion = f"{unchecked} 个图框定不出范围，没核；其余图框都在图页表里" if unchecked else "图框都在图页表里"
+        if self.frame_disposed:
+            conclusion += f"；{len(self.frame_disposed)} 个已写处置，不再报"
         self.frame_coverage = {"checked": True, "rules": [label for *_, label in self.frames], "frame_count": len(frames),
                                "nested_frames_skipped": len(found) - len(frames), "uncovered_frame_count": uncovered,
-                               "unchecked_frame_count": unchecked, "conclusion": conclusion}
+                               "unchecked_frame_count": unchecked, "todo_count": len(self.frame_todo),
+                               "disposed": self.frame_disposed, "conclusion": conclusion}
 
     @staticmethod
     def class_hits(ex, block, layer, kind, c) -> bool:
@@ -1118,6 +1175,7 @@ class Ledger:
         self.place(sheets)
         self.apply_rules(self.sheet_kind_rules(sheets, drawings))
         self.frame_rules()
+        self.frame_disposition_rules()
         self.check_frames(sheets, drawings)
         self.unexpanded_warnings()
         self.search_records = self.read_search_records()
@@ -1176,7 +1234,7 @@ class Ledger:
                 "search_records": {"given": self.search_records is not None, "records": len(self.search_records or {})},
                 "frame_coverage": {**self.frame_coverage, "legend_frames_skipped": dict(sorted(self.legend_frames.items())),
                                    "legend_frame_rows_dropped": self.legend_frame_rows_dropped},
-                "groups": group_rows, "legend_rows": legend_rows}
+                "frame_todo": self.frame_todo, "groups": group_rows, "legend_rows": legend_rows}
 
     def completeness(self) -> dict[str, Any]:
         counted_on = defaultdict(set)
@@ -1235,6 +1293,7 @@ def main(argv: list[str] | None = None) -> int:
     (out / "点位覆盖台账.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     write_csv(out / "点位覆盖台账.csv", LEDGER_COLUMNS, result["groups"])
     write_csv(out / "图例覆盖表_待填.csv", LEGEND_COLUMNS, legend_rows)
+    write_csv(out / "图框待办.csv", FRAME_TODO_COLUMNS, result["frame_todo"])
     print(json.dumps({"status": report["status"], "candidate_total": result["candidate_total"], **result["by_destination"],
                       "uncovered_drawings": len(result["uncovered_drawings"]),
                       "legend_rows_without_destination": len(result["legend_rows_without_destination"]),
