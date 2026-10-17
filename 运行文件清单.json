@@ -797,8 +797,8 @@
     },
     {
       "path": "qto-electrical-routes/references/计算与证据流程.md",
-      "sha256": "4e74f52ab2f1fbfd489361e39d12f01ab0cd422473e8f846cfd679b9fc141826",
-      "bytes": 9681
+      "sha256": "d24d4ed842cd559ed0cfa4bca29c3547d7532fa60e966d56b109577e6d080522",
+      "bytes": 15426
     },
     {
       "path": "qto-electrical-routes/references/计量口径选择.md",
@@ -822,13 +822,13 @@
     },
     {
       "path": "qto-electrical-routes/scripts/trace_drawn_routes.py",
-      "sha256": "d5ec43f28ecc3b889ad24a6338e07c60c12381950f80998f380b96148a9a48f4",
-      "bytes": 50908
+      "sha256": "14d79ff372e9b5e20bbed7901681b28abbbfb53601aa27dec3e422d89e5e04a0",
+      "bytes": 83179
     },
     {
       "path": "qto-electrical-routes/SKILL.md",
-      "sha256": "e25f4a2870e2bed7a56abb85b907caeab285c2fcfb8eb49f1cca9b7fa4cbd90d",
-      "bytes": 6856
+      "sha256": "9e4e65cd3160e7b55f9b8d3b08520192b60491e325906824563c068d008b6b72",
+      "bytes": 7117
     },
     {
       "path": "qto-framing-supports/agents/openai.yaml",

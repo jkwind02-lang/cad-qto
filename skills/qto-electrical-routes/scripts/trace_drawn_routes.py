@@ -26,14 +26,20 @@ from pathlib import Path
 from typing import Any, Iterable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
+import build_review_scenes_from_tables as sheet_tables  # noqa: E402  (sheet table rows, as the coverage ledger reads them)
 import qto_cad_geometry as cad_geometry  # noqa: E402
 import qto_segment_graph as segment_graph  # noqa: E402
 from qto_spatial import BoundsIndex  # noqa: E402
 
-VERSION = "qto-drawn-route-tracer/1.1.0"
+VERSION = "qto-drawn-route-tracer/1.2.0"
 REQUEST_SCHEMA = "qto-drawn-route-request/1.0"
 RESULT_SCHEMA = "qto-drawn-route-trace/1.0"
 PATHS_SCHEMA = "qto-drawn-route-paths/1.0"
+LAYER_REQUEST_SCHEMA = "qto-layer-length-request/1.0"
+LAYER_RESULT_SCHEMA = "qto-layer-length/1.0"
+LEGEND_SHEET_KIND = "图例"
+EXCLUDABLE_SHEET_KINDS = (LEGEND_SHEET_KIND, "系统图")
+UNSHEETED, UNREGIONED = "图页未定", "区域未定"
 IDENTITY = (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
 DYNAMIC_STATE_CODES = cad_geometry.DYNAMIC_STATE_CODES
 END_NAME = {"from": "起点", "to": "终点"}
@@ -146,9 +152,10 @@ def parse_endpoint(raw: Any, label: str) -> dict[str, Any]:
     return {"point": [finite(point[0], f"{label}.point[0]"), finite(point[1], f"{label}.point[1]")]}
 
 
-def parse_request(request: dict[str, Any]) -> dict[str, Any]:
-    if request.get("schema") != REQUEST_SCHEMA:
-        fail(f"request.schema 必须为 {REQUEST_SCHEMA}")
+def parse_common(request: dict[str, Any], schema: str) -> dict[str, Any]:
+    """What both requests share: unit, scope, route layers, expanded blocks and the segment graph tolerances."""
+    if request.get("schema") != schema:
+        fail(f"request.schema 必须为 {schema}")
     unit = request.get("unit")
     if not isinstance(unit, dict):
         fail("unit 必须是对象")
@@ -171,6 +178,26 @@ def parse_request(request: dict[str, Any]) -> dict[str, Any]:
     expand = request.get("expand_blocks", [])
     if not isinstance(expand, list) or any(not isinstance(name, str) or not name for name in expand):
         fail("expand_blocks 须为块名数组")
+    max_depth = int(request.get("max_depth", 16))
+    if max_depth < 1:
+        fail("max_depth 必须大于0")
+    t_junctions = request.get("t_junctions", True)
+    if not isinstance(t_junctions, bool):
+        fail("t_junctions 须为 true 或 false")
+    return {
+        "layout": text(request.get("layout", "Model"), "layout"), "factor": factor,
+        "unit_source_id": text(unit.get("source_id"), "unit.source_id"), "bounds": bounds,
+        "route_re": pattern(request.get("route_layers"), "route_layers"),
+        "expand": set(expand), "max_depth": max_depth, "t_junctions": t_junctions,
+        "snap": tolerance(request, "snap_tolerance", 0.005), "gap": tolerance(request, "gap_tolerance", 0.0),
+        "gap_angle_deg": tolerance(request, "gap_angle_deg", 10.0),
+        "drawing_id": str(request.get("drawing_id") or "").strip(),
+        "label_re": None, "label_layer_re": None, "label_radius": None,
+    }
+
+
+def parse_request(request: dict[str, Any]) -> dict[str, Any]:
+    common = parse_common(request, REQUEST_SCHEMA)
     routes = request.get("routes")
     if not isinstance(routes, list) or not routes:
         fail("routes 须为非空数组")
@@ -185,28 +212,16 @@ def parse_request(request: dict[str, Any]) -> dict[str, Any]:
         parsed.append({"route_id": route_id, "from": parse_endpoint(route.get("from"), f"routes[{index}].from"),
                        "to": parse_endpoint(route["to"], f"routes[{index}].to") if route.get("to") is not None else None,
                        "circuit_label": route.get("circuit_label")})
-    max_depth = int(request.get("max_depth", 16))
-    if max_depth < 1:
-        fail("max_depth 必须大于0")
-    t_junctions = request.get("t_junctions", True)
-    if not isinstance(t_junctions, bool):
-        fail("t_junctions 须为 true 或 false")
     label_re = pattern(request["circuit_label_pattern"], "circuit_label_pattern") if request.get("circuit_label_pattern") else None
     if label_re is None and (request.get("circuit_label_layers") or request.get("circuit_label_radius") is not None):
         fail("写了 circuit_label_layers 或 circuit_label_radius 就要写 circuit_label_pattern（回路标注文字的正则）")
     return {
-        "label_re": label_re,
+        **common, "label_re": label_re,
         "label_layer_re": pattern(request["circuit_label_layers"], "circuit_label_layers") if request.get("circuit_label_layers") else None,
         "label_radius": tolerance(request, "circuit_label_radius") if label_re else None,
-        "layout": text(request.get("layout", "Model"), "layout"), "factor": factor,
-        "unit_source_id": text(unit.get("source_id"), "unit.source_id"), "bounds": bounds,
-        "route_re": pattern(request.get("route_layers"), "route_layers"),
         "box_re": pattern(request["box_block_pattern"], "box_block_pattern") if request.get("box_block_pattern") else None,
-        "expand": set(expand), "max_depth": max_depth, "t_junctions": t_junctions,
-        "snap": tolerance(request, "snap_tolerance", 0.005), "gap": tolerance(request, "gap_tolerance", 0.0),
-        "gap_angle_deg": tolerance(request, "gap_angle_deg", 10.0), "endpoint": tolerance(request, "endpoint_tolerance"),
-        "equal": tolerance(request, "equal_length_tolerance", 0.001),
-        "drawing_id": str(request.get("drawing_id") or "").strip(), "routes": parsed,
+        "endpoint": tolerance(request, "endpoint_tolerance"), "equal": tolerance(request, "equal_length_tolerance", 0.001),
+        "routes": parsed,
     }
 
 
@@ -252,7 +267,8 @@ class Drawing:
         self.inserts: dict[str, dict[str, Any]] = {}
         self.curves: list[dict[str, Any]] = []
         self.texts: list[dict[str, Any]] = []
-        types = segment_graph.CURVE_TYPES | segment_graph.LEADER_TYPES | segment_graph.UNSUPPORTED_LEADERS
+        self.circles: list[dict[str, Any]] = []
+        types =segment_graph.CURVE_TYPES | segment_graph.LEADER_TYPES | segment_graph.UNSUPPORTED_LEADERS
         for row in load_stream(layout_path):
             if row.get("row_type") != "entity" or row.get("layout") != req["layout"]:
                 continue
@@ -263,6 +279,8 @@ class Drawing:
                 self.curves.append(row)
             elif kind in ("TEXT", "MTEXT") and req["label_re"] is not None:
                 self.texts.append(row)
+            elif kind == "CIRCLE":                  # building markers of the layer-length mode (not route lines)
+                self.circles.append(row)
 
     def scope_of(self, insert: dict[str, Any], parent: tuple[float, ...]) -> dict[str, Any]:
         """Point adapter scope_of (Codex retest R2, K3): in scope, 2D world box or None, notes, anchor, matrix."""
@@ -389,7 +407,8 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
     label_items = drawing.label_texts(expand) if req["label_re"] is not None else []
     got = segment_graph.collect_segments(rows, drawing.definitions, drawing.origins, layer_pattern=req["route_re"],
                                          expand_blocks=sorted(expand), scope=req["bounds"], max_depth=req["max_depth"])
-    graph = segment_graph.build_graph(got["segments"], snap_tolerance=req["snap"] / f, gap_tolerance=req["gap"] / f,
+    flat, got["plan"] = flatten_elevations(got["segments"], f, req["snap"] / f)
+    graph = segment_graph.build_graph(flat, snap_tolerance=req["snap"] / f, gap_tolerance=req["gap"] / f,
                                       gap_angle_deg=req["gap_angle_deg"])
     segs = {s["segment_id"]: s for s in graph["segments"]}
     point_of = {n["node_id"]: n["point"] for n in graph["nodes"]}
@@ -751,6 +770,10 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         if len(part_edges[start_part]) >= len(part_nodes[start_part]):
             out["review_flags"].append({"flag": "走线网络有环，取最短"})
         check_tees(out, pieces)
+        slopes = [x for x in got["plan"]["sloped_lines_in_plan"] if x["segment_id"] in {p.get("segment_id") for p in pieces}]
+        if slopes:
+            out["review_flags"].append({"flag": "斜线按平面投影计长", "handles": [x["handle"] for x in slopes],
+                                        "length_3d_minus_plan_m": math.fsum(x["length_3d_m"] - x["length_plan_m"] for x in slopes)})
         drawn =math.fsum(p["length_m"] for p in pieces if p["kind"] == "segment")
         gaps = math.fsum(p["length_m"] for p in pieces if p["kind"] == "gap")
         clean = lambda p: {k: v for k, v in p.items() if not k.startswith("drawing_") and not k.startswith("_")}   # noqa: E731
@@ -793,6 +816,435 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
             "label_texts": len(label_items)}
 
 
+def flatten_elevations(segments: list[dict[str, Any]], factor: float, flat_tolerance: float) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Plan routes are measured and joined in plan: every straight segment and every arc lying in a horizontal plane is
+    moved to z = 0 before the graph is built, so ends that meet in plan meet (D003 draws LWPOLYLINEs at elevations
+    7.71, 15.42). A sloped line (ends more than flat_tolerance apart in z - the snap tolerance, so float noise is not a
+    slope - as D021 52DF from z 8000 to 0) is counted at its plan length and listed; an arc out of the horizontal plane
+    keeps its geometry and is listed. Returns the segments and the record."""
+    out, moved, sloped, tilted = [], defaultdict(int), [], []
+    for s in segments:
+        part = s["part"]
+        if part["kind"] != "line" and (abs(part["u"][2]) > 1e-9 or abs(part["v"][2]) > 1e-9):
+            tilted.append({"segment_id": s["segment_id"], "handle": s["handle"], "length_m": s["length"] * factor})
+            out.append(s)
+            continue
+        zs = [s["start"][2], s["end"][2]] + ([] if part["kind"] == "line" else [part["center"][2]])
+        if all(z == 0.0 for z in zs):
+            out.append(s)
+            continue
+        part = {**part, **{k: [*part[k][:2], 0.0] for k in ("start", "end", "center") if k in part}}
+        b = s["bbox3d"]
+        row = {**s, "start": [*s["start"][:2], 0.0], "end": [*s["end"][:2], 0.0], "part": part, "bbox3d": [b[0], b[1], 0.0, b[3], b[4], 0.0]}
+        if part["kind"] == "line" and max(zs) - min(zs) > max(flat_tolerance, 1e-9):
+            row["length"] = math.dist(row["start"][:2], row["end"][:2])
+            sloped.append({"segment_id": s["segment_id"], "handle": s["handle"], "z_start": s["start"][2], "z_end": s["end"][2],
+                           "length_3d_m": s["length"] * factor, "length_plan_m": row["length"] * factor})
+        else:
+            moved[f"{max(zs, key=abs):g}"] += 1
+        out.append(row)
+    return out, {"elevations_flattened": dict(sorted(moved.items())), "sloped_lines_in_plan": sloped, "tilted_arcs_kept": tilted}
+
+
+def plan_warnings(record: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = []
+    if record["sloped_lines_in_plan"]:
+        rows.append({"warning": "sloped_lines_measured_in_plan", "count": len(record["sloped_lines_in_plan"]),
+                     "length_3d_minus_plan_m": math.fsum(x["length_3d_m"] - x["length_plan_m"] for x in record["sloped_lines_in_plan"]),
+                     "detail": "两端标高不同的线按平面投影计长；核对图纸，这段若真是竖向或斜向敷设，另按竖向列"})
+    if record["tilted_arcs_kept"]:
+        rows.append({"warning": "arcs_out_of_plan_kept", "count": len(record["tilted_arcs_kept"]),
+                     "detail": "不在水平面里的弧按原几何计长、不参与平面并点，核对图纸"})
+    return rows
+
+
+def parse_layer_request(request: dict[str, Any], base: Path) -> dict[str, Any]:
+    """The layer-length request (fifth batch L3): sheets as in the coverage ledger, regions, end classes, feeders."""
+    req = parse_common(request, LAYER_REQUEST_SCHEMA)
+    kinds = request.get("exclude_sheet_kinds", [LEGEND_SHEET_KIND])
+    if not isinstance(kinds, list) or any(kind not in EXCLUDABLE_SHEET_KINDS for kind in kinds):
+        fail("exclude_sheet_kinds 只能取 " + "、".join(EXCLUDABLE_SHEET_KINDS) + "（平面、详图不能整类剔除）")
+    specs = request.get("sheets") or []
+    specs = [specs] if isinstance(specs, dict) else specs
+    if not isinstance(specs, list):
+        fail("sheets 须为图页表数组（写法同点位覆盖台账的 sheets）")
+    problems, files, sheets = [], [], []
+    for spec in specs:
+        rows, _ = sheet_tables.read_rows(spec, sheet_tables.SHEET_KEYS, base, problems, files, "sheets")
+        for row in rows:
+            if req["drawing_id"] and str(row.get("drawing") or "") != req["drawing_id"]:
+                continue
+            box = [row.get(k) for k in ("x1", "y1", "x2", "y2")]
+            kind = row.get("sheet_kind") or None
+            if not row.get("sheet_id") or any(v is None for v in box):
+                problems.append({"where": row["_where"], "message": "图页须有 sheet_id 和 x1、y1、x2、y2"}); continue
+            if kind is not None and kind not in sheet_tables.SHEET_KINDS:
+                problems.append({"where": row["_where"], "message": "sheet_kind 只能是 " + "、".join(sheet_tables.SHEET_KINDS)}); continue
+            x1, x2 = sorted((box[0], box[2])); y1, y2 = sorted((box[1], box[3]))
+            sheets.append({"sheet_id": row["sheet_id"], "title": row.get("title") or row["sheet_id"], "kind": kind,
+                           "bounds": (x1, y1, x2, y2), "area": (x2 - x1) * (y2 - y1)})
+    if problems:
+        fail("图页表有问题：" + "；".join(f"{p['where']} {p['message']}" for p in problems[:5]))
+    regions = []
+    for index, region in enumerate(request.get("regions") or []):
+        polygon = region.get("polygon") if isinstance(region, dict) else None
+        if not isinstance(polygon, list) or len(polygon) < 3 or any(not isinstance(p, list) or len(p) < 2 for p in polygon):
+            fail(f"regions[{index}].polygon 须为至少 3 个点 [x, y]（米）")
+        regions.append({"region_id": text(region.get("region_id"), f"regions[{index}].region_id"),
+                        "polygon": [[finite(p[0], f"regions[{index}].polygon"), finite(p[1], f"regions[{index}].polygon")] for p in polygon]})
+    req.update(exclude_kinds=list(kinds), sheets=sheets, files=files, regions=regions, endpoints=None, feeders=None)
+    raw_ends = request.get("endpoints")
+    if raw_ends is not None:
+        if not isinstance(raw_ends, dict):
+            fail("endpoints 必须是对象")
+        if raw_ends.get("radius") is None:
+            fail("endpoints.radius 必须写明（端点找实例的半径，按输出单位米、按本图图符定，没有默认值）")
+        radius = finite(raw_ends["radius"], "endpoints.radius")
+        if radius < 0:
+            fail("endpoints.radius 须为非负有限数值")
+        classes = []
+        for index, item in enumerate(raw_ends.get("classes") or []):
+            if not isinstance(item, dict) or not isinstance(item.get("class"), str) or not item["class"].strip():
+                fail(f"endpoints.classes[{index}].class 必须是非空文本")
+            rule_ids = item.get("rule_ids") or []
+            if not isinstance(rule_ids, list) or (not rule_ids and not item.get("block_pattern")):
+                fail(f"endpoints.classes[{index}] 须写 rule_ids（识别规则号数组）或 block_pattern")
+            if item.get("role") not in (None, "source"):
+                fail(f"endpoints.classes[{index}].role 只能是 source（箱）")
+            classes.append({"class": item["class"].strip(), "rule_ids": set(map(str, rule_ids)), "source": item.get("role") == "source",
+                            "block_re": pattern(item["block_pattern"], f"endpoints.classes[{index}].block_pattern") if item.get("block_pattern") else None})
+        if not classes:
+            fail("endpoints.classes 须为非空数组（块类别到回路类别的映射由项目给）")
+        source = raw_ends.get("instances")
+        if not isinstance(source, dict):
+            fail("endpoints.instances 须写 path（点位中性实例处置清单）")
+        path = Path(text(source.get("path"), "endpoints.instances.path"))
+        path = path if path.is_absolute() else (base / path).resolve()
+        if not path.is_file():
+            fail(f"endpoints.instances.path 找不到：{path}")
+        dispositions = set(source.get("dispositions") or ["adopted"])
+        instances = []
+        for row in load_stream(path):
+            if row.get("disposition") not in dispositions:
+                continue
+            pid = text(row.get("physical_id"), f"{path.name} physical_id")
+            hit = sorted({c["class"] for c in classes if (set(map(str, row.get("rule_ids") or ())) & c["rule_ids"])
+                          or (c["block_re"] is not None and c["block_re"].search(str(row.get("block_name") or "")))})
+            if len(hit) > 1:
+                fail(f"实例 {pid} 同时命中类别 {'、'.join(hit)}，类别映射要唯一")
+            box = row.get("scope_geometry_bbox")
+            if isinstance(box, list) and len(box) == 4:
+                box = [finite(v, f"{pid}.scope_geometry_bbox") for v in box]
+            elif isinstance(row.get("point"), list) and row.get("coordinate_unit") == "m":
+                x, y = finite(row["point"][0], f"{pid}.point") / req["factor"], finite(row["point"][1], f"{pid}.point") / req["factor"]
+                box = [x, y, x, y]
+            else:
+                fail(f"实例 {pid} 没有外框 scope_geometry_bbox，也没有按米的 point")
+            instances.append({"physical_id": pid, "block_name": str(row.get("block_name") or ""), "class": hit[0] if hit else None,
+                              "source": bool(hit) and any(c["source"] and c["class"] == hit[0] for c in classes), "box": box})
+        files.append({"role": "instances", "path": str(path), "sha256": sha256(path)})
+        markers = raw_ends.get("building_markers")
+        req["endpoints"] = {"radius": radius, "classes": classes, "instances": instances, "dispositions": sorted(dispositions),
+                            "marker_re": pattern(markers.get("layer_pattern"), "endpoints.building_markers.layer_pattern")
+                            if isinstance(markers, dict) else None}
+    feeders = request.get("feeders")
+    if feeders is not None:
+        if req["endpoints"] is None:
+            fail("feeders 要和 endpoints 一起写（设备和箱的类别由 endpoints.classes 定）")
+        device_classes = feeders.get("device_classes") if isinstance(feeders, dict) else None
+        if not isinstance(device_classes, list) or not device_classes:
+            fail("feeders.device_classes 须为非空数组（如 [\"插座箱\"]）")
+        req["feeders"] = {"device_classes": set(device_classes)}
+    return req
+
+
+def in_polygon(point: list[float], polygon: list[list[float]]) -> bool:
+    inside, n = False, len(polygon)
+    for i in range(n):
+        (x1, y1), (x2, y2) = polygon[i], polygon[(i + 1) % n]
+        if (y1 > point[1]) != (y2 > point[1]) and point[0] < x1 + (point[1] - y1) * (x2 - x1) / (y2 - y1):
+            inside = not inside
+    return inside
+
+
+def measure_layers(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
+    """Fifth batch L3: every line on the route layers, totalled by sheet, region and layer, legend samples dropped;
+    connected parts (bridged gaps and T junctions join) listed with their dangling ends classed by the instances
+    within the project's radius; socket boxes traced to the box in their part. Nothing is shared out by length."""
+    f, expand = req["factor"], set(req["expand"])
+    rows = [row for row in drawing.inserts.values() if str(row.get("block_name") or "") in expand] + drawing.curves
+    got = segment_graph.collect_segments(rows, drawing.definitions, drawing.origins, layer_pattern=req["route_re"],
+                                         expand_blocks=sorted(expand), scope=req["bounds"], max_depth=req["max_depth"])
+
+    def sheet_at(p: list[float]) -> dict[str, Any] | None:
+        hits = [s for s in req["sheets"] if s["bounds"][0] <= p[0] <= s["bounds"][2] and s["bounds"][1] <= p[1] <= s["bounds"][3]]
+        return min(hits, key=lambda s: s["area"]) if hits else None
+
+    def middle(s: dict[str, Any]) -> list[float]:
+        if s["kind"] == "line":
+            return [(s["start"][k] + s["end"][k]) / 2 for k in range(2)]
+        part = s["part"]
+        return cad_geometry.conic_point(part, part["start_param"] + part["sweep_param"] / 2)[:2]
+    where: dict[str, dict[str, Any]] = {}
+    kept, excluded, crossing = [], [], []
+    flat, got["plan"] = flatten_elevations(got["segments"], f, req["snap"] / f)
+    for s in flat:
+        mid = middle(s)
+        sheet = sheet_at(mid)
+        ends = {(x or {}).get("sheet_id") for x in (sheet_at(s["start"]), sheet_at(s["end"]))}
+        info = {"sheet_id": sheet["sheet_id"] if sheet else UNSHEETED, "sheet_kind": sheet["kind"] if sheet else None,
+                "region_id": next((r["region_id"] for r in req["regions"] if in_polygon([mid[0] * f, mid[1] * f], r["polygon"])), UNREGIONED),
+                "layer": s["layer"], "length_m": s["length"] * f}
+        where[s["segment_id"]] = info
+        if sheet and sheet["kind"] in req["exclude_kinds"]:
+            excluded.append({"segment_id": s["segment_id"], "handle": s["handle"], "layer": s["layer"], **info,
+                             "drawing_from": s["start"][:2], "drawing_to": s["end"][:2]})
+            continue
+        if len(ends) > 1:
+            crossing.append({"segment_id": s["segment_id"], "handle": s["handle"], "sheet_ids": sorted(x or UNSHEETED for x in ends),
+                             "sheet_id": info["sheet_id"]})
+        kept.append(s)
+    graph = segment_graph.build_graph(kept, snap_tolerance=req["snap"] / f, gap_tolerance=req["gap"] / f,
+                                      gap_angle_deg=req["gap_angle_deg"])
+    segs = {s["segment_id"]: s for s in graph["segments"]}
+    point_of = {n["node_id"]: n["point"] for n in graph["nodes"]}
+    link = {n: n for n in point_of}
+
+    def find(x: str) -> str:
+        while link[x] != x:
+            link[x] = link[link[x]]; x = link[x]
+        return x
+
+    def join(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            link[max(ra, rb)] = min(ra, rb)
+    degree: dict[str, int] = defaultdict(int)
+    for s in graph["segments"]:
+        join(s["start_node"], s["end_node"]); degree[s["start_node"]] += 1; degree[s["end_node"]] += 1
+    for g in graph["gap_bridged"]:
+        join(g["from_node"], g["to_node"]); degree[g["from_node"]] += 1; degree[g["to_node"]] += 1
+    tees = [t for t in graph["t_contacts"] if req["t_junctions"] and segs[t["on_segment_id"]]["kind"] == "line"]
+    for t in tees:                                    # a branch end on another straight line's middle joins it
+        join(t["node_id"], segs[t["on_segment_id"]]["start_node"]); degree[t["node_id"]] += 1
+    parts: dict[str, dict[str, Any]] = defaultdict(lambda: {"segments": [], "gaps": [], "tees": 0, "nodes": []})
+    for s in graph["segments"]:
+        parts[find(s["start_node"])]["segments"].append(s)
+    for g in graph["gap_bridged"]:
+        parts[find(g["from_node"])]["gaps"].append(g)
+    for t in tees:
+        parts[find(t["node_id"])]["tees"] += 1
+    for n in point_of:
+        parts[find(n)]["nodes"].append(n)
+
+    ends_cfg = req["endpoints"]
+    r = ends_cfg["radius"] / f if ends_cfg else 0.0
+    inst_index = BoundsIndex([(i["physical_id"], i["box"]) for i in ends_cfg["instances"]]) if ends_cfg and ends_cfg["instances"] else None
+    inst_of = {i["physical_id"]: i for i in ends_cfg["instances"]} if ends_cfg else {}
+    source_classes = {c["class"] for c in ends_cfg["classes"] if c["source"]} if ends_cfg else set()
+    markers = []
+    if ends_cfg and ends_cfg["marker_re"] is not None:   # top-level circles on the marker layers, in scope by their centre
+        for row in drawing.circles:
+            part = ((row.get("geometry") or {}).get("parts") or [{}])[0]
+            if ends_cfg["marker_re"].search(str(row.get("layer") or "")) and part.get("center") and part.get("u"):
+                if cad_geometry.point_in_scope(part["center"], req["bounds"]):
+                    markers.append((part["center"][:2], math.hypot(*part["u"][:2])))
+
+    def near(p: list[float]) -> list[tuple[float, dict[str, Any]]]:
+        if inst_index is None:
+            return []
+        keys = inst_index.query_box([p[0] - r, p[1] - r, p[0] + r, p[1] + r])
+        return sorted(((d, inst_of[k]) for k in keys if (d := box_distance(p, list(inst_index.boxes[k]))) <= r),
+                      key=lambda x: (x[0], x[1]["physical_id"]))
+
+    def end_of(node: str) -> dict[str, Any]:
+        p = point_of[node]
+        hits = near(p)
+        classes = sorted({inst["class"] for _, inst in hits if inst["class"]})
+        unmapped = sorted(inst["physical_id"] for _, inst in hits if inst["class"] is None)
+        row: dict[str, Any] = {"node_id": node, "point_m": [p[0] * f, p[1] * f], "classes": classes,
+                               "instances": [{"physical_id": inst["physical_id"], "class": inst["class"], "distance_m": d * f} for d, inst in hits]}
+        if unmapped:
+            row["unmapped_instances"] = unmapped
+        if unmapped or len(classes) > 1:
+            row["status"] = "未决"
+        elif classes:
+            row["status"] = "已归类"
+        elif any(max(math.dist(p[:2], c) - radius, 0.0) <= r for c, radius in markers):
+            row["status"] = "楼栋示意圆"
+        else:
+            row["status"] = "未连"
+        return row
+
+    components, todo, by_class = [], [], defaultdict(float)
+    comp_of_node: dict[str, str] = {}
+    ordered = sorted(parts.values(), key=lambda part: min(s["segment_id"] for s in part["segments"]))
+    for number, part in enumerate(ordered, 1):
+        cid = f"LC-{number:04d}"
+        for n in part["nodes"]:
+            comp_of_node[n] = cid
+        seg_list = sorted(part["segments"], key=lambda s: s["segment_id"])
+        sheets = sorted({where[s["segment_id"]]["sheet_id"] for s in seg_list})
+        crossed = [c for c in crossing if c["segment_id"] in {s["segment_id"] for s in seg_list}]
+        dangling = sorted(n for n in part["nodes"] if degree[n] == 1)
+        comp = {"component_id": cid, "length_m": math.fsum(s["length"] for s in seg_list) * f,
+                "bridged_gap_length_m": math.fsum(g["length"] for g in part["gaps"]) * f, "segment_count": len(seg_list),
+                "handles": list(dict.fromkeys(s["handle"] for s in seg_list)), "segment_ids": [s["segment_id"] for s in seg_list],
+                "layers": sorted({s["layer"] for s in seg_list}), "sheets": sheets,
+                "regions": sorted({where[s["segment_id"]]["region_id"] for s in seg_list}), "t_junction_count": part["tees"],
+                "dangling_points": [[point_of[n][0] * f, point_of[n][1] * f] for n in dangling], "review_flags": []}
+        if len(sheets) > 1 or crossed:
+            comp["review_flags"].append({"flag": "跨图页", "sheets": sorted(set(sheets) | {x for c in crossed for x in c["sheet_ids"]})})
+        if ends_cfg is None:
+            comp.update(status="未归类", **{"class": None})
+        else:
+            ends = [end_of(n) for n in dangling]
+            sources = sorted({inst["physical_id"] for n in part["nodes"] for _, inst in near(point_of[n]) if inst["source"]})
+            load = sorted({c for e in ends if e["status"] == "已归类" for c in e["classes"] if c not in source_classes})
+            if any(e["status"] == "未决" for e in ends) or len(load) > 1:
+                status, cls = "未决", None
+            elif load:
+                status, cls = "已归类", load[0]
+            else:
+                status, cls = "未连", None
+            comp.update(status=status, ends=ends, sources=sources, load_classes=load, **{"class": cls})
+            if len(sources) > 1:
+                comp["review_flags"].append({"flag": "连到两只以上箱", "instance_ids": sources, "detail": "串箱或画法相连，核对系统图"})
+            if status == "未决":
+                todo.append({"component_id": cid, "kind": "未决", "problem": "两端归类不清",
+                             "detail": {"load_classes": load, "end_classes": [e["classes"] for e in ends if e["status"] == "未决"],
+                                        "unmapped_instances": sorted({x for e in ends for x in e.get("unmapped_instances", ())})}})
+            for e in ends:
+                if e["status"] == "楼栋示意圆":
+                    todo.append({"component_id": cid, "kind": "待办", "problem": "到楼栋示意圆，没有进户点", "detail": {"point_m": e["point_m"]}})
+        for flag in comp["review_flags"]:
+            todo.append({"component_id": cid, "kind": "复核", "problem": flag["flag"], "detail": {k: v for k, v in flag.items() if k != "flag"}})
+        by_class[comp["class"] if comp["status"] == "已归类" else comp["status"]] += comp["length_m"]
+        components.append(comp)
+
+    feeders, l1_routes = [], []
+    if req["feeders"]:
+        node_index = BoundsIndex([(n, [p[0], p[1], p[0], p[1]]) for n, p in point_of.items()]) if point_of else None
+        source_parts: dict[str, set[str]] = defaultdict(set)
+        for comp in components:
+            for pid in comp.get("sources", ()):
+                source_parts[comp["component_id"]].add(pid)
+        for inst in sorted(inst_of.values(), key=lambda i: i["physical_id"]):
+            if inst["class"] not in req["feeders"]["device_classes"]:
+                continue
+            b = inst["box"]
+            hits = set(node_index.query_box([b[0] - r, b[1] - r, b[2] + r, b[3] + r])) if node_index else set()
+            touched = sorted({comp_of_node[n] for n in hits if box_distance(point_of[n], b) <= r})
+            row = {"device": inst["physical_id"], "class": inst["class"], "component_ids": touched}
+            boxes = sorted(set().union(*(source_parts[c] for c in touched))) if touched else []
+            if not touched:
+                row.update(status="待办", problem="离走线超出半径")
+            elif len(boxes) == 1:
+                row.update(status="对应", box=boxes[0])
+                l1_routes.append({"route_id": f"FEED-{inst['physical_id']}", "from": {"instance_id": boxes[0]},
+                                  "to": {"instance_id": inst["physical_id"]}})
+            elif boxes:
+                row.update(status="未决", box_candidates=boxes, problem="同一分量连到几只箱")
+            else:
+                row.update(status="待办", problem="分量里没有箱")
+            if row["status"] != "对应":
+                todo.append({"component_id": ",".join(touched), "kind": row["status"], "problem": f"{inst['class']}归箱：{row['problem']}",
+                             "detail": {"device": inst["physical_id"], **({"box_candidates": boxes} if boxes else {})}})
+            feeders.append(row)
+
+    def totals(key: str) -> list[dict[str, Any]]:
+        sums: dict[Any, list[float]] = defaultdict(list)
+        for s in graph["segments"]:
+            sums[where[s["segment_id"]][key]].append(s["length"] * f)
+        return [{key: k, "length_m": math.fsum(v), "segment_count": len(v)} for k, v in sorted(sums.items(), key=lambda kv: str(kv[0]))]
+    by_sheet = totals("sheet_id")
+    kind_of = {s["sheet_id"]: s["kind"] for s in req["sheets"]}
+    for row in by_sheet:
+        row["sheet_kind"] = kind_of.get(row["sheet_id"])
+    detail: dict[tuple, list[float]] = defaultdict(list)
+    for s in graph["segments"]:
+        w = where[s["segment_id"]]
+        detail[(w["sheet_id"], w["sheet_kind"] or "", w["region_id"], s["layer"])].append(s["length"] * f)
+    class_rows = [{"class": k, "length_m": v} for k, v in sorted(by_class.items(), key=lambda kv: str(kv[0]))]
+    warnings = plan_warnings(got["plan"])
+    unsheeted = [s["segment_id"] for s in graph["segments"] if where[s["segment_id"]]["sheet_id"] == UNSHEETED]
+    if unsheeted:
+        warnings.append({"warning": "segments_on_no_sheet", "count": len(unsheeted), "length_m": math.fsum(where[x]["length_m"] for x in unsheeted),
+                         "detail": "这些段不在图页表的任何图页里：图页表可能漏页，补页后重算（图例样线也认不出来）"})
+    return {
+        "graph": graph, "collected": got, "components": components, "excluded": excluded, "crossing": crossing, "todo": todo,
+        "feeders": feeders, "l1_routes": l1_routes, "warnings": warnings, "where": where, "comp_of_node": comp_of_node,
+        "graph_points": point_of,
+        "totals": {"by_sheet": by_sheet, "by_region": totals("region_id"), "by_layer": totals("layer"), "by_class": class_rows,
+                   "detail": [{"sheet_id": k[0], "sheet_kind": k[1], "region_id": k[2], "layer": k[3], "length_m": math.fsum(v),
+                               "segment_count": len(v)} for k, v in sorted(detail.items())],
+                   "counted_m": math.fsum(s["length"] for s in graph["segments"]) * f,
+                   "bridged_gap_m": math.fsum(g["length"] for g in graph["gap_bridged"]) * f,
+                   "excluded_m": math.fsum(x["length_m"] for x in excluded)},
+        "checks": {"class_total_equals_sheet_total": abs(math.fsum(by_class.values()) - math.fsum(r["length_m"] for r in by_sheet)) < 1e-6},
+    }
+
+
+def write_layer_outputs(args: argparse.Namespace, drawing: Drawing, req: dict[str, Any], done: dict[str, Any]) -> int:
+    f = req["factor"]
+    review = bool(done["todo"] or done["warnings"])
+    clean = lambda row: {k: v for k, v in row.items() if not k.startswith("drawing_")}   # noqa: E731
+    ends_cfg = req["endpoints"]
+    result = {
+        "schema": LAYER_RESULT_SCHEMA, "version": VERSION, "status": "REVIEW_REQUIRED" if review else "REFERENCE_ONLY",
+        "inputs": {"cad_manifest": str(args.cad_manifest.resolve()), "cad_manifest_sha256": sha256(args.cad_manifest),
+                   "source_sha256": (drawing.manifest.get("authoritative_source") or {}).get("sha256"),
+                   "request": str(args.request.resolve()), "request_sha256": sha256(args.request), "files": req["files"]},
+        "parameters": {"layout": req["layout"], "route_layers": req["route_re"].pattern, "factor_to_output": f,
+                       "unit_source_id": req["unit_source_id"], "scope_bounds": req["bounds"], "expanded_blocks": sorted(req["expand"]),
+                       "tolerances_m": {"snap": req["snap"], "gap": req["gap"]}, "gap_angle_deg": req["gap_angle_deg"],
+                       "t_junctions": req["t_junctions"], "exclude_sheet_kinds": req["exclude_kinds"], "sheet_count": len(req["sheets"]),
+                       "regions": [r["region_id"] for r in req["regions"]],
+                       "endpoints": None if ends_cfg is None else {
+                           "radius_m": ends_cfg["radius"], "dispositions": ends_cfg["dispositions"], "instance_count": len(ends_cfg["instances"]),
+                           "classes": [{"class": c["class"], "rule_ids": sorted(c["rule_ids"]), "source": c["source"],
+                                        "block_pattern": c["block_re"].pattern if c["block_re"] else None} for c in ends_cfg["classes"]],
+                           "building_marker_layers": ends_cfg["marker_re"].pattern if ends_cfg["marker_re"] else None},
+                       "feeders": sorted(req["feeders"]["device_classes"]) if req["feeders"] else None},
+        "graph": {"counts": done["graph"]["counts"], "degenerate_parts": done["collected"]["degenerate_parts"],
+                  "geometry_problems": done["collected"]["geometry_problems"], "unsupported": done["collected"]["unsupported"],
+                  "out_of_scope_parts": done["collected"]["out_of_scope_parts"], "ambiguous_gaps": done["graph"]["ambiguous_gaps"],
+                  "refused_snaps": done["graph"]["refused_snaps"], **done["collected"]["plan"]},
+        "totals": done["totals"], "checks": done["checks"], "warnings": done["warnings"], "components": done["components"],
+        "excluded_segments": [clean(x) for x in done["excluded"]], "segments_crossing_sheets": done["crossing"],
+        "feeders": done["feeders"], "l1_routes": done["l1_routes"], "todo": done["todo"],
+        "meaning": "按图层量出的平面线长（只计画出的线，桥接缺口另列）；分量两端按项目给的半径和类别映射归类，"
+                   "不按长度分摊，未决、未连单列；归箱只按画出的连线，与系统图回路对账另做",
+    }
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    (args.output_dir / "按图层量长结果.json").write_text(json.dumps(result, ensure_ascii=False, indent=1, allow_nan=False) + "\n", encoding="utf-8")
+    write_csv(args.output_dir / "按图层量长汇总.csv", ["sheet_id", "sheet_kind", "region_id", "layer", "length_m", "segment_count"],
+              [[r["sheet_id"], r["sheet_kind"], r["region_id"], r["layer"], r["length_m"], r["segment_count"]] for r in done["totals"]["detail"]])
+    write_csv(args.output_dir / "按图层量长分量.csv",
+              ["component_id", "status", "class", "length_m", "bridged_gap_length_m", "segment_count", "sheets", "regions", "sources",
+               "load_classes", "review_flags"],
+              [[c["component_id"], c["status"], c["class"] or "", c["length_m"], c["bridged_gap_length_m"], c["segment_count"],
+                "、".join(c["sheets"]), "、".join(c["regions"]), "、".join(c.get("sources", ())), "、".join(c.get("load_classes", ())),
+                "、".join(x["flag"] for x in c["review_flags"])] for c in done["components"]])
+    write_csv(args.output_dir / "按图层量长待办.csv", ["component_id", "kind", "problem", "detail"],
+              [[t["component_id"], t["kind"], t["problem"], json.dumps(t["detail"], ensure_ascii=False)] for t in done["todo"]])
+    lines = []
+    for s in done["graph"]["segments"]:
+        lines.append([done["comp_of_node"][s["start_node"]], "segment", s["segment_id"], s["handle"], s["layer"],
+                      done["where"][s["segment_id"]]["sheet_id"], *s["start"][:2], *s["end"][:2], s["length"] * f])
+    for g in done["graph"]["gap_bridged"]:
+        a, b = done["graph_points"][g["from_node"]], done["graph_points"][g["to_node"]]
+        lines.append([done["comp_of_node"][g["from_node"]], "gap", g["bridge_id"], "", "", "", *a[:2], *b[:2], g["length"] * f])
+    for x in done["excluded"]:
+        lines.append(["", "excluded", x["segment_id"], x["handle"], x["layer"], x["sheet_id"], *x["drawing_from"], *x["drawing_to"], x["length_m"]])
+    write_csv(args.output_dir / "按图层量长映射线.csv",
+              ["component_id", "kind", "segment_id", "handle", "layer", "sheet_id", "x1", "y1", "x2", "y2", "length_m"], lines)
+    print(json.dumps({"status": result["status"], "components": len(done["components"]), "counted_m": done["totals"]["counted_m"],
+                      "excluded_m": done["totals"]["excluded_m"], "todo": len(done["todo"]), "output_dir": str(args.output_dir)},
+                     ensure_ascii=False))
+    return 3 if review else 0
+
+
 def write_csv(path: Path, header: list[str], rows: list[list[Any]]) -> None:
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.writer(handle)
@@ -807,7 +1259,12 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     try:
-        req = parse_request(load_json(args.request))
+        raw = load_json(args.request)
+        if raw.get("schema") == LAYER_REQUEST_SCHEMA:
+            req = parse_layer_request(raw, args.request.resolve().parent)
+            drawing = Drawing(args.cad_manifest.resolve(), req)
+            return write_layer_outputs(args, drawing, req, measure_layers(drawing, req))
+        req = parse_request(raw)
         drawing = Drawing(args.cad_manifest.resolve(), req)
         traced = trace_routes(drawing, req)
         graph, got = traced["graph"], traced["collected"]
@@ -831,7 +1288,8 @@ def main() -> int:
             "graph": {"counts": graph["counts"], "degenerate_parts": got["degenerate_parts"], "geometry_problems": got["geometry_problems"],
                       "unsupported": got["unsupported"], "expansion_problems": got["expansion_problems"],
                       "out_of_scope_parts": got["out_of_scope_parts"], "ambiguous_gaps": graph["ambiguous_gaps"],
-                      "refused_snaps": graph["refused_snaps"]},
+                      "refused_snaps": graph["refused_snaps"], **got["plan"]},
+            "warnings": plan_warnings(got["plan"]),
             "routes": [{k: v for k, v in r.items() if k != "_pieces"} for r in traced["routes"]],
             "shared_segments": traced["shared"],
             "counts": {"routes": len(traced["routes"]), "traced": sum(r["status"] == "已追踪" for r in traced["routes"]),
