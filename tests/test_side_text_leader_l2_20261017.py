@@ -6,6 +6,8 @@ touch_tolerance 0.1 m、text_tolerance 0.3 m、snap_tolerance 0.01 m、max_segme
 - 检查点一后（决策会话 10-17）：只有两只候选的引线到同一段文字、或引线一端落在两个候选外框之间分不清 → 引线未决；
 - 一只候选的引线分叉到两段文字、两条引线各到一段 → 多段文字（与半径同）；
 - 引线中途断开、文字在引线末端容差外、超过最多段数 → 不算引线（无文字），原因记 leader_notes；
+- 检查点一返修 1.2 答复：这样的线离开了外框而半径内有文字 → 引线未决（“引线未到文字，与半径文字矛盾”）；半径内没有
+  文字（含只剩别的候选引线到的文字）→ 无文字；挨着外框、没离开外框的短线不算引线，按半径判；
 - 引线只从另一个候选外框中间穿过 → 不算那个候选的引线；引线图层以外的线不走；
 - 半径与引线都写：同一候选引线文字优先于半径内的其他文字；引线连到 A 的文字，别的候选不能凭半径认领或共用；
 - 只分型的规则（role: classify）：半径内命中同一条规则的几只候选可以共用同一段文字；一只候选落在两段分型文字内照旧未决；
@@ -225,8 +227,19 @@ def draw_mixed(doc, msp):
     ids['C3'] = box(msp, 20000, 0)                                 # its leader's text also in C4's radius
     msp.add_lwpolyline([(20050, 50), (21500, 1500), (22000, 1500)], dxfattribs=LEAD); note(msp, 'AL3', 22050, 1600)
     ids['C4'] = box(msp, 22800, 1700)
+    msp.add_line((22850, 1750), (23500, 2400), dxfattribs=LEAD)   # C4's own line leaves its box and reaches no text
     ids['C5'] = box(msp, 30000, 0)                                 # leader and radius agree
     msp.add_line((30050, 50), (30600, 600), dxfattribs=LEAD); note(msp, 'AL5', 30650, 650)
+    # decision 10-17 (checkpoint 1 return 1.2): a line leaving the box that reaches no text, with a text in the radius
+    ids['C6'] = box(msp, 40000, 0)                                 # AL6 0.5 m past the leader end; AL61 in the radius
+    msp.add_line((40050, 50), (41000, 1000), dxfattribs=LEAD); note(msp, 'AL6', 41500, 1000); note(msp, 'AL61', 40800, -300)
+    ids['C7'] = box(msp, 50000, 0)                                 # four segments (max 3): cut off; AL71 in the radius
+    msp.add_lwpolyline([(50050, 50), (50500, 500), (51000, 500), (51500, 1000), (52000, 1000)], dxfattribs=LEAD)
+    note(msp, 'AL7', 52050, 1050); note(msp, 'AL71', 50800, -300)
+    ids['C8'] = box(msp, 60000, 0)                                 # a short line at the box that does not leave it
+    msp.add_line((60050, 0), (60120, 0), dxfattribs=LEAD); note(msp, 'AL8', 60800, 0)
+    ids['C9'] = box(msp, 70000, 0)                                 # leaves the box, reaches no text, none in the radius
+    msp.add_line((70050, 50), (71000, 1000), dxfattribs=LEAD)
     return ids
 
 
@@ -237,11 +250,21 @@ def test_a_leader_wins_over_radii_and_takes_its_text_from_other_candidates(tmp_p
     assert adopted[ids['C2']]['instance_key'] == 'AL2' and disp[ids['C2']]['side_text'].get('via', 'radius') == 'radius'
     assert adopted[ids['C3']]['instance_key'] == 'AL3'
     c4 = disp[ids['C4']]['side_text']                              # AL3 lies in its radius, but C3's leader reaches it
-    assert disp[ids['C4']]['disposition'] == 'unresolved' and c4['status'] == '无文字'
+    assert disp[ids['C4']]['disposition'] == 'unresolved' and c4['status'] == '无文字'   # its own line: no text left
     assert [(t['text'], t['leader_of']) for t in c4['leader_texts_elsewhere']] == [('AL3', [ids['C3']])]
-    assert '别的候选的引线' in disp[ids['C4']]['basis']
+    assert '别的候选的引线' in disp[ids['C4']]['basis'] and c4['leader_notes'] == ['BOX 挨着外框的线没到符合的文字（1 段）']
     assert adopted[ids['C5']]['instance_key'] == 'AL5' and disp[ids['C5']]['side_text']['via'] == 'leader'
-    assert [t['text'] for t in report['side_text_binding']['unclaimed_key_texts']] == ['AL9']
+    for name, text in (('C6', 'AL61'), ('C7', 'AL71')):           # the leader says its label is elsewhere: no radius bind
+        side = disp[ids[name]]['side_text']
+        assert disp[ids[name]]['disposition'] == 'unresolved' and side['status'] == '引线未决', name
+        assert [p['problem'] for p in side['leader_problems']] == ['引线未到文字，与半径文字矛盾'], name
+        assert [t['text'] for t in side['texts']] == [text] and side['shared_with'] == [] and side['leader_notes'], name
+        assert side['leader_problems'][0]['leader_segment_ids'] and '引线未到文字，与半径文字矛盾' in disp[ids[name]]['basis'], name
+    assert '超过 3 段' in disp[ids['C7']]['side_text']['leader_notes'][0]
+    assert adopted[ids['C8']]['instance_key'] == 'AL8'             # a line that never leaves the box is no leader
+    c9 = disp[ids['C9']]['side_text']
+    assert disp[ids['C9']]['disposition'] == 'unresolved' and c9['status'] == '无文字' and c9['leader_notes']
+    assert sorted(t['text'] for t in report['side_text_binding']['unclaimed_key_texts']) == ['AL6', 'AL7', 'AL9']
 
 
 # ---------- R2: the out-of-package candidate claims nothing ----------

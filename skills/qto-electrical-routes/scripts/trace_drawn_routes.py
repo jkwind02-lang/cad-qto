@@ -6,6 +6,10 @@ segment with handles and lengths, gaps behind symbols bridged and listed. Ends o
 alternatives and paths over the scope edge become to-dos; nothing falls back to a straight or right-angle distance.
 A circuit label in the request is kept as evidence only: the tool never decides which circuit a line belongs to, and
 it never matches device names (a system-diagram name against a plan name is the model's call, with its basis listed).
+A T junction a route turns at is never joined silently (checkpoint 2 decision): each one lists both lines, the point
+and the trunk part run; with a circuit label pattern in the request, the drawn labels near the route are compared
+across its T junctions and different labels on the two sides are a review flag, and without one the route is flagged
+as unchecked.
 """
 from __future__ import annotations
 
@@ -26,7 +30,7 @@ import qto_cad_geometry as cad_geometry  # noqa: E402
 import qto_segment_graph as segment_graph  # noqa: E402
 from qto_spatial import BoundsIndex  # noqa: E402
 
-VERSION = "qto-drawn-route-tracer/1.0.0"
+VERSION = "qto-drawn-route-tracer/1.1.0"
 REQUEST_SCHEMA = "qto-drawn-route-request/1.0"
 RESULT_SCHEMA = "qto-drawn-route-trace/1.0"
 PATHS_SCHEMA = "qto-drawn-route-paths/1.0"
@@ -187,7 +191,13 @@ def parse_request(request: dict[str, Any]) -> dict[str, Any]:
     t_junctions = request.get("t_junctions", True)
     if not isinstance(t_junctions, bool):
         fail("t_junctions 须为 true 或 false")
+    label_re = pattern(request["circuit_label_pattern"], "circuit_label_pattern") if request.get("circuit_label_pattern") else None
+    if label_re is None and (request.get("circuit_label_layers") or request.get("circuit_label_radius") is not None):
+        fail("写了 circuit_label_layers 或 circuit_label_radius 就要写 circuit_label_pattern（回路标注文字的正则）")
     return {
+        "label_re": label_re,
+        "label_layer_re": pattern(request["circuit_label_layers"], "circuit_label_layers") if request.get("circuit_label_layers") else None,
+        "label_radius": tolerance(request, "circuit_label_radius") if label_re else None,
         "layout": text(request.get("layout", "Model"), "layout"), "factor": factor,
         "unit_source_id": text(unit.get("source_id"), "unit.source_id"), "bounds": bounds,
         "route_re": pattern(request.get("route_layers"), "route_layers"),
@@ -241,6 +251,7 @@ class Drawing:
         self.block_boxes: dict[str, Any] = {}
         self.inserts: dict[str, dict[str, Any]] = {}
         self.curves: list[dict[str, Any]] = []
+        self.texts: list[dict[str, Any]] = []
         types = segment_graph.CURVE_TYPES | segment_graph.LEADER_TYPES | segment_graph.UNSUPPORTED_LEADERS
         for row in load_stream(layout_path):
             if row.get("row_type") != "entity" or row.get("layout") != req["layout"]:
@@ -250,6 +261,8 @@ class Drawing:
                 self.inserts[str(row.get("entity_handle") or "").upper()] = row
             elif kind in types:
                 self.curves.append(row)
+            elif kind in ("TEXT", "MTEXT") and req["label_re"] is not None:
+                self.texts.append(row)
 
     def scope_of(self, insert: dict[str, Any], parent: tuple[float, ...]) -> dict[str, Any]:
         """Point adapter scope_of (Codex retest R2, K3): in scope, 2D world box or None, notes, anchor, matrix."""
@@ -319,6 +332,42 @@ class Drawing:
             walk(insert, IDENTITY, f"CAD-{insert.get('entity_handle')}", ())
         return found
 
+    def label_texts(self, expand: set[str]) -> list[dict[str, Any]]:
+        """Circuit label texts: layout texts and the texts inside the expanded blocks (walked and scoped as boxes()),
+        in scope by their insertion point; the label is the part of the words the request pattern matches."""
+        label_re, layer_re, found = self.req["label_re"], self.req["label_layer_re"], []
+
+        def keep(row: dict[str, Any], matrix: tuple[float, ...], path: str) -> None:
+            if str(row.get("entity_type") or "").upper() not in ("TEXT", "MTEXT"):
+                return
+            words = str(row.get("text") or "").strip()
+            hit = label_re.search(words) if words else None
+            if hit is None or (layer_re is not None and not layer_re.search(str(row.get("layer") or ""))):
+                return
+            point = cad_geometry.transform_point([finite(row.get(axis, 0.0), f"{row.get('record_id')}.{axis}")
+                                                  for axis in ("x", "y", "z")], matrix)
+            if point is None or not cad_geometry.point_in_scope(point, self.req["bounds"]):
+                return
+            found.append({"label": hit.group(0), "text": words[:80], "layer": str(row.get("layer") or ""),
+                          "handle": f"{path}{row.get('entity_handle') or ''}", "point": point[:2]})
+        for row in self.texts:
+            keep(row, IDENTITY, "")
+
+        def walk(insert, parent, path, stack):
+            here = self.scope_of(insert, parent)
+            name = str(insert.get("block_name") or "")
+            if not here["in_scope"] or name not in expand or name in stack or len(stack) >= self.req["max_depth"]:
+                return
+            for child in self.definitions.get(name, ()):
+                if str(child.get("entity_type") or "").upper() == "INSERT":
+                    walk(child, here["matrix"], f"{path}/{name}/CAD-{child.get('entity_handle')}", (*stack, name))
+                else:
+                    keep(child, here["matrix"], f"{path}/{name}/")
+        if expand:
+            for insert in self.inserts.values():
+                walk(insert, IDENTITY, f"CAD-{insert.get('entity_handle')}", ())
+        return found
+
 
 def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
     f = req["factor"]
@@ -337,6 +386,7 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
             else:
                 ends[(route["route_id"], which)] = {"spec": end, "point": [end["point"][0] / f, end["point"][1] / f]}
     rows = [row for row in drawing.inserts.values() if str(row.get("block_name") or "") in expand] + drawing.curves
+    label_items = drawing.label_texts(expand) if req["label_re"] is not None else []
     got = segment_graph.collect_segments(rows, drawing.definitions, drawing.origins, layer_pattern=req["route_re"],
                                          expand_blocks=sorted(expand), scope=req["bounds"], max_depth=req["max_depth"])
     graph = segment_graph.build_graph(got["segments"], snap_tolerance=req["snap"] / f, gap_tolerance=req["gap"] / f,
@@ -547,12 +597,78 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                 row = {"kind": "gap", "bridge_id": p["bridge_id"], "length_m": p["length"] * f, "from_point": m(a), "to_point": m(b)}
             else:
                 t = p["t"]
-                row = {"kind": "t", "free_end_segment_id": t["segment_id"], "on_segment_id": t["on_segment_id"],
-                       "on_handle": segs[t["on_segment_id"]]["handle"], "fraction": t["fraction"], "distance_m": t["distance"] * f,
-                       "point": m(point_of[t["virtual_node_id"]])}
+                row = {"kind": "t", "free_end_segment_id": t["segment_id"], "free_end_handle": segs[t["segment_id"]]["handle"],
+                       "on_segment_id": t["on_segment_id"], "on_handle": segs[t["on_segment_id"]]["handle"],
+                       "fraction": t["fraction"], "distance_m": t["distance"] * f, "point": m(point_of[t["virtual_node_id"]])}
             row["drawing_from"], row["drawing_to"] = a[:2], b[:2]
             result.append(row)
+        for k, row in enumerate(result):              # the trunk part run next to each T junction
+            if row["kind"] == "t":
+                host = [q for q in result[max(k - 1, 0):k + 2] if q["kind"] == "segment" and q["segment_id"] == row["on_segment_id"]]
+                if host:
+                    row["on_walked_fraction_range"] = list(host[0]["_range"])
         return result
+
+    def piece_distance(point: list[float], p: dict[str, Any]) -> float:
+        """Plan distance (drawing units) from a point to a walked segment piece: its curve, or the run part of a cut line."""
+        s = segs[p["segment_id"]]
+        if s["kind"] != "line" and p["_range"] == (0.0, 1.0):
+            return segment_graph._project([point[0], point[1], s["start"][2]], s["part"])[0]
+        (ax, ay), (bx, by) = p["drawing_from"], p["drawing_to"]
+        dx, dy = bx - ax, by - ay
+        den = dx * dx + dy * dy
+        t = max(0.0, min(1.0, ((point[0] - ax) * dx + (point[1] - ay) * dy) / den)) if den else 0.0
+        return math.hypot(point[0] - ax - t * dx, point[1] - ay - t * dy)
+
+    def check_tees(out: dict[str, Any], pieces: list[dict[str, Any]]) -> None:
+        """Checkpoint 2 decision 1: a T junction is not joined silently. The route is cut into parts at its T junctions;
+        each label text within the radius belongs to the part(s) nearest to it; two labelled parts in a row (an
+        unlabelled part between them is skipped) with no label in common are a review flag."""
+        tees = [p for p in pieces if p["kind"] == "t"]
+        if not tees:
+            return
+        if req["label_re"] is None:
+            out["review_flags"].append({"flag": "T接未核回路标注", "t_count": len(tees),
+                                        "detail": "请求没写 circuit_label_pattern，T 接两侧是不是同一回路没核"})
+            return
+        parts: list[list[dict[str, Any]]] = [[]]
+        for p in pieces:
+            if p["kind"] == "t":
+                parts.append([])
+            elif p["kind"] == "segment":
+                parts[-1].append(p)
+        r = req["label_radius"] / f
+        boxes = [segs[p["segment_id"]]["bbox3d"] for p in pieces if p["kind"] == "segment"]
+        x0, y0 = min(b[0] for b in boxes) - r, min(b[1] for b in boxes) - r
+        x1, y1 = max(b[3] for b in boxes) + r, max(b[4] for b in boxes) + r
+        found: list[dict[str, tuple[float, dict[str, Any]]]] = [{} for _ in parts]
+        for item in label_items:
+            x, y = item["point"]
+            if not (x0 <= x <= x1 and y0 <= y <= y1):
+                continue
+            d = [min((piece_distance(item["point"], p) for p in part), default=math.inf) for part in parts]
+            low = min(d)
+            if low > r:
+                continue
+            for i, v in enumerate(d):
+                if v <= low + 1e-9 and (item["label"] not in found[i] or v < found[i][item["label"]][0]):
+                    found[i][item["label"]] = (v, item)
+        for k, row in enumerate(tees):
+            row["circuit_labels_before"], row["circuit_labels_after"] = sorted(found[k]), sorted(found[k + 1])
+        out["circuit_labels_by_part"] = [[{"label": label, "text": item["text"], "layer": item["layer"], "handle": item["handle"],
+                                           "distance_m": v * f} for label, (v, item) in sorted(part.items())] for part in found]
+        changes, last = [], None
+        for i, labels in enumerate(found):
+            if not labels:
+                continue
+            if last is not None and not set(labels) & set(found[last]):
+                between = tees[last:i]
+                changes.append({"labels_before": sorted(found[last]), "labels_after": sorted(labels),
+                                "t_on_handles": [t["on_handle"] for t in between], "t_points": [t["point"] for t in between]})
+            last = i
+        if changes:
+            out["review_flags"].append({"flag": "T接两侧回路标注不同", "changes": changes,
+                                        "detail": "T 接可能连到了别的回路：核对平面标注和系统图，确认后再用这段长度"})
 
     results, paths, used = [], [], defaultdict(list)
     for route in req["routes"]:
@@ -634,7 +750,8 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         start_part = find(found["start"])
         if len(part_edges[start_part]) >= len(part_nodes[start_part]):
             out["review_flags"].append({"flag": "走线网络有环，取最短"})
-        drawn = math.fsum(p["length_m"] for p in pieces if p["kind"] == "segment")
+        check_tees(out, pieces)
+        drawn =math.fsum(p["length_m"] for p in pieces if p["kind"] == "segment")
         gaps = math.fsum(p["length_m"] for p in pieces if p["kind"] == "gap")
         clean = lambda p: {k: v for k, v in p.items() if not k.startswith("drawing_") and not k.startswith("_")}   # noqa: E731
         out.update(status="已追踪", path_id=f"DRAWN-{rid}", drawn_length_m=drawn, bridged_gap_length_m=gaps,
@@ -672,7 +789,8 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                                                for s in out["segments"] if "fraction_range" in s],
                           "review_flags": [flag["flag"] for flag in out["review_flags"]]})
     return {"graph": graph, "collected": got, "routes": results, "paths": paths, "shared": shared, "box_count": len(box_list),
-            "expanded": sorted(expand), "t_junctions_used": len(used_t), "t_contacts_hint_only": len(hint_t)}
+            "expanded": sorted(expand), "t_junctions_used": len(used_t), "t_contacts_hint_only": len(hint_t),
+            "label_texts": len(label_items)}
 
 
 def write_csv(path: Path, header: list[str], rows: list[list[Any]]) -> None:
@@ -706,7 +824,10 @@ def main() -> int:
                            "expanded_blocks": traced["expanded"],
                            "box_block_pattern": req["box_re"].pattern if req["box_re"] else None, "box_instances": traced["box_count"],
                            "t_junctions": req["t_junctions"], "t_junctions_used": traced["t_junctions_used"],
-                           "t_contacts_hint_only": traced["t_contacts_hint_only"]},
+                           "t_contacts_hint_only": traced["t_contacts_hint_only"],
+                           "circuit_label_pattern": req["label_re"].pattern if req["label_re"] else None,
+                           "circuit_label_layers": req["label_layer_re"].pattern if req["label_layer_re"] else None,
+                           "circuit_label_radius_m": req["label_radius"], "circuit_label_texts": traced["label_texts"]},
             "graph": {"counts": graph["counts"], "degenerate_parts": got["degenerate_parts"], "geometry_problems": got["geometry_problems"],
                       "unsupported": got["unsupported"], "expansion_problems": got["expansion_problems"],
                       "out_of_scope_parts": got["out_of_scope_parts"], "ambiguous_gaps": graph["ambiguous_gaps"],

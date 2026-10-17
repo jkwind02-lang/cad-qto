@@ -31,7 +31,7 @@ from qto_actor_identity import is_model_identity
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
 
-VERSION = "qto-component-neutral-adapter/1.9.1"
+VERSION = "qto-component-neutral-adapter/1.9.2"
 # Only these two codes can be released by a dynamic_state_adjudication on an include or exclude rule (registration
 # 20261016-1709; exclude added after checkpoint 1);
 # arrays, xrefs and missing definitions stay unresolved whatever the rule says.
@@ -737,7 +737,9 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
     leader's other nodes. A node that already has a matching text is that leader's text end, not where it leaves
     a box. Only a line reaching a matching text is a leader: one reaching no text, one longer than max_segments, or
     a candidate without a drawn box gives no leader (the reason is kept in leader_notes) and the radius decides,
-    if written. One leader reaching one text binds it (via leader); one candidate's leaders reaching two texts are
+    if written; but a line that leaves the box (some node beyond touch_tolerance) and reaches no text, or is cut off
+    past max_segments, leaves the candidate "引线未决" when its radius holds a text (decision 10-17 on the checkpoint 1
+    return, 1.2), and "无文字" when it holds none. One leader reaching one text binds it (via leader); one candidate's leaders reaching two texts are
     "多段文字" as with a radius. After checkpoint 1 (decision 10-17): a text a leader connects to candidate A is A's;
     every candidate's leaders are traced first and such a text leaves the other candidates' radii (listed in
     leader_texts_elsewhere), and a candidate's own leader text wins over the other texts in its radius. Only a text
@@ -902,7 +904,8 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
                     for distance, item in texts_near(point, cond, lead["text_tolerance"]):
                         if item["text_id"] not in reached or distance < reached[item["text_id"]][0]:
                             reached[item["text_id"]] = (distance, item)
-            comps.append({"segment_ids": comp["segment_ids"], "too_long": too_long,
+            leaves = any(box_distance(entry["nodes"][node_id]["point"], box) > touch for node_id in comp["node_ids"])
+            comps.append({"segment_ids": comp["segment_ids"], "too_long": too_long, "leaves": leaves,
                           "handles": sorted({entry["segment_handle"][s] for s in comp["segment_ids"]}),
                           "texts": {tid: dict(text_item(item, distance), via="leader", leader_segment_ids=comp["segment_ids"],
                                               leader_handles=sorted({entry["segment_handle"][s] for s in comp["segment_ids"]}))
@@ -926,6 +929,7 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
     for physical_id, candidate in candidates.items():
         per_rule: dict[str, list[dict[str, Any]]] = {}
         notes: list[str] = []
+        conflicts: list[dict[str, Any]] = []
         elsewhere: dict[str, dict[str, Any]] = {}
         for rule in candidate["rules"]:
             cond, rule_id = rule["text_cond"], rule["rule_id"]
@@ -953,6 +957,16 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
                     groups = f" {len(sizes)} 组" if len(sizes) > 1 else ""
                     notes.append(f"{rule_id} 挨着外框的{groups}线{reason}（{'、'.join(map(str, sizes))} 段）")
             if not leaders:
+                # decision 10-17 (checkpoint 1 return 1.2): a line leaving the box that reaches no text (or is cut off
+                # past max_segments) says this candidate's label is elsewhere, so a text in its radius is most likely
+                # another symbol's: unresolved. With no text in the radius it stays "无文字". A short line at the box
+                # that never leaves it is no leader and the radius decides.
+                strays = [comp for comp in comps if comp["leaves"]]
+                if strays and by_radius:
+                    conflicts.append({"problem": "引线未到文字，与半径文字矛盾", "rule_id": rule_id,
+                                      "leader_segment_ids": sorted(s for comp in strays for s in comp["segment_ids"]),
+                                      "leader_handles": sorted({h for comp in strays for h in comp["handles"]}),
+                                      "text_ids": sorted(item["text_id"] for item in by_radius)})
                 per_rule[rule_id] = by_radius                 # no leader: the radius decides, if written
                 continue
             others = sorted(s for comp in comps if not comp["texts"] for s in comp["segment_ids"])
@@ -971,7 +985,7 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
                 if item.get("via") != "leader":
                     radius_claims[item["text_id"]][physical_id].add(rule_id)
         near[physical_id] = {"per_rule": per_rule, "rule_ids": sorted(rule["rule_id"] for rule in candidate["rules"]),
-                             "notes": notes, "elsewhere": [elsewhere[k] for k in sorted(elsewhere)],
+                             "notes": notes, "conflicts": conflicts, "elsewhere": [elsewhere[k] for k in sorted(elsewhere)],
                              "leader": any(rule["text_cond"]["leader"] for rule in candidate["rules"]),
                              "radius": any(rule["text_cond"]["radius"] is not None for rule in candidate["rules"])}
 
@@ -1000,6 +1014,11 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
                                     "shared_with": sorted(rivals),
                                     "leader_problems": [{"problem": "引线端点落在两只候选之间，分不清" if one_line else "两条引线到同一段文字",
                                                          "text_ids": contested, "leader_segment_ids": sorted(mine)}],
+                                    "leader": item["leader"], "radius": item["radius"], **extra}
+            continue
+        if item["conflicts"]:
+            binding[physical_id] = {"status": LEADER_UNRESOLVED, "rule_ids": item["rule_ids"], "ok": [], "texts": listed,
+                                    "shared_with": [], "leader_problems": item["conflicts"],
                                     "leader": item["leader"], "radius": item["radius"], **extra}
             continue
         shared = sorted(text_id for text_id in found if found[text_id].get("via") != "leader" and len(radius_claims[text_id]) > 1)
@@ -1043,6 +1062,8 @@ def side_text_basis(side: dict[str, Any]) -> str:
         return f"旁注多段文字：有 {len(side['texts'])} 段符合条件的文字 {texts}，不按远近硬绑"
     if side["status"] == LEADER_UNRESOLVED:
         reasons = "；".join(p["problem"] for p in side["leader_problems"])
+        if not side["shared_with"]:                   # this candidate's own line left its box: the texts are its radius'
+            return f"引线未决：{reasons}" + (f"（半径内的文字 {texts}）" if texts else "") + "，不按半径硬绑"
         return (f"引线未决：{reasons}" + (f"（引线到的文字 {texts}，另有 {len(side['shared_with'])} 只候选的引线也到）" if texts else "")
                 + "，不按远近硬绑")
     why = "".join(f"；{note}" for note in side.get("leader_notes") or ())

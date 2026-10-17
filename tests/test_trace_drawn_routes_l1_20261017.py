@@ -13,6 +13,9 @@
 - 走线和箱在楼层块内（实例号 PT-CAD-<顶层>/FLOOR/CAD-<块内>）；单位换算（输出米）；
 - 范围边上的段 → 待办（不能整段计入）；两条等长路径 → 待办；只给起点 → 输出连通分量；
 - 输出的 paths 行可直接交给 calculate_electrical_paths；映射线表按原图坐标列每段和每个缺口。
+- T 接（检查点二答复第 1 条）：每个用到的 T 接列干线、支线句柄、位置和干线走过的 fraction_range。写了回路标注
+  模式时，路线按 T 接分成几截，每段标注文字只归离它最近的那截（半径内）；相邻两截有标注的没有共同标注 →
+  复核“T接两侧回路标注不同”（中间隔着没标注的截也比）；没写模式 → 复核“T接未核回路标注”，不静默连。
 """
 import csv
 import json
@@ -200,7 +203,8 @@ def test_a_branch_ending_on_a_trunk_takes_only_the_trunk_part_it_runs(main):
     assert first['fraction_range'] == pytest.approx([0.0, 3700 / 7700])
     assert routes['RT2']['length_m'] == pytest.approx(7.7) and 'fraction_range' not in routes['RT2']['segments'][0]
     for rid, length in (('RA', 5.6), ('RB', 4.6)):      # two parts of one line that do not overlap are not shared
-        assert routes[rid]['length_m'] == pytest.approx(length) and not routes[rid]['review_flags'], rid
+        assert routes[rid]['length_m'] == pytest.approx(length), rid
+        assert [f['flag'] for f in routes[rid]['review_flags']] == ['T接未核回路标注'], rid   # no label pattern given
     rt_lines = [row for row in lines if row['route_id'] == 'RT']
     assert [float(rt_lines[0][k]) for k in ('x1', 'y1', 'x2', 'y2')] == pytest.approx([300, 140000, 4000, 140000])
 
@@ -323,10 +327,132 @@ def test_a_route_over_the_scope_edge_is_not_measured_whole(tmp_path):
 def test_request_is_checked(tmp_path):
     doc = new_doc(); doc.modelspace().add_line((0, 0), (1000, 0), dxfattribs=WIRE); manifest = extract(tmp_path, doc)
     for bad, message in ((dict(route_layers=''), 'route_layers'), (dict(endpoint_tolerance=-1), 'endpoint_tolerance'),
-                         (dict(routes=[{'route_id': 'X', 'from': {}}]), 'from')):
+                         (dict(routes=[{'route_id': 'X', 'from': {}}]), 'from'),
+                         (dict(circuit_label_pattern='WP'), 'circuit_label_radius'),
+                         (dict(circuit_label_radius=0.5), 'circuit_label_pattern'),
+                         (dict(circuit_label_pattern='WP', circuit_label_radius=-1), 'circuit_label_radius')):
         request = {'schema': 'qto-drawn-route-request/1.0', 'unit': {'factor_to_output': 0.001, 'source_id': 'U'},
                    'route_layers': 'W', 'endpoint_tolerance': 0.3, 'routes': [{'route_id': 'X', 'from': {'point': [0, 0]}}]}
         request.update(bad)
         rp = tmp_path / 'bad.json'; rp.write_text(json.dumps(request), encoding='utf-8')
         done = run(ROUTES / 'trace_drawn_routes.py', '--cad-manifest', manifest, '--request', rp, '--output-dir', tmp_path / 'o')
         assert done.returncode == 2 and message in done.stdout, (bad, done.stdout)
+
+
+def t_case(msp, y0, labels, second_branch=False):
+    """Box -> trunk 7.7 m; a branch off its middle at x = 4 m to a device."""
+    h = {'A': ins(msp, 'BOX', 0, y0)}
+    h['TK'] = msp.add_line((300, y0), (8000, y0), dxfattribs=WIRE).dxf.handle
+    if second_branch:                                   # a vertical branch, and a second branch off its middle
+        h['B1'] = msp.add_line((4000, y0), (4000, y0 + 3000), dxfattribs=WIRE).dxf.handle
+        h['B2'] = msp.add_line((4000, y0 + 1500), (5900, y0 + 1500), dxfattribs=WIRE).dxf.handle
+        h['D'] = ins(msp, 'DEV', 6000, y0 + 1500)
+    else:
+        h['B1'] = msp.add_lwpolyline([(4000, y0), (4000, y0 + 2000), (5900, y0 + 2000)], dxfattribs=WIRE).dxf.handle
+        h['D'] = ins(msp, 'DEV', 6000, y0 + 2000)
+    for words, layer, x, dy in labels:
+        msp.add_text(words, dxfattribs={'insert': (x, y0 + dy), 'layer': layer, 'height': 250})
+    return h
+
+
+T_CASES = {
+    # WP1 0.25 m off the trunk and 0.27 m off the branch: it is the trunk's (nearest) label; WP3 is 0.7 m off,
+    # 照明 does not match, WP9 is on another layer
+    'DIFF': (0, [('WP1', 'E-TEXT', 3900, -250), ('WP2', 'E-TEXT', 4300, 1000), ('WP3', 'E-TEXT', 4700, 1000),
+                 ('照明', 'E-TEXT', 4200, 1200), ('WP9', 'DIM-其他', 3700, 1000)], False),
+    'SAME': (10000, [('WP1', 'E-TEXT', 2000, 300), ('WP1-BV-3x2.5', 'E-TEXT', 4300, 1000)], False),
+    'ONE': (20000, [('WP1', 'E-TEXT', 2000, 300)], False),
+    'TWO': (30000, [('WP1', 'E-TEXT', 2000, 300), ('WP2', 'E-TEXT', 5000, 1800)], True),   # unlabelled middle part
+}
+LABELS = dict(circuit_label_pattern=r'WP\d+', circuit_label_layers='^E-TEXT$', circuit_label_radius=0.5)
+
+
+@pytest.fixture(scope='module')
+def tees(tmp_path_factory):
+    tmp = tmp_path_factory.mktemp('l1tees')
+    doc = new_doc(); doc.layers.add('E-TEXT'); doc.layers.add('DIM-其他'); msp = doc.modelspace()
+    h = {name: t_case(msp, y0, labels, two) for name, (y0, labels, two) in T_CASES.items()}
+    n_box, n_dev = ins(msp, 'BOX', 0, 40000), ins(msp, 'DEV', 6000, 40000)           # a route with no T junction
+    msp.add_line((300, 40000), (5900, 40000), dxfattribs=WIRE)
+    msp.add_text('WP5', dxfattribs={'insert': (2000, 40300), 'layer': 'E-TEXT', 'height': 250})
+    manifest = extract(tmp, doc)
+    routes = [{'route_id': name, 'from': inst(h[name]['A']), 'to': inst(h[name]['D'])} for name in T_CASES]
+    routes.append({'route_id': 'N', 'from': inst(n_box), 'to': inst(n_dev)})
+    (tmp / 'with').mkdir(); (tmp / 'without').mkdir()
+    with_labels = trace(tmp / 'with', manifest, routes, **LABELS)
+    without = trace(tmp / 'without', manifest, routes)
+    return h, with_labels, without
+
+
+def test_each_t_junction_lists_both_lines_the_point_and_the_trunk_part_run(tees):
+    h, (code, result, paths, lines, todo), _ = tees
+    routes = {r['route_id']: r for r in result['routes']}
+    diff = routes['DIFF']
+    assert diff['status'] == '已追踪' and diff['length_m'] == pytest.approx(7.6)
+    (t,) = diff['t_junctions']
+    assert (t['on_handle'], t['free_end_handle']) == (h['DIFF']['TK'], h['DIFF']['B1'])
+    assert t['point'] == pytest.approx([4.0, 0.0]) and t['fraction'] == pytest.approx(3700 / 7700)
+    assert t['on_walked_fraction_range'] == pytest.approx([0.0, 3700 / 7700])
+    two = routes['TWO']
+    assert two['length_m'] == pytest.approx(7.1)
+    assert [(x['on_handle'], x['free_end_handle']) for x in two['t_junctions']] == [
+        (h['TWO']['TK'], h['TWO']['B1']), (h['TWO']['B1'], h['TWO']['B2'])]
+    assert two['t_junctions'][1]['on_walked_fraction_range'] == pytest.approx([0.0, 0.5])
+    assert result['parameters']['circuit_label_radius_m'] == 0.5
+
+
+def test_different_circuit_labels_on_the_two_sides_of_a_t_are_flagged(tees):
+    h, (code, result, paths, lines, todo), _ = tees
+    routes = {r['route_id']: r for r in result['routes']}
+    flags = lambda rid: [f['flag'] for f in routes[rid]['review_flags']]   # noqa: E731
+    diff = routes['DIFF']
+    (t,) = diff['t_junctions']
+    assert (t['circuit_labels_before'], t['circuit_labels_after']) == (['WP1'], ['WP2'])   # nearest part, radius, layer
+    assert flags('DIFF') == ['T接两侧回路标注不同']
+    (change,) = diff['review_flags'][0]['changes']
+    assert (change['labels_before'], change['labels_after']) == (['WP1'], ['WP2'])
+    assert change['t_on_handles'] == [h['DIFF']['TK']]
+    same = routes['SAME']['t_junctions'][0]                    # 'WP1-BV-3x2.5' is labelled WP1 by the pattern
+    assert (same['circuit_labels_before'], same['circuit_labels_after']) == (['WP1'], ['WP1']) and not flags('SAME')
+    assert routes['ONE']['t_junctions'][0]['circuit_labels_after'] == [] and not flags('ONE')   # one side unknown
+    assert flags('TWO') == ['T接两侧回路标注不同']               # WP1 ... (no label) ... WP2
+    (change,) = routes['TWO']['review_flags'][0]['changes']
+    assert change['t_on_handles'] == [h['TWO']['TK'], h['TWO']['B1']]
+    assert not flags('N') and not routes['N']['t_junctions']
+    assert {(row['route_id'], row['problem']) for row in todo} == {('DIFF', 'T接两侧回路标注不同'), ('TWO', 'T接两侧回路标注不同')}
+    assert next(p for p in paths['paths'] if p['route_id'] == 'DIFF')['review_flags'] == ['T接两侧回路标注不同']
+
+
+def test_without_a_label_pattern_every_route_through_a_t_is_flagged_unchecked(tees):
+    h, _, (code, result, paths, lines, todo) = tees
+    routes = {r['route_id']: r for r in result['routes']}
+    for rid in T_CASES:
+        assert [f['flag'] for f in routes[rid]['review_flags']] == ['T接未核回路标注'], rid
+        assert 'circuit_labels_before' not in routes[rid]['t_junctions'][0], rid
+    assert routes['TWO']['review_flags'][0]['t_count'] == 2
+    assert not routes['N']['review_flags'] and result['parameters']['circuit_label_pattern'] is None
+
+
+def test_labels_are_read_in_scope_and_inside_the_walked_blocks(tmp_path):
+    doc = new_doc(); doc.layers.add('E-TEXT'); msp = doc.modelspace()
+    # WP2 lies 0.3 m off the branch but beyond the scope edge (y >= 2.15 m): not read, so no change of label is seen
+    s = t_case(msp, 0, [('WP1', 'E-TEXT', 2000, 300), ('WP2', 'E-TEXT', 5000, 2300)])
+    floor = doc.blocks.new('FLOOR')                     # the same circuit inside a floor block placed at (0, 50 m)
+    f = t_case(floor, 0, [('WP1', 'E-TEXT', 2000, 300), ('WP2', 'E-TEXT', 4300, 1000)])
+    top = ins(msp, 'FLOOR', 0, 50000)
+    manifest = extract(tmp_path, doc)
+    (tmp_path / 's').mkdir(); (tmp_path / 'f').mkdir()
+    scope = {'bounds': {'xmin': -1000, 'xmax_exclusive': 8001, 'ymin': -1000, 'ymax_exclusive': 2150}}
+    _, result, *_ = trace(tmp_path / 's', manifest, [{'route_id': 'S', 'from': inst(s['A']), 'to': inst(s['D'])}],
+                          scope=scope, **LABELS)
+    route = result['routes'][0]
+    assert route['status'] == '已追踪' and route['length_m'] == pytest.approx(7.6)
+    assert route['t_junctions'][0]['circuit_labels_after'] == [] and not route['review_flags']
+    _, result, *_ = trace(tmp_path / 'f', manifest, [{'route_id': 'F', 'from': inst(f"{top}/FLOOR/CAD-{f['A']}"),
+                                                       'to': inst(f"{top}/FLOOR/CAD-{f['D']}")}], **LABELS)
+    route = result['routes'][0]
+    assert route['status'] == '已追踪' and route['length_m'] == pytest.approx(7.6)
+    t = route['t_junctions'][0]
+    assert (t['circuit_labels_before'], t['circuit_labels_after']) == (['WP1'], ['WP2'])
+    assert [x['flag'] for x in route['review_flags']] == ['T接两侧回路标注不同']
+    assert route['circuit_labels_by_part'][1][0]['handle'].startswith(f"CAD-{top}/FLOOR/")
