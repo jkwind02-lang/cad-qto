@@ -57,7 +57,7 @@ EXCLUSION_KEYS = ("drawing", "handle", "basis")
 TOP_FIELDS = {"schema_version", "scope_id", "drawings", "count_tables", "handle_exclusions", "sheets", "legend_coverage",
               "version_conflicts", "excluded_classes", "auto_exclude_sheet_kinds", "detail_copy_sheets", "search_records",
               "frame_blocks", "frame_dispositions"}
-FRAME_DISPOSITIONS = ("封面", "目录", "空白", "已补进图页表", "其他")
+FRAME_DISPOSITIONS = ("封面", "目录", "空白", "说明或图例", "旧版副本", "非本专业底图", "已补进图页表", "其他")
 FRAME_TODO_COLUMNS = ("todo_id", "drawing", "kind", "id", "handle", "block_name", "insert_x", "insert_y", "x1", "y1", "x2", "y2",
                       "placement_basis", "hint")
 HANDLE_RE = re.compile(r'"entity_handle":\s*"([^"]*)"')

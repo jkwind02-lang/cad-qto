@@ -10,7 +10,8 @@
   图框中心在图页上、重合只有四分之一 → 不报；图页框比图框大一圈、伸进相邻图框 200 → 相邻图框照报；A0 图框里嵌着的图签（展开后的子候选）随外框，不单核，单列个数；
   只有填充、定不出范围的图框，插入点不在任何图页里 → 报 frame_extent_unknown，记“没核”，不算漏页；
 - 报出的每个图框（可能漏页、定不出范围、整图没有图页表）逐条进 frame_todo 和 图框待办.csv（FR- 编号、图号、句柄、块名、
-  插入点、范围）；frame_dispositions 按句柄（大小写不论）或编号写处置（封面、目录、空白、已补进图页表、其他，basis 必填），
+  插入点、范围）；frame_dispositions 按句柄（大小写不论）或编号写处置（封面、目录、空白、说明或图例、旧版副本、非本专业底图、
+  已补进图页表、其他，basis 必填；中间三个取自电气逐框核图的处置表），
   写了的不再报、单列 disposed；没对上任何报出图框的处置 → frame_dispositions_unused；坏处置 → C-5；
 - 整张图没有图页表：整图报 frames_without_sheet_table；frame_blocks 写块名正则，或引用 excluded_classes 的规则号，
   引用的规则号不存在 → 输入问题；没写 frame_blocks 时不核，结论写明没核；
@@ -178,6 +179,15 @@ def test_every_reported_frame_is_a_to_do_row_until_the_project_writes_its_dispos
     assert 'frame_outside_sheet_table' not in after['warnings'] and 'frame_extent_unknown' not in after['warnings']
     (unused,) = after['warnings']['frame_dispositions_unused']
     assert unused['frame'] == 'FFFF' and unused['where'] == 'frame_dispositions[2]'
+
+
+@pytest.mark.parametrize('value', ['说明或图例', '旧版副本', '非本专业底图'])
+def test_frame_disposition_values_found_by_the_electrical_check(drawing2, tmp_path, value):
+    h = drawing2['h']
+    given = [{'drawing': 'D1', 'handle': h['F_NEXT'], 'disposition': value, 'basis': '电气逐框核图'}]
+    _, report, _ = ledger(drawing2, tmp_path, expand=('A0',), frame_blocks=[{'block_pattern': '^(A0|A1|A2|TB)$'}],
+                          frame_dispositions=given)
+    assert [(d['handle'], d['disposition']) for d in report['frame_coverage']['disposed']] == [(h['F_NEXT'].upper(), value)]
 
 
 @pytest.mark.parametrize('items, frames, message', [
