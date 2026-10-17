@@ -31,7 +31,7 @@ import qto_cad_geometry as cad_geometry  # noqa: E402
 import qto_segment_graph as segment_graph  # noqa: E402
 from qto_spatial import BoundsIndex  # noqa: E402
 
-VERSION = "qto-drawn-route-tracer/1.2.0"
+VERSION = "qto-drawn-route-tracer/1.3.0"
 REQUEST_SCHEMA = "qto-drawn-route-request/1.0"
 RESULT_SCHEMA = "qto-drawn-route-trace/1.0"
 PATHS_SCHEMA = "qto-drawn-route-paths/1.0"
@@ -40,6 +40,7 @@ LAYER_RESULT_SCHEMA = "qto-layer-length/1.0"
 LEGEND_SHEET_KIND = "图例"
 EXCLUDABLE_SHEET_KINDS = (LEGEND_SHEET_KIND, "系统图")
 UNSHEETED, UNREGIONED = "图页未定", "区域未定"
+OVERLAP_ACTIONS = ("drop_overlap", "keep_both", "pending")
 IDENTITY = (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
 DYNAMIC_STATE_CODES = cad_geometry.DYNAMIC_STATE_CODES
 END_NAME = {"from": "起点", "to": "终点"}
@@ -184,16 +185,54 @@ def parse_common(request: dict[str, Any], schema: str) -> dict[str, Any]:
     t_junctions = request.get("t_junctions", True)
     if not isinstance(t_junctions, bool):
         fail("t_junctions 须为 true 或 false")
+    snap = tolerance(request, "snap_tolerance", 0.005)
     return {
         "layout": text(request.get("layout", "Model"), "layout"), "factor": factor,
         "unit_source_id": text(unit.get("source_id"), "unit.source_id"), "bounds": bounds,
         "route_re": pattern(request.get("route_layers"), "route_layers"),
         "expand": set(expand), "max_depth": max_depth, "t_junctions": t_junctions,
-        "snap": tolerance(request, "snap_tolerance", 0.005), "gap": tolerance(request, "gap_tolerance", 0.0),
+        "snap": snap, "gap": tolerance(request, "gap_tolerance", 0.0),
         "gap_angle_deg": tolerance(request, "gap_angle_deg", 10.0),
         "drawing_id": str(request.get("drawing_id") or "").strip(),
         "label_re": None, "label_layer_re": None, "label_radius": None,
+        "overlaps": parse_overlaps(request, snap),
     }
+
+
+def parse_overlaps(request: dict[str, Any], snap: float) -> dict[str, Any]:
+    """L4: collinear overlap check (always on) and the project's one disposition per candidate pair."""
+    raw = request.get("overlaps") or {}
+    if not isinstance(raw, dict):
+        fail("overlaps 必须是对象")
+    angle = tolerance(raw, "angle_tolerance_deg", 0.5)
+    distance = tolerance(raw, "distance_tolerance", snap)
+    minimum = tolerance(raw, "min_overlap", 0.01)
+    groups = raw.get("layer_groups") or []
+    if not isinstance(groups, list):
+        fail("overlaps.layer_groups 须为图层正则数组（同一导体身份的几个图层写成一个正则）")
+    resolutions, seen = [], set()
+    items = request.get("overlap_resolutions") or []
+    if not isinstance(items, list):
+        fail("overlap_resolutions 须为数组")
+    for index, item in enumerate(items):
+        where = f"overlap_resolutions[{index}]"
+        ids = item.get("segment_ids") if isinstance(item, dict) else None
+        if not isinstance(ids, list) or len(ids) != 2 or len({str(x) for x in ids}) != 2:
+            fail(f"{where}.segment_ids 须为两个不同的段号（取自重合候选表）")
+        pair = tuple(sorted(str(x) for x in ids))
+        if pair in seen:
+            fail(f"{where}：段对 {pair[0]}、{pair[1]} 已有一条处置，一组只许一条")
+        seen.add(pair)
+        action = item.get("action")
+        if action not in OVERLAP_ACTIONS:
+            fail(f"{where}.action 只能是 " + "、".join(OVERLAP_ACTIONS))
+        drop = str(item.get("drop") or "")
+        if action == "drop_overlap" and drop not in pair:
+            fail(f"{where}.drop 须为这一对里要扣掉重合区间的那一段")
+        resolutions.append({"pair": pair, "action": action, "drop": drop if action == "drop_overlap" else None,
+                            "basis": text(item.get("basis"), f"{where}.basis")})
+    return {"angle_deg": angle, "distance": distance, "min": minimum, "resolutions": resolutions,
+            "groups": [pattern(g, f"overlaps.layer_groups[{i}]") for i, g in enumerate(groups)]}
 
 
 def parse_request(request: dict[str, Any]) -> dict[str, Any]:
@@ -408,10 +447,19 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
     got = segment_graph.collect_segments(rows, drawing.definitions, drawing.origins, layer_pattern=req["route_re"],
                                          expand_blocks=sorted(expand), scope=req["bounds"], max_depth=req["max_depth"])
     flat, got["plan"] = flatten_elevations(got["segments"], f, req["snap"] / f)
+    # L4: a segment the project drops whose whole length lies on its partner is left out of the graph; a partial drop
+    # stays and only the part a route walks on both lines is taken off that route
+    ov_found, ov_apart = find_overlaps(flat, req)
+    ov_cut = resolve_overlaps(ov_found, ov_apart, req)
+    reach = req["overlaps"]["distance"] / f
+    left_out = {s["segment_id"] for s in flat if s["segment_id"] in ov_cut
+                and (1.0 - union_length(ov_cut[s["segment_id"]])) * s["length"] <= reach}
+    flat = [s for s in flat if s["segment_id"] not in left_out]
     graph = segment_graph.build_graph(flat, snap_tolerance=req["snap"] / f, gap_tolerance=req["gap"] / f,
                                       gap_angle_deg=req["gap_angle_deg"])
     segs = {s["segment_id"]: s for s in graph["segments"]}
     point_of = {n["node_id"]: n["point"] for n in graph["nodes"]}
+    ov_walk = [r for r in ov_found if not set(r["segment_ids"]) & left_out and r["status"] in ("已扣重合", "未处置", "暂缓")]
 
     # A free end lying on the middle of another straight line (an L0 T contact) is a branch of the drawn run
     # (electrical rule; request t_junctions, default on): that line is cut there and only the part run is counted.
@@ -774,10 +822,27 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         if slopes:
             out["review_flags"].append({"flag": "斜线按平面投影计长", "handles": [x["handle"] for x in slopes],
                                         "length_3d_minus_plan_m": math.fsum(x["length_3d_m"] - x["length_plan_m"] for x in slopes)})
-        drawn =math.fsum(p["length_m"] for p in pieces if p["kind"] == "segment")
+        walked: dict[str, list[tuple[float, float]]] = defaultdict(list)
+        for p in pieces:
+            if p["kind"] == "segment":
+                walked[p["segment_id"]].append(p["_range"])
+        twice = [{"group_id": r["group_id"], "segment_ids": r["segment_ids"], "status": r["status"],
+                  "walked_twice_m": walked_overlap(segs[r["segment_ids"][0]], segs[r["segment_ids"][1]],
+                                                   walked[r["segment_ids"][0]], walked[r["segment_ids"][1]]) * f}
+                 for r in ov_walk if all(x in walked for x in r["segment_ids"])]
+        twice = [x for x in twice if x["walked_twice_m"] > 1e-9]
+        taken = math.fsum(x["walked_twice_m"] for x in twice if x["status"] == "已扣重合")
+        if any(x["status"] != "已扣重合" for x in twice):
+            open_twice = [x for x in twice if x["status"] != "已扣重合"]
+            out["review_flags"].append({"flag": "经过未处置的共线重合", "group_ids": [x["group_id"] for x in open_twice],
+                                        "walked_twice_m": math.fsum(x["walked_twice_m"] for x in open_twice),
+                                        "detail": "路线在同层共线重合处两段都走过，重合部分计了两次：核图后写 overlap_resolutions"})
+        drawn = math.fsum(p["length_m"] for p in pieces if p["kind"] == "segment") - taken
         gaps = math.fsum(p["length_m"] for p in pieces if p["kind"] == "gap")
         clean = lambda p: {k: v for k, v in p.items() if not k.startswith("drawing_") and not k.startswith("_")}   # noqa: E731
-        out.update(status="已追踪", path_id=f"DRAWN-{rid}", drawn_length_m=drawn, bridged_gap_length_m=gaps,
+        if twice:
+            out["overlaps_walked_twice"] = twice
+        out.update(status="已追踪", path_id=f"DRAWN-{rid}", drawn_length_m=drawn, bridged_gap_length_m=gaps, overlap_deducted_m=taken,
                    length_m=drawn + gaps, segments=[clean(p) for p in pieces if p["kind"] == "segment"],
                    bridged_gaps=[clean(p) for p in pieces if p["kind"] == "gap"],
                    t_junctions=[clean(p) for p in pieces if p["kind"] == "t"], _pieces=pieces)
@@ -811,9 +876,25 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                           "partial_segments": [{"segment_id": s["segment_id"], "fraction_range": s["fraction_range"]}
                                                for s in out["segments"] if "fraction_range" in s],
                           "review_flags": [flag["flag"] for flag in out["review_flags"]]})
+    overlaps, overlap_warnings = overlap_outputs(ov_found, ov_apart)
+    overlaps["left_out_of_graph"] = sorted(left_out)
     return {"graph": graph, "collected": got, "routes": results, "paths": paths, "shared": shared, "box_count": len(box_list),
             "expanded": sorted(expand), "t_junctions_used": len(used_t), "t_contacts_hint_only": len(hint_t),
-            "label_texts": len(label_items)}
+            "label_texts": len(label_items), "overlaps": overlaps, "overlap_warnings": overlap_warnings}
+
+
+def walked_overlap(a: dict[str, Any], b: dict[str, Any], on_a: list[tuple[float, float]], on_b: list[tuple[float, float]]) -> float:
+    """Length (drawing units) a route walks on both of two collinear lines: its walked fraction ranges, measured along a."""
+    a0, a1 = a["start"][:2], a["end"][:2]
+    la = math.dist(a0, a1)
+    ua = [(a1[0] - a0[0]) / la, (a1[1] - a0[1]) / la]
+    b0, b1 = b["start"][:2], b["end"][:2]
+
+    def along(t: float) -> float:
+        return (b0[0] + t * (b1[0] - b0[0]) - a0[0]) * ua[0] + (b0[1] + t * (b1[1] - b0[1]) - a0[1]) * ua[1]
+    first = [(lo * la, hi * la) for lo, hi in on_a]
+    second = [tuple(sorted((along(lo), along(hi)))) for lo, hi in on_b]
+    return math.fsum(max(0.0, min(x1, y1) - max(x0, y0)) for x0, x1 in first for y0, y1 in second)
 
 
 def flatten_elevations(segments: list[dict[str, Any]], factor: float, flat_tolerance: float) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -831,11 +912,12 @@ def flatten_elevations(segments: list[dict[str, Any]], factor: float, flat_toler
             continue
         zs = [s["start"][2], s["end"][2]] + ([] if part["kind"] == "line" else [part["center"][2]])
         if all(z == 0.0 for z in zs):
-            out.append(s)
+            out.append({**s, "plan_z": (0.0, 0.0)})
             continue
         part = {**part, **{k: [*part[k][:2], 0.0] for k in ("start", "end", "center") if k in part}}
         b = s["bbox3d"]
-        row = {**s, "start": [*s["start"][:2], 0.0], "end": [*s["end"][:2], 0.0], "part": part, "bbox3d": [b[0], b[1], 0.0, b[3], b[4], 0.0]}
+        row = {**s, "start": [*s["start"][:2], 0.0], "end": [*s["end"][:2], 0.0], "part": part, "bbox3d": [b[0], b[1], 0.0, b[3], b[4], 0.0],
+               "plan_z": (min(zs), max(zs))}
         if part["kind"] == "line" and max(zs) - min(zs) > max(flat_tolerance, 1e-9):
             row["length"] = math.dist(row["start"][:2], row["end"][:2])
             sloped.append({"segment_id": s["segment_id"], "handle": s["handle"], "z_start": s["start"][2], "z_end": s["end"][2],
@@ -856,6 +938,109 @@ def plan_warnings(record: dict[str, Any]) -> list[dict[str, Any]]:
         rows.append({"warning": "arcs_out_of_plan_kept", "count": len(record["tilted_arcs_kept"]),
                      "detail": "不在水平面里的弧按原几何计长、不参与平面并点，核对图纸"})
     return rows
+
+
+def find_overlaps(segments: list[dict[str, Any]], req: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Fifth batch L4: pairs of straight segments on one layer (or one declared layer group) lying on one line in plan
+    and sharing an interval longer than min_overlap - a local redraw (D022 0.8 m) or a whole copy. Both must sit flat at
+    one original elevation; a pair at different or sloped z is listed apart and never merged. Only candidates: nothing
+    is taken off until the project writes a disposition for the pair."""
+    cfg, f = req["overlaps"], req["factor"]
+    tol, least, flat_tol = cfg["distance"] / f, cfg["min"] / f, max(req["snap"] / f, 1e-9)
+    cos_tol = math.cos(math.radians(cfg["angle_deg"]))
+
+    def group(layer: str) -> str:
+        return next((f"layer_groups[{i}]" for i, rx in enumerate(cfg["groups"]) if rx.search(layer)), layer)
+
+    def along(p: list[float], o: list[float], u: list[float]) -> float:
+        return (p[0] - o[0]) * u[0] + (p[1] - o[1]) * u[1]
+
+    def across(p: list[float], o: list[float], u: list[float]) -> float:
+        return abs((p[0] - o[0]) * u[1] - (p[1] - o[1]) * u[0])
+    lines = [s for s in segments if s["kind"] == "line" and s.get("plan_z") is not None and math.dist(s["start"][:2], s["end"][:2]) > 0]
+    index = BoundsIndex([(s["segment_id"], [min(s["start"][0], s["end"][0]) - tol, min(s["start"][1], s["end"][1]) - tol,
+                                            max(s["start"][0], s["end"][0]) + tol, max(s["start"][1], s["end"][1]) + tol]) for s in lines])
+    by_id = {s["segment_id"]: s for s in lines}
+    found, apart = [], []
+    for a in lines:
+        a0, a1 = a["start"][:2], a["end"][:2]
+        la = math.dist(a0, a1)
+        ua = [(a1[0] - a0[0]) / la, (a1[1] - a0[1]) / la]
+        for key in index.query_box(list(index.boxes[a["segment_id"]])):
+            b = by_id[key]
+            if key <= a["segment_id"] or group(a["layer"]) != group(b["layer"]):
+                continue
+            b0, b1 = b["start"][:2], b["end"][:2]
+            lb = math.dist(b0, b1)
+            ub = [(b1[0] - b0[0]) / lb, (b1[1] - b0[1]) / lb]
+            if abs(ua[0] * ub[0] + ua[1] * ub[1]) < cos_tol:
+                continue
+            t = sorted((along(b0, a0, ua), along(b1, a0, ua)))
+            lo, hi = max(0.0, t[0]), min(la, t[1])
+            if hi - lo <= least:
+                continue
+            p_lo, p_hi = [a0[0] + ua[0] * lo, a0[1] + ua[1] * lo], [a0[0] + ua[0] * hi, a0[1] + ua[1] * hi]
+            if max(across(p_lo, b0, ub), across(p_hi, b0, ub)) > tol:     # apart across the shared interval
+                continue
+            on_b = sorted((min(max(along(p_lo, b0, ub), 0.0), lb), min(max(along(p_hi, b0, ub), 0.0), lb)))
+            row = {"segment_ids": [a["segment_id"], b["segment_id"]], "handles": [a["handle"], b["handle"]], "layers": [a["layer"], b["layer"]],
+                   "part_indices": [a["part_index"], b["part_index"]], "lengths_m": [la * f, lb * f], "overlap_m": (hi - lo) * f,
+                   "kind": "整条重复" if hi - lo >= min(la, lb) - tol else "局部重复",
+                   "from_point_m": [p_lo[0] * f, p_lo[1] * f], "to_point_m": [p_hi[0] * f, p_hi[1] * f],
+                   "_spans": {a["segment_id"]: (lo / la, hi / la), b["segment_id"]: (on_b[0] / lb, on_b[1] / lb)}}
+            za, zb = a["plan_z"], b["plan_z"]
+            if za[1] - za[0] > flat_tol or zb[1] - zb[0] > flat_tol or abs(za[0] - zb[0]) > flat_tol:
+                apart.append({**row, "z": [list(za), list(zb)]})
+            else:
+                found.append(row)
+    found.sort(key=lambda r: r["segment_ids"]); apart.sort(key=lambda r: r["segment_ids"])
+    for number, row in enumerate(found, 1):
+        row["group_id"] = f"OV-{number:04d}"
+    return found, apart
+
+
+def union_length(spans: list[tuple[float, float]]) -> float:
+    total, end = 0.0, -math.inf
+    for lo, hi in sorted(spans):
+        if hi > end:
+            total += hi - max(lo, end); end = hi
+    return total
+
+
+def resolve_overlaps(found: list[dict[str, Any]], apart: list[dict[str, Any]], req: dict[str, Any]) -> dict[str, list[tuple[float, float]]]:
+    """Attach the request's one disposition per pair; returns {segment_id: [fraction spans to take off]} for drop_overlap.
+    A pair that is no candidate, or one at different elevations, is refused. Undisposed or pending pairs stay open."""
+    pairs = {tuple(sorted(r["segment_ids"])): r for r in found}
+    apart_pairs = {tuple(sorted(r["segment_ids"])) for r in apart}
+    cut: dict[str, list[tuple[float, float]]] = defaultdict(list)
+    for res in req["overlaps"]["resolutions"]:
+        if res["pair"] in apart_pairs:
+            fail(f"段对 {res['pair'][0]}、{res['pair'][1]} 标高不同，不合并、不能写处置（列在 overlap_z_differs 待核）")
+        if res["pair"] not in pairs:
+            fail(f"段对 {res['pair'][0]}、{res['pair'][1]} 不是本次的共线重合候选（段号取自重合候选表）")
+        row = pairs[res["pair"]]
+        row["resolution"] = {"action": res["action"], "drop": res["drop"], "basis": res["basis"]}
+        if res["action"] == "drop_overlap":
+            cut[res["drop"]].append(row["_spans"][res["drop"]])
+    for row in found:
+        action = (row.get("resolution") or {}).get("action")
+        row["status"] = {"drop_overlap": "已扣重合", "keep_both": "两段都保留", "pending": "暂缓"}.get(action, "未处置")
+    return dict(cut)
+
+
+def overlap_outputs(found: list[dict[str, Any]], apart: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Result section and warnings of the overlap check (both requests)."""
+    clean = lambda r: {k: v for k, v in r.items() if not k.startswith("_")}   # noqa: E731
+    open_rows = [r for r in found if r["status"] in ("未处置", "暂缓")]
+    warnings = []
+    if open_rows:
+        warnings.append({"warning": "collinear_overlaps_open", "count": len(open_rows), "overlap_m": math.fsum(r["overlap_m"] for r in open_rows),
+                         "detail": "同层共线重合的线段对没有处置：逐对核图，写 overlap_resolutions（drop_overlap 扣一段的重合区间，keep_both 两段都留）"})
+    if apart:
+        warnings.append({"warning": "collinear_overlaps_at_different_z", "count": len(apart),
+                         "detail": "平面共线重合但原始标高不同或有斜线：不合并、不能处置，核对是不是不同标高的两路"})
+    return {"candidates": [clean(r) for r in found], "z_differs": [clean(r) for r in apart],
+            "open_count": len(open_rows), "resolved": not open_rows}, warnings
 
 
 def parse_layer_request(request: dict[str, Any], base: Path) -> dict[str, Any]:
@@ -1004,6 +1189,17 @@ def measure_layers(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
             crossing.append({"segment_id": s["segment_id"], "handle": s["handle"], "sheet_ids": sorted(x or UNSHEETED for x in ends),
                              "sheet_id": info["sheet_id"]})
         kept.append(s)
+    # L4: collinear overlaps among the counted lines; a drop_overlap disposition takes the shared interval off the
+    # named segment, which stays in the graph (its ends still join)
+    found, apart = find_overlaps(kept, req)
+    cut = resolve_overlaps(found, apart, req)
+    deducted = 0.0
+    for k, s in enumerate(kept):
+        if s["segment_id"] in cut:
+            take = min(union_length(cut[s["segment_id"]]), 1.0) * s["length"]
+            kept[k] = {**s, "length": s["length"] - take, "overlap_deducted": take}
+            where[s["segment_id"]]["length_m"] = kept[k]["length"] * f
+            deducted += take
     graph = segment_graph.build_graph(kept, snap_tolerance=req["snap"] / f, gap_tolerance=req["gap"] / f,
                                       gap_angle_deg=req["gap_angle_deg"])
     segs = {s["segment_id"]: s for s in graph["segments"]}
@@ -1152,6 +1348,16 @@ def measure_layers(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                              "detail": {"device": inst["physical_id"], **({"box_candidates": boxes} if boxes else {})}})
             feeders.append(row)
 
+    overlaps, overlap_warnings = overlap_outputs(found, apart)
+    for row in [*found, *apart]:
+        comps = ",".join(sorted({comp_of_node[segs[x]["start_node"]] for x in row["segment_ids"]}))
+        detail = {"segment_ids": row["segment_ids"], "handles": row["handles"], "overlap_m": row["overlap_m"], "kind": row["kind"],
+                  "from_point_m": row["from_point_m"], "to_point_m": row["to_point_m"]}
+        if row.get("status") in ("未处置", "暂缓"):
+            todo.append({"component_id": comps, "kind": "待办", "problem": f"共线重合{row['status']}", "detail": {"group_id": row["group_id"], **detail}})
+        elif "z" in row:
+            todo.append({"component_id": comps, "kind": "复核", "problem": "共线重合但标高不同", "detail": {**detail, "z": row["z"]}})
+
     def totals(key: str) -> list[dict[str, Any]]:
         sums: dict[Any, list[float]] = defaultdict(list)
         for s in graph["segments"]:
@@ -1166,7 +1372,7 @@ def measure_layers(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         w = where[s["segment_id"]]
         detail[(w["sheet_id"], w["sheet_kind"] or "", w["region_id"], s["layer"])].append(s["length"] * f)
     class_rows = [{"class": k, "length_m": v} for k, v in sorted(by_class.items(), key=lambda kv: str(kv[0]))]
-    warnings = plan_warnings(got["plan"])
+    warnings = plan_warnings(got["plan"]) + overlap_warnings
     unsheeted = [s["segment_id"] for s in graph["segments"] if where[s["segment_id"]]["sheet_id"] == UNSHEETED]
     if unsheeted:
         warnings.append({"warning": "segments_on_no_sheet", "count": len(unsheeted), "length_m": math.fsum(where[x]["length_m"] for x in unsheeted),
@@ -1174,14 +1380,15 @@ def measure_layers(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
     return {
         "graph": graph, "collected": got, "components": components, "excluded": excluded, "crossing": crossing, "todo": todo,
         "feeders": feeders, "l1_routes": l1_routes, "warnings": warnings, "where": where, "comp_of_node": comp_of_node,
-        "graph_points": point_of,
+        "graph_points": point_of, "overlaps": overlaps,
         "totals": {"by_sheet": by_sheet, "by_region": totals("region_id"), "by_layer": totals("layer"), "by_class": class_rows,
                    "detail": [{"sheet_id": k[0], "sheet_kind": k[1], "region_id": k[2], "layer": k[3], "length_m": math.fsum(v),
                                "segment_count": len(v)} for k, v in sorted(detail.items())],
                    "counted_m": math.fsum(s["length"] for s in graph["segments"]) * f,
                    "bridged_gap_m": math.fsum(g["length"] for g in graph["gap_bridged"]) * f,
-                   "excluded_m": math.fsum(x["length_m"] for x in excluded)},
-        "checks": {"class_total_equals_sheet_total": abs(math.fsum(by_class.values()) - math.fsum(r["length_m"] for r in by_sheet)) < 1e-6},
+                   "excluded_m": math.fsum(x["length_m"] for x in excluded), "overlap_deducted_m": deducted * f},
+        "checks": {"class_total_equals_sheet_total": abs(math.fsum(by_class.values()) - math.fsum(r["length_m"] for r in by_sheet)) < 1e-6,
+                   "overlaps_resolved": overlaps["resolved"]},
     }
 
 
@@ -1205,15 +1412,16 @@ def write_layer_outputs(args: argparse.Namespace, drawing: Drawing, req: dict[st
                            "classes": [{"class": c["class"], "rule_ids": sorted(c["rule_ids"]), "source": c["source"],
                                         "block_pattern": c["block_re"].pattern if c["block_re"] else None} for c in ends_cfg["classes"]],
                            "building_marker_layers": ends_cfg["marker_re"].pattern if ends_cfg["marker_re"] else None},
-                       "feeders": sorted(req["feeders"]["device_classes"]) if req["feeders"] else None},
+                       "feeders": sorted(req["feeders"]["device_classes"]) if req["feeders"] else None,
+                       "overlaps": overlap_parameters(req)},
         "graph": {"counts": done["graph"]["counts"], "degenerate_parts": done["collected"]["degenerate_parts"],
                   "geometry_problems": done["collected"]["geometry_problems"], "unsupported": done["collected"]["unsupported"],
                   "out_of_scope_parts": done["collected"]["out_of_scope_parts"], "ambiguous_gaps": done["graph"]["ambiguous_gaps"],
                   "refused_snaps": done["graph"]["refused_snaps"], **done["collected"]["plan"]},
         "totals": done["totals"], "checks": done["checks"], "warnings": done["warnings"], "components": done["components"],
         "excluded_segments": [clean(x) for x in done["excluded"]], "segments_crossing_sheets": done["crossing"],
-        "feeders": done["feeders"], "l1_routes": done["l1_routes"], "todo": done["todo"],
-        "meaning": "按图层量出的平面线长（只计画出的线，桥接缺口另列）；分量两端按项目给的半径和类别映射归类，"
+        "feeders": done["feeders"], "l1_routes": done["l1_routes"], "overlaps": done["overlaps"], "todo": done["todo"],
+        "meaning": "按图层量出的平面线长（只计画出的线，桥接缺口另列；共线重合只扣项目处置为 drop_overlap 的区间）；分量两端按项目给的半径和类别映射归类，"
                    "不按长度分摊，未决、未连单列；归箱只按画出的连线，与系统图回路对账另做",
     }
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -1239,10 +1447,29 @@ def write_layer_outputs(args: argparse.Namespace, drawing: Drawing, req: dict[st
         lines.append(["", "excluded", x["segment_id"], x["handle"], x["layer"], x["sheet_id"], *x["drawing_from"], *x["drawing_to"], x["length_m"]])
     write_csv(args.output_dir / "按图层量长映射线.csv",
               ["component_id", "kind", "segment_id", "handle", "layer", "sheet_id", "x1", "y1", "x2", "y2", "length_m"], lines)
+    write_overlap_csv(args.output_dir / "按图层量长共线重合.csv", done["overlaps"])
     print(json.dumps({"status": result["status"], "components": len(done["components"]), "counted_m": done["totals"]["counted_m"],
                       "excluded_m": done["totals"]["excluded_m"], "todo": len(done["todo"]), "output_dir": str(args.output_dir)},
                      ensure_ascii=False))
     return 3 if review else 0
+
+
+def overlap_parameters(req: dict[str, Any]) -> dict[str, Any]:
+    cfg = req["overlaps"]
+    return {"angle_tolerance_deg": cfg["angle_deg"], "distance_tolerance_m": cfg["distance"], "min_overlap_m": cfg["min"],
+            "layer_groups": [g.pattern for g in cfg["groups"]], "resolutions": len(cfg["resolutions"])}
+
+
+def write_overlap_csv(path: Path, overlaps: dict[str, Any]) -> None:
+    """One row per candidate pair (group_id is what a disposition refers to by its two segment ids) and per pair at different z."""
+    rows = []
+    for r in [*overlaps["candidates"], *overlaps["z_differs"]]:
+        res = r.get("resolution") or {}
+        rows.append([r.get("group_id", ""), r.get("status", "标高不同"), r["kind"], *r["segment_ids"], *r["handles"], "、".join(dict.fromkeys(r["layers"])),
+                     r["overlap_m"], *r["lengths_m"], *r["from_point_m"], *r["to_point_m"], res.get("action", ""), res.get("drop") or "", res.get("basis", ""),
+                     json.dumps(r["z"]) if "z" in r else ""])
+    write_csv(path, ["group_id", "status", "kind", "segment_id_a", "segment_id_b", "handle_a", "handle_b", "layers", "overlap_m",
+                     "length_a_m", "length_b_m", "x1", "y1", "x2", "y2", "action", "drop", "basis", "z"], rows)
 
 
 def write_csv(path: Path, header: list[str], rows: list[list[Any]]) -> None:
@@ -1284,14 +1511,15 @@ def main() -> int:
                            "t_contacts_hint_only": traced["t_contacts_hint_only"],
                            "circuit_label_pattern": req["label_re"].pattern if req["label_re"] else None,
                            "circuit_label_layers": req["label_layer_re"].pattern if req["label_layer_re"] else None,
-                           "circuit_label_radius_m": req["label_radius"], "circuit_label_texts": traced["label_texts"]},
+                           "circuit_label_radius_m": req["label_radius"], "circuit_label_texts": traced["label_texts"],
+                           "overlaps": overlap_parameters(req)},
             "graph": {"counts": graph["counts"], "degenerate_parts": got["degenerate_parts"], "geometry_problems": got["geometry_problems"],
                       "unsupported": got["unsupported"], "expansion_problems": got["expansion_problems"],
                       "out_of_scope_parts": got["out_of_scope_parts"], "ambiguous_gaps": graph["ambiguous_gaps"],
                       "refused_snaps": graph["refused_snaps"], **got["plan"]},
-            "warnings": plan_warnings(got["plan"]),
+            "warnings": plan_warnings(got["plan"]) + traced["overlap_warnings"],
             "routes": [{k: v for k, v in r.items() if k != "_pieces"} for r in traced["routes"]],
-            "shared_segments": traced["shared"],
+            "shared_segments": traced["shared"], "overlaps": traced["overlaps"],
             "counts": {"routes": len(traced["routes"]), "traced": sum(r["status"] == "已追踪" for r in traced["routes"]),
                        "components": sum(r["status"] == "分量" for r in traced["routes"]), "todo": len(todo)},
             "meaning": "沿已画走线逐段量出的水平长度（含桥接缺口）；回路归属、系统图与平面名称对应由模型判定并列依据；待办不按直角距离补",
@@ -1319,6 +1547,7 @@ def main() -> int:
         write_csv(args.output_dir / "走线追踪映射线.csv",
                   ["route_id", "drawing", "kind", "segment_id", "handle", "layer", "x1", "y1", "x2", "y2", "length_m"], lines)
         write_csv(args.output_dir / "走线追踪待办.csv", ["route_id", "kind", "problem", "detail"], todo_rows)
+        write_overlap_csv(args.output_dir / "走线追踪共线重合.csv", traced["overlaps"])
         print(json.dumps({"status": result["status"], **result["counts"], "output_dir": str(args.output_dir)}, ensure_ascii=False))
         return 3 if todo else 0
     except (InputError, OSError, ValueError, KeyError, TypeError) as exc:
