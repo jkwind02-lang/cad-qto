@@ -31,7 +31,7 @@ import qto_cad_geometry as cad_geometry  # noqa: E402
 import qto_segment_graph as segment_graph  # noqa: E402
 from qto_spatial import BoundsIndex  # noqa: E402
 
-VERSION = "qto-drawn-route-tracer/1.3.0"
+VERSION = "qto-drawn-route-tracer/1.3.1"
 REQUEST_SCHEMA = "qto-drawn-route-request/1.0"
 RESULT_SCHEMA = "qto-drawn-route-trace/1.0"
 PATHS_SCHEMA = "qto-drawn-route-paths/1.0"
@@ -450,7 +450,7 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
     # L4: a segment the project drops whose whole length lies on its partner is left out of the graph; a partial drop
     # stays and only the part a route walks on both lines is taken off that route
     ov_found, ov_apart = find_overlaps(flat, req)
-    ov_cut = resolve_overlaps(ov_found, ov_apart, req)
+    ov_cut, ov_conflicts = resolve_overlaps(ov_found, ov_apart, req, flat)
     reach = req["overlaps"]["distance"] / f
     left_out = {s["segment_id"] for s in flat if s["segment_id"] in ov_cut
                 and (1.0 - union_length(ov_cut[s["segment_id"]])) * s["length"] <= reach}
@@ -459,7 +459,7 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                                       gap_angle_deg=req["gap_angle_deg"])
     segs = {s["segment_id"]: s for s in graph["segments"]}
     point_of = {n["node_id"]: n["point"] for n in graph["nodes"]}
-    ov_walk = [r for r in ov_found if not set(r["segment_ids"]) & left_out and r["status"] in ("已扣重合", "未处置", "暂缓")]
+    ov_walk = [r for r in ov_found if not set(r["segment_ids"]) & left_out and r["status"] in ("已扣重合", "未处置", "暂缓", "处置冲突")]
 
     # A free end lying on the middle of another straight line (an L0 T contact) is a branch of the drawn run
     # (electrical rule; request t_junctions, default on): that line is cut there and only the part run is counted.
@@ -876,7 +876,7 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                           "partial_segments": [{"segment_id": s["segment_id"], "fraction_range": s["fraction_range"]}
                                                for s in out["segments"] if "fraction_range" in s],
                           "review_flags": [flag["flag"] for flag in out["review_flags"]]})
-    overlaps, overlap_warnings = overlap_outputs(ov_found, ov_apart)
+    overlaps, overlap_warnings = overlap_outputs(ov_found, ov_apart, ov_conflicts)
     overlaps["left_out_of_graph"] = sorted(left_out)
     return {"graph": graph, "collected": got, "routes": results, "paths": paths, "shared": shared, "box_count": len(box_list),
             "expanded": sorted(expand), "t_junctions_used": len(used_t), "t_contacts_hint_only": len(hint_t),
@@ -1007,39 +1007,127 @@ def union_length(spans: list[tuple[float, float]]) -> float:
     return total
 
 
-def resolve_overlaps(found: list[dict[str, Any]], apart: list[dict[str, Any]], req: dict[str, Any]) -> dict[str, list[tuple[float, float]]]:
-    """Attach the request's one disposition per pair; returns {segment_id: [fraction spans to take off]} for drop_overlap.
-    A pair that is no candidate, or one at different elevations, is refused. Undisposed or pending pairs stay open."""
+def merge_spans(spans: Iterable[tuple[float, float]]) -> list[tuple[float, float]]:
+    merged: list[tuple[float, float]] = []
+    for lo, hi in sorted(spans):
+        if merged and lo <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], hi))
+        else:
+            merged.append((lo, hi))
+    return merged
+
+
+def subtract_spans(base: list[tuple[float, float]], cuts: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Parts of the merged spans `base` not covered by the merged spans `cuts`."""
+    left = []
+    for lo, hi in base:
+        at = lo
+        for c_lo, c_hi in cuts:
+            if c_hi <= at or c_lo >= hi:
+                continue
+            if c_lo > at:
+                left.append((at, c_lo))
+            at = max(at, c_hi)
+        if at < hi:
+            left.append((at, hi))
+    return left
+
+
+def resolve_overlaps(found: list[dict[str, Any]], apart: list[dict[str, Any]], req: dict[str, Any],
+                     segments: list[dict[str, Any]]) -> tuple[dict[str, list[tuple[float, float]]], list[dict[str, Any]]]:
+    """Attach the request's one disposition per pair; returns ({segment_id: [fraction spans to take off]} for drop_overlap,
+    conflicts). A pair that is no candidate, or one at different elevations, is refused. Undisposed or pending pairs stay open.
+    A drop must leave a line behind (CXR-01): candidates that share lines form a group on one line, and wherever a line
+    was drawn before the drops, one must still be drawn after them - checked on the union of the group's spans, not pair
+    by pair, so a cycle of "keep the other one" or drops that each keep a line but together empty a stretch are a
+    disposition conflict: none of the group's drops is taken, its disposed pairs read 处置冲突 and stay open."""
     pairs = {tuple(sorted(r["segment_ids"])): r for r in found}
     apart_pairs = {tuple(sorted(r["segment_ids"])) for r in apart}
-    cut: dict[str, list[tuple[float, float]]] = defaultdict(list)
-    for res in req["overlaps"]["resolutions"]:
+    for index, res in enumerate(req["overlaps"]["resolutions"]):
         if res["pair"] in apart_pairs:
             fail(f"段对 {res['pair'][0]}、{res['pair'][1]} 标高不同，不合并、不能写处置（列在 overlap_z_differs 待核）")
         if res["pair"] not in pairs:
             fail(f"段对 {res['pair'][0]}、{res['pair'][1]} 不是本次的共线重合候选（段号取自重合候选表）")
         row = pairs[res["pair"]]
         row["resolution"] = {"action": res["action"], "drop": res["drop"], "basis": res["basis"]}
-        if res["action"] == "drop_overlap":
-            cut[res["drop"]].append(row["_spans"][res["drop"]])
+        row["_index"] = index
+    link: dict[str, str] = {}
+
+    def root(x: str) -> str:
+        while link.setdefault(x, x) != x:
+            link[x] = link[link[x]]; x = link[x]
+        return x
+    for row in found:
+        a, b = (root(x) for x in row["segment_ids"])
+        link[max(a, b)] = min(a, b)
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in found:
+        groups[root(row["segment_ids"][0])].append(row)
+    by_id = {s["segment_id"]: s for s in segments}
+    f, least = req["factor"], req["overlaps"]["min"] / req["factor"]
+    cut: dict[str, list[tuple[float, float]]] = defaultdict(list)
+    conflicts = []
+    for rows in sorted(groups.values(), key=lambda rs: rs[0]["group_id"]):
+        drops = [r for r in rows if (r.get("resolution") or {}).get("action") == "drop_overlap"]
+        if not drops:
+            continue
+        ids = sorted({x for r in rows for x in r["segment_ids"]})
+        o, e = by_id[ids[0]]["start"][:2], by_id[ids[0]]["end"][:2]
+        u = [(e[0] - o[0]) / math.dist(o, e), (e[1] - o[1]) / math.dist(o, e)]
+
+        def on_axis(sid: str, t: float) -> float:
+            s, q = by_id[sid]["start"], by_id[sid]["end"]
+            return (s[0] + t * (q[0] - s[0]) - o[0]) * u[0] + (s[1] + t * (q[1] - s[1]) - o[1]) * u[1]
+        span = {sid: tuple(sorted((on_axis(sid, 0.0), on_axis(sid, 1.0)))) for sid in ids}
+        taken: dict[str, list[tuple[float, float]]] = defaultdict(list)
+        for r in drops:
+            d = r["resolution"]["drop"]
+            taken[d].append(tuple(sorted(on_axis(d, t) for t in r["_spans"][d])))
+        before = merge_spans(span.values())
+        after = merge_spans(p for sid in ids for p in subtract_spans([span[sid]], merge_spans(taken.get(sid, []))))
+        lost = [p for p in subtract_spans(before, after) if p[1] - p[0] > 1e-9]
+        if math.fsum(hi - lo for lo, hi in lost) <= least:
+            for r in drops:
+                cut[r["resolution"]["drop"]].append(r["_spans"][r["resolution"]["drop"]])
+            continue
+        hits = lambda r: any(min(hi, b) - max(lo, a) > 1e-9 for a, b in lost   # noqa: E731
+                             for lo, hi in [tuple(sorted(on_axis(r["resolution"]["drop"], t) for t in r["_spans"][r["resolution"]["drop"]]))])
+        point = lambda a: [(o[0] + u[0] * a) * f, (o[1] + u[1] * a) * f]   # noqa: E731
+        for r in rows:
+            if r.get("resolution"):
+                r["conflict"] = True
+        conflicts.append({
+            "conflict_id": f"OVC-{len(conflicts) + 1:04d}", "segment_ids": ids, "handles": [by_id[x]["handle"] for x in ids],
+            "group_ids": [r["group_id"] for r in rows], "lost_m": math.fsum(hi - lo for lo, hi in lost) * f,
+            "lost_intervals": [{"from_point_m": point(lo), "to_point_m": point(hi), "length_m": (hi - lo) * f} for lo, hi in lost],
+            "dispositions": [{"index": r["_index"], "group_id": r["group_id"], "segment_ids": r["segment_ids"],
+                              "drop": r["resolution"]["drop"], "basis": r["resolution"]["basis"]} for r in sorted(drops, key=lambda r: r["_index"]) if hits(r)],
+            "detail": "这几条去重处置执行后，上面的区间一段线都不剩（互相“留另一段”）：本组不扣、按没处置计；核图后改成统一留一段，"
+                      "确实整段不计的走排除依据"})
     for row in found:
         action = (row.get("resolution") or {}).get("action")
-        row["status"] = {"drop_overlap": "已扣重合", "keep_both": "两段都保留", "pending": "暂缓"}.get(action, "未处置")
-    return dict(cut)
+        row["status"] = "处置冲突" if row.get("conflict") else {"drop_overlap": "已扣重合", "keep_both": "两段都保留", "pending": "暂缓"}.get(action, "未处置")
+    return dict(cut), conflicts
 
 
-def overlap_outputs(found: list[dict[str, Any]], apart: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def overlap_outputs(found: list[dict[str, Any]], apart: list[dict[str, Any]],
+                    conflicts: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Result section and warnings of the overlap check (both requests)."""
-    clean = lambda r: {k: v for k, v in r.items() if not k.startswith("_")}   # noqa: E731
-    open_rows = [r for r in found if r["status"] in ("未处置", "暂缓")]
+    clean = lambda r: {k: v for k, v in r.items() if not k.startswith("_") and k != "conflict"}   # noqa: E731
+    open_rows = [r for r in found if r["status"] in ("未处置", "暂缓", "处置冲突")]
     warnings = []
+    if conflicts:
+        warnings.append({"warning": "collinear_overlap_dispositions_conflict", "count": len(conflicts),
+                         "lost_m": math.fsum(c["lost_m"] for c in conflicts),
+                         "detail": "几条去重处置互相“留另一段”，执行后有重合区间一段线都不剩：这一组不扣、按没处置计；"
+                                   "核图后改成统一留一段，确实整段不计的走排除依据"})
     if open_rows:
         warnings.append({"warning": "collinear_overlaps_open", "count": len(open_rows), "overlap_m": math.fsum(r["overlap_m"] for r in open_rows),
                          "detail": "同层共线重合的线段对没有处置：逐对核图，写 overlap_resolutions（drop_overlap 扣一段的重合区间，keep_both 两段都留）"})
     if apart:
         warnings.append({"warning": "collinear_overlaps_at_different_z", "count": len(apart),
                          "detail": "平面共线重合但原始标高不同或有斜线：不合并、不能处置，核对是不是不同标高的两路"})
-    return {"candidates": [clean(r) for r in found], "z_differs": [clean(r) for r in apart],
+    return {"candidates": [clean(r) for r in found], "z_differs": [clean(r) for r in apart], "conflicts": conflicts,
             "open_count": len(open_rows), "resolved": not open_rows}, warnings
 
 
@@ -1192,7 +1280,7 @@ def measure_layers(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
     # L4: collinear overlaps among the counted lines; a drop_overlap disposition takes the shared interval off the
     # named segment, which stays in the graph (its ends still join)
     found, apart = find_overlaps(kept, req)
-    cut = resolve_overlaps(found, apart, req)
+    cut, conflicts = resolve_overlaps(found, apart, req, kept)
     deducted = 0.0
     for k, s in enumerate(kept):
         if s["segment_id"] in cut:
@@ -1348,7 +1436,10 @@ def measure_layers(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                              "detail": {"device": inst["physical_id"], **({"box_candidates": boxes} if boxes else {})}})
             feeders.append(row)
 
-    overlaps, overlap_warnings = overlap_outputs(found, apart)
+    overlaps, overlap_warnings = overlap_outputs(found, apart, conflicts)
+    for c in conflicts:
+        comps = ",".join(sorted({comp_of_node[segs[x]["start_node"]] for x in c["segment_ids"]}))
+        todo.append({"component_id": comps, "kind": "待办", "problem": "共线重合处置冲突", "detail": c})
     for row in [*found, *apart]:
         comps = ",".join(sorted({comp_of_node[segs[x]["start_node"]] for x in row["segment_ids"]}))
         detail = {"segment_ids": row["segment_ids"], "handles": row["handles"], "overlap_m": row["overlap_m"], "kind": row["kind"],
@@ -1496,8 +1587,9 @@ def main() -> int:
         traced = trace_routes(drawing, req)
         graph, got = traced["graph"], traced["collected"]
         todo = [r for r in traced["routes"] if r["status"] == "待办"]
+        conflicts = traced["overlaps"]["conflicts"]
         result = {
-            "schema": RESULT_SCHEMA, "version": VERSION, "status": "REVIEW_REQUIRED" if todo else "REFERENCE_ONLY",
+            "schema": RESULT_SCHEMA, "version": VERSION, "status": "REVIEW_REQUIRED" if todo or conflicts else "REFERENCE_ONLY",
             "inputs": {"cad_manifest": str(args.cad_manifest.resolve()), "cad_manifest_sha256": sha256(args.cad_manifest),
                        "source_sha256": (drawing.manifest.get("authoritative_source") or {}).get("sha256"),
                        "request": str(args.request.resolve()), "request_sha256": sha256(args.request)},
@@ -1539,6 +1631,8 @@ def main() -> int:
                 for flag in r["review_flags"]:
                     todo_rows.append([r["route_id"], "复核", flag["flag"],
                                       json.dumps({k: v for k, v in flag.items() if k != "flag"}, ensure_ascii=False)])
+        for c in conflicts:
+            todo_rows.append([c["conflict_id"], "待办", "共线重合处置冲突", json.dumps(c, ensure_ascii=False)])
         args.output_dir.mkdir(parents=True, exist_ok=True)
         (args.output_dir / "走线追踪结果.json").write_text(json.dumps(result, ensure_ascii=False, indent=1, allow_nan=False) + "\n", encoding="utf-8")
         (args.output_dir / "走线追踪路径.json").write_text(json.dumps(
@@ -1549,7 +1643,7 @@ def main() -> int:
         write_csv(args.output_dir / "走线追踪待办.csv", ["route_id", "kind", "problem", "detail"], todo_rows)
         write_overlap_csv(args.output_dir / "走线追踪共线重合.csv", traced["overlaps"])
         print(json.dumps({"status": result["status"], **result["counts"], "output_dir": str(args.output_dir)}, ensure_ascii=False))
-        return 3 if todo else 0
+        return 3 if todo or conflicts else 0
     except (InputError, OSError, ValueError, KeyError, TypeError) as exc:
         print(json.dumps({"status": "INPUT_REQUIRED", "error": str(exc)}, ensure_ascii=False))
         return 2

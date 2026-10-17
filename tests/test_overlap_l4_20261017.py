@@ -10,6 +10,11 @@
   checks.overlaps_resolved 为假；
 - 路线追踪：被剔段整条落在另一段上 → 不进图（整条复制不再出"多条等长路径"，回头重描后 T 接接上）；局部的被剔段留在图里，
   路线两段都走过的部分扣一次；路线两段都走过而这对没处置 → 复核"经过未处置的共线重合"；keep_both 不扣。
+- 返修 CXR-01（Codex 交叉复测，登记 20261017-1138）：去重处置必须有留存方。按一组相连候选的区间并集查：处置执行后，
+  原来有线的地方至少还要留一段没被扣；做不到的（三条互相“留对方”的循环、每对都留了一段而合起来某处一段不剩）判
+  “处置冲突”：本组不扣、按没处置计，列待办“共线重合处置冲突”（段、句柄、一段不剩的区间、哪几条处置），
+  状态 REVIEW_REQUIRED，overlaps_resolved 为假；别的组照常。合法的链式处置（统一留一段）照扣，三条 9 m 留 9 m；
+  路线追踪同样，冲突组的线一条都不移出图。
 """
 import csv
 import json
@@ -102,14 +107,14 @@ def measure(drawing, name, **extra):
     return done, result
 
 
-def trace(drawing, name, **extra):
+def trace(drawing, name, routes=('B', 'P'), **extra):
     tmp, manifest, h = drawing
     req = {'schema': 'qto-drawn-route-request/1.0', 'drawing_id': 'SYN', 'layout': 'Model',
            'unit': {'factor_to_output': 0.001, 'output_coordinate_unit': 'm', 'source_id': 'INSUNITS=4'},
            'route_layers': '^WIRE-照明$', 'box_block_pattern': '^BOX$', 'snap_tolerance': 0.01, 'gap_tolerance': 0.0,
            'endpoint_tolerance': 0.3, 'routes': [
-               {'route_id': 'B', 'from': {'instance_id': f'PT-CAD-{h["BOX_B"]}'}, 'to': {'instance_id': f'PT-CAD-{h["DEV_B"]}'}},
-               {'route_id': 'P', 'from': {'instance_id': f'PT-CAD-{h["BOX_P"]}'}, 'to': {'instance_id': f'PT-CAD-{h["DEV_P"]}'}}], **extra}
+               {'route_id': r, 'from': {'instance_id': f'PT-CAD-{h["BOX_" + r]}'}, 'to': {'instance_id': f'PT-CAD-{h["DEV_" + r]}'}}
+               for r in routes], **extra}
     rp = tmp / f'{name}.json'; rp.write_text(json.dumps(req, ensure_ascii=False), encoding='utf-8')
     out = tmp / name
     done = run(ROUTES / 'trace_drawn_routes.py', '--cad-manifest', manifest, '--request', rp, '--output-dir', out)
@@ -224,3 +229,160 @@ def test_routes_leave_a_covered_copy_out_and_take_a_walked_overlap_off_once(draw
     _, routes = trace(drawing, 'route_keep', overlap_resolutions=[pair(h, 'P1', ('P2', 0), 'keep_both')])
     assert routes['P']['length_m'] == pytest.approx(15.8) and routes['P']['overlap_deducted_m'] == 0
     assert not any(f['flag'] == '经过未处置的共线重合' for f in routes['P']['review_flags'])
+
+
+def draw_stacks():
+    """Three or more lines over one interval (CXR-01): T three 9 m copies; Q partial (Q3 inside Q1 and Q2); M two lines
+    covering a third (M2 0-6, M3 4-10 over M1 0-10); R three copies between a box and a device for the route mode;
+    U (layer WIRE-插座, route mode only) a route that runs to U1's end and back over it on U2, U3 a dead-end third copy."""
+    doc = ezdxf.new('R2013'); doc.units = 4
+    doc.layers.add('WIRE-照明'); doc.layers.add('WIRE-插座')
+    doc.blocks.new('BOX').add_lwpolyline([(-300, -200), (300, -200), (300, 200), (-300, 200)], close=True)
+    doc.blocks.new('DEV').add_lwpolyline([(-100, -100), (100, -100), (100, 100), (-100, 100)], close=True)
+    msp, h = doc.modelspace(), {}
+
+    def line(key, a, b):
+        h[key] = msp.add_line(a, b, dxfattribs=LIGHT).dxf.handle
+    for key in ('T1', 'T2', 'T3'):
+        line(key, (0, 0), (9000, 0))
+    line('Q1', (0, 4000), (10000, 4000)); line('Q2', (5000, 4000), (15000, 4000)); line('Q3', (5000, 4000), (10000, 4000))
+    line('M1', (0, 8000), (10000, 8000)); line('M2', (0, 8000), (6000, 8000)); line('M3', (4000, 8000), (10000, 8000))
+    for key in ('R1', 'R2', 'R3'):
+        line(key, (0, 12000), (6000, 12000))
+    h['BOX_R'] = msp.add_blockref('BOX', (-300, 12000)).dxf.handle; h['DEV_R'] = msp.add_blockref('DEV', (6100, 12000)).dxf.handle
+    socket = {'layer': 'WIRE-插座'}
+    h['U1'] = msp.add_line((0, 16000), (10000, 16000), dxfattribs=socket).dxf.handle
+    h['U2'] = msp.add_lwpolyline([(10000, 16000), (9200, 16000), (9200, 21000)], dxfattribs=socket).dxf.handle
+    h['U3'] = msp.add_line((9000, 16000), (10000, 16000), dxfattribs=socket).dxf.handle
+    h['BOX_U'] = msp.add_blockref('BOX', (-300, 16000)).dxf.handle; h['DEV_U'] = msp.add_blockref('DEV', (9200, 21100)).dxf.handle
+    return doc, h
+
+
+@pytest.fixture(scope='module')
+def stacks(tmp_path_factory):
+    tmp = tmp_path_factory.mktemp('l4_stacks')
+    doc, h = draw_stacks()
+    dxf = tmp / 'stacks.dxf'; doc.saveas(dxf)
+    done = run(SHARED / 'extract_cad_neutral.py', '--source-dxf', dxf, '--output-dir', tmp / 'neutral')
+    assert done.returncode == 0, done.stdout + done.stderr
+    with (tmp / 'sheets.csv').open('w', encoding='utf-8-sig', newline='') as f:
+        csv.writer(f).writerows([['图页编号', '类型', 'x1', 'y1', 'x2', 'y2'], ['P1', '平面', -1000, -1000, 60000, 60000]])
+    return tmp, tmp / 'neutral' / 'CAD中性取证清单.json', h
+
+
+def segs(h, *names):
+    return sorted(seg(h, k) for k in names)
+
+
+def test_drops_that_leave_no_line_over_a_shared_interval_are_a_conflict_not_zero(stacks):
+    _, _, h = stacks
+    cycle = [pair(h, 'T1', 'T2', 'drop_overlap', drop='T1', basis='留 T2'), pair(h, 'T2', 'T3', 'drop_overlap', drop='T2', basis='留 T3'),
+             pair(h, 'T1', 'T3', 'drop_overlap', drop='T3', basis='留 T1')]
+    legal = [pair(h, 'M1', 'M2', 'drop_overlap', drop='M1'), pair(h, 'M1', 'M3', 'drop_overlap', drop='M1'), pair(h, 'M2', 'M3', 'keep_both'),
+             pair(h, 'Q1', 'Q2', 'drop_overlap', drop='Q2'), pair(h, 'Q2', 'Q3', 'drop_overlap', drop='Q3'),
+             pair(h, 'Q1', 'Q3', 'drop_overlap', drop='Q3'), pair(h, 'R1', 'R2', 'drop_overlap', drop='R1'),
+             pair(h, 'R2', 'R3', 'drop_overlap', drop='R2'), pair(h, 'R1', 'R3', 'drop_overlap', drop='R1')]
+    done, result = measure(stacks, 'cycle', overlap_resolutions=cycle + legal)
+    assert done.returncode == 3 and result['status'] == 'REVIEW_REQUIRED'
+    ov = result['overlaps']
+    (c,) = ov['conflicts']
+    assert c['segment_ids'] == segs(h, 'T1', 'T2', 'T3') and c['lost_m'] == pytest.approx(9.0)
+    assert [d['index'] for d in c['dispositions']] == [0, 1, 2]
+    (lost,) = c['lost_intervals']
+    assert sorted([lost['from_point_m'][0], lost['to_point_m'][0]]) == pytest.approx([0.0, 9.0])
+    pair_of = lambda a, b: tuple(sorted((h[a], h[b])))   # noqa: E731
+    status = {tuple(sorted(r['handles'])): r['status'] for r in ov['candidates']}
+    assert {status[pair_of('T1', 'T2')], status[pair_of('T2', 'T3')], status[pair_of('T1', 'T3')]} == {'处置冲突'}
+    assert status[pair_of('M1', 'M2')] == '已扣重合' and status[pair_of('M2', 'M3')] == '两段都保留'
+    # the conflicting group counts as drawn, the other group as disposed (M1 comes off on the union of its two drops)
+    comp = lambda k: next(x for x in result['components'] if h[k] in x['handles'])   # noqa: E731
+    assert comp('T1')['length_m'] == pytest.approx(27.0) and comp('M1')['length_m'] == pytest.approx(12.0)
+    assert result['totals']['overlap_deducted_m'] == pytest.approx(10.0 + 10.0 + 12.0)
+    # every other pair is disposed: the three conflicting rows alone keep the overlaps open
+    assert ov['open_count'] == 3 and ov['resolved'] is False and result['checks']['overlaps_resolved'] is False
+    warned = {w['warning']: w for w in result['warnings']}
+    assert warned['collinear_overlap_dispositions_conflict']['count'] == 1
+    (todo,) = [t for t in result['todo'] if t['problem'] == '共线重合处置冲突']
+    assert sorted(todo['detail']['handles']) == sorted(h[k] for k in ('T1', 'T2', 'T3'))
+    assert {r['status'] for r in result['_csv'] if r['handle_a'] in (h['T1'], h['T2'], h['T3'])} == {'处置冲突'}
+
+
+def test_a_chain_that_keeps_one_line_is_taken_off(stacks):
+    _, _, h = stacks
+    chain = [pair(h, 'T1', 'T2', 'drop_overlap', drop='T1', basis='统一留 T3'), pair(h, 'T2', 'T3', 'drop_overlap', drop='T2', basis='统一留 T3'),
+             pair(h, 'T1', 'T3', 'drop_overlap', drop='T1', basis='统一留 T3')]
+    partial = [pair(h, 'Q1', 'Q2', 'drop_overlap', drop='Q2'), pair(h, 'Q2', 'Q3', 'drop_overlap', drop='Q3'),
+               pair(h, 'Q1', 'Q3', 'drop_overlap', drop='Q3')]
+    _, result = measure(stacks, 'chain', overlap_resolutions=chain + partial)
+    assert result['overlaps']['conflicts'] == []
+    comp = lambda k: next(x for x in result['components'] if h[k] in x['handles'])   # noqa: E731
+    assert comp('T1')['length_m'] == pytest.approx(9.0) and comp('Q1')['length_m'] == pytest.approx(15.0)
+    assert result['totals']['overlap_deducted_m'] == pytest.approx(18.0 + 10.0)
+    assert {r['status'] for r in result['overlaps']['candidates'] if h['T1'] in r['handles'] or h['Q1'] in r['handles']} == {'已扣重合'}
+    assert 'collinear_overlap_dispositions_conflict' not in {w['warning'] for w in result['warnings']}
+
+
+def test_conflicts_are_found_on_the_union_of_the_drops_not_pair_by_pair(stacks):
+    _, _, h = stacks
+    # every pair keeps one of its lines, yet together nothing is left over 4-6 m (M) or 5-10 m (Q)
+    union_cycle = [pair(h, 'M1', 'M2', 'drop_overlap', drop='M2'), pair(h, 'M1', 'M3', 'drop_overlap', drop='M1'),
+                   pair(h, 'M2', 'M3', 'drop_overlap', drop='M3')]
+    partial_cycle = [pair(h, 'Q1', 'Q2', 'drop_overlap', drop='Q1'), pair(h, 'Q2', 'Q3', 'drop_overlap', drop='Q2'),
+                     pair(h, 'Q1', 'Q3', 'drop_overlap', drop='Q3')]
+    _, before = measure(stacks, 'stacks_open')
+    _, result = measure(stacks, 'union_cycle', overlap_resolutions=union_cycle + partial_cycle)
+    conflicts = {tuple(c['segment_ids']): c for c in result['overlaps']['conflicts']}
+    m, q = conflicts[tuple(segs(h, 'M1', 'M2', 'M3'))], conflicts[tuple(segs(h, 'Q1', 'Q2', 'Q3'))]
+    assert m['lost_m'] == pytest.approx(2.0) and [d['index'] for d in m['dispositions']] == [0, 1, 2]
+    (lost,) = m['lost_intervals']
+    assert sorted([lost['from_point_m'][0], lost['to_point_m'][0]]) == pytest.approx([4.0, 6.0])
+    assert q['lost_m'] == pytest.approx(5.0) and [d['index'] for d in q['dispositions']] == [3, 4, 5]
+    assert result['totals']['overlap_deducted_m'] == 0
+    assert result['totals']['counted_m'] == pytest.approx(before['totals']['counted_m'])
+
+
+def test_routes_keep_every_copy_of_a_conflicting_group_in_the_graph(stacks):
+    _, _, h = stacks
+    cycle = [pair(h, 'R1', 'R2', 'drop_overlap', drop='R1'), pair(h, 'R2', 'R3', 'drop_overlap', drop='R2'),
+             pair(h, 'R1', 'R3', 'drop_overlap', drop='R3')]
+    result, routes = trace(stacks, 'route_cycle', routes=('R',), overlap_resolutions=cycle)
+    assert result['status'] == 'REVIEW_REQUIRED' and result['overlaps']['left_out_of_graph'] == []
+    (c,) = result['overlaps']['conflicts']
+    assert c['segment_ids'] == segs(h, 'R1', 'R2', 'R3') and c['lost_m'] == pytest.approx(6.0)
+    assert 'collinear_overlap_dispositions_conflict' in {w['warning'] for w in result['warnings']}
+    assert routes['R']['status'] == '待办' and routes['R']['problems'][0]['problem'] == '多条等长路径'
+    chain = [pair(h, 'R1', 'R2', 'drop_overlap', drop='R1'), pair(h, 'R2', 'R3', 'drop_overlap', drop='R2'),
+             pair(h, 'R1', 'R3', 'drop_overlap', drop='R1')]
+    result, routes = trace(stacks, 'route_chain', routes=('R',), overlap_resolutions=chain)
+    assert result['overlaps']['conflicts'] == [] and result['overlaps']['left_out_of_graph'] == segs(h, 'R1', 'R2')
+    assert routes['R']['status'] == '已追踪' and routes['R']['length_m'] == pytest.approx(6.0)
+    # a conflict off the route still sends the result to review: the route itself is clean
+    t_cycle = [pair(h, 'T1', 'T2', 'drop_overlap', drop='T1'), pair(h, 'T2', 'T3', 'drop_overlap', drop='T2'),
+               pair(h, 'T1', 'T3', 'drop_overlap', drop='T3')]
+    result, routes = trace(stacks, 'route_chain_t_cycle', routes=('R',), overlap_resolutions=chain + t_cycle)
+    assert routes['R']['status'] == '已追踪' and routes['R']['length_m'] == pytest.approx(6.0)
+    assert [c['segment_ids'] for c in result['overlaps']['conflicts']] == [segs(h, 'T1', 'T2', 'T3')]
+    assert result['status'] == 'REVIEW_REQUIRED'
+
+
+def test_a_route_walking_a_conflicting_pair_twice_is_flagged_and_nothing_is_taken_off(stacks):
+    _, _, h = stacks
+    # U1 (0-10) and U2's first part (10 back to 9.2) are both walked; U3 (9-10) only hangs off U1's end (no T contacts)
+    cycle = [pair(h, 'U1', ('U2', 0), 'drop_overlap', drop='U1'), pair(h, ('U2', 0), 'U3', 'drop_overlap', drop=('U2', 0)),
+             pair(h, 'U1', 'U3', 'drop_overlap', drop='U3')]
+    result, routes = trace(stacks, 'route_walk_cycle', routes=('U',), route_layers='^WIRE-插座$', t_junctions=False,
+                           overlap_resolutions=cycle)
+    (c,) = result['overlaps']['conflicts']
+    assert sorted(c['segment_ids']) == sorted(segs(h, 'U1', 'U3') + [seg(h, 'U2', 0)])
+    assert c['lost_m'] == pytest.approx(0.8)
+    u = routes['U']
+    assert u['status'] == '已追踪' and u['length_m'] == pytest.approx(15.8) and u['overlap_deducted_m'] == 0
+    (flag,) = [f for f in u['review_flags'] if f['flag'] == '经过未处置的共线重合']
+    assert flag['walked_twice_m'] == pytest.approx(0.8)
+    assert result['status'] == 'REVIEW_REQUIRED'
+    # the same three pairs kept on U2's first part: the walked 0.8 m comes off once
+    chain = [pair(h, 'U1', ('U2', 0), 'drop_overlap', drop='U1'), pair(h, ('U2', 0), 'U3', 'drop_overlap', drop='U3'),
+             pair(h, 'U1', 'U3', 'drop_overlap', drop='U3')]
+    result, routes = trace(stacks, 'route_walk_chain', routes=('U',), route_layers='^WIRE-插座$', t_junctions=False,
+                           overlap_resolutions=chain)
+    assert result['overlaps']['conflicts'] == [] and routes['U']['length_m'] == pytest.approx(15.0)
