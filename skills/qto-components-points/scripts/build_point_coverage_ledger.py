@@ -27,7 +27,7 @@ from search_negative_evidence import OUTPUT_SCHEMA as SEARCH_SCHEMA, record_prob
 
 SCHEMA = "qto-point-coverage-input/1.0"
 LEDGER_SCHEMA = "qto-point-coverage-ledger/1.0"
-VERSION = "qto-point-coverage-ledger/1.3.3"
+VERSION = "qto-point-coverage-ledger/1.4.0"
 DESTINATIONS = ("已计", "有据排除", "待识别", "版本冲突", "无去向")
 DISPOSITION_DEST = {"adopted": "已计", "merged": "已计", "excluded": "有据排除", "not_applicable": "有据排除",
                     "duplicate_excluded": "有据排除", "unresolved": "待识别"}
@@ -55,7 +55,8 @@ GEOMETRY_BASES = (GEOMETRY_BASIS, PARTIAL_BASIS, cad_geometry.PLACEMENT_ESTIMATE
 COUNT_KEYS = ("drawing", "handle", "category", "sheet")
 EXCLUSION_KEYS = ("drawing", "handle", "basis")
 TOP_FIELDS = {"schema_version", "scope_id", "drawings", "count_tables", "handle_exclusions", "sheets", "legend_coverage",
-              "version_conflicts", "excluded_classes", "auto_exclude_sheet_kinds", "detail_copy_sheets", "search_records"}
+              "version_conflicts", "excluded_classes", "auto_exclude_sheet_kinds", "detail_copy_sheets", "search_records",
+              "frame_blocks"}
 HANDLE_RE = re.compile(r'"entity_handle":\s*"([^"]*)"')
 # Same path id as the adapter: PT-CAD-<top handle>/<block>/CAD-<child handle>, one /<block>/CAD-<handle> per level.
 # AutoCAD block names cannot contain / or \, so the separators are unambiguous.
@@ -63,6 +64,7 @@ PATH_RE = re.compile(r"PT-CAD-([0-9A-Fa-f]+)((?:/[^/\\]+/CAD-[0-9A-Fa-f]+)+)")
 SEGMENT_RE = re.compile(r"/([^/\\]+)/CAD-([0-9A-Fa-f]+)")
 XREF_PREFIX_RE = re.compile(r"^(?:[^$]*\$\d+\$)+")   # bound xref names: XREF$0$GPB, A$0$B$0$C
 LIST_SPLIT_RE = re.compile(r"[；;，,]")
+CLAIM_SEP = "::"   # matched_symbols "block::category"; AutoCAD block names cannot contain a colon (checkpoint 1, 3.4)
 INSERT_KEYS = ("record_id", "entity_handle", "block_name", "layer", "x", "y", "z", "rotation", "scale_factors",
                "extrusion", "insert_matrix_wcs")
 MAX_DEPTH = 16
@@ -71,6 +73,12 @@ MAX_DEPTH = 16
 def base_symbol(name: str) -> str:
     """Block name without bound-xref prefixes, so a legend XREF$0$GPB matches a plan GPB (registration 20261016-1800)."""
     return XREF_PREFIX_RE.sub("", name) or name
+
+
+def claim_parts(entry: str) -> tuple[str, str | None]:
+    """A matched_symbols entry: a block name, or block::category claiming only that category's instances (1945)."""
+    name, sep, category = entry.partition(CLAIM_SEP)
+    return name.strip(), (category.strip() if sep else None)
 
 
 def normalize_id(value: str) -> tuple[str | None, str | None]:
@@ -121,6 +129,10 @@ class Ledger:
         self.sources: dict[str, str] = {}
         self.auto_kinds: list[str] = list(DEFAULT_AUTO_EXCLUDE)
         self.class_rules: list[tuple[dict[str, Any], Any, Any, str | None]] = []
+        self.frames: list[tuple[str, Any, Any, str]] = []
+        self.frame_coverage: dict[str, Any] = {"checked": False, "conclusion": "没写 frame_blocks，没核图框是否都在图页表里"}
+        self.legend_frames: Counter[str] = Counter()
+        self.legend_frame_rows_dropped: list[dict[str, str]] = []
         self.auto_excluded: Counter[str] = Counter()
         self.unconfirmed_detail: Counter[tuple[str, str]] = Counter()
         self.nested: dict[str, tuple[dict[str, Any], list[dict[str, Any]]]] = {}   # drawing -> (block index, unexpanded tops)
@@ -200,6 +212,7 @@ class Ledger:
                 self.add(drawing, pid, symbol=str(row.get("block_name") or ""), layer=str(row.get("layer") or ""),
                          parent_block=row.get("parent_block"), destination=dest, category=category, basis=basis,
                          x=x, y=y, insert_x=ix, insert_y=iy, placement_basis=placed,
+                         box=[float(v) for v in box[:4]] if placed in (GEOMETRY_BASIS, PARTIAL_BASIS) else None,
                          adjudication_id=row.get("adjudication_id"),
                          handle=pid[len("PT-CAD-"):].upper() if top and pid.startswith("PT-CAD-") else None, top_level=top)
             for oid in report.get("unmatched_recognition_object_ids") or []:
@@ -285,11 +298,12 @@ class Ledger:
         except (ValueError, TypeError, IndexError):
             return None, frozenset()
 
-    def placed(self, blocks, meta, memo, name: str, matrix, insert_point) -> tuple[Any, Any, str]:
+    def placed(self, blocks, meta, memo, name: str, matrix, insert_point) -> tuple[Any, Any, str, list[float] | None]:
+        """(x, y, basis, plan box [x1, y1, x2, y2] or None); the box is kept for the frame check (fifth batch G)."""
         box, notes = self.extent(blocks, meta, name, memo) if matrix is not None else (None, frozenset())
         world = cad_geometry.transform_bounds(box, matrix) if box is not None else None
         (x, y), basis = cad_geometry.placement_point(world, notes, insert_point)
-        return x, y, basis
+        return x, y, basis, ([float(world[0]), float(world[1]), float(world[3]), float(world[4])] if world is not None else None)
 
     def expand(self, drawing: str, path_id: str, block: str, matrix, layer: str, blocks, meta, memo, expand_set: set[str],
                out: dict[str, dict[str, Any]], stack: tuple[str, ...]) -> None:
@@ -307,10 +321,10 @@ class Ledger:
             point = cad_geometry.transform_point(local, matrix)
             own_layer = str(child.get("layer") or "")
             effective = layer if own_layer in {"", "0"} and layer else own_layer
-            x, y, basis = self.placed(blocks, meta, memo, name, world, point)
+            x, y, basis, box = self.placed(blocks, meta, memo, name, world, point)
             out[cid] = {"symbol": name, "kind": "块", "layer": effective, "parent_block": block, "x": x, "y": y,
-                        "insert_x": point[0], "insert_y": point[1], "placement_basis": basis, "handle": None, "top_level": False,
-                        "container": name in expand_set}
+                        "insert_x": point[0], "insert_y": point[1], "placement_basis": basis, "box": box, "handle": None,
+                        "top_level": False, "container": name in expand_set}
             if name in expand_set:
                 if name in stack or len(stack) >= MAX_DEPTH:
                     self.problem("C-2", f"{drawing} {cid}", f"展开的块循环引用或超过 {MAX_DEPTH} 层：{name}")
@@ -356,11 +370,11 @@ class Ledger:
                 box = row["bbox"]; x, y = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
             symbol = str(row.get("block_name") or "") if is_insert else f"<{row.get('entity_type')}>"
             fields = {"symbol": symbol, "kind": "块" if is_insert else "非块", "layer": str(row.get("layer") or ""),
-                      "x": x, "y": y, "insert_x": x, "insert_y": y, "placement_basis": INSERT_BASIS, "handle": handle_id,
-                      "top_level": True, "container": is_insert and symbol in expand_set}
+                      "x": x, "y": y, "insert_x": x, "insert_y": y, "placement_basis": INSERT_BASIS, "box": None,
+                      "handle": handle_id, "top_level": True, "container": is_insert and symbol in expand_set}
             matrix = self.matrix(row, meta) if is_insert else None
             if is_insert and x is not None and y is not None:
-                fields["x"], fields["y"], fields["placement_basis"] = self.placed(blocks, meta, memo, symbol, matrix, (x, y))
+                fields["x"], fields["y"], fields["placement_basis"], fields["box"] = self.placed(blocks, meta, memo, symbol, matrix, (x, y))
             tops[handle_id] = fields
             if fields["container"]:
                 if matrix is None:
@@ -615,6 +629,98 @@ class Ledger:
             if kind == DETAIL_KIND and detail is None and c["destination"] == "待识别":
                 self.unconfirmed_detail[(c["drawing"], c["sheet"])] += c["count"]
 
+    def frame_rules(self) -> None:
+        """frame_blocks (fifth batch G, 1859): frame block names as a regex, or an excluded_classes rule id (its block and
+        layer patterns, any sheet kind - a frame outside every sheet has none)."""
+        specs = self.data.get("frame_blocks")
+        if specs is None:
+            return
+        if not isinstance(specs, list):
+            self.problem("C-5", "frame_blocks", "须是数组：每项写 block_pattern（图框块名正则）或 class_id（excluded_classes 的规则号）"); return
+        by_class = {ex["class_id"]: (ex, block, layer) for ex, block, layer, _ in self.class_rules}
+        for i, spec in enumerate(specs):
+            where = f"frame_blocks[{i}]"
+            if not isinstance(spec, dict) or nonempty(spec.get("class_id")) == nonempty(spec.get("block_pattern")):
+                self.problem("C-5", where, "每项只写 block_pattern（图框块名正则）或 class_id（excluded_classes 的规则号）之一"); continue
+            drawing = str(spec.get("drawing") or "").strip()
+            if nonempty(spec.get("class_id")):
+                hit = by_class.get(str(spec["class_id"]).strip())
+                if hit is None:
+                    self.problem("C-5", where, f"引用的规则号 {spec['class_id']} 不在 excluded_classes 里"); continue
+                ex, block, layer = hit
+                self.frames.append((drawing or ex["drawing"], block, layer, str(spec["class_id"]).strip()))
+            else:
+                block = self.regex(spec.get("block_pattern"), where)
+                if block is not None:
+                    self.frames.append((drawing or "*", block, None, block.pattern))
+
+    def is_frame(self, c: dict[str, Any]) -> bool:
+        return c["kind"] == "块" and any(drawing in ("*", c["drawing"]) and (block is None or block.search(c["symbol"]))
+                                         and (layer is None or layer.search(c["layer"])) for drawing, block, layer, _ in self.frames)
+
+    @staticmethod
+    def frame_on_sheet(box: list[float], sheet_list: list[dict[str, Any]]) -> bool:
+        """A sheet box may be the whole frame or only its drawing area (D003's table boxes the 310 x 320 plan inside an
+        840 x 594 frame, so the frame centre falls outside): the frame is on the table when it and a sheet share at least
+        half of the smaller of the two. Frames side by side only touch, so a neighbour's sheet never covers a frame."""
+        area = (box[2] - box[0]) * (box[3] - box[1])
+        for s in sheet_list:
+            x1, y1, x2, y2 = s["bounds"]
+            w, h = min(box[2], x2) - max(box[0], x1), min(box[3], y2) - max(box[1], y1)
+            if w > 0 and h > 0 and w * h >= 0.5 * min(area, s["area"]):
+                return True
+        return False
+
+    def check_frames(self, sheets: dict[str, list[dict[str, Any]]], drawings: dict[str, str]) -> None:
+        """Every frame instance must be on a sheet of the table: one that is not is a sheet the table may have left out
+        (D003 sheet 005, 552.78 m of earthing never counted). On the table = geometry centre on a sheet (as any candidate)
+        or the frame extent sharing most of a sheet box (frame_on_sheet). A frame inside another frame (the title block
+        nested in A0) goes with its outer frame. A frame known only by its insertion point (a corner) and off every sheet
+        cannot be checked: listed, not counted as a missing sheet. Report only."""
+        if self.data.get("frame_blocks") is None:
+            return
+        found = [c for c in self.candidates if self.is_frame(c)]
+        ids = {c["id"] for c in found}
+
+        def inside_frame(cid: str) -> bool:
+            while "/" in cid:
+                cid = cid.rsplit("/", 2)[0]
+                if cid in ids:
+                    return True
+            return False
+
+        frames = [c for c in found if not inside_frame(c["id"])]
+        uncovered, unchecked = 0, 0
+        for drawing in sorted(d for d, kind in drawings.items() if kind != "legend_only" and not sheets.get(d)):
+            own = [c for c in frames if c["drawing"] == drawing]
+            uncovered += len(own)
+            self.warnings["frames_without_sheet_table"].append({"drawing": drawing, "frame_count": len(own), "sample_ids": [c["id"] for c in own[:3]],
+                                                                "hint": "这张图没有图页表，图框和图页都没核：写图页表后重算"})
+        for c in frames:
+            sheet_list = sheets.get(c["drawing"])
+            if not sheet_list or c["sheet"] != UNSHEETED:
+                continue
+            box = c.get("box")
+            if box is not None and box[2] > box[0] and box[3] > box[1]:
+                if self.frame_on_sheet(box, sheet_list):
+                    continue
+                uncovered += 1
+                key, hint = "frame_outside_sheet_table", "图框不在图页表的任何图页里，可能漏了这张图页：补页后重算"
+            else:
+                unchecked += 1
+                key, hint = "frame_extent_unknown", "图框定不出图形范围，插入点（图框角点）不在任何图页里，没法核：核图后补图页表，或补全图框范围"
+            self.warnings[key].append({
+                "drawing": c["drawing"], "id": c["id"], "handle": c["handle"], "block_name": c["symbol"],
+                "insert_point": [c.get("insert_x"), c.get("insert_y")], "geometry_centre": [c["x"], c["y"]],
+                "geometry_box": box, "placement_basis": c.get("placement_basis"), "hint": hint})
+        if uncovered:
+            conclusion = f"可能漏页：{uncovered} 个图框不在图页表里" + (f"；另有 {unchecked} 个图框定不出范围，没核" if unchecked else "")
+        else:
+            conclusion = f"{unchecked} 个图框定不出范围，没核；其余图框都在图页表里" if unchecked else "图框都在图页表里"
+        self.frame_coverage = {"checked": True, "rules": [label for *_, label in self.frames], "frame_count": len(frames),
+                               "nested_frames_skipped": len(found) - len(frames), "uncovered_frame_count": uncovered,
+                               "unchecked_frame_count": unchecked, "conclusion": conclusion}
+
     @staticmethod
     def class_hits(ex, block, layer, kind, c) -> bool:
         return (ex["drawing"] in ("*", c["drawing"]) and (block is None or block.search(c["symbol"]))
@@ -630,7 +736,7 @@ class Ledger:
             names = set()
             if r["symbol_kind"] == "块" and r["legend_handle"]:
                 names.add(base_symbol(r["symbol"]))
-            names |= {base_symbol(e) for e in r.get("_claims") or [] if not e.startswith("@")}
+            names |= {base_symbol(claim_parts(e)[0]) for e in r.get("_claims") or [] if not e.startswith("@")}
             for name in names:
                 rows_of[(r["drawing"], name)].append(r["legend_row"])
         for ex, block, layer, kind in self.class_rules:
@@ -688,8 +794,13 @@ class Ledger:
     def legend(self) -> list[dict[str, str]]:
         auto: list[dict[str, str]] = []
         by_drawing: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        frames_here: set[tuple[str, str]] = set()
         for c in self.candidates:
             if c["kind"] == "块" and c.get("top_level") and c["sheet_kind"] == LEGEND_KIND:
+                if self.is_frame(c):            # a frame or title block on the legend sheet is no legend row (1945)
+                    self.legend_frames[c["drawing"]] += 1
+                    frames_here.add((c["drawing"], (c["handle"] or "").upper()))
+                    continue
                 by_drawing[c["drawing"]].append(c)
         plan_of = self.plan_candidates()
         filled = self.read_legend()
@@ -730,6 +841,9 @@ class Ledger:
         rows = list(auto)
         for row in filled:
             key = (row["drawing"], row["legend_handle"].strip().upper())
+            if row["symbol_kind"] == "块" and key[1] and key in frames_here:
+                self.legend_frame_rows_dropped.append({"drawing": row["drawing"], "legend_row": row["legend_row"], "legend_handle": row["legend_handle"]})
+                continue
             if row["symbol_kind"] == "块" and key[1] and key in index:
                 target = index[key]
                 for field in FILLED:
@@ -760,22 +874,37 @@ class Ledger:
         A block claimed by two rows, explicitly on at least one side, is a conflict and keeps both rows pending."""
         names_of: dict[str, set[str]] = defaultdict(set)
         records_of: dict[str, set[str]] = defaultdict(set)
+        categories_of: dict[tuple[str, str], set[str]] = defaultdict(set)
         for c in self.candidates:
             if c["kind"] == "块":
                 names_of[c["drawing"]] |= {c["symbol"], base_symbol(c["symbol"])}
                 if c.get("adjudication_id"):
                     records_of[c["drawing"]].add(str(c["adjudication_id"]))
+                if c.get("category"):
+                    categories_of[(c["drawing"], base_symbol(c["symbol"]))].add(c["category"])
         for r in rows:
             r["_claims"], r["_explicit"] = None, False
             entries = [e.strip() for e in LIST_SPLIT_RE.split(r.get("matched_symbols") or "") if e.strip()]
             if not entries:
                 continue
-            bad = [e for e in entries if (e[1:] not in records_of[r["drawing"]] if e.startswith("@")
-                                          else e not in names_of[r["drawing"]] and base_symbol(e) not in names_of[r["drawing"]])]
+            bad, wrong = [], []
+            for e in entries:
+                if e.startswith("@"):
+                    if e[1:] not in records_of[r["drawing"]]:
+                        bad.append(e)
+                    continue
+                name, category = claim_parts(e)
+                if name not in names_of[r["drawing"]] and base_symbol(name) not in names_of[r["drawing"]]:
+                    bad.append(e)
+                elif category is not None and category not in categories_of[(r["drawing"], base_symbol(name))]:
+                    wrong.append(e)
+            where = f"图例覆盖表 {r['drawing']} {r['legend_row']}"
             if bad:
-                self.problem("C-6", f"图例覆盖表 {r['drawing']} {r['legend_row']}",
-                             "matched_symbols 写了本图没有的块名或识别记录编号（识别记录写 @编号）：" + "、".join(bad))
+                self.problem("C-6", where, "matched_symbols 写了本图没有的块名或识别记录编号（识别记录写 @编号）：" + "、".join(bad))
                 continue
+            if wrong:
+                self.problem("C-6", where, "matched_symbols 按类别认领（块名::类别），这个块名下没有该类别的实例（类别取计数表或识别记录）："
+                             + "、".join(wrong)); continue
             r["_claims"], r["_explicit"], r["count_source"] = sorted(set(entries)), True, "matched_symbols"
         targets = Counter((r["drawing"], r["target_or_reason"]) for r in rows if r["destination"] == "已计" and r["target_or_reason"])
         for r in rows:
@@ -785,24 +914,37 @@ class Ledger:
                                 if p["destination"] == "已计" and p["category"] == r["target_or_reason"]} - {r["symbol"]})
                 if names:
                     r["_claims"], r["matched_symbols"], r["count_source"] = names, "；".join(names), "类别一对一默认"
+        # block::category claims split one block name's instances between rows by category (1945); a row claiming its
+        # own legend block by category no longer claims all of that block. Plain and by-category claims of one block
+        # name on different rows (the row's own legend block counts as plain) are a conflict, as two plain explicit ones.
         owners: dict[tuple[str, str], list[tuple[str, bool]]] = defaultdict(list)
+        plain: dict[tuple[str, str], set[str]] = defaultdict(set)
+        by_category: dict[tuple[str, str], set[str]] = defaultdict(set)
         for r in rows:
-            keys = set()
-            if r["symbol_kind"] == "块" and r["legend_handle"]:
-                owners[(r["drawing"], base_symbol(r["symbol"]))].append((r["legend_row"], False))
-                keys.add(base_symbol(r["symbol"]))
-            for e in r["_claims"] or []:
-                key = e if e.startswith("@") else base_symbol(e)
+            d, keys = r["drawing"], set()
+            claims = [(e, None) if e.startswith("@") else claim_parts(e) for e in r["_claims"] or []]
+            split = {base_symbol(name) for name, category in claims if category is not None}
+            own = base_symbol(r["symbol"]) if r["symbol_kind"] == "块" and r["legend_handle"] else None
+            if own is not None and own not in split:
+                owners[(d, own)].append((r["legend_row"], False))
+                keys.add(own); plain[(d, own)].add(r["legend_row"])
+            for name, category in claims:
+                if name.startswith("@"):
+                    key = name
+                else:
+                    key = base_symbol(name) if category is None else f"{base_symbol(name)}{CLAIM_SEP}{category}"
+                    (plain if category is None else by_category)[(d, base_symbol(name))].add(r["legend_row"])
                 if key not in keys:
-                    owners[(r["drawing"], key)].append((r["legend_row"], True))
+                    owners[(d, key)].append((r["legend_row"], True))
                     keys.add(key)
             if r["_claims"] is not None:
-                wanted = {base_symbol(e) for e in r["_claims"] if not e.startswith("@")}
-                if r["symbol_kind"] == "块" and r["legend_handle"]:
-                    wanted.add(base_symbol(r["symbol"]))
-                records = {e[1:] for e in r["_claims"] if e.startswith("@")}
-                hits = [p for p in plan_of[r["drawing"]]
-                        if base_symbol(p["symbol"]) in wanted or str(p.get("adjudication_id") or "") in records]
+                wanted = {base_symbol(name) for name, category in claims if category is None and not name.startswith("@")}
+                if own is not None and own not in split:
+                    wanted.add(own)
+                wanted_category = {(base_symbol(name), category) for name, category in claims if category is not None}
+                records = {name[1:] for name, _ in claims if name.startswith("@")}
+                hits = [p for p in plan_of[d] if base_symbol(p["symbol"]) in wanted or (base_symbol(p["symbol"]), p["category"]) in wanted_category
+                        or str(p.get("adjudication_id") or "") in records]
                 r["plan_count"] = str(len(hits))
         by_row = {(r["drawing"], r["legend_row"]): r for r in rows}
         for (drawing, key), claimants in sorted(owners.items()):
@@ -811,6 +953,14 @@ class Ledger:
                 self.warnings["matched_symbol_conflicts"].append({"drawing": drawing, "symbol": key, "legend_rows": numbers})
                 for number in numbers:
                     by_row[(drawing, number)]["_conflict"] = f"matched_symbols 冲突：{key} 同时对应 {'、'.join(numbers)}"
+        for (drawing, key), split_rows in sorted(by_category.items()):
+            numbers = sorted(split_rows | plain.get((drawing, key), set()))
+            if plain.get((drawing, key)) and len(numbers) > 1:
+                self.warnings["matched_symbol_conflicts"].append({"drawing": drawing, "symbol": key, "legend_rows": numbers,
+                                                                  "detail": "一行按类别认领、另一行没写类别"})
+                for number in numbers:
+                    by_row[(drawing, number)]["_conflict"] = (f"matched_symbols 冲突：{key} 在 {'、'.join(numbers)} 里有的按类别认领、"
+                                                              "有的没写类别；同名块分给几行时每行都写 块名::类别")
 
     def read_search_records(self) -> dict[str, dict[str, Any]] | None:
         """search_records: search_negative_evidence.py outputs (one path or a list). None when not given."""
@@ -891,7 +1041,7 @@ class Ledger:
         suspected: dict[tuple[str, str], str] = {}
         for r in rows:
             if r["suspected_category"] and (r["symbol_kind"] == "块" or r.get("_claims")):
-                names = {base_symbol(e) for e in r.get("_claims") or [] if not e.startswith("@")}
+                names = {base_symbol(claim_parts(e)[0]) for e in r.get("_claims") or [] if not e.startswith("@")}
                 if r["symbol_kind"] == "块":
                     names.add(base_symbol(r["symbol"]))
                 for name in names:
@@ -967,6 +1117,8 @@ class Ledger:
         sheets = self.load_sheets()
         self.place(sheets)
         self.apply_rules(self.sheet_kind_rules(sheets, drawings))
+        self.frame_rules()
+        self.check_frames(sheets, drawings)
         self.unexpanded_warnings()
         self.search_records = self.read_search_records()
         legend_rows = self.legend()
@@ -1022,6 +1174,8 @@ class Ledger:
                 "expanded_containers": {d: dict(sorted(n.items())) for d, n in sorted(self.expanded.items()) if n},
                 "placement_basis_counts": dict(sorted(placement.items())),
                 "search_records": {"given": self.search_records is not None, "records": len(self.search_records or {})},
+                "frame_coverage": {**self.frame_coverage, "legend_frames_skipped": dict(sorted(self.legend_frames.items())),
+                                   "legend_frame_rows_dropped": self.legend_frame_rows_dropped},
                 "groups": group_rows, "legend_rows": legend_rows}
 
     def completeness(self) -> dict[str, Any]:
@@ -1084,7 +1238,7 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps({"status": report["status"], "candidate_total": result["candidate_total"], **result["by_destination"],
                       "uncovered_drawings": len(result["uncovered_drawings"]),
                       "legend_rows_without_destination": len(result["legend_rows_without_destination"]),
-                      "ledger": str(out / "点位覆盖台账.json")}, ensure_ascii=False))
+                      "frames": result["frame_coverage"]["conclusion"], "ledger": str(out / "点位覆盖台账.json")}, ensure_ascii=False))
     return 0
 
 
