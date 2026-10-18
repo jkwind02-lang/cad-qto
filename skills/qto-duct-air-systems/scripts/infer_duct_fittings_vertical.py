@@ -12,10 +12,11 @@ destination is unknown is listed as pending, never estimated.
 from __future__ import annotations
 
 import argparse
+import heapq
 import json
 import math
 import sys
-from collections import Counter, defaultdict, deque
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +39,7 @@ DEFAULT_PARAMETERS = {
     "tap_margin": 400.0,                # open end may land on a main within half width + margin
     "band_margin": 250.0,               # single-ended elbow centre within half width + margin of a main
     "riser_match_distance": 2500.0,     # plan distance between stacked single-ended elbows of adjacent floors
-    "fitting_overlap_duplicate": 0.7,   # same-kind fittings overlapping this much are one physical fitting
+    "fitting_overlap_duplicate": 0.7,   # overlap generates identity candidates, never proves identity alone
     "accessory_gap_policy": "exclude",  # exclude (GB 50856 部件所占长度不计) or include
     # Single-ended lengths require an evidenced centre/body endpoint or turn geometry.
     # Legacy full/half-width readings are reported only as diagnostics, never adopted.
@@ -52,7 +53,7 @@ ELEVATION_ORIGIN_LABELS = {"tag": "本段标高标注", "host_propagated": "宿�
 ELEVATION_ORIGINS = set(ELEVATION_ORIGIN_LABELS)
 VERTICAL_LINK_KINDS = {"segment_to_segment", "single_end_to_segment"}
 LENGTH_PENDING_KINDS = {"fitting_unconnected", "fitting_system_ambiguous", "single_end_plane_unresolved", "single_end_turn_plane_unknown",
-                        "single_end_horizontal_destination_unknown", "single_end_destination_unknown"}
+                        "single_end_horizontal_destination_unknown", "single_end_destination_unknown", "fitting_duplicate_identity_unresolved"}
 
 
 class InputError(ValueError):
@@ -344,12 +345,19 @@ class Network:
                 for item in explicit_ends:
                     if not isinstance(item, dict) or item.get("segment_id") not in self.segments or item.get("end") not in {"start", "end"}:
                         fail(f"{fid}.ends 必须引用真实管段的 start/end")
+            identity = raw.get("physical_identity")
+            if identity is not None:
+                if not isinstance(identity, dict):
+                    fail(f"{fid}.physical_identity 必须是含来源、实例编号和依据的对象")
+                identity = {key: text(identity.get(key), f"{fid}.physical_identity.{key}")
+                            for key in ("source_id", "instance_id", "basis")}
             self.fittings.append({
                 "fitting_id": fid, "kind": kind, "floor_id": text(raw.get("floor_id"), f"{fid}.floor_id"),
                 "bbox": [float(v) for v in bbox], "source_id": raw.get("source_id"), "block_name": raw.get("block_name"),
                 "explicit_ends": explicit_ends, "ends": [], "arms": [], "notes": [], "status": "unprocessed",
                 "system": text(raw['system'], f'{fid}.system') if raw.get('system') is not None else None,
                 "single_end_geometry": raw.get('single_end_geometry'),
+                "physical_identity": identity,
             })
             geometry = raw.get('single_end_geometry')
             if geometry is not None:
@@ -390,6 +398,19 @@ class Network:
                 link["fitting_id"] = text(raw.get("fitting_id"), f"{lid}.fitting_id")
                 if link["fitting_id"] not in fitting_ids:
                     fail(f"{lid}.fitting_id 不是已登记管件")
+            anchors = raw.get("connection_ends")
+            if anchors is not None:
+                if kind != "segment_to_segment" or not isinstance(anchors, list) or not 1 <= len(anchors) <= 2:
+                    fail(f"{lid}.connection_ends 仅用于segment_to_segment，须为1或2个有据管段端口")
+                allowed = {link["segment_id"], target}
+                seen_segments = set()
+                link["connection_ends"] = []
+                for anchor in anchors:
+                    if (not isinstance(anchor, dict) or anchor.get("segment_id") not in allowed
+                            or anchor.get("end") not in {"start", "end"} or anchor["segment_id"] in seen_segments):
+                        fail(f"{lid}.connection_ends 必须引用连接两侧互不重复的真实管段start/end")
+                    seen_segments.add(anchor["segment_id"])
+                    link["connection_ends"].append((anchor["segment_id"], anchor["end"]))
             self.vertical_links.append(link)
 
     # ------------------------------------------------------------ geometry helpers
@@ -449,6 +470,41 @@ def build_connections(net: Network, result: dict[str, Any]) -> None:
             joints.append({"a": list(a), "b": list(b), "distance": d})
             end_state[a] = end_state[b] = "joint"
     result["joints"] = joints
+    # A bare endpoint tee/cross has no fitting block to provide main/branch metadata.
+    # Find its coincident-end node first; collinear opposite-facing arms continue one run,
+    # while the other directions cross a branch boundary. Two-arm bends remain continuous.
+    endpoint_graph = defaultdict(set)
+    for joint in joints:
+        a, b = tuple(joint['a']), tuple(joint['b'])
+        endpoint_graph[a].add(b)
+        endpoint_graph[b].add(a)
+    visited = set()
+    for seed in endpoint_graph:
+        if seed in visited:
+            continue
+        component, stack = set(), [seed]
+        while stack:
+            node = stack.pop()
+            if node in component:
+                continue
+            component.add(node)
+            stack.extend(endpoint_graph[node] - component)
+        visited.update(component)
+        if len({sid for sid, _ in component}) < 3:
+            continue
+        local = [j for j in joints if tuple(j['a']) in component and tuple(j['b']) in component]
+        def through(joint):
+            ua, ub = net.outward(*joint['a']), net.outward(*joint['b'])
+            return (abs(ua[0] * ub[1] - ua[1] * ub[0]) <= p['collinear_cross_limit']
+                    and ua[0] * ub[0] + ua[1] * ub[1] < 0)
+        if not any(through(j) for j in local):
+            continue  # no supported through-run identity; do not invent a main direction
+        for joint in local:
+            ua, ub = net.outward(*joint['a']), net.outward(*joint['b'])
+            if through(joint):
+                joint['elevation_relation'] = 'same_run'
+            elif abs(ua[0] * ub[1] - ua[1] * ub[0]) > p['collinear_cross_limit']:
+                joint['elevation_relation'] = 'branch_boundary'
     result["cross_system_contacts"] = contacts
     for item in contacts:
         result["pending"].append({"kind": "cross_system_contact", "a": item["a"], "b": item["b"], "systems": item["systems"],
@@ -474,26 +530,87 @@ def build_connections(net: Network, result: dict[str, Any]) -> None:
         if not ambiguous:
             fitting['ends'] = candidates
             fitting['system'] = fitting['system'] or next(iter(systems), None)
-        # Duplicates only within the same system; ambiguous copies of one block (Revit exports)
-        # collapse into one pending item instead of one per copy.
+        # Duplicate evidence is considered only within the same system/ownership group.
+        # An evidenced same physical block can have unresolved ownership and one combined pending.
         # tagged keys: a system may legitimately be named "ambiguous"
         group_key = ('ambiguous',) if ambiguous else ('system', fitting['system'])
+        fitting['_ownership_group'] = group_key
+        fitting['_candidate_ends'] = candidates
+        fitting['_candidate_systems'] = systems
+
+    # Check the complete claimed physical group before choosing any representative. A copy with
+    # no explicit ports must not erase one member's ports and then swallow a conflicting member.
+    identity_groups = defaultdict(list)
+    for fitting in net.fittings:
+        identity = fitting['physical_identity']
+        if identity:
+            key = (fitting['kind'], fitting['floor_id'], fitting['_ownership_group'], identity['source_id'], identity['instance_id'])
+            identity_groups[key].append(fitting)
+    identity_conflicts = set()
+    for members in identity_groups.values():
+        port_sets = {frozenset((e['segment_id'], e['end']) for e in f['explicit_ends'])
+                     for f in members if f['explicit_ends'] is not None}
+        if len(port_sets) > 1:
+            ids = sorted(f['fitting_id'] for f in members)
+            identity_conflicts.update(ids)
+            result['pending'].append({'kind': 'fitting_duplicate_identity_unresolved', 'fitting_ids': ids,
+                'physical_identity': members[0]['physical_identity'],
+                'explicit_port_sets': [sorted(list(ports)) for ports in sorted(port_sets, key=lambda value: sorted(value))],
+                'reason': '同一来源物理身份组含不同有效显式端口，整组身份凭据冲突；合并前保留全部成员及端口证据，不让无端口代表覆盖冲突'})
+
+    # Where a non-conflicting group has explicit port evidence, consume that member as the
+    # representative before an unported copy; inferred bbox ports cannot replace known ports.
+    for fitting in sorted(net.fittings, key=lambda item: item['explicit_ends'] is None):
+        x1, y1, x2, y2 = fitting['bbox']
+        group_key = fitting['_ownership_group']
+        ambiguous = group_key == ('ambiguous',)
+        candidates, systems = fitting['_candidate_ends'], fitting['_candidate_systems']
         area = max((x2 - x1) * (y2 - y1), 1e-9)
         duplicate_of = None
         for other in kept:
             other_key = ('ambiguous',) if other['status'] == 'system_ambiguous' else ('system', other['system'])
             if other["kind"] != fitting["kind"] or other["floor_id"] != fitting["floor_id"] or other_key != group_key:
                 continue
+            if fitting['fitting_id'] in identity_conflicts or other['fitting_id'] in identity_conflicts:
+                continue
             ox1, oy1, ox2, oy2 = other["bbox"]
             ix = max(0.0, min(x2, ox2) - max(x1, ox1))
             iy = max(0.0, min(y2, oy2) - max(y1, oy1))
-            if ix * iy / min(area, max((ox2 - ox1) * (oy2 - oy1), 1e-9)) >= p["fitting_overlap_duplicate"]:
+            if ix * iy / min(area, max((ox2 - ox1) * (oy2 - oy1), 1e-9)) < p["fitting_overlap_duplicate"]:
+                continue
+            explicit = fitting["explicit_ends"]
+            other_explicit = other["explicit_ends"]
+            identity = fitting["physical_identity"]
+            other_identity = other["physical_identity"]
+            identity_key = (identity["source_id"], identity["instance_id"]) if identity else None
+            other_identity_key = (other_identity["source_id"], other_identity["instance_id"]) if other_identity else None
+            ports = {(v["segment_id"], v["end"]) for v in explicit} if explicit is not None else None
+            other_ports = {(v["segment_id"], v["end"]) for v in other_explicit} if other_explicit is not None else None
+            if explicit is not None and other_explicit is not None:
+                if ports != other_ports:
+                    # Different evidenced ports identify different physical connections, even where
+                    # opposite bends occupy almost the same plan envelope.
+                    if identity_key is not None and identity_key == other_identity_key:
+                        result["pending"].append({"kind": "fitting_duplicate_identity_unresolved",
+                            "fitting_ids": [other["fitting_id"], fitting["fitting_id"]],
+                            "reason": "同物身份凭据与不同有效显式端口冲突，保留两件待核，不以身份声明覆盖端口证据"})
+                    continue
+            if identity_key is not None and other_identity_key is not None and identity_key != other_identity_key:
+                if ports is not None and ports == other_ports:
+                    result["pending"].append({"kind": "fitting_duplicate_identity_unresolved",
+                        "fitting_ids": [other["fitting_id"], fitting["fitting_id"]],
+                        "reason": "不同有据物理身份与相同显式端口冲突，保留两件待核，不因bbox或端口一致覆盖身份"})
+                continue
+            if (ports is not None and ports == other_ports) or (identity_key is not None and identity_key == other_identity_key):
                 duplicate_of = other
                 break
+            result["pending"].append({"kind": "fitting_duplicate_identity_unresolved",
+                "fitting_ids": [other["fitting_id"], fitting["fitting_id"]],
+                "reason": "同类管件范围重合只构成重复候选；缺相同有效显式端口或同来源命名空间的物理身份凭据，保留两件待核，不按bbox强制合并"})
         if duplicate_of:
             fitting["status"] = "duplicate"
             fitting["duplicate_of"] = duplicate_of["fitting_id"]
-            fitting["notes"].append(f"与 {duplicate_of['fitting_id']} 同类且范围重合，按同一物理管件只计一次")
+            fitting["notes"].append(f"与 {duplicate_of['fitting_id']} 同类同归属组、范围重合且显式端口或有据物理身份相同，按同一物理连接的重复表示只计一次")
             if ambiguous:
                 duplicate_of['ambiguous_pending']['duplicate_fitting_ids'].append(fitting['fitting_id'])
             duplicates.append(fitting)
@@ -513,7 +630,9 @@ def build_connections(net: Network, result: dict[str, Any]) -> None:
         for key in fitting["ends"]:
             end_state.setdefault(key, "fitting")
     net.fittings = kept
-    result["duplicate_fittings"] = [{"fitting_id": f["fitting_id"], "duplicate_of": f["duplicate_of"], "kind": f["kind"]} for f in duplicates]
+    result["duplicate_fittings"] = [{"fitting_id": f["fitting_id"], "duplicate_of": f["duplicate_of"], "kind": f["kind"],
+                                    **({"explicit_ends": f["explicit_ends"]} if f["explicit_ends"] is not None else {}),
+                                    **({"physical_identity": f["physical_identity"]} if f["physical_identity"] else {})} for f in duplicates]
     # 3. accessory gaps between free collinear facing ends
     gaps = []
     free = [e for e in ends if e not in end_state]
@@ -667,6 +786,7 @@ def fitting_arms(net: Network, result: dict[str, Any]) -> None:
                 if best_pair is None or cross < best_pair[0]:
                     best_pair = (cross, i, j)
         i, j = best_pair[1], best_pair[2]
+        fitting["main_segment_ids"] = [pts[i][0], pts[j][0]]
         branches = [pt for index, pt in enumerate(pts) if index not in (i, j)]
         J = intersect(pts[i][2], pts[i][3], branches[0][2], branches[0][3], p["collinear_cross_limit"]) if branches else None
         if J is None:
@@ -712,7 +832,7 @@ def fitting_arms(net: Network, result: dict[str, Any]) -> None:
 
 
 def build_runs(net: Network) -> tuple[dict[str, str], dict[str, set[str]]]:
-    """Continuity for elevation propagation: joints, gaps, taps and fittings except vertical candidates."""
+    """Keep same-run continuity separate from crossing a main/branch boundary."""
     parent = {sid: sid for sid in net.segments}
 
     def find(x):
@@ -722,35 +842,59 @@ def build_runs(net: Network) -> tuple[dict[str, str], dict[str, set[str]]]:
         return x
 
     adjacency: dict[str, set[str]] = defaultdict(set)
+    branch_adjacency: dict[str, set[str]] = defaultdict(set)
 
-    def link(a, b):
+    def fitting_branch(fitting, a, b):
+        main_ids = set(fitting.get("main_segment_ids", ()))
+        if main_ids:
+            return not {a, b} <= main_ids
+        if fitting["kind"] in {"tap", "tee", "cross"}:
+            ua, ub = net.segments[a]["u"], net.segments[b]["u"]
+            return abs(ua[0] * ub[1] - ua[1] * ub[0]) > net.params["collinear_cross_limit"]
+        return False
+
+    # Endpoints may also meet exactly at a tee. Its explicit main/branch relation must
+    # not be bypassed by the generic coincident-end joint created earlier.
+    branch_pairs = {frozenset((item["segment_id"], item["main_segment_id"])) for item in net.result["open_taps"]}
+    for fitting in net.fittings:
+        ids = [sid for sid, _ in fitting["ends"]]
+        if fitting.get("main_segment_id"):
+            branch_pairs.update(frozenset((sid, fitting["main_segment_id"])) for sid in ids)
+        else:
+            branch_pairs.update(frozenset((a, b)) for a in ids for b in ids if a != b and fitting_branch(fitting, a, b))
+
+    def link(a, b, branch=False):
         if net.segments[a]['system'] != net.segments[b]['system']:
             fail(f'{a}/{b}: 连续关系跨风系统，不能传播标高')
         parent[find(a)] = find(b)
-        adjacency[a].add(b)
-        adjacency[b].add(a)
+        graph = branch_adjacency if branch or frozenset((a, b)) in branch_pairs else adjacency
+        graph[a].add(b)
+        graph[b].add(a)
 
     for item in net.result["joints"]:
-        link(item["a"][0], item["b"][0])
+        link(item["a"][0], item["b"][0], branch=item.get('elevation_relation') == 'branch_boundary')
     for item in net.result["accessory_gaps"]:
         link(item["a"][0], item["b"][0])
     for item in net.result["open_taps"]:
-        link(item["segment_id"], item["main_segment_id"])
+        link(item["segment_id"], item["main_segment_id"], branch=True)
     for fitting in net.fittings:
         if fitting["status"] in {"offset_candidate", "offset_member_duplicate", 'system_ambiguous'} or fitting['status'].startswith('single_end'):
             continue
         ids = [sid for sid, _ in fitting["ends"]]
         if fitting.get("main_segment_id"):
-            ids.append(fitting["main_segment_id"])
+            for sid in ids:
+                link(sid, fitting["main_segment_id"], branch=True)
+            continue
         for a in ids:
             for b in ids:
                 if a != b:
-                    link(a, b)
+                    link(a, b, branch=fitting_branch(fitting, a, b))
+    net.elevation_branch_adjacency = branch_adjacency
     return {sid: find(sid) for sid in net.segments}, adjacency
 
 
 def propagate_elevation(net: Network, adjacency: dict[str, set[str]]) -> dict[str, dict[str, Any]]:
-    """Nearest tagged segment within the run by hop count; conflicting equal-hop values stay unresolved."""
+    """Prefer any same-run tag to main/branch fallback; fallback is scenario evidence only."""
     resolved: dict[str, dict[str, Any]] = {}
     for sid, segment in net.segments.items():
         own, level, why = net.center_elevation(segment)
@@ -761,34 +905,42 @@ def propagate_elevation(net: Network, adjacency: dict[str, set[str]]) -> dict[st
             resolved[sid] = {"value": own, "evidence_level": level, "origin": segment["elevation"]["origin"],
                              "basis": f"{source} {segment['elevation']['source_id']}（{segment['elevation']['reference']}）", "hops": 0}
             continue
-        seen = {sid}
-        frontier = deque([(sid, 0)])
+        best = {sid: (0, 0)}
+        frontier = [(0, 0, sid)]
         found = None
+        tagged = []
+        found_cost = None
         while frontier and found is None:
-            hop = frontier[0][1]
-            level_nodes = []
-            while frontier and frontier[0][1] == hop:
-                level_nodes.append(frontier.popleft()[0])
-            tagged = []
-            for node in level_nodes:
-                value, lvl, _ = net.center_elevation(net.segments[node])
-                if value is not None and node != sid:
-                    tagged.append((node, value, lvl))
-            if tagged:
-                values = sorted({round(v, 6) for _, v, _ in tagged})
-                if len(values) == 1:
-                    node, value, lvl = tagged[0]
-                    derived = "方案暂估" if lvl == "方案暂估" else "规则推算"
-                    found = {"value": value, "evidence_level": derived, "origin": "script_propagated",
-                             "basis": f"沿连续管路传播自 {node} 的标高（{hop} 跳，无变径/支管竖向）", "hops": hop}
-                else:
-                    found = {"value": None, "evidence_level": "未决", "basis": f"同距离多个不同标高 {values}，无法判定", "hops": hop}
+            crossings, hop, node = heapq.heappop(frontier)
+            cost = (crossings, hop)
+            if cost != best[node]:
+                continue
+            if found_cost is not None and cost > found_cost:
                 break
-            for node in level_nodes:
-                for nxt in adjacency.get(node, ()):
-                    if nxt not in seen:
-                        seen.add(nxt)
-                        frontier.append((nxt, hop + 1))
+            value, lvl, _ = net.center_elevation(net.segments[node])
+            if value is not None and node != sid:
+                found_cost = cost
+                tagged.append((node, value, lvl))
+                continue
+            for extra, graph in ((0, adjacency), (1, net.elevation_branch_adjacency)):
+                for nxt in sorted(graph.get(node, ())):
+                    candidate_cost = (crossings + extra, hop + 1)
+                    if nxt not in best or candidate_cost < best[nxt]:
+                        best[nxt] = candidate_cost
+                        heapq.heappush(frontier, (*candidate_cost, nxt))
+        if tagged:
+            crossings, hop = found_cost
+            values = sorted({round(v, 6) for _, v, _ in tagged})
+            if len(values) == 1:
+                node, value, lvl = sorted(tagged)[0]
+                derived = "方案暂估" if crossings or lvl == "方案暂估" else "规则推算"
+                basis = (f"跨主支管接头 {crossings} 次取 {node} 的标高作同高假定（{hop} 跳，无同支管标高依据，仅方案暂估）" if crossings else
+                         f"沿同一连续管路传播自 {node} 的标高（{hop} 跳，不跨主支管边界或竖向候选）")
+                found = {"value": value, "evidence_level": derived, "origin": "script_propagated", "basis": basis, "hops": hop,
+                         "branch_boundaries": crossings}
+            else:
+                found = {"value": None, "evidence_level": "未决", "basis": f"同优先级同距离多个不同标高 {values}，无法判定", "hops": hop,
+                         "branch_boundaries": crossings}
         resolved[sid] = found or {"value": None, "evidence_level": "未决", "basis": why or "连续管路内没有标高标注", "hops": None}
     return resolved
 
@@ -807,7 +959,7 @@ def vertical_items(net: Network, elevations: dict[str, dict[str, Any]], result: 
 
     # 0. host-declared vertical connections: the host has judged which pipes join; the script
     #    only takes the centre-elevation difference and keeps the host as the source.
-    host_pairs: set[frozenset[str]] = set()
+    host_connections: dict[frozenset[str], list[dict[str, Any]]] = defaultdict(list)
     fittings_by_id = {f["fitting_id"]: f for f in net.fittings}
     for link in net.vertical_links:
         fitting = None
@@ -825,8 +977,18 @@ def vertical_items(net: Network, elevations: dict[str, dict[str, Any]], result: 
             if fitting.get("vertical_id"):
                 fail(f"{link['link_id']}: 管件 {fitting['fitting_id']} 已有竖向连接")
             sa, sb = fitting["ends"][0][0], link["to_segment_id"]
-        if frozenset((sa, sb)) in host_pairs:
-            fail(f"{link['link_id']}: {sa} 与 {sb} 的竖向连接重复声明")
+        anchors = list(link.get("connection_ends", ()))
+        if fitting is not None:
+            anchors = [fitting["ends"][0]]
+        pair = frozenset((sa, sb))
+        for previous in host_connections[pair]:
+            old = dict(previous["anchors"])
+            new = dict(anchors)
+            # Different anchored ports can prove two real connections between the same runs.
+            # Non-overlapping/incomplete hints cannot prove that two declarations are distinct.
+            shared = old.keys() & new.keys()
+            if not shared or any(old[sid] == new[sid] for sid in shared):
+                fail(f"{link['link_id']}: {sa} 与 {sb} 的竖向连接重复声明或缺少不同连接端口依据")
         if net.segments[sa]['system'] != net.segments[sb]['system']:
             fail(f"{link['link_id']}: 竖向连接跨风系统，不能自动合并数量")
         ea, eb = elevations[sa], elevations[sb]
@@ -851,21 +1013,20 @@ def vertical_items(net: Network, elevations: dict[str, dict[str, Any]], result: 
                       "floor_id": floor_a if floor_a == floor_b else f"{floor_a}-{floor_b}", "fitting_ids": [fitting["fitting_id"]] if fitting else [],
                       "segment_ids": [sa, sb], "system": segment["system"], "spec": spec_of(segment), "length": length, "evidence_level": level,
                       "basis": f"宿主判定 {link['link_id']}（{link['source_id']}：{link['basis']}）；{sa}: {ea['value']}（{ea['basis']}） / {sb}: {eb['value']}（{eb['basis']}）{floor_note}；按管中心标高差"})
-        host_pairs.add(frozenset((sa, sb)))
+        items[-1]["connection_ends"] = [{"segment_id": sid, "end": end} for sid, end in anchors]
+        host_connections[pair].append({"item": items[-1], "anchors": anchors})
         if fitting is not None:
             fitting["vertical_id"] = vid
     # 1. in-floor offsets
     for group in net.offset_groups.values():
         (sa, _), (sb, _) = group["ends"]
-        if frozenset((sa, sb)) in host_pairs:
-            group["superseded_by_host_link"] = True
-            continue
         ea, eb = elevations[sa], elevations[sb]
         segment = net.segments[sa]
         level = combine([ea["evidence_level"], eb["evidence_level"]])
         length = abs(ea["value"] - eb["value"]) if level != "未决" else None
         items.append({"vertical_id": f"VERT-{len(items) + 1:03d}", "kind": "in_floor_offset", "floor_id": group["floor_id"], "fitting_ids": group["members"],
                       "segment_ids": [sa, sb], "system": segment["system"], "spec": spec_of(segment), "length": length,
+                       "_connection_ends": group["ends"],
                       "evidence_level": level, "basis": f"{sa}: {ea['value']}（{ea['basis']}） / {sb}: {eb['value']}（{eb['basis']}）；上下翻按两侧管中心标高差"})
     # 2. single-ended elbows: branch rising/dropping onto a main of the same floor
     singles = [f for f in net.fittings if f["status"] == "single_end" and not f.get('plane_length_unresolved')]
@@ -891,6 +1052,7 @@ def vertical_items(net: Network, elevations: dict[str, dict[str, Any]], result: 
         length = abs(ea["value"] - eb["value"]) if level != "未决" else None
         items.append({"vertical_id": f"VERT-{len(items) + 1:03d}", "kind": "branch_to_main", "floor_id": fitting["floor_id"], "fitting_ids": [fitting["fitting_id"]],
                       "segment_ids": [sid, partner["segment_id"]], "system": segment["system"], "spec": spec_of(segment), "length": length,
+                       "_connection_ends": [(sid, which)],
                       "evidence_level": level, "basis": f"支管 {sid}: {ea['value']}（{ea['basis']}） -> 主管 {partner['segment_id']}: {eb['value']}（{eb['basis']}）；支管竖向接主管按管中心标高差"})
         fitting["vertical_id"] = items[-1]["vertical_id"]
     # 3. inter-floor risers between stacked single-ended elbows
@@ -923,17 +1085,17 @@ def vertical_items(net: Network, elevations: dict[str, dict[str, Any]], result: 
             vid = f"VERT-{len(items) + 1:03d}"
             items.append({"vertical_id": vid, "kind": "inter_floor_riser", "floor_id": f"{lower['floor_id']}-{upper['floor_id']}",
                           "fitting_ids": [candidate["fitting_id"], fitting["fitting_id"]], "segment_ids": [sl, su],
+                           "_connection_ends": [candidate["ends"][0], fitting["ends"][0]],
                           "system": net.segments[su]["system"], "spec": spec_of(net.segments[su]), "length": length, "evidence_level": level,
                           "basis": f"{upper['floor_id']} {su} 中心 {eu['value']} + 层标高 {upper['level']} / {lower['floor_id']} {sl} 中心 {el['value']} + 层标高 {lower['level']}；平面错位 {best[0]:.0f}"})
             fitting["vertical_id"] = candidate["vertical_id"] = vid
-    # 3b. stacked candidates where one end's single-end geometry is unresolved (reversed or unknown
-    #     relation, conflicting evidence, turn plane not declared). They never enter the rule quantity.
-    #     The pair is reported against both ends and as one combined item; where every blocked end
-    #     shows a riser projection the riser is listed as a scenario outside the totals.
-    blocked = [f for f in net.fittings if len(f["ends"]) == 1 and not f.get("vertical_id")
+
+    # Freeze one physical-candidate universe before any host supersession: resolved and
+    # geometry-blocked branches are not separate opportunities to claim uniqueness.
+    blocked = [f for f in net.fittings if len(f["ends"]) == 1 and not f.get("vertical_id") and not f.get("vertical_identity_pending")
                and (f["status"] == "single_end_unresolved" or (f["status"] == "single_end" and f.get("plane_length_unresolved")))]
     blocked_ids = {f["fitting_id"] for f in blocked}
-    open_ends = [f for f in singles if not f.get("vertical_id")] + blocked
+    open_ends = [f for f in singles if not f.get("vertical_id") and not f.get("vertical_identity_pending")] + blocked
 
     def locate(fitting):
         if fitting.get("plane_center") and not fitting.get("plane_length_unresolved"):
@@ -956,10 +1118,87 @@ def vertical_items(net: Network, elevations: dict[str, dict[str, Any]], result: 
                          [pb[0] - upper["plan_offset"][0], pb[1] - upper["plan_offset"][1]])
                 if d <= p["riser_match_distance"]:
                     blocked_pairs.append((d, lower, upper, a, b, {a["fitting_id"]: basis_a, b["fitting_id"]: basis_b}))
+    all_connection_candidates = defaultdict(set)
+    for item in items:
+        if item['kind'] != 'host_declared_link':
+            all_connection_candidates[frozenset(item['segment_ids'])].add(frozenset(tuple(e) for e in item['_connection_ends']))
+    for _, _, _, a, b, _ in blocked_pairs:
+        ports = (a['ends'][0], b['ends'][0])
+        all_connection_candidates[frozenset((ports[0][0], ports[1][0]))].add(frozenset(tuple(e) for e in ports))
+
+    def match_host(item):
+        """Return a unique evidenced host, None for a different connection, or 'ambiguous'."""
+        pair = frozenset(item["segment_ids"])
+        hosts = host_connections.get(pair, ())
+        candidate_count = len(all_connection_candidates[pair])
+        matches, unknown = [], False
+        ports = dict(item["_connection_ends"])
+        for host in hosts:
+            anchors = dict(host["anchors"])
+            if not anchors:
+                if candidate_count == 1 and len(hosts) == 1:
+                    matches.append(host)
+                else:
+                    unknown = True
+                continue
+            shared = anchors.keys() & ports.keys()
+            if any(anchors[sid] != ports[sid] for sid in shared):
+                if any(anchors[sid] == ports[sid] for sid in shared):
+                    unknown = True  # one port claimed twice with contradictory partner ports
+                continue
+            if anchors.items() <= ports.items():
+                matches.append(host)
+            else:
+                unknown = True
+        if len(matches) == 1 and not unknown:
+            return matches[0]
+        return "ambiguous" if matches or unknown else None
+
+    def supersede(item, host):
+        for fid in item["fitting_ids"]:
+            fitting = fittings_by_id[fid]
+            if host == "ambiguous":
+                fitting.pop("vertical_id", None)
+                fitting["vertical_identity_pending"] = True
+            else:
+                fitting["vertical_id"] = host["item"]["vertical_id"]
+        if host == "ambiguous":
+            pending.append({"kind": "vertical_connection_identity_unresolved", "segment_ids": item["segment_ids"],
+                "fitting_ids": item["fitting_ids"], "candidate": {k: v for k, v in item.items() if not k.startswith("_")},
+                "reason": "同一管段对有多处不同端口竖向候选，显式声明缺唯一对应证据；保留候选待核，不按整对吞并，也不与宿主项重复计量。补connection_ends或明确单端管件连接"})
+
+    retained = []
+    for item in items:
+        if item["kind"] == "host_declared_link":
+            retained.append(item)
+            continue
+        host = match_host(item)
+        if host is not None:
+            supersede(item, host)
+            if host != "ambiguous" and item["kind"] == "in_floor_offset":
+                for group in net.offset_groups.values():
+                    if group["members"] == item["fitting_ids"]:
+                        group["superseded_by_host_link"] = True
+        else:
+            retained.append(item)
+    items = retained
+    for item in items:
+        anchors = item.pop("_connection_ends", None)
+        if anchors is not None:
+            item["connection_ends"] = [{"segment_id": sid, "end": end} for sid, end in anchors]
+    # 3b. stacked candidates where one end's single-end geometry is unresolved (reversed or unknown
+    #     relation, conflicting evidence, turn plane not declared). They never enter the rule quantity.
+    #     The pair is reported against both ends and as one combined item; where every blocked end
+    #     shows a riser projection the riser is listed as a scenario outside the totals.
     scenarios, partners, scenario_used = [], defaultdict(list), set()
     for d, lower, upper, a, b, bases in sorted(blocked_pairs, key=lambda pair: pair[0]):
         ids = [a["fitting_id"], b["fitting_id"]]
         sa, sb = a["ends"][0][0], b["ends"][0][0]
+        candidate = {"segment_ids": [sa, sb], "fitting_ids": ids, "_connection_ends": [a["ends"][0], b["ends"][0]]}
+        host = match_host(candidate)
+        if host is not None:
+            supersede(candidate, host)
+            continue
         partners[ids[0]].append(ids[1]); partners[ids[1]].append(ids[0])
         stuck = [f for f in (a, b) if f["fitting_id"] in blocked_ids]
         why = "；".join(f"{f['fitting_id']}：{'、'.join(f.get('single_end_block_reasons') or ['单端几何未决'])}" for f in stuck)
@@ -993,7 +1232,7 @@ def vertical_items(net: Network, elevations: dict[str, dict[str, Any]], result: 
     result["vertical_scenarios"] = scenarios
     # 4. single ends with unknown destination are pending, never estimated
     for fitting in singles:
-        if fitting.get("vertical_id"):
+        if fitting.get("vertical_id") or fitting.get("vertical_identity_pending"):
             continue
         sid, which = fitting["ends"][0]
         segment = net.segments[sid]
@@ -1063,6 +1302,7 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
                              "ends": [{"segment_id": s, "end": w} for s, w in fitting["ends"]], "junction": fitting.get("junction"),
                              "main_segment_id": fitting.get("main_segment_id"), "arms": arms,
                              'system': fitting.get('system'),
+                              'physical_identity': fitting.get('physical_identity'),
                              'single_end_geometry': fitting.get('single_end_geometry'),
                              'plane_center': fitting.get('plane_center'),
                              'plane_extension_basis': fitting.get('plane_extension_basis'),

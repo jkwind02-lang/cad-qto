@@ -20,3 +20,9 @@
 对象定义、活动实例和实物数量不同。活动实例必须能从当前布局通过插入路径到达；未放置的定义不能作为活动构件验证。相同源定义的不同插入/阵列单元分别保留路径，不在读取层去重为实物数量。
 
 图纸单位未知、曲线含义未明、源坐标无效或引用缺失均保持原状态。原图/DXF和导出回执身份不一致时拒绝复用。已炸开或转T3丢掉载荷的文件不具有可恢复的原生专用字段。
+
+## DWG导出与暂存清理
+
+导出回执 `*.dxf.export.json` 的 `status=PASS`、`export_status=SUCCEEDED` 表示导出、DXF完整性和源身份检查已通过；基础读取可继续使用该交换副本。`cleanup` 单列本次暂存资源的处置：`CLEANED` 已清理、`NOT_NEEDED` 已不存在、`RETAINED` 因占用等异常保留、`REFUSED` 因路径或链接校验拒绝清理。字段 `stage_directory` 是本次确切资源路径，`attempts` 为有限清理尝试次数，`retained` 和 `warning` 说明剩余资源与原因。清理告警不把有效导出改判失败，也不证明历史占用者归属。
+
+导出失败保留非零退出及原始主错误；`*.dxf.导出失败.log` 记录主因与转换日志，`*.dxf.导出失败.json` 分列 `export_error`、`backend_completed`、`dxf_completion_verified`、`source_immutable_verified` 和 `cleanup`。该失败记录不是成功导出回执，不能据此继续读取或把部分文件判为可用。仅清理本次校验后的临时目录；不扫描或终止其他会话进程。

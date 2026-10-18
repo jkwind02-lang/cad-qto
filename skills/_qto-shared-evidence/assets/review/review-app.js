@@ -55,7 +55,7 @@ try{
   $('category').value=preferred&&counts[preferred]?preferred:'全部';
  }
  function list(reset=true){
-  if(reset){page=0;selected=null;focused=null;checked.clear();$('members-panel').hidden=true;$('current-adoption').hidden=true;$('save-review').disabled=true;}
+  if(reset){page=0;selected=null;focused=null;syncUnlocated();checked.clear();$('members-panel').hidden=true;$('current-adoption').hidden=true;$('save-review').disabled=true;}
   const prof=$('professional').value,cat=$('category').value,q=$('search').value.trim().toLowerCase();
   items=source().filter(o=>(prof==='全部'||(o.member_keys?groupProfessional(o).includes(prof):o.professional===prof))&&(cat==='全部'||o.category===cat)&&(!q||JSON.stringify(o).toLowerCase().includes(q)));
   page=Math.min(page,Math.max(0,Math.ceil(items.length/PAGE)-1));$('list').replaceChildren();
@@ -69,7 +69,7 @@ try{
   $('list-page').textContent=(page+1)+' / '+Math.max(1,Math.ceil(items.length/PAGE));$('list-prev').disabled=page===0;$('list-next').disabled=(page+1)*PAGE>=items.length;draw();
  }
  function select(i){
-  selected=i;focused=null;memberPage=0;document.querySelectorAll('.item').forEach(b=>b.classList.toggle('active',b.dataset.key===i.id));
+  selected=i;focused=null;syncUnlocated();memberPage=0;document.querySelectorAll('.item').forEach(b=>b.classList.toggle('active',b.dataset.key===i.id));
   const note=feedback.drafts[key(i)]||feedback.annotations[key(i)];
   checked=new Set(i.member_keys?(note?.selected_object_keys||i.member_keys).filter(k=>i.member_keys.includes(k)):[]);
   $('members-panel').hidden=!i.member_keys;if(i.member_keys)renderMembers();reviewShow(i);
@@ -127,7 +127,7 @@ try{
   if(tw.apart.length){if(tw.same.length>1)box.append(document.createElement('br'));rows(tw.apart,'注意：同编号另有 '+tw.apart.length+' 条记录坐标不一致，各画各的点，请核对坐标：');}
   return box;
  }
- function changeScene(id,fitPage=true){if(!scenes.has(id))return;const swap=scene!==scenes.get(id);scene=scenes.get(id);$('scene').value=id;if(swap){marks=[];mpts=[];renderSymbols();if(measuring)status(measureText());}if(fitPage)fit();draw();}
+ function changeScene(id,fitPage=true){if(!scenes.has(id))return;const swap=scene!==scenes.get(id);scene=scenes.get(id);$('scene').value=id;if(swap){syncUnlocated(null);marks=[];mpts=[];renderSymbols();if(measuring)status(measureText());}if(fitPage)fit();draw();}
  // What this page cannot show is counted per scene; the reviewer must go back to the original for those (scene mapping contract 7.4).
  const NOT_SHOWN={other_layers:'大块里未画的图层',pattern_hatch:'填充图案',image:'图片',ole:'OLE 对象',proxy:'代理对象',xref_missing:'缺外部参照'};
  function restorationText(s){const r=s?.restoration;if(!r)return '';if(r.source==='neutral')return ' · '+(r.note||'底图只有模型空间顶层图元');if(!r.not_shown_total)return ' · 底图已按原图还原';const top=(r.other_layers_top||[]).slice(0,3).map(e=>e[0]).join('、');return ' · 本页看不出 '+r.not_shown_total+' 处，须回原图（'+Object.entries(r.not_shown||{}).filter(e=>e[1]).map(e=>(NOT_SHOWN[e[0]]||e[0])+' '+e[1]+(e[0]==='other_layers'&&top?'，多为 '+top:'')).join('；')+'）';}
@@ -164,9 +164,13 @@ try{
   d.append(t('。已计、未计要回原图或看覆盖台账。'));return d;
  }
  $('symbols').onclick=()=>{const p=$('symbols-panel');p.hidden=!p.hidden;$('symbols').classList.toggle('on',!p.hidden);if(p.hidden){marks=[];draw();}};
+ function syncUnlocated(obj=focused){
+  const note=$('unlocated'),show=obj?.kind==='unlocated';note.hidden=!show;
+  const why=show?core.unlocatedText(obj):'';note.textContent=show?'本对象尚无可靠图面定位'+(why?'（'+why+'）':'')+'。保留数量、来源及文字批注，不用虚构坐标代替回图。':'';
+ }
  function focus(i){
   focused=i;if(i.scene_id)changeScene(i.scene_id,false);showFacts(i);
-  const why=core.unlocatedText(i);$('unlocated').hidden=i.kind!=='unlocated';$('unlocated').textContent='本对象尚无可靠图面定位'+(why?'（'+why+'）':'')+'。保留数量、来源及文字批注，不用虚构坐标代替回图。';
+  syncUnlocated();
   if(i.kind==='unlocated')fit();else{const pts=[...allPts(i),...(i.holes||[]).flat()],xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);const min=(scene.bounds[2]-scene.bounds[0])*.04;fitBounds([Math.min(...xs)-min,Math.min(...ys)-min,Math.max(...xs)+min,Math.max(...ys)+min]);}
   const ms=selected?.member_keys?members(selected):[i],index=ms.indexOf(i);
   $('member-position').textContent=(selected?.member_keys?'第 '+(index+1)+' / '+ms.length+'处 · ':'')+i.id+' · '+(scenes.get(i.scene_id)?.title||'未定位');
@@ -179,7 +183,7 @@ try{
  function resize(){const b=cv.getBoundingClientRect();cw=b.width;ch=b.height;cv.width=Math.round(cw*devicePixelRatio);cv.height=Math.round(ch*devicePixelRatio);draw();}
  function mapItems(){return external?external:selected?.member_keys?members(selected):mode==='objects'?items:selected?[selected]:[];}
  // Comparison modes highlight an item's member objects (contract 5.1/8); returns false when the object has no drawing position.
- function locate(list,obj){external=list;focused=obj||null;if(!obj||obj.kind==='unlocated'||!scenes.has(obj.scene_id)){draw();return false;}changeScene(obj.scene_id,false);const pts=allPts(obj),min=(scene.bounds[2]-scene.bounds[0])*.04;fitBounds([Math.min(...pts.map(p=>p[0]))-min,Math.min(...pts.map(p=>p[1]))-min,Math.max(...pts.map(p=>p[0]))+min,Math.max(...pts.map(p=>p[1]))+min]);return true;}
+ function locate(list,obj){external=list;focused=obj||null;syncUnlocated();if(!obj||obj.kind==='unlocated'||!scenes.has(obj.scene_id)){draw();return false;}changeScene(obj.scene_id,false);const pts=allPts(obj),min=(scene.bounds[2]-scene.bounds[0])*.04;fitBounds([Math.min(...pts.map(p=>p[0]))-min,Math.min(...pts.map(p=>p[1]))-min,Math.max(...pts.map(p=>p[0]))+min,Math.max(...pts.map(p=>p[1]))+min]);return true;}
  function path(points,close=false){ctx.beginPath();points.forEach((p,n)=>n?ctx.lineTo(...screen(p)):ctx.moveTo(...screen(p)));if(close)ctx.closePath();}
  function draw(){
   if(!cw||!ch||!scene)return;ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);ctx.fillStyle='#fffefb';ctx.fillRect(0,0,cw,ch);

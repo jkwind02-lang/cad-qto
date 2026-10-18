@@ -59,8 +59,10 @@ def plan():
             fit('E1', '1F', 'elbow', [9400, -600, 10600, 600]),
             fit('T1', '1F', 'tap', [4600, -100, 5400, 900]),
             fit('R1', '1F', 'reducer', [14900, -600, 15500, 600]),
-            fit('E2', '1F', 'elbow', [24800, -600, 26200, 600]),
-            fit('E2dup', '1F', 'elbow', [24810, -590, 26190, 590]),
+            # The duplicate fixture carries independently given matching ports; bbox overlap alone
+            # is only an identity candidate (T46), not proof of one physical fitting.
+            fit('E2', '1F', 'elbow', [24800, -600, 26200, 600], ends=[dict(segment_id='S6', end='end'), dict(segment_id='S7', end='start')]),
+            fit('E2dup', '1F', 'elbow', [24810, -590, 26190, 590], ends=[dict(segment_id='S6', end='end'), dict(segment_id='S7', end='start')]),
             fit('E3', '1F', 'elbow', [4800, 19400, 6000, 20600]),
             fit('E4', '1F', 'elbow', [44800, -600, 46000, 600]),
             fit('E5', '2F', 'elbow', [44800, 99400, 46000, 100600]),
@@ -134,9 +136,12 @@ def test_missing_floor_level_makes_riser_pending(tmp_path, plan):
 
 
 def test_conflicting_equal_distance_elevations_are_not_averaged(tmp_path, plan):
-    plan['segments'].append(seg('S9', '1F', [22000, 2000], [22000, 500], w=800, h=400, el=5.0))  # open tap onto S6: second tagged neighbour at one hop
+    # Two real same-run accessory gaps: S5--S6--S9. A branch tapping the main would be
+    # a different evidence priority (T47) and cannot veto the same-run source S5.
+    plan['fittings'] = [f for f in plan['fittings'] if f['fitting_id'] not in {'E2', 'E2dup'}]
+    plan['segments'].append(seg('S9', '1F', [25400, 0], [26000, 0], w=800, h=400, el=5.0))
     _, out = run(tmp_path, plan)
-    assert out['open_taps'][0]['segment_id'] == 'S9' and out['open_taps'][0]['main_segment_id'] == 'S6'
+    assert any(set([g['a'][0], g['b'][0]]) == {'S6', 'S9'} for g in out['accessory_gaps'])
     s6 = by_id(out['straight_segments'], 'segment_id', 'S6')
     assert s6['center_elevation'] is None and s6['elevation_evidence_level'] == '未决' and '多个不同标高' in s6['elevation_basis']
 

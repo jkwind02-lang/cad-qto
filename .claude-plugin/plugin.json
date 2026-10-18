@@ -1,9 +1,14 @@
 {
   "name": "cad-qto",
-  "version": "0.3.15",
+  "version": "0.3.16",
   "description": "CAD基础数据读取与全专业工程量计算，包含独立CAD基础读取入口、13个专业Skill和协调入口，共用原生字段与中性取证层。",
   "author": {
     "name": "Local developer"
   },
-  "keywords": ["CAD", "工程量", "算量", "天正"]
+  "keywords": [
+    "CAD",
+    "工程量",
+    "算量",
+    "天正"
+  ]
 }

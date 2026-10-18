@@ -411,7 +411,8 @@ function attach(api){
   const lost=current?memberObjects(current).length-located.length:0,lostText=lost?' · 未定位 '+lost:'';
   byId('map-note').textContent=!hasScenes?'':located.length?'可回图 '+located.length+lostText+' · 第 '+(at+1)+' 处':current?'当前目标没有可定位成员'+lostText+(mapState==='auto'?'，图面已自动收起':''):'';
   byId('member-prev2').disabled=byId('member-next2').disabled=located.length<2;
-  if(visible){api.resize();api.locate(located,located[at]);}
+  if(visible){api.resize();api.locate(located,located[at]||memberObjects(current).find(o=>o.kind==='unlocated'));}
+  else api.locate([],null);
  }
  function step(d){if(!located.length)return;at=(at+d+located.length)%located.length;map();}
 

@@ -227,13 +227,15 @@ def bind_rule_authority(rule: dict[str, Any], label: str, entries: dict[str, dic
     rule["authority"] = dict(entry)
 
 
-def choose_layer_rule(layer: str, rules: list[dict[str, Any]], object_id: str | None = None) -> tuple[dict[str, Any] | None, list[str]]:
-    matches = [item for item in rules if item["layer_re"].search(layer) and applies_to(item, object_id)]
+def choose_layer_rule(layer: str, rules: list[dict[str, Any]], object_id: str | None = None,
+                      entity_type: str | None = None) -> tuple[dict[str, Any] | None, list[str]]:
+    matches = [item for item in rules if item["layer_re"].search(layer) and applies_to(item, object_id)
+               and (entity_type is None or entity_type in {str(v).upper() for v in item.get("allowed_entity_types", sorted(LINE_TYPES))})]
     if not matches:
         return None, []
     best_priority = max(item["priority"] for item in matches)
     best = sorted((item for item in matches if item["priority"] == best_priority), key=lambda item: item["rule_id"])
-    signatures = {(item.get("decision", "unresolved"), item.get("system"), tuple(sorted(item.get("allowed_entity_types", [])))) for item in best}
+    signatures = {(item.get("decision", "unresolved"), item.get("system")) for item in best}
     if len(signatures) > 1:
         return None, [item["rule_id"] for item in best]
     return best[0], []
@@ -315,13 +317,38 @@ def apply_insert_quantity_ownership(insert_rows, block_rules, root_consumed_ids,
     return [row for row in insert_rows if row["record_id"] not in suppressed]
 
 
-def save_pending_recognition(output, dispositions, scope, working_basis, reason):
+def attach_recognition_records(dispositions, rules, detail):
+    """Keep full records in the bound ledger; compact rows have fixed-size references."""
+    by_id = {rule["rule_id"]: rule for rule in rules if isinstance(rule.get("authority"), dict)}
+    for item in dispositions.values():
+        selected = [by_id[rid] for rid in item["rule_ids"] if rid in by_id]
+        refs = []
+        for rule in selected:
+            if "_record_ref" not in rule:
+                authority = rule["authority"]
+                payload = json.dumps(authority, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+                rule["_record_ref"] = {
+                    "rule_id": rule["rule_id"], "adjudication_id": authority.get("adjudication_id"),
+                    "subject_id": authority.get("subject_id"), "decision": authority.get("decision"),
+                    "decision_origin": authority.get("decision_origin") or "independent",
+                    "object_id_count": len(authority["object_ids"]) if isinstance(authority.get("object_ids"), list) else None,
+                    "entry_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+                }
+            refs.append(rule["_record_ref"])
+        item["recognition_record_refs"] = refs
+        if detail == "full":
+            item["recognition_records"] = [rule["authority"] for rule in selected]
+
+
+def save_pending_recognition(output, dispositions, scope, working_basis, reason, rules=(), detail="compact"):
     """A not-yet-recognized work area is a checkpoint, not zero pipe quantity."""
+    attach_recognition_records(dispositions, rules, detail)
     path = output / "管网中性对象处置清单.jsonl"
     path.write_text("".join(json.dumps(item, ensure_ascii=False) + "\n" for item in dispositions.values()), encoding="utf-8")
     report = {
         "schema_version": "qto-pipe-recognition-report/1.0", "status": "RECOGNITION_REQUIRED",
         "scope": scope, "recognition_basis": working_basis, "business_adoption_allowed": False,
+        "disposition_detail": detail,
         "counts": {"scoped_rows": len(dispositions), "object_dispositions": dict(Counter(item["disposition"] for item in dispositions.values()))},
         "reason": reason, "quantity": None,
         "next_action": "模型回到图例、系统图及局部图面继续识别；只有资料确缺才请求用户补充。此处不是首轮算量完成。",
@@ -554,6 +581,8 @@ def main() -> int:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--endpoint-handoff", type=Path)
     parser.add_argument("--inference-output", type=Path, help="提供时继续运行通用管网推算器")
+    parser.add_argument("--disposition-detail", choices=("compact", "full"), default="compact",
+                        help="处置清单默认引用识别记录；full逐对象嵌入整条记录，可能明显增大体积")
     args = parser.parse_args()
 
     try:
@@ -832,7 +861,7 @@ def main() -> int:
             if entity_type not in LINE_TYPES:
                 ignored_types[entity_type or "<EMPTY>"] += 1
                 continue
-            rule, conflicts = choose_layer_rule(str(row.get("layer") or ""), layer_rules, source_record_id)
+            rule, conflicts = choose_layer_rule(str(row.get("layer") or ""), layer_rules, source_record_id, entity_type)
             if conflicts:
                 recognition_unresolved.append({"object_id": row.get("record_id"), "kind": "layer_rule_conflict", "rule_ids": conflicts, "layer": row.get("layer")})
                 object_dispositions[source_record_id].update({"basis": "同优先级图层规则冲突", "rule_ids": conflicts})
@@ -930,7 +959,8 @@ def main() -> int:
             candidates, candidate_meta, explicit_dispositions, derived_roots, factor,
             context_insert_rows)
         if not candidates:
-            save_pending_recognition(output, object_dispositions, scope, working_basis, "当前识别配置尚未形成可计算管段")
+            save_pending_recognition(output, object_dispositions, scope, working_basis, "当前识别配置尚未形成可计算管段",
+                                     layer_rules + block_rules + root_rules + text_rules, args.disposition_detail)
             fail("冻结范围和识别配置没有产生可审计管段候选")
 
         audit_input = {
@@ -979,7 +1009,8 @@ def main() -> int:
                 "physical_id": item.get("physical_id"),
             })
         if not segments:
-            save_pending_recognition(output, object_dispositions, scope, working_basis, "当前对象审计后尚无可计算管段，需继续识图或补充相关证据")
+            save_pending_recognition(output, object_dispositions, scope, working_basis, "当前对象审计后尚无可计算管段，需继续识图或补充相关证据",
+                                     layer_rules + block_rules + root_rules + text_rules, args.disposition_detail)
             fail("对象审计后没有可继续计算的管段")
 
         dn_route_index = RouteIndex(segments)
@@ -1279,9 +1310,8 @@ def main() -> int:
         }
         if working_basis:
             inference_input["recognition_basis"] = working_basis
-        rule_authorities = {rule["rule_id"]: rule["authority"] for rule in layer_rules + block_rules + root_rules + text_rules if "authority" in rule}
-        for item in object_dispositions.values():
-            item["recognition_records"] = [rule_authorities[rid] for rid in item["rule_ids"] if rid in rule_authorities]
+        attach_recognition_records(object_dispositions, layer_rules + block_rules + root_rules + text_rules,
+                                   args.disposition_detail)
         if dn_candidates:
             inference_input["dn_match_candidates"] = dn_candidates
             inference_input["dn_match_policy"] = dn_policy
@@ -1318,6 +1348,7 @@ def main() -> int:
         report = {
             "schema_version": "qto-pipe-recognition-report/1.0",
             "adapter_version": VERSION,
+            "disposition_detail": args.disposition_detail,
             "status": "REVIEW_REQUIRED" if unresolved or audit.get("unresolved_count", 0) else "READY",
             "profile": {"path": str(profile_path), "sha256": sha256(profile_path), "profile_id": profile_id, "profile_version": profile_version},
             "adjudication_ledger": {"path": str(ledger_path), "sha256": ledger_sha, "ledger_id": ledger["ledger_id"], "ledger_version": ledger["ledger_version"]},

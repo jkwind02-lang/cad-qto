@@ -348,10 +348,13 @@ def classify_review_row(entity_type: str, layer: str, block_name: str, active, f
             blocks = [fam for fam in families["block"] if fam["family_id"] in active and fam["layer_re"].search(layer) and fam["block_re"].search(block_name)]
             matched, conflicts = best_family(blocks)
     else:
-        layers = [fam for fam in families["layer"] if fam["family_id"] in active and fam["layer_re"].search(layer)]
+        layer_matches = [fam for fam in families["layer"] if fam["family_id"] in active and fam["layer_re"].search(layer)]
+        layers = [fam for fam in layer_matches if entity_type in fam["entity_types"]]
         matched, conflicts = best_family(layers)
-        if matched is not None and entity_type not in matched["entity_types"]:
-            return matched, [], "entity_type_not_covered"
+        if matched is None and not conflicts and layer_matches:
+            # A layer family exists but none covers this type: diagnostic only, never an applied decision.
+            diagnostic = sorted(layer_matches, key=lambda fam: (-fam["priority"], fam["family_id"]))[0]
+            return diagnostic, [], "entity_type_not_covered"
     if conflicts:
         return None, conflicts, "family_conflict"
     if matched is None:
@@ -807,9 +810,11 @@ def write_frame_inputs(frame: dict[str, Any], state: dict[str, Any], mapping: di
 # ------------------------------------------------------------------- run
 
 
-def run_adapter(manifest_path: Path, profile_path: Path, ledger_path: Path, frame_dir: Path, run_inference: bool) -> tuple[int, str, str]:
+def run_adapter(manifest_path: Path, profile_path: Path, ledger_path: Path, frame_dir: Path, run_inference: bool,
+                disposition_detail: str = "compact") -> tuple[int, str, str]:
     command = [sys.executable, "-B", str(Path(adapter.__file__).resolve()), "--cad-manifest", str(manifest_path),
-               "--profile", str(profile_path), "--adjudication-ledger", str(ledger_path), "--output-dir", str(frame_dir)]
+               "--profile", str(profile_path), "--adjudication-ledger", str(ledger_path), "--output-dir", str(frame_dir),
+               "--disposition-detail", disposition_detail]
     if run_inference:
         command += ["--inference-output", str(frame_dir / "管网推算证据.json")]
     completed = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8")
@@ -867,12 +872,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--skip-invalid-frames", action="store_true", help="被选中的图框行格式不合格时写诊断并跳过，不整批停止")
     parser.add_argument("--run-inference", action="store_true", help="每个图框继续运行 infer_pipe_network.py")
     parser.add_argument("--max-scoped-rows", type=int, default=30000, help="单图框范围内图元行数上限提示，超过只告警不中断")
+    parser.add_argument("--disposition-detail", choices=("compact", "full"), default="compact",
+                        help="传给每框适配器：默认引用识别记录；full逐对象嵌入整条记录")
     args = parser.parse_args(argv)
 
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
     diagnostics: list[dict[str, Any]] = []
     summary: dict[str, Any] = {"schema_version": SUMMARY_SCHEMA, "generator": VERSION, "status": "FAILED", "frames": [],
+                               "disposition_detail": args.disposition_detail,
                                "diagnostics": diagnostics, "business_adoption_allowed": False,
                                "meaning": "族级批量工作识别生成的运行输入；候选/未决不等于专业标准答案或正式工程量"}
     summary_path = output / "批量转换汇总.json"
@@ -1002,7 +1010,8 @@ def main(argv: list[str] | None = None) -> int:
                     summary["frames"].append(record)
                     continue
                 record.update(profile=str(profile_path), ledger=str(ledger_path), prescoped_rows=str(prescoped), families_without_objects=skipped)
-                code, stdout, stderr = run_adapter(manifest_path, profile_path, ledger_path, frame_dir, args.run_inference)
+                code, stdout, stderr = run_adapter(manifest_path, profile_path, ledger_path, frame_dir, args.run_inference,
+                                                  args.disposition_detail)
                 report_path = frame_dir / "管网识别报告.json"
                 if code != 0:
                     error = adapter_error_text(stdout, stderr)

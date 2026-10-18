@@ -139,6 +139,59 @@ function Invoke-OdaExport([string]$WorkingDwg, [string]$TargetDxf, [string]$Stag
     Copy-Item -LiteralPath $converted -Destination $TargetDxf -Force
 }
 
+function Clear-ExportStage([string]$StageDirectory, [string]$ExpectedPrefix) {
+    # Cleanup has its own outcome: it must never replace the export's error or
+    # prevent a verified DXF from receiving its success receipt.
+    $result = [pscustomobject]@{
+        status = 'NOT_NEEDED'
+        stage_directory = $StageDirectory
+        retained = $false
+        attempts = 0
+        warning = $null
+    }
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        $canRetry = $false
+        try {
+            if (-not (Test-Path -LiteralPath $StageDirectory)) { return $result }
+            $result.attempts = $attempt
+            $resolved = (Resolve-Path -LiteralPath $StageDirectory).Path
+            if (-not $resolved.Equals([IO.Path]::GetFullPath($StageDirectory), [StringComparison]::OrdinalIgnoreCase) -or
+                -not $resolved.StartsWith($ExpectedPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                throw '临时目录校验失败，拒绝清理。'
+            }
+            # Inspect without following a child junction: recursive deletion is
+            # allowed only for the exact tree created by this invocation.
+            $pending = New-Object 'System.Collections.Generic.Stack[string]'
+            $pending.Push($resolved)
+            while ($pending.Count) {
+                $directory = $pending.Pop()
+                if ((Get-Item -LiteralPath $directory -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                    throw '临时目录含链接，拒绝递归清理。'
+                }
+                foreach ($item in Get-ChildItem -LiteralPath $directory -Force) {
+                    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                        throw '临时目录含链接，拒绝递归清理。'
+                    }
+                    if ($item.PSIsContainer) { $pending.Push($item.FullName) }
+                }
+            }
+            $canRetry = $true
+            Remove-Item -LiteralPath $resolved -Recurse -Force -ErrorAction Stop
+            $result.status = 'CLEANED'
+            $result.retained = $false
+            $result.warning = $null
+            return $result
+        } catch {
+            $result.status = if ($canRetry) { 'RETAINED' } else { 'REFUSED' }
+            $result.retained = $true
+            $result.warning = $_.Exception.Message
+            if (-not $canRetry) { return $result }
+        }
+        if ($attempt -lt 3) { Start-Sleep -Milliseconds 200 }
+    }
+    return $result
+}
+
 $sourcePath = (Resolve-Path -LiteralPath $SourceDwg).Path
 $outputPath = [System.IO.Path]::GetFullPath($OutputDxf)
 if ([System.IO.Path]::GetExtension($sourcePath) -ine '.dwg') { throw 'SourceDwg must use the .dwg extension.' }
@@ -147,6 +200,8 @@ if ($sourcePath.Equals($outputPath, [System.StringComparison]::OrdinalIgnoreCase
 if (Test-Path -LiteralPath $outputPath) { throw '目标 DXF 已存在；请使用新的输出文件名，已有成果未修改。' }
 $exportReceiptPath = $outputPath + '.export.json'
 if (Test-Path -LiteralPath $exportReceiptPath) { throw '目标转换记录已存在；请使用新的输出文件名。' }
+$failureReceiptPath = $outputPath + '.导出失败.json'
+if (Test-Path -LiteralPath $failureReceiptPath) { throw '目标导出失败记录已存在；请使用新的输出文件名。' }
 
 $outputParent = Split-Path -Parent $outputPath
 New-Item -ItemType Directory -Force -Path $outputParent | Out-Null
@@ -165,72 +220,122 @@ $comError = $null
 # The source is hashed once before and once after the export (in the try block, or in
 # finally when the export failed earlier); a third pass on multi-GB sources was pure cost.
 $sourceAfter = $null
+$exportError = $null
+$sourceVerificationError = $null
+$backendCompleted = $false
+$completionVerified = $false
+$sourceImmutable = $false
+$outputPublished = $false
+$diagnostic = $null
+$diagnosticWriteError = $null
+$cleanup = $null
 
 try {
     Copy-Item -LiteralPath $sourcePath -Destination $workingDwg
     if ($ExportBackend -in @('oda', 'oda-audit')) {
-        Invoke-OdaExport $workingDwg $stagedDxf $stageDirectory $TimeoutSeconds ($ExportBackend -eq 'oda-audit')
         $backendUsed = if ($ExportBackend -eq 'oda-audit') { 'oda_staged_copy_audit' } else { 'oda_staged_copy_no_audit' }
+        Invoke-OdaExport $workingDwg $stagedDxf $stageDirectory $TimeoutSeconds ($ExportBackend -eq 'oda-audit')
     } elseif ($ExportBackend -eq 'coreconsole') {
-        Invoke-CoreConsoleExport $workingDwg $stagedDxf $stageDirectory $TimeoutSeconds
         $backendUsed = 'accoreconsole_staged_copy'
+        Invoke-CoreConsoleExport $workingDwg $stagedDxf $stageDirectory $TimeoutSeconds
     } else {
         try {
-            Invoke-ComExport $workingDwg $stagedDxf
             $backendUsed = 'autocad_com_staged_copy'
+            Invoke-ComExport $workingDwg $stagedDxf
         } catch {
             $comError = $_.Exception.Message
             if (Test-Path -LiteralPath $stagedDxf) { Remove-Item -LiteralPath $stagedDxf -Force }
-            Invoke-CoreConsoleExport $workingDwg $stagedDxf $stageDirectory $TimeoutSeconds
             $backendUsed = 'accoreconsole_staged_copy'
+            Invoke-CoreConsoleExport $workingDwg $stagedDxf $stageDirectory $TimeoutSeconds
         }
     }
+    $backendCompleted = $true
     if (-not (Test-Path -LiteralPath $stagedDxf) -or (Get-Item -LiteralPath $stagedDxf).Length -eq 0) {
         throw '未生成非空交换 DXF；已有成果未修改。'
     }
     Test-DxfCompletion $stagedDxf
+    $completionVerified = $true
     $sourceAfter = Get-SourceSnapshot $sourcePath
     if ($sourceBefore.Sha256 -ne $sourceAfter.Sha256 -or $sourceBefore.Length -ne $sourceAfter.Length -or $sourceBefore.LastWriteTimeUtc -ne $sourceAfter.LastWriteTimeUtc) {
         throw '权威源 DWG 在导出期间发生变化；不发布本次输出。'
     }
     Move-Item -LiteralPath $stagedDxf -Destination $outputPath -ErrorAction Stop
+    $outputPublished = $true
 } catch {
-    $diagnosticPath = $outputPath + '.导出失败.log'
-    if (-not (Test-Path -LiteralPath $diagnosticPath)) {
-        $diagnostic = $_.Exception.Message
-        foreach ($logName in @('accoreconsole.stdout.log', 'accoreconsole.stderr.log', 'oda.stdout.log', 'oda.stderr.log')) {
+    $exportError = $_
+    $diagnostic = $_.Exception.Message
+    # Capture backend logs before cleanup can remove them; diagnostic failures
+    # remain secondary and cannot replace the original export error.
+    foreach ($logName in @('accoreconsole.stdout.log', 'accoreconsole.stderr.log', 'oda.stdout.log', 'oda.stderr.log')) {
+        try {
             $logPath = Join-Path $stageDirectory $logName
             if (Test-Path -LiteralPath $logPath) { $diagnostic += "`n" + (Get-Content -Raw -LiteralPath $logPath) }
+        } catch {
+            $diagnostic += "`n读取转换日志失败：" + $_.Exception.Message
         }
-        [System.IO.File]::WriteAllText($diagnosticPath, $diagnostic, [System.Text.UTF8Encoding]::new($false))
     }
-    throw
 } finally {
-    if (Test-Path -LiteralPath $stageDirectory) {
-        $resolvedStage = (Resolve-Path -LiteralPath $stageDirectory).Path
-        if (-not $resolvedStage.StartsWith($expectedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw '临时目录校验失败，拒绝清理。'
-        }
-        if ((Get-Item -LiteralPath $resolvedStage).Attributes -band [IO.FileAttributes]::ReparsePoint) {
-            throw '临时目录为链接，拒绝递归清理。'
-        }
-        Remove-Item -LiteralPath $resolvedStage -Recurse -Force
+    try {
+        if ($null -eq $sourceAfter) { $sourceAfter = Get-SourceSnapshot $sourcePath }
+        $sourceImmutable = ($sourceBefore.Sha256 -eq $sourceAfter.Sha256 -and $sourceBefore.Length -eq $sourceAfter.Length -and
+            $sourceBefore.LastWriteTimeUtc -eq $sourceAfter.LastWriteTimeUtc)
+        if (-not $sourceImmutable) { throw '权威源 DWG 在导出期间发生变化；本次导出无效。' }
+    } catch {
+        $sourceVerificationError = $_.Exception.Message
+        if ($null -eq $exportError) { $exportError = $_ }
     }
-    if ($null -eq $sourceAfter) { $sourceAfter = Get-SourceSnapshot $sourcePath }
-    if ($sourceBefore.Sha256 -ne $sourceAfter.Sha256 -or $sourceBefore.Length -ne $sourceAfter.Length -or $sourceBefore.LastWriteTimeUtc -ne $sourceAfter.LastWriteTimeUtc) {
-        throw '权威源 DWG 在导出期间发生变化；本次导出无效。'
-    }
+    $cleanup = Clear-ExportStage $stageDirectory $expectedPrefix
 }
 
-if ($sourceBefore.Sha256 -ne $sourceAfter.Sha256 -or $sourceBefore.Length -ne $sourceAfter.Length -or $sourceBefore.LastWriteTimeUtc -ne $sourceAfter.LastWriteTimeUtc) {
-    throw '权威源 DWG 在导出期间发生变化；输出已判无效，请先核查源文件。'
+if ($cleanup.retained) {
+    Write-Warning ("导出暂存资源未清理：{0}；{1}" -f $cleanup.stage_directory, $cleanup.warning) -WarningAction Continue
 }
+if ($null -ne $exportError) {
+    $diagnosticPath = $outputPath + '.导出失败.log'
+    if ($null -eq $diagnostic) { $diagnostic = $exportError.Exception.Message }
+    if ($sourceVerificationError) { $diagnostic += "`n源文件后验：" + $sourceVerificationError }
+    try {
+        if (-not (Test-Path -LiteralPath $diagnosticPath)) {
+            [IO.File]::WriteAllText($diagnosticPath, $diagnostic, [Text.UTF8Encoding]::new($false))
+        }
+    } catch { $diagnosticWriteError = $_.Exception.Message }
+    # A failure receipt deliberately uses a different name: consumers must not
+    # mistake it for the success .export.json bound to a usable exchange DXF.
+    $failureReceipt = [pscustomobject]@{
+        schema_version = 'qto-dwg-exchange-export/1.4'
+        status = 'FAIL'
+        export_status = 'FAILED'
+        backend = $backendUsed
+        backend_completed = $backendCompleted
+        source = $sourcePath
+        source_sha256_before = $sourceBefore.Sha256
+        source_sha256_after = $(if ($sourceAfter) { $sourceAfter.Sha256 } else { $null })
+        source_immutable_verified = $sourceImmutable
+        source_verification_error = $sourceVerificationError
+        dxf_completion_verified = $completionVerified
+        output = $outputPath
+        output_published = $outputPublished
+        export_error = [pscustomobject]@{ message = $exportError.Exception.Message; type = $exportError.Exception.GetType().FullName }
+        diagnostic_path = $diagnosticPath
+        diagnostic_write_error = $diagnosticWriteError
+        cleanup = $cleanup
+    }
+    try {
+        [IO.File]::WriteAllText($failureReceiptPath, ($failureReceipt | ConvertTo-Json -Depth 6 -Compress), [Text.UTF8Encoding]::new($false))
+    } catch {
+        Write-Warning ('导出失败回执写入失败：' + $_.Exception.Message) -WarningAction Continue
+    }
+    throw $exportError
+}
+
 if (-not (Test-Path -LiteralPath $outputPath)) { throw '未生成交换 DXF。' }
 
 $exportReceipt = [pscustomobject]@{
-    schema_version = 'qto-dwg-exchange-export/1.3'
+    schema_version = 'qto-dwg-exchange-export/1.4'
     status = 'PASS'
+    export_status = 'SUCCEEDED'
     backend = $backendUsed
+    backend_completed = $backendCompleted
     source = $sourcePath
     source_sha256 = $sourceAfter.Sha256
     source_immutable_verified = $true
@@ -240,7 +345,8 @@ $exportReceipt = [pscustomobject]@{
     output_bytes = (Get-Item -LiteralPath $outputPath).Length
     output_sha256 = (Get-FileHash -LiteralPath $outputPath -Algorithm SHA256).Hash.ToLowerInvariant()
     com_fallback_reason = $comError
+    cleanup = $cleanup
 }
-$receiptJson = $exportReceipt | ConvertTo-Json -Compress
+$receiptJson = $exportReceipt | ConvertTo-Json -Depth 6 -Compress
 [System.IO.File]::WriteAllText($exportReceiptPath, $receiptJson, [System.Text.UTF8Encoding]::new($false))
 $receiptJson

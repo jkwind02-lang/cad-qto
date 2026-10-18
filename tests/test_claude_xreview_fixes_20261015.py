@@ -201,7 +201,10 @@ def test_totals_flag_known_parts_only():
 
 def test_ambiguous_copies_collapse_but_declared_systems_stay_apart():
     parts = [seg('A', elev=3.), seg('B', 'SYS-B', (1200, 0), (2200, 0))]
-    block = dict(fitting_id='R1', kind='reducer', floor_id='F1', bbox=[990, -200, 1210, 200])
+    # D11's duplicate is an independently evidenced physical instance; overlap by itself is
+    # insufficient (T46), including when system ownership is still ambiguous.
+    block = dict(fitting_id='R1', kind='reducer', floor_id='F1', bbox=[990, -200, 1210, 200],
+                 physical_identity=dict(source_id='SYN-DRAWING', instance_id='SYN-ONE-FITTING', basis='合成同物导出副本'))
     r = infer(data(parts, [block, dict(block, fitting_id='R2')]))
     assert [f['fitting_id'] for f in r['fittings']] == ['R1'] and r['duplicate_fittings'][0]['duplicate_of'] == 'R1'
     pend = [p for p in r['pending'] if p['kind'] == 'fitting_system_ambiguous']
