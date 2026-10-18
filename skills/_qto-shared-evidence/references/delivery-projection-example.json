@@ -1,0 +1,145 @@
+{
+  "schema": "qto-review-delivery-projection/1.0",
+  "assistant_work_complete": true,
+  "items": {
+    "path": "prepared.items",
+    "fields": {
+      "id": {
+        "$path": "value.id"
+      },
+      "title": {
+        "$path": "value.title"
+      },
+      "unit": {
+        "$path": "value.unit"
+      },
+      "quantity": {
+        "$path": "value.quantity"
+      },
+      "original_quantity": {
+        "$path": "value.original_quantity"
+      },
+      "dimensions": {
+        "$path": "value.dimensions"
+      },
+      "coverage_state": {
+        "$path": "value.coverage_state"
+      },
+      "scope_hint": {
+        "$path": "value.scope_hint"
+      },
+      "pending_scope": {
+        "$path": "value.pending_scope"
+      }
+    }
+  },
+  "row_sources": [
+    {
+      "path": "prepared.rows",
+      "fields": {
+        "id": {
+          "$path": "value.id",
+          "default": null
+        },
+        "item_id": {
+          "$path": "value.item_id",
+          "default": null
+        },
+        "title": {
+          "$path": "value.title",
+          "default": null
+        },
+        "unit": {
+          "$path": "value.unit",
+          "default": null
+        },
+        "quantity": {
+          "$path": "value.quantity",
+          "default": null
+        },
+        "state": {
+          "$path": "value.state",
+          "default": null
+        },
+        "basis": {
+          "$path": "value.basis",
+          "default": null
+        },
+        "member_keys": {
+          "$path": "value.member_keys",
+          "default": null
+        },
+        "evidence_member_keys": {
+          "$path": "value.evidence_member_keys",
+          "default": null
+        },
+        "evidence": {
+          "$path": "value.evidence",
+          "default": null
+        },
+        "scope": {
+          "$path": "value.scope",
+          "default": null
+        },
+        "coverage": {
+          "$path": "value.coverage",
+          "default": null
+        },
+        "scope_hint": {
+          "$path": "value.scope_hint",
+          "default": null
+        },
+        "coverage_state": {
+          "$path": "value.coverage_state",
+          "default": null
+        },
+        "pending_scope": {
+          "$path": "value.pending_scope",
+          "default": null
+        },
+        "reference_relationship": {
+          "$path": "value.reference_relationship",
+          "default": null
+        },
+        "reference_current_row_ids": {
+          "$path": "value.reference_current_row_ids",
+          "default": null
+        },
+        "reference_prerequisites": {
+          "$path": "value.reference_prerequisites",
+          "default": null
+        },
+        "history_reason": {
+          "$path": "value.history_reason",
+          "default": null
+        }
+      }
+    }
+  ],
+  "missing_groups": {
+    "path": "prepared.missing",
+    "fields": {
+      "id": {
+        "$path": "value.id"
+      },
+      "title": {
+        "$path": "value.title"
+      },
+      "scope": {
+        "$path": "value.scope"
+      },
+      "verified_facts": {
+        "$path": "value.verified_facts"
+      },
+      "minimum_required": {
+        "$path": "value.minimum_required"
+      },
+      "children": {
+        "$path": "value.children"
+      }
+    }
+  },
+  "retired_member_keys": {
+    "$path": "root.prepared.retired"
+  }
+}

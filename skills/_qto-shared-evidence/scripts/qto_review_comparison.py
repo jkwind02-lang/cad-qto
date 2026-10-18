@@ -322,7 +322,7 @@ def normalize_comparison(view, object_keys):
   # Detail rows: item -> rows (C3-1), rows -> members (C3-2).
   rows = it.get('detail_rows', [])
   if not isinstance(rows, list): bad('C3-0', where, 'detail_rows 须为数组'); rows = it['detail_rows'] = []
-  by_level = {k: [] for k in LEVELS}; counted = 0; dropped = []
+  by_level = {k: [] for k in LEVELS}; counted = 0; dropped = []; current_excluded = 0
   for j, r in enumerate(rows):
    rw = f'{where} 明细[{j}]'
    if not isinstance(r, dict) or not text(r.get('id')) or r['id'] in detail_ids: bad('C3-0', rw, '明细行编号缺失或全视图重复'); continue
@@ -336,10 +336,19 @@ def normalize_comparison(view, object_keys):
    # Decided not counted (contract 5.1): kept for reference, outside the levels and the total.
    ex = r.get('excluded')
    if ex is not None:
-    if not (isinstance(ex, dict) and set(ex) <= {'rule_ref', 'issue_id', 'note'} and text(ex.get('note')) and all(ex.get(k) is None or text(ex[k]) for k in ('rule_ref', 'issue_id')) and (text(ex.get('rule_ref')) or text(ex.get('issue_id')))):
+    valid_ex = (isinstance(ex, dict) and set(ex) <= {'rule_ref', 'issue_id', 'note', 'period'} and text(ex.get('note'))
+                and all(ex.get(k) is None or text(ex[k]) for k in ('rule_ref', 'issue_id'))
+                and (text(ex.get('rule_ref')) or text(ex.get('issue_id')))
+                and ex.get('period', 'current') in ('current', 'historical'))
+    if not valid_ex:
      bad('C3-12', rw, 'excluded 须为 {rule_ref, issue_id, note}：note 必填，rule_ref 和 issue_id 至少写一个'); ex = None
     else:
      dropped.append(r.get('quantity'))
+     if ex.get('period', 'current') == 'current': current_excluded += 1
+     elif 'delivery' not in view: bad('C3-12', rw, '历史退出须使用正式delivery当前采用契约；旧格式不改变已定不计规则')
+     else:
+      history = {h['id'] for h in view['delivery'].get('quantity_rows', []) if h.get('state') in ('historical', 'retired')}
+      if r['id'] not in history: bad('C3-12', rw, 'historical排除须完整保留在delivery历史/退役明细，不得伪造本期已证排除')
      if text(ex.get('issue_id')): excluded_refs.append((rw, ex['issue_id']))
      note('已定不计', rw, '；'.join(x for x in (ex.get('rule_ref'), ex.get('issue_id'), ex['note']) if x))
    if ex is None: by_level[r['level']].append(r.get('quantity')); counted += 1
@@ -395,7 +404,7 @@ def normalize_comparison(view, object_keys):
    bad('C3-12', where, f'excluded_quantity、excluded_rows 由生成器补，数据里带的与重算（{exq}，{exn} 行）不同')
   if exn:
    ours['excluded_quantity'] = exq; ours['excluded_rows'] = exn
-   if not counted and not (ours['levels']['确认量'] == 0 and all(ours['levels'][k] is None for k in LEVELS[1:])): bad('C3-12', where, '明细全部已定不计：确认量须写 0（本期为 0），其余层级为 null')
+   if not counted and current_excluded and not (ours['levels']['确认量'] == 0 and all(ours['levels'][k] is None for k in LEVELS[1:])): bad('C3-12', where, '明细全部已定不计：确认量须写 0（本期为 0），其余层级为 null')
   else: ours.pop('excluded_quantity', None); ours.pop('excluded_rows', None)
 
  # One quantity of a member object feeds at most one detail row unless split explicitly (C3-4).

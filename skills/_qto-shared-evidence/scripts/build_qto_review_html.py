@@ -54,7 +54,13 @@ def build(data_path,output,feedback_path=None,feedback_url=None,feedback_backup_
  raw=json.dumps(view,ensure_ascii=False,separators=(',',':')).encode();packed=pack_payload(view);packed_gz=gzip.compress(packed,mtime=0)
  payload=wrap_base64(packed_gz)
  page=template.replace('__PAGE_TITLE__',html.escape(view['title'])).replace('__PAYLOAD__',payload)
- page=page.replace('__FEEDBACK__',json.dumps(feedback,ensure_ascii=False,indent=0).replace('<','\\u003c'))
+ # The authoritative current delivery is already in the compressed view.
+ # A reference avoids embedding a second, uncompressed copy in every saved HTML.
+ embedded_feedback=dict(feedback)
+ if 'delivery' in view:
+  embedded_feedback.pop('delivery_snapshot',None)
+  embedded_feedback['delivery_snapshot_ref']={'result_fingerprint':view['result_fingerprint']}
+ page=page.replace('__FEEDBACK__',json.dumps(embedded_feedback,ensure_ascii=False,indent=0).replace('<','\\u003c'))
  page=page.replace('__REVIEW_CORE__',(assets/'review-core.js').read_text(encoding='utf-8')).replace('__REVIEW_AUDIT__',(assets/'review-audit.js').read_text(encoding='utf-8')).replace('__REVIEW_APP__',(assets/'review-app.js').read_text(encoding='utf-8'))
  page=page.replace('__REVIEW_DELIVERY__',(assets/'review-delivery.js').read_text(encoding='utf-8'))
  page=page.replace('__PROBLEM_CONFIG__',json.dumps(config,ensure_ascii=False).replace('<','\\u003c')).replace('__PROBLEM_FEEDBACK__',(assets/'problem-feedback.js').read_text(encoding='utf-8'))

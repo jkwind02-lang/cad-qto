@@ -126,6 +126,8 @@ python ../_qto-shared-evidence/scripts/migrate_cad_review_view.py --input 旧复
 
 运行实现：[生成器](../scripts/build_qto_review_html.py)、[数据契约](../scripts/qto_review_contract.py)、[批注读取](../scripts/read_qto_review_feedback.py)、[旧版视图适配器](../scripts/migrate_cad_review_view.py)。
 
+使用正式 `delivery` 的共享页面将当前交付快照只保留在同文件的压缩视图中，反馈数据块按结果指纹引用，避免再嵌一份未压缩明细。保存和重开会校验引用，导出JSON及插件反馈读取会重建完整当前快照；历史快照、原意见和来源身份完整保留。旧的完整快照HTML和无 `delivery` 页面继续可读。自有消费代码不能只抽取 `feedback-seed` 就把它当完整交付，浏览器文件导入使用 `await QtoReviewCore.readFileTextAsync(text)`，宿主读取沿用正式反馈CLI；错误引用及缺少载荷须拒收。
+
 ## 6. 成果、待解决问题与对照审核（qto-review-view/1.1，可选扩展）
 
 复核页就是最终成果页：显示本次算出的全部总量，按楼栋、分部、品类分类，能查明细组成并溯源到最初依据；重点是成果中没有依据或无法判断的内容，按问题性质分组，用共性问题答一类、解决一片；第三方数量只作对比，偏差按本次依据是否充分归因，清单的问题按类型整组答复。1.1 视图在 1.0 全部字段之外加可选的 `comparison` 节：条目（本次各层级量、明细行含已定不计、成员，可带第三方来源段）、个别问题和共性问题（性质、做法及影响量）。页面默认打开“成果”，另有“待解决问题”“对照审核”“图面复核”；可以没有图页，有图页时成员回图高亮。批注写 `qto-review-feedback/2.1`：共性问题答复对整个适用范围生效，个别处只写例外；读取时多出 `common_issue_actions`、`item_actions`、`issue_actions`、`conflicts`、`overlaps`。不带 `comparison` 的视图，页面与原来完全一致。

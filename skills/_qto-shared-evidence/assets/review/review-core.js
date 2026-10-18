@@ -107,6 +107,11 @@ function parse(input,view){
  ensure(legacy||p.schema===schema||p.schema===comparisonSchema,'不是支持的复核批注文件');
  if(legacy)ensure(view.legacy_source_sha256&&p.source_sha256===view.legacy_source_sha256,'旧版批注未绑定到本图，不可跨项目导入');
  else ensure(p.project_id===view.project_id&&p.review_id===view.review_id&&p.source_sha256===view.source_sha256,'项目、复核范围或来源图纸不同，已停止导入');
+ if(Object.prototype.hasOwnProperty.call(p,'delivery_snapshot_ref')){
+  const fp=snapshotRef(p.delivery_snapshot_ref);
+  ensure(p.delivery_snapshot?p.delivery_snapshot.result_fingerprint===fp:!!view.delivery&&view.result_fingerprint===fp,'当前交付引用与内嵌视图不一致');
+  delete p.delivery_snapshot_ref;
+ }
  if(legacy){p.legacy_schema=p.schema;p.legacy_source_sha256=p.source_sha256;}
  p.schema=p.schema===comparisonSchema?comparisonSchema:schemaFor(view);p.project_id=view.project_id;p.review_id=view.review_id;p.source_sha256=view.source_sha256;
  const auditItems=new Map((view.comparison?.items||[]).map(i=>[i.id,i]));
@@ -216,10 +221,36 @@ function mergePackages(local,incoming){
  const a=mergeRecords(local.annotations,incoming.annotations),d=mergeRecords(local.drafts,incoming.drafts),markers=clone(local.custom_markers);
  for(const m of incoming.custom_markers){const old=markers.find(x=>x.id===m.id);ensure(!old||JSON.stringify(old)===JSON.stringify(m),'新增标记编号冲突，已保留当前批注并停止导入');if(!old)markers.push(m);}
  for(const [k,r] of Object.entries(d.annotations))if((Date.parse(a.annotations[k]?.updated_at)||0)>=(Date.parse(r.updated_at)||0))delete d.annotations[k];
- return {...local,annotations:a.annotations,drafts:d.annotations,custom_markers:markers,merge_conflicts:a.conflicts+d.conflicts};
+ const out={...local,annotations:a.annotations,drafts:d.annotations,custom_markers:markers,merge_conflicts:a.conflicts+d.conflicts};
+ const history=[...(local.historical_delivery_snapshots||[]),...(incoming.historical_delivery_snapshots||[])];
+ if(incoming.delivery_snapshot&&JSON.stringify(incoming.delivery_snapshot)!==JSON.stringify(local.delivery_snapshot))history.push(incoming.delivery_snapshot);
+ if(history.length||local.historical_delivery_snapshots||incoming.historical_delivery_snapshots)out.historical_delivery_snapshots=history.filter((x,n)=>history.findIndex(y=>JSON.stringify(x)===JSON.stringify(y))===n).map(clone);
+ return out;
 }
-function embed(html,pkg){const json=JSON.stringify(pkg,null,1).replace(/^[ \t]+/gm,'').replace(/</g,'\\u003c');ensure(/id="feedback-seed"/.test(html),'页面缺少批注嵌入块');return html.replace(/(<script id="feedback-seed" type="application\/json">)[\s\S]*?(<\/script>)/,(_,a,b)=>a+json+b);}
-function readFileText(text){if(text.trimStart().startsWith('<')){const m=text.match(/<script id="feedback-seed" type="application\/json">([\s\S]*?)<\/script>/);ensure(m,'HTML没有批注数据块');return JSON.parse(m[1]);}return JSON.parse(text);}
+function embed(html,pkg,view){
+ const embedded=clone(pkg);
+ // Only deduplicate against a known matching delivery view. Old pages can carry
+ // complete historical delivery snapshots even when their own view has none.
+ let seedRef=null;try{seedRef=seedText(html).delivery_snapshot_ref;}catch(e){}
+ const fp=embedded.delivery_snapshot?.result_fingerprint;
+ const canReference=fp&&(view?!!view.delivery&&view.result_fingerprint===fp:seedRef?.result_fingerprint===fp);
+ delete embedded.delivery_snapshot_ref;
+ if(canReference){embedded.delivery_snapshot_ref={result_fingerprint:fp};delete embedded.delivery_snapshot;}
+ const json=JSON.stringify(embedded,null,1).replace(/^[ \t]+/gm,'').replace(/</g,'\\u003c');ensure(/id="feedback-seed"/.test(html),'页面缺少批注嵌入块');return html.replace(/(<script id="feedback-seed" type="application\/json">)[\s\S]*?(<\/script>)/,(_,a,b)=>a+json+b);
+}
+function seedText(text){if(text.trimStart().startsWith('<')){const m=text.match(/<script id="feedback-seed" type="application\/json">([\s\S]*?)<\/script>/);ensure(m,'HTML没有批注数据块');return JSON.parse(m[1]);}return JSON.parse(text);}
+function snapshotRef(ref){ensure(plain(ref)&&typeof ref.result_fingerprint==='string'&&/^[0-9a-f]{64}$/.test(ref.result_fingerprint),'当前交付引用结构无效');return ref.result_fingerprint;}
+function readFileText(text){const p=seedText(text);ensure(!Object.prototype.hasOwnProperty.call(p,'delivery_snapshot_ref'),'引用格式HTML须使用异步文件读取，避免丢失来源交付快照');return p;}
+async function readFileTextAsync(text){
+ const p=seedText(text);if(!Object.prototype.hasOwnProperty.call(p,'delivery_snapshot_ref'))return p;
+ const fp=snapshotRef(p.delivery_snapshot_ref);
+ const m=text.match(/<script\s+id="payload"[^>]*>([\s\S]*?)<\/script>/);
+ if(!m){ensure(p.delivery_snapshot?.result_fingerprint===fp,'缺少当前交付引用对应的视图载荷');delete p.delivery_snapshot_ref;return p;}
+ const bytes=Uint8Array.from(atob(m[1].replace(/\s/g,'')),c=>c.charCodeAt(0));
+ const view=await readPayload(new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()));
+ ensure(view.delivery&&view.result_fingerprint===fp&&p.project_id===view.project_id&&p.review_id===view.review_id&&p.source_sha256===view.source_sha256,'当前交付引用与内嵌视图不一致');
+ bindDeliveryFeedback(p,view);delete p.delivery_snapshot_ref;return p;
+}
 function receiptState(receipt,annotation){return receipt&&annotation&&annotation.result_fingerprint&&!['stale','unmatched','conflict'].includes(annotation.applicability_state)&&receipt.source_annotation_updated_at===annotation.updated_at&&receipt.source_result_fingerprint===annotation.result_fingerprint?'current':receipt?'stale':'none';}
 // Why an object has no drawing position (scene mapping contract 8); unknown codes are shown as written.
 const UNLOCATED={no_geometry:'没有坐标',handle_not_found:'句柄查不到',handle_in_block:'在块内，回不到',sheet_unknown:'图页不在图页表里',outside_sheet:'落在图页范围外',estimated:'估算，没有图面路径'};
@@ -237,5 +268,5 @@ async function readPayload(buf){
  }
  delete data.background_pack;return data;
 }
-root.QtoReviewCore={deliveryAllowsTarget,bindDeliveryFeedback,schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord,isAudit,opinion,unlocatedText,readPayload,holdDecisionConflicts};
+root.QtoReviewCore={readFileTextAsync,deliveryAllowsTarget,bindDeliveryFeedback,schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord,isAudit,opinion,unlocatedText,readPayload,holdDecisionConflicts};
 })(globalThis);

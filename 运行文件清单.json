@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 301,
+  "runtime_file_count": 307,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -17,8 +17,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
-      "sha256": "ba70e3b1c02aa9815eae44bd81c403052697910ecd24b35ba6f7ff5bf8e21695",
-      "bytes": 40592
+      "sha256": "c751f33c6e45fb63ec3abf3305d85f95fc6b1758005e4951f7f8e1f0a153a045",
+      "bytes": 40608
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-audit.js",
@@ -27,18 +27,18 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-core.js",
-      "sha256": "fffe95cbd93bc935301ace5f1827ab97b3a13df6e559f6c4ed0da50b581f153c",
-      "bytes": 23148
+      "sha256": "c3dce5f9a32431ec002cf0fbab0961dad0fb3f56ec3de47e73672ecf25ba683e",
+      "bytes": 25928
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-delivery.js",
-      "sha256": "176ceb2c847cb0a7b5d394849aa62d364f8a6504e2f1a2d0e67a3528822c60cf",
-      "bytes": 12784
+      "sha256": "4fa042474b0a0cec26c259397f13c8a6d45a16c2d8f7ab367d4f3b42ec548c46",
+      "bytes": 35048
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-shell.html",
-      "sha256": "92518765c9b001087b84002382b8a822b30474c1eb5803bc0e07afbae64452c3",
-      "bytes": 23886
+      "sha256": "3d73f8bf06d091ac0538e57e97536b94c5848302d172d6b6f464fece0476064a",
+      "bytes": 30230
     },
     {
       "path": "_qto-shared-evidence/assets/插件问题登记模板.md",
@@ -61,9 +61,14 @@
       "bytes": 2527
     },
     {
+      "path": "_qto-shared-evidence/references/delivery-projection-example.json",
+      "sha256": "3f26f46b1a1245b90dcf07d1a58ebd9deb9216ca4d0a18e994511397eb9b5575",
+      "bytes": 3307
+    },
+    {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
-      "sha256": "865a7b4b0ad0e2fab6b5265b08ebfb39b1d927028a96e5ffd2b60058cca063f0",
-      "bytes": 23816
+      "sha256": "c0bd0afddf1179524eacbfb77fa807a126dff05e74d8aed6d37353883f42e06a",
+      "bytes": 24432
     },
     {
       "path": "_qto-shared-evidence/references/PDF图片与表格提取.md",
@@ -117,8 +122,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/当前采用与缺资料只读交付契约.md",
-      "sha256": "70808b332e13087ee5f6693372fd9265ef4066cef64451dce0df1a5669845c33",
-      "bytes": 9081
+      "sha256": "31a4f664afb7a5fc3e8c79f6a5425c47ba3287699fe61097b5f9cc6370369a1f",
+      "bytes": 9479
     },
     {
       "path": "_qto-shared-evidence/references/按人工算量顺序执行与重算.md",
@@ -156,6 +161,11 @@
       "bytes": 1768
     },
     {
+      "path": "_qto-shared-evidence/references/简明两表Excel交付.md",
+      "sha256": "c8dcd14cd003c377775512e8f2aad989652bdd368a44641e524098ad47ed9fa7",
+      "bytes": 5098
+    },
+    {
       "path": "_qto-shared-evidence/references/线段连通图.md",
       "sha256": "d41e53ae307917502e57ce65cb3574b01388641e8b36b9bb6b632f11a3683853",
       "bytes": 3705
@@ -191,6 +201,11 @@
       "bytes": 9814
     },
     {
+      "path": "_qto-shared-evidence/references/通用交付投影与统计覆盖.md",
+      "sha256": "22fd3984b65a505c80573fa0523f159d9be7547760644b6ab65e0d787177c11c",
+      "bytes": 10530
+    },
+    {
       "path": "_qto-shared-evidence/references/通用成果字段与状态.md",
       "sha256": "b4515ce665fb5b9e9f6f9d1c990105778deb015148b11107f9bffda0f7ae212f",
       "bytes": 17037
@@ -206,9 +221,14 @@
       "bytes": 43678
     },
     {
+      "path": "_qto-shared-evidence/scripts/build_qto_delivery_excel.py",
+      "sha256": "60ede8cfdd98695fb16f734ad95cc1bd6a77a1cb3cd50389e4f9971b1f88a362",
+      "bytes": 32162
+    },
+    {
       "path": "_qto-shared-evidence/scripts/build_qto_review_html.py",
-      "sha256": "db1b69e9b12ffa5e67fd462d398f52326f223a026ef3fd4066ae31ba5c0357e2",
-      "bytes": 8737
+      "sha256": "b78ed87bb7dcd707a7b86c86784ee944cf22a562a786021141bf8df80ac294d7",
+      "bytes": 9102
     },
     {
       "path": "_qto-shared-evidence/scripts/build_review_scenes_from_tables.py",
@@ -254,6 +274,11 @@
       "path": "_qto-shared-evidence/scripts/cad_native/runtime_audit.py",
       "sha256": "913deaba81b34f379f6a61088afe2ffa483b0a10fdcb877812cf028f49eabff3",
       "bytes": 2824
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/convert_qto_review_delivery.py",
+      "sha256": "847dec082dc00804f6fe201d4768068fef17c8bb804d2db6ca90a421f6a3f50b",
+      "bytes": 20021
     },
     {
       "path": "_qto-shared-evidence/scripts/DxfCompletion.cs",
@@ -342,13 +367,13 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_comparison.py",
-      "sha256": "907a8340b99cb539714ecaf82af58081f3bfeadfab4618d60c8b4f1f8c6639f9",
-      "bytes": 46603
+      "sha256": "96cbe94bfa34eb5612bb7f604ea34c2ea78086fd8b60eeb53cf3417bd0451719",
+      "bytes": 47291
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
-      "sha256": "ec8b8e1db705b263a8ea833f8c279e13978f73a28d65755a1e2d97e3ed9f6f4d",
-      "bytes": 28109
+      "sha256": "168246ff53c646d8819cbb98e4a4a841cdda22a6db9f568c33d96c90ca39bece",
+      "bytes": 29110
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_decisions.py",
@@ -357,13 +382,18 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_delivery.py",
-      "sha256": "96d00fb0bd30ae88275f72b037467d76d15da19216fe2dbe1d65f591961f74e4",
-      "bytes": 14359
+      "sha256": "5d834bdde6fa0c38276cd3851a2150579816ff7c4f4a4c8416250269ce80a66c",
+      "bytes": 25672
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_revision.py",
       "sha256": "25949ac62b3467a2d9d52d272392f3167f59bbc4280e0a686b5d31d5380c9045",
       "bytes": 12867
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_review_statistics.py",
+      "sha256": "d7468a240b49a57a26065f41412eb46551233167485ad7c660de09ad84fe6204",
+      "bytes": 13920
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_search_text_lines.py",
@@ -632,8 +662,8 @@
     },
     {
       "path": "qto-coordinator/SKILL.md",
-      "sha256": "8104138892de518101c28c9473fca780436d4ac43214d8d653fb89f74c6cd551",
-      "bytes": 8914
+      "sha256": "60dd2dc9aa88f1bfcec6c7cb76fb8a675810ef049ad405f090bb6a9700a73c82",
+      "bytes": 10071
     },
     {
       "path": "qto-duct-air-systems/agents/openai.yaml",

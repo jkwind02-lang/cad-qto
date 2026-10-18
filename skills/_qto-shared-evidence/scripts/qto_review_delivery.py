@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import copy
 import math
+from qto_review_statistics import build_comparison_statistics, build_coverage_check
 
 SCHEMA = 'qto-review-delivery/1.0'
 ADOPTION_BOUNDARY = '当前采用仅指本轮工作采用，不代表工程正式核准。'
+ADOPTED_RECORD_NOTICE = '冻结采用记录迁移，仅核对记录身份，本次未重新量算或核证几何及规则输入，不代表正式核准。'
 MEMBER_FIELDS = ('current_member_keys', 'source_evidence_member_keys', 'retired_member_keys')
 
 
@@ -46,8 +48,17 @@ def evidence(value, sources, label, verified=False):
     require(isinstance(value, dict) and value.get('state') in ('verified', 'pending'), label + '证据状态无效')
     if verified:
         require(value['state'] == 'verified', label + '主量须有已核实证据；可改列参考待核，不得造零')
-    require(value.get('method') in ('measured', 'rule'), label + '须声明实测或规则推算')
-    source_refs(value.get('source_refs'), sources, label, value['state'] == 'verified')
+    require(value.get('method') in ('measured', 'rule', 'adopted_record'), label + '须声明实测、规则推算或冻结采用记录迁移')
+    if value.get('method') == 'adopted_record':
+        p = value.get('provenance')
+        require(isinstance(p, dict) and all(text(p.get(k)) for k in ('input_sha256', 'record_id', 'record_locator', 'role_path', 'role_value')),
+                label + '冻结采用记录须有输入指纹、原记录定位和明确采用角色字段')
+        require(len(p['input_sha256']) == 64 and all(c in '0123456789abcdef' for c in p['input_sha256']), label + '迁移输入指纹无效')
+        require(value.get('new_measurement_performed') is False, label + '冻结记录投影不得声称本轮重新量算或验证规则输入')
+        require(p.get('verification_scope') == 'frozen_record_identity_only', label + '冻结记录投影须明确仅核对原记录身份')
+        value['verification_scope'] = 'frozen_record_identity_only'
+        value['notice'] = ADOPTED_RECORD_NOTICE
+    source_refs(value.get('source_refs'), sources, label, value['state'] == 'verified' and value['method'] != 'adopted_record')
     facts = value.get('input_facts', [])
     require(isinstance(facts, list), label + '输入事实须为列表')
     if verified and value['method'] == 'rule':
@@ -63,6 +74,102 @@ def evidence(value, sources, label, verified=False):
         source_refs(fact.get('source_refs'), sources, label + '.input_facts', fact['state'] == 'verified')
 
 
+def canonical_delivery_data(view):
+    """Business delivery fields for independent exporters; no normalization."""
+    d = copy.deepcopy(view.get('delivery'))
+    if d is not None:
+        for key in ('generation_check', 'comparison_statistics', 'coverage_check'):
+            d.pop(key, None)
+    return d
+
+
+def reference_containment_minimum(ref, byrow, items):
+    """A safe lower bound from proved distinct scopes or one quantity outlet.
+
+    Overlapping/unclear scopes are not summed merely because a reference names
+    several rows. A complete declared item's current outlet is already the sum
+    of its unique adopted rows, so an explicit link to every row includes that
+    outlet without inventing a new overlap decision.
+    """
+    linked = [byrow[rid] for rid in ref['current_row_ids']]
+    minimum = max((r['quantity'] for r in linked), default=0)
+    ids = set(ref['current_row_ids'])
+    for item in items:
+        current = item.get('current_row_ids') if isinstance(item, dict) else None
+        if not isinstance(current, list) or not current or not all(isinstance(rid, str) and rid in byrow for rid in current): continue
+        if len(current) != len(set(current)) or not set(current) <= ids: continue
+        rows = [byrow[rid] for rid in current]
+        if any(r['state'] != 'current' or r['unit'] != linked[0]['unit'] for r in rows): continue
+        value = item.get('quantity')
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and math.isclose(value, sum(r['quantity'] for r in rows), rel_tol=1e-10, abs_tol=1e-9):
+            minimum = max(minimum, value)
+    def exclusive(a, b):
+        return (set(a['coverage']['computed_scope']).isdisjoint(b['coverage']['computed_scope'])
+                and set(a['member_keys']).isdisjoint(b['member_keys']))
+    pairs = [(a, b) for n, a in enumerate(linked) for b in linked[n + 1:] if exclusive(a, b)]
+    for a, b in pairs: minimum = max(minimum, a['quantity'] + b['quantity'])
+    if len(pairs) == len(linked) * (len(linked) - 1) // 2:
+        minimum = max(minimum, sum(r['quantity'] for r in linked))
+    return minimum
+
+
+def normalize_items(view, d, byrow):
+    if 'items' not in d:
+        return
+    items = d['items']
+    require(isinstance(items, list), 'items须为列表')
+    ids, used, main_used = set(), set(), set()
+    comparison = {i['id']: i for i in (view.get('comparison') or {}).get('items', [])}
+    for item in items:
+        require(isinstance(item, dict) and text(item.get('id')) and item['id'] not in ids, '条目编号缺失或重复')
+        ids.add(item['id'])
+        require(text(item.get('title')) and text(item.get('unit')), '条目须有名称和单位')
+        if 'original_unit' in item: require(text(item['original_unit']), '原量单位无效')
+        if 'original_row_present' in item: require(isinstance(item['original_row_present'], bool), '原行存在性须为明确布尔值，不从空量猜测')
+        for field in ('quantity', 'original_quantity'):
+            q = item.get(field)
+            require(field in item and (q is None or isinstance(q, (int, float)) and not isinstance(q, bool) and math.isfinite(q) and q >= 0),
+                    '条目' + field + '须显式为非负有限数字或null')
+        scope(item.get('scope'), '条目' + item['id'])
+        c = item.get('coverage')
+        require(isinstance(c, dict) and c.get('state') in ('complete', 'partial', 'unknown'), '条目覆盖须为complete/partial/unknown')
+        computed, pending = strings(c.get('computed_scope'), '条目已算范围'), strings(c.get('uncomputed_scope'), '条目未算范围')
+        require(not computed & pending and computed | pending == set(item['scope']['included']), '条目已算与未算范围须互斥且覆盖全部适用范围')
+        require((c['state'] == 'complete' and not pending and bool(computed)) or
+                (c['state'] == 'partial' and bool(pending) and bool(computed)) or
+                (c['state'] == 'unknown' and not computed and bool(pending)), '条目覆盖状态与具体范围不一致')
+        require(isinstance(item.get('dimensions'), dict) and all(text(k) and text(v) for k, v in item['dimensions'].items()), '条目dimensions须为文字映射')
+        require('display' not in item or isinstance(item['display'], dict), '条目display须为对象')
+        for field, states in (('current_row_ids', ('current',)), ('reference_row_ids', ('reference',)), ('historical_row_ids', ('historical', 'retired'))):
+            refs = strings(item.get(field), '条目' + field)
+            require(all(r in byrow and byrow[r]['state'] in states and byrow[r]['unit'] == item['unit'] for r in refs), '条目明细引用不存在、角色或单位不一致')
+            used.update(refs)
+            if field == 'current_row_ids':
+                require(not refs & main_used, '同一当前主量明细不得重复归入多个条目')
+                main_used.update(refs)
+        values = [byrow[r]['quantity'] for r in item['current_row_ids']]
+        expected = sum(values) if values else None
+        same = item['quantity'] == expected or expected is not None and item['quantity'] is not None and math.isclose(item['quantity'], expected, rel_tol=1e-10, abs_tol=1e-9)
+        require(same or expected is None and item['quantity'] == 0 and item.get('current_zero_evidence'),
+                '条目当前量与采用主明细不一致；未知不能由历史退出强制造零：' + item['id'] + ' / ' + str(item['quantity']) + ' / ' + str(expected))
+        if item.get('current_zero_evidence'):
+            require(item['quantity'] == 0 and isinstance(item['current_zero_evidence'], dict), '已证零量说明无效')
+            source_refs(item['current_zero_evidence'].get('source_refs'), {s['id'] for s in view['sources']}, '已证零量')
+            require(text(item['current_zero_evidence'].get('reason')), '已证零量须有具体排除原因')
+        source = comparison.get(item.get('comparison_item_id', item['id']))
+        if source is not None:
+            require(source['ours']['unit'] == item['unit'] and source['ours']['total'] == item['quantity'], '条目当前量与正式比较采用量不一致')
+            segs = source.get('third_parties', [])
+            if any(s.get('comparison_state') == 'comparable' for s in segs):
+                require(c['state'] == 'complete', '正式整项可比与当前局部/未知覆盖冲突；明确局部对照须独立形成完整局部条目')
+            if len(segs) == 1:
+                require(segs[0]['quantity'] == item['original_quantity'], '条目原量与正式来源段不一致')
+                require(segs[0]['unit'] == item.get('original_unit', item['unit']), '异单位原量须显式保留original_unit，不得误标当前单位')
+    require(used == set(byrow), '全部主量、参考和历史明细须保留条目归属，不得漏出交付列表')
+    d['comparison_statistics'] = build_comparison_statistics(view, d)
+    d['coverage_check'] = build_coverage_check(d)
+
+
 def normalize_delivery(view):
     """Validate opt-in data in place; never change quantities or legacy defaults."""
     if 'delivery' not in view:
@@ -76,6 +183,12 @@ def normalize_delivery(view):
     d.setdefault('adoption_note', ADOPTION_BOUNDARY)
     require(text(d['adoption_note']), '当前采用说明缺失')
     sources = {s['id'] for s in view['sources']}
+    provenance = d.get('projection_provenance')
+    if provenance is not None:
+        require(isinstance(provenance, dict) and text(provenance.get('input_sha256')) and len(provenance['input_sha256']) == 64
+                and all(c in '0123456789abcdef' for c in provenance['input_sha256'])
+                and provenance.get('verification_scope') == 'frozen_record_identity_only', '投影来源须绑定实际输入SHA并明确仅核原记录身份')
+        provenance['notice'] = ADOPTED_RECORD_NOTICE
     keys = {o['catalog_key'] for o in view['objects']}
     membership = [strings(d.get(k), k) for k in MEMBER_FIELDS]
     current, source, retired = membership
@@ -112,6 +225,9 @@ def normalize_delivery(view):
             require(value is not None and bool(computed), '当前主量须有已算数值及范围；未知不能改成零')
             require(members <= current, '仅来源证据定位对象不得作为主量成员')
             evidence(row.get('evidence'), sources, row['id'], True)
+            if row['evidence']['method'] == 'adopted_record':
+                require(provenance is not None and row['evidence']['provenance']['input_sha256'] == provenance['input_sha256'],
+                        '冻结采用记录与本次投影输入身份不一致')
         elif row['state'] == 'reference':
             require(members <= current | source, '参考成员无效')
             evidence(row.get('evidence'), sources, row['id'])
@@ -130,14 +246,28 @@ def normalize_delivery(view):
             continue
         ref = row['reference']
         require(all(r in byrow and byrow[r]['state'] == 'current' for r in ref['current_row_ids']), '参考关联主量不存在')
+        association = ref.get('association_state', 'resolved')
+        require(association in ('resolved', 'scope_only'), '参考关联状态无效')
+        if association == 'scope_only':
+            require(ref['relationship'] == 'unknown' and ref.get('source_claimed_relationship') in ('includes_current', 'excludes_current', 'unknown')
+                    and not ref['current_row_ids'] and text(ref.get('scope_statement')) and text(ref.get('association_reason')),
+                    '仅范围包含声明须保留原范围和未匹配原因，不能猜测主明细关系')
         if ref['relationship'] == 'includes_current':
-            require(bool(ref['current_row_ids']), '包含主量的参考须列明主量编号')
+            absent = ref.get('current_quantity_absent') is True
+            require(bool(ref['current_row_ids']) or absent or association == 'scope_only', '包含主量的参考须列明主量编号；本次未形成量须显式声明current_quantity_absent')
+            if absent:
+                require(not ref['current_row_ids'] and not any(r['state'] == 'current' and r.get('item_id') == row.get('item_id') for r in rows),
+                        '声明本次未形成主量却仍关联当前明细')
         for rid in ref['current_row_ids']:
             main = byrow[rid]
             require(main['unit'] == row['unit'], '不同单位的参考与主量不能建立数值包含关系')
             if ref['relationship'] == 'includes_current':
                 require(set(main['scope']['included']) <= set(row['scope']['included']), '参考范围未包含所指主量范围')
                 require(row['quantity'] is None or row['quantity'] >= main['quantity'], '参考包含主量却小于主量')
+        if ref['relationship'] == 'includes_current' and ref['current_row_ids'] and row['quantity'] is not None:
+            minimum = reference_containment_minimum(ref, byrow, d.get('items', []))
+            require(row['quantity'] >= minimum or math.isclose(row['quantity'], minimum, rel_tol=1e-10, abs_tol=1e-9),
+                    '参考包含互斥主明细或唯一采用出口，却小于有据合计下限：' + row['id'] + ' / ' + str(minimum))
     groups = d.get('missing_groups')
     require(isinstance(groups, list), 'missing_groups须为列表')
     ids = set()
@@ -151,7 +281,11 @@ def normalize_delivery(view):
         require(isinstance(facts, list), '已核事实须显式列出；无事实用空列表')
         for fact in facts:
             require(isinstance(fact, dict) and text(fact.get('statement')), '已核事实无效')
-            source_refs(fact.get('source_refs'), sources, '已核事实')
+            recorded = fact.get('provenance')
+            if recorded is not None:
+                require(provenance is not None and recorded.get('input_sha256') == provenance['input_sha256'] and text(recorded.get('record_locator'))
+                        and recorded.get('verification_scope') == 'frozen_record_identity_only', '迁移已核事实须绑定原输入指纹与定位，不冒充本轮核图')
+            source_refs(fact.get('source_refs'), sources, '已核事实', recorded is None)
         needs = node.get('minimum_required')
         children = node.get('children', [])
         require(isinstance(needs, list) and isinstance(children, list) and (needs or children), '须提供最少具体缺件或独立子项')
@@ -187,6 +321,12 @@ def normalize_delivery(view):
         common = next((x for x in c.get('common_issues', []) if x['id'] == issue.get('common_issue_id')), None)
         require(common is None or common.get('handler') == 'closed' or ('common', common['id']) in seen,
                 '单项取舍依赖尚未答复的共性问题，须显式声明该共性取舍后再开放单项；不得形成无法保存的表单')
+    baseline = d.get('coverage_baseline')
+    if isinstance(baseline, dict) and baseline.get('state') == 'explicit':
+        source_refs(baseline.get('source_refs'), sources, '覆盖基准')
+        for obj in baseline.get('objects', []):
+            if obj.get('source_refs') is not None: source_refs(obj['source_refs'], sources, '覆盖对象')
+    normalize_items(view, d, byrow)
     d['generation_check'] = {'current_rows': sum(r['state'] == 'current' for r in rows),
                              'reference_rows': sum(r['state'] == 'reference' for r in rows),
                              'missing_groups': len(groups), 'business_choices': len(targets),

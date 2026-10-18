@@ -169,7 +169,22 @@ def extract_json_file(path):
  text=Path(path).read_text(encoding='utf-8-sig')
  if Path(path).suffix.lower() in ['.html','.htm']:
   m=re.search(r'<script\s+id="feedback-seed"\s+type="application/json">([\s\S]*?)</script>',text)
-  require(m is not None,'HTML没有批注数据块；不执行其中脚本');return json.loads(m.group(1))
+  require(m is not None,'HTML没有批注数据块；不执行其中脚本')
+  package=json.loads(m.group(1))
+  if 'delivery_snapshot_ref' in package:
+   ref=package['delivery_snapshot_ref']
+   require(isinstance(ref,dict) and isinstance(ref.get('result_fingerprint'),str)
+           and re.fullmatch(r'[0-9a-f]{64}',ref['result_fingerprint']) is not None,'HTML当前交付引用结构无效')
+   payload=re.search(r'<script\s+id="payload"[^>]*>([\s\S]*?)</script>',text)
+   require(payload is not None,'HTML缺少当前交付引用对应的视图载荷')
+   view=unpack_payload(gzip.decompress(base64.b64decode(payload.group(1))))
+   require(package['delivery_snapshot_ref'].get('result_fingerprint')==view.get('result_fingerprint')
+           and package.get('source_sha256')==view.get('source_sha256')
+           and package.get('project_id')==view.get('project_id') and package.get('review_id')==view.get('review_id')
+           and 'delivery' in view,'HTML当前交付引用与内嵌视图不一致')
+   bind_delivery_feedback(package,view)
+   package.pop('delivery_snapshot_ref',None)
+  return package
  return json.loads(text)
 
 def validate_feedback(raw, view):
