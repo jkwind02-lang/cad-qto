@@ -502,7 +502,12 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
                 context_rows[record_id] = serialized or json.dumps(row, ensure_ascii=False)
             instance_path = str(row.get("instance_path") or "")
             owners, location_basis = located_frame_ids(row, frames, insert_index, frame_bounds)
+            symbol_excluded = (adapter.symbol_geometry.pipe_exclusion(row, mapping["_symbol_context"])
+                               if mapping.get("_symbol_context") is not None else None)
             if owners is None:
+                if symbol_excluded is not None:
+                    drawing_excluded["explicit_symbol_evidence"] += 1
+                    continue
                 if entity_type in REVIEW_TYPES:
                     # same family rule as inside a frame: what the mapping excludes is not pending anywhere
                     matched, conflicts, reason = classify_review_row(entity_type, layer, block_name, drawing_families, by_kind)
@@ -539,6 +544,8 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
                 state["scoped_rows"] += 1
                 state["entity_counts"][entity_type or "<EMPTY>"] += 1
                 active = state["members"]
+                if symbol_excluded is not None:
+                    continue  # row is still in the prescoped stream and gets its explicit disposition in the adapter
                 if entity_type in adapter.TEXT_TYPES:
                     for fam in text_families:
                         if fam["family_id"] in active and fam["layer_re"].search(layer) and fam["text_re"].search(str(row.get("text") or "")):
@@ -790,6 +797,7 @@ def write_frame_inputs(frame: dict[str, Any], state: dict[str, Any], mapping: di
         "scope": {"layout": mapping["layout"], "space_id": frame_id, "boundary_policy": "contained", "bounds": frame_bounds_of(frame)},
         "unit": unit,
         "block_expansion": mapping["block_expansion"],
+        **({"symbol_census_report": mapping["symbol_census_report"]} if mapping.get("symbol_census_report") is not None else {}),
         **rules,
         "use_conventional_terminal_type_candidates": bool(mapping.get("use_conventional_terminal_type_candidates", True)),
         "use_conventional_valve_type_candidates": bool(mapping.get("use_conventional_valve_type_candidates", True)),
@@ -907,6 +915,8 @@ def main(argv: list[str] | None = None) -> int:
         mapping = load_mapping(mapping_path)
         manifest_path = args.cad_manifest.resolve()
         stream_path, block_path, cad_manifest = adapter.source_from_manifest(manifest_path)
+        if mapping.get("symbol_census_report") is not None:
+            mapping["_symbol_context"] = adapter.symbol_geometry.pipe_context(mapping["symbol_census_report"], manifest_path, mapping["layout"])
         manifest_sha = str(cad_manifest.get("authoritative_source", {}).get("sha256") or "").lower()
         if manifest_sha != mapping["expected_source_sha256"].lower():
             fail("族映射绑定的来源哈希与当前CAD证据不一致")

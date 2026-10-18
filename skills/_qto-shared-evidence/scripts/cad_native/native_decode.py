@@ -17,6 +17,7 @@ SUPPORTED_CLASSES = OLD_CLASSES | {'TCH_HVACDIMENSION', 'TCH_TEXT', 'TCH_MTEXT',
 EVIDENCE = {'module_sha256': '66ffd0c2185c01dc264c4345cd48839d2908b462347e53dfb7d7f547eea22572',
     'entity_fields': '0x5dbf0/0x5cf70', 'wrapper': '0x217b0',
     'point2_permutation': '0x22550', 'point3_permutation': '0x225d0/0x226e0',
+    'base8_text': '0x1c4f0+0x217b0; TCH_TEXT/TU-separated/context0 only',
     'text': '0x55e30/0x562b0', 'leader': '0x13370/0x163e0',
     'pipe': '0x37f00/0x39200', 'pipe_node': '0x38970/0x38510',
     'pipe_fitting': '0x39c10', 'pipe_valve': '0x38dc0/0x39fa0',
@@ -105,11 +106,18 @@ class NativeReader(PreviousReader):
                 'reference_indices': [before[2], self.reference_pos]})
         return result
 
-    def base(self):
+    def base(self, class_name=None):
         version = self.field('entity_version', self.d.rc)
-        self.require(version in (9, 10), f'unsupported base version {version}')
-        context = self.field('entity_context', self.d.rc)
-        self.require((version, context) in ((9, 16), (10, 17)), 'unsupported base version/context')
+        self.require(version in (8, 9, 10), f'unsupported base version {version}')
+        if version == 8:
+            # 0x217b0 reads no context byte below threshold 9; scalars use the raw filer.
+            self.require(class_name == 'TCH_TEXT' and not self.legacy_inline,
+                'unsupported base8 class/container profile')
+            context = self.field('entity_context', lambda: 0)
+            self.result['stream_profile'] = 'TU-separated-base8-context0; implicit context, no context byte'
+        else:
+            context = self.field('entity_context', self.d.rc)
+        self.require((version, context) in ((8, 0), (9, 16), (10, 17)), 'unsupported base version/context')
         if version >= 10: self.guid = self.field('entity_format_identifier', self.text)
         for offset in ('10', '18'): self.field(f'entity_scalar_0x{offset}', lambda: self.encoded('double', context))
         flags = self.field('entity_reference_flags', lambda: self.encoded('byte', context))
@@ -118,7 +126,8 @@ class NativeReader(PreviousReader):
             if flags & mask:
                 count = self.field(label+'_reference_count', lambda: self.encoded('byte', context))-adjustment
                 self.require(0 <= count <= 64, 'base reference count outside bound')
-                for i in range(count): self.field(f'{label}_reference_{i}', self.object_id)
+                for i in range(count): self.field(f'{label}_reference_{i}',
+                    (lambda: self.reference(330)) if version == 8 else self.object_id)
         count = self.field('entity_fields_count', self.d.bl)
         self.field('entity_fields', lambda: self.entity_fields(count))
         self.field('entity_property_map', self.datamap)
@@ -310,7 +319,7 @@ class NativeReader(PreviousReader):
     def parse(self, class_name):
         try:
             if class_name=='TDBINTERFACERECORD':self.interface_record()
-            else:self.base(); self.result['base_complete']=True
+            else:self.base(class_name); self.result['base_complete']=True
             if class_name=='TDBINTERFACERECORD':pass
             elif class_name in OLD_CLASSES:
                 self.interfaces()

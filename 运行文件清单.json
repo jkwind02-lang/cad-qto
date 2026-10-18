@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 335,
+  "runtime_file_count": 339,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -62,8 +62,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/CAD基础读取与天正原生字段.md",
-      "sha256": "6b514e2a13e0f73dc001b7d1173393f1ba1ab3d115902a7e4207eb309c05b911",
-      "bytes": 3586
+      "sha256": "f17239ee3cedc50d73e581ebea2bfeb2cc9e6e9cb97b0c9ca0cd8ccf1e035666",
+      "bytes": 3972
     },
     {
       "path": "_qto-shared-evidence/references/delivery-projection-example.json",
@@ -94,6 +94,11 @@
       "path": "_qto-shared-evidence/references/原图独立算量实测.md",
       "sha256": "e1c590e41105c64233b89b75c7791655f8575d3c2ad4e07bef0ef1905219ab02",
       "bytes": 4286
+    },
+    {
+      "path": "_qto-shared-evidence/references/原生文字基类8格式依据.md",
+      "sha256": "2898a2cb7cbfa0e759889cf4e23e597075fe308865fde73129665da953c88487",
+      "bytes": 3898
     },
     {
       "path": "_qto-shared-evidence/references/否定结论检索.md",
@@ -164,6 +169,11 @@
       "path": "_qto-shared-evidence/references/现行规则来源选择门.md",
       "sha256": "c937a35378b3de5cf45724f0f14fbda211cdd2c22d835e3b4d0df5bb8cf666c2",
       "bytes": 1768
+    },
+    {
+      "path": "_qto-shared-evidence/references/符号普查与有据处置.md",
+      "sha256": "82f4ef0a5e9733822fec0749a0bdbf6ae0f3c2a0fa7b3a5df9dd5f538d7eed3e",
+      "bytes": 7781
     },
     {
       "path": "_qto-shared-evidence/references/简明两表Excel交付.md",
@@ -272,8 +282,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/cad_native/native_decode.py",
-      "sha256": "da816b0118d8147aabb8ed520530b64c25a4a805c5eba9b3fc08d2a4342e5774",
-      "bytes": 22794
+      "sha256": "60a1c6aa7b415e638272de92a844865922b9f274aa7cccfb218de2466abc7a89",
+      "bytes": 23420
     },
     {
       "path": "_qto-shared-evidence/scripts/cad_native/reader.py",
@@ -284,6 +294,11 @@
       "path": "_qto-shared-evidence/scripts/cad_native/runtime_audit.py",
       "sha256": "913deaba81b34f379f6a61088afe2ffa483b0a10fdcb877812cf028f49eabff3",
       "bytes": 2824
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/census_cad_symbols.py",
+      "sha256": "ff216e052bfa321ac404c45413d23c8843087b133d9fe598030de9ad5cf4195d",
+      "bytes": 1494
     },
     {
       "path": "_qto-shared-evidence/scripts/convert_qto_review_delivery.py",
@@ -441,6 +456,11 @@
       "bytes": 6283
     },
     {
+      "path": "_qto-shared-evidence/scripts/qto_symbol_geometry.py",
+      "sha256": "3306ccb281578d62f86b2b80f8256e4d711e921dacae7f09b4762d120c9da243",
+      "bytes": 34820
+    },
+    {
       "path": "_qto-shared-evidence/scripts/read_cad_basic.py",
       "sha256": "1eb35994475b4a380877bc7267400782a8049fc3e6c09d250b4d4807e5b14cbd",
       "bytes": 6379
@@ -582,8 +602,8 @@
     },
     {
       "path": "qto-components-points/SKILL.md",
-      "sha256": "067d70a9ab57c8308c82cbb926984fcc90afbccd6a9a23ddf8b82fe04e4d0a1d",
-      "bytes": 9074
+      "sha256": "0bb92c49847412d6628b666b5930727ab583f6b32acafae11c424076b596ea31",
+      "bytes": 9564
     },
     {
       "path": "qto-concrete-formwork/agents/openai.yaml",
@@ -1317,13 +1337,13 @@
     },
     {
       "path": "qto-pipe-networks/scripts/build_pipe_inference_input.py",
-      "sha256": "ab1218288f4cc6b1f5266bafaa5e7bffe6800fbe283ef974c94395776cd6ff2b",
-      "bytes": 87431
+      "sha256": "96284dea5f116b638dbfeaf682ff01682aaec023ac77d4c989ea5d7009d6537f",
+      "bytes": 88810
     },
     {
       "path": "qto-pipe-networks/scripts/build_pipe_inference_inputs_batch.py",
-      "sha256": "a6569e26fa53456cbd03c11a78bda5cc34be61f2c47766f19a2f5e5d4603f1f8",
-      "bytes": 65197
+      "sha256": "da24cf1c4be1abb4a7915fd881a3381e873855e48a45c9ee284b3debb08910cf",
+      "bytes": 66036
     },
     {
       "path": "qto-pipe-networks/scripts/infer_pipe_network.py",
@@ -1367,8 +1387,8 @@
     },
     {
       "path": "qto-pipe-networks/SKILL.md",
-      "sha256": "2e2c451320d47174afa0db85e7f089c269bb0c6625eaef09bbc6aa5cb84995b1",
-      "bytes": 15600
+      "sha256": "25ae64b570f674437c57e87b71de6d06590df561df2f638aa85c70509efc8759",
+      "bytes": 16027
     },
     {
       "path": "qto-rebar/agents/openai.yaml",

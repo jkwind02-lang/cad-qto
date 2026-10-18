@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-eviden
 from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_entries, applies_to, recognition_basis, validate_working_basis
 
 import qto_cad_geometry as cad_geometry
+import qto_symbol_geometry as symbol_geometry
 from qto_actor_identity import is_model_identity
 from qto_cad_source_contract import (check_unit_factor, verify_source_file, unit_known, verify_unit_declaration_texts,
                                      verify_unit_corroboration, unit_tokens, UNIT_APPLIES_TO)
@@ -716,6 +717,11 @@ def main() -> int:
             text(scope.get("boundary_source_id"), "scope.boundary_source_id")
         boundary_objects = []
 
+        symbol_context = None
+        if profile.get("symbol_census_report") is not None:
+            if not args.cad_manifest:
+                fail("symbol_census_report requires --cad-manifest")
+            symbol_context = symbol_geometry.pipe_context(profile["symbol_census_report"], args.cad_manifest.resolve(), layout)
         layer_rules = normalized_rules(profile.get("layer_rules"), "layer_rules")
         for item in layer_rules:
             decision = str(item.get("decision", "unresolved"))
@@ -798,6 +804,15 @@ def main() -> int:
                 "basis": "未命中冻结专业规则，不能静默排除" if review_required and not empty_definition else "当前管网适配器不消费该中性实体类型",
                 "rule_ids": [],
             }
+            if symbol_context is not None:
+                shape_candidates = symbol_context["candidates"].get(source_record_id, [])
+                if shape_candidates:
+                    object_dispositions[source_record_id]["symbol_shape_candidates"] = shape_candidates
+                symbol_decision = symbol_geometry.pipe_exclusion(row, symbol_context)
+                if symbol_decision is not None:
+                    object_dispositions[source_record_id].update(disposition="excluded", basis=symbol_decision["basis"],
+                        symbol_disposition=symbol_decision, symbol_census_report=profile["symbol_census_report"])
+                    continue
             if empty_definition:
                 # registration 20261016-2359: an empty definition is a hint; a block rule may still exclude or adopt it below
                 empty_block_hits[str(row.get("block_name") or "")] += 1
@@ -1360,11 +1375,14 @@ def main() -> int:
                      "source_declared_unit": (cad_manifest.get("drawing_unit") or {}).get("raw_unit") if cad_manifest else unit.get("raw_unit"),
                      "declaration": unit_declaration},
             "scope_boundary_objects": boundary_objects,
+            "symbol_census_report": profile.get("symbol_census_report"),
             "counts": {
                 "total_neutral_rows": prescoped_header["source_total_rows"] if prescoped_header else total_rows,
                 "rows_read": total_rows,
                 "scoped_rows": scoped_rows,
                 "segment_candidates": len(candidates),
+                "symbol_explicitly_excluded_objects": sum("symbol_disposition" in item for item in object_dispositions.values()),
+                "symbol_candidate_objects": sum(bool(item.get("symbol_shape_candidates")) for item in object_dispositions.values()),
                 "included_segments": len(segments),
                 "excluded_segments": int(audit.get("excluded_count", 0)),
                 "unresolved_segments": int(audit.get("unresolved_count", 0)),
