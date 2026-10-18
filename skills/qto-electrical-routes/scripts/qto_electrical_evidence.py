@@ -90,10 +90,21 @@ class Evidence:
         self.layout = required(request.get('layout', 'Model'), 'layout')
         self.before = {str(p): routes.sha256(p) for p in (self.path, layout_path, block_path)}
         self.dependencies = {}
-        authority=self.manifest.get('authoritative_source')
-        if authority:
-            source_contract.verify_source_file(authority,'authoritative_source')
-            self.before[str(Path(authority['path']))]=authority['sha256']
+        # Both the authority and its declared exchange file belong to this
+        # evidence snapshot; unchanged streams do not validate a changed DXF.
+        for label in ('authoritative_source', 'exchange_dxf'):
+            reference = self.manifest.get(label)
+            if reference is None:
+                continue  # Older direct-source manifests may omit exchange_dxf.
+            if not isinstance(reference, dict) or not reference.get('path') or not reference.get('sha256'):
+                source_contract.verify_source_file(reference, label)  # Controlled contract error.
+            source_path = Path(reference['path'])
+            if not source_path.is_absolute():
+                source_path = self.path.resolve().parent / source_path
+            source_path = source_path.resolve()
+            checked = dict(reference, path=str(source_path))
+            source_contract.verify_source_file(checked, label)
+            self.before[str(source_path)] = str(reference['sha256']).lower()
         definitions = defaultdict(list)
         for row in routes.load_stream(block_path):
             if row.get('row_type') == 'entity':

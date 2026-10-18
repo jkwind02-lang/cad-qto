@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 330,
+  "runtime_file_count": 335,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -862,8 +862,8 @@
     },
     {
       "path": "qto-electrical-routes/capability.json",
-      "sha256": "37f2c69a3f27657a98af99464766c4e71a056e2e805afc5c72af9a9b1c347a97",
-      "bytes": 2296
+      "sha256": "eb4d3da4ea3f84b6fd92e0df9cd25a524e233bbb921d9751aaeb3afffc368a3f",
+      "bytes": 3073
     },
     {
       "path": "qto-electrical-routes/references/专业规则与成熟状态.md",
@@ -894,6 +894,16 @@
       "path": "qto-electrical-routes/references/案例与接入清单.md",
       "sha256": "6d4a9647f0669a71154a1bcf79584f59591b49eb801774e278b22f7f149d9da2",
       "bytes": 657
+    },
+    {
+      "path": "qto-electrical-routes/references/火警网络系统与重复表达.md",
+      "sha256": "a5db0ea35ee571ea4ab6d3b67efc983aa07b8c410f20ae4c2b17868285a7381c",
+      "bytes": 11988
+    },
+    {
+      "path": "qto-electrical-routes/references/电气专用支吊架参考复算.md",
+      "sha256": "30fe29a222c61184ea03b843799ed28f69eaa9854104c5658e36e195ebd70991",
+      "bytes": 9401
     },
     {
       "path": "qto-electrical-routes/references/电气原图对象包.schema.json",
@@ -932,8 +942,8 @@
     },
     {
       "path": "qto-electrical-routes/references/计算与证据流程.md",
-      "sha256": "680680299197100af47ff0ef32dd55da85401df460eb690b61efe4ae564f90cb",
-      "bytes": 23838
+      "sha256": "1aeaa094d0f5fd4392b71098efe566f199b5a2a961c65070b485976e5136c5a5",
+      "bytes": 24737
     },
     {
       "path": "qto-electrical-routes/references/计量口径选择.md",
@@ -966,6 +976,11 @@
       "bytes": 2046
     },
     {
+      "path": "qto-electrical-routes/scripts/calculate_electrical_supports.py",
+      "sha256": "956c0882f991919f6be6979e202853baf89f305fc0edfac99b51306ae94fe46f",
+      "bytes": 37028
+    },
+    {
       "path": "qto-electrical-routes/scripts/extract_design_clauses.py",
       "sha256": "f577e1b30d84631a7971959696fcf3f6105bd8d4908c27c0ed3811ce600efc07",
       "bytes": 9064
@@ -976,14 +991,24 @@
       "bytes": 25998
     },
     {
+      "path": "qto-electrical-routes/scripts/infer_electrical_network_roles.py",
+      "sha256": "e785a588cbda900ae7f7d90f557bb792e00f83e3765d04c4dda7745761fc9f90",
+      "bytes": 30151
+    },
+    {
+      "path": "qto-electrical-routes/scripts/match_electrical_network_expressions.py",
+      "sha256": "94aa53454d16298dd215356ee3496ce615b59c176b4da9cbad05994f07a84037",
+      "bytes": 25437
+    },
+    {
       "path": "qto-electrical-routes/scripts/partition_electrical_route_network.py",
-      "sha256": "8e987c618b4e2750f29f2a9a0db324bf6efdd9a498403d98c2f796b9ef66dce1",
-      "bytes": 49662
+      "sha256": "2f2338b2978f2bb18b23949f8ff3b6582ae94b3457431d072f3380680fd18a1f",
+      "bytes": 49757
     },
     {
       "path": "qto-electrical-routes/scripts/qto_electrical_evidence.py",
-      "sha256": "852ac454fe6d455fc42fb03ba04d25fb4ec7eded729ea94b32ec4bde4d5daf69",
-      "bytes": 18089
+      "sha256": "3eef63fee4fec64aad4f52506d1292aefe551b6ce2ef676dd14e08bd138babff",
+      "bytes": 18855
     },
     {
       "path": "qto-electrical-routes/scripts/recognize_cable_trays.py",
@@ -1002,8 +1027,8 @@
     },
     {
       "path": "qto-electrical-routes/SKILL.md",
-      "sha256": "2135c5742b511fc91e8cdf9d83733e58b119281ed6eec5007686718bcb460de8",
-      "bytes": 9295
+      "sha256": "b97ed61b299be4aee03235440c45a9c09ce66471e952f88bf236b4b5710a8e19",
+      "bytes": 10586
     },
     {
       "path": "qto-framing-supports/agents/openai.yaml",

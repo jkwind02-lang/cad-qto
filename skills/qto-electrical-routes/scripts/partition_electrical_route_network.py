@@ -101,7 +101,8 @@ def partition_network(manifest_path, request, base_path=None):
         raise ValueError('trace_request须为现有L1公共请求参数；routes由实际关系重建')
     factor = trace.finite(raw_trace.get('unit', {}).get('factor_to_output'), 'unit.factor_to_output')
     e_req = dict(schema=REQUEST_SCHEMA, layout=raw_trace.get('layout', 'Model'),
-                 unit=dict(factor_to_m=factor, basis=trace.text(raw_trace.get('unit', {}).get('source_id'), 'unit.source_id')),
+                 unit=dict(factor_to_m=factor, basis=trace.text(raw_trace.get('unit', {}).get('source_id'), 'unit.source_id'),
+                 declaration=copy.deepcopy(raw_trace.get('unit', {}).get('declaration', {}))),
                  expand_blocks=raw_trace.get('expand_blocks', []), opaque_blocks=request.get('opaque_blocks', []),
                  max_depth=raw_trace.get('max_depth', 16))
     evidence = binding.Evidence(manifest_path, e_req)
