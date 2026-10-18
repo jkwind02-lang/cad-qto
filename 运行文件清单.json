@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 327,
+  "runtime_file_count": 330,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -17,8 +17,8 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
-      "sha256": "d704d69e6156db3f1180e571fe8f82921a4da5a8b359dc05b513c718cecf8cba",
-      "bytes": 41622
+      "sha256": "cf5862faee0e5e6ddedf29ad93f823d5542a058959a88c7730894f2ea9c37a6c",
+      "bytes": 43706
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-audit.js",
@@ -201,6 +201,11 @@
       "bytes": 9744
     },
     {
+      "path": "_qto-shared-evidence/references/跨图配准与同物复核.md",
+      "sha256": "2962392f9b241a84ad983cbfac35f84d433c3524558f983b3ded77995bbf6e64",
+      "bytes": 7462
+    },
+    {
       "path": "_qto-shared-evidence/references/逐实例构造要求与附属量.md",
       "sha256": "8e0be84ffbd5f185f297b06acec47543199ccd66251f5e28836bf0457b49506c",
       "bytes": 9814
@@ -222,8 +227,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/build_comparison_view_from_tables.py",
-      "sha256": "b0ea971a8b707cb5d75ff4e6710ead34cd16a3196dfe5a9f168838338390c48b",
-      "bytes": 44382
+      "sha256": "47158dd0cc181865cfa0ca1bd8ce0ac01199c78db8908f82a03ec51572208443",
+      "bytes": 44853
     },
     {
       "path": "_qto-shared-evidence/scripts/build_qto_delivery_excel.py",
@@ -324,6 +329,11 @@
       "path": "_qto-shared-evidence/scripts/qto_cad_source_contract.py",
       "sha256": "b35dbf2c91134a91dd6c0f0bf5d0d4ef264d4310c31ce885e8d2b3f07181b90a",
       "bytes": 10514
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_cross_drawing_registration.py",
+      "sha256": "21e963abca9fbc4ef065a5c10a5d10f76c27d2a098005adb6ae715ce70066b7f",
+      "bytes": 28591
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_dimension_semantics.py",
@@ -517,8 +527,8 @@
     },
     {
       "path": "qto-components-points/references/点位覆盖台账.md",
-      "sha256": "e173ee122d1025ef842d06ac35c42e4131ce1fbf2cb40ac5e0a28d9a9d42051c",
-      "bytes": 18611
+      "sha256": "9a98123f61bae68be81d214e4757319c4f88bed5a29443a99e35d3583dbeeab9",
+      "bytes": 19866
     },
     {
       "path": "qto-components-points/references/结果检查与输出.md",
@@ -532,8 +542,8 @@
     },
     {
       "path": "qto-components-points/references/计算与证据流程.md",
-      "sha256": "f11eb36af701b702178b8fd78d759066fc6959d5906a41e17590877a24fe4380",
-      "bytes": 21920
+      "sha256": "fdf862105278d3fb4315eaec3b58295070daf2807a381ff2b73b64a115ce3929",
+      "bytes": 25823
     },
     {
       "path": "qto-components-points/references/跨专业端点事实.md",
@@ -542,8 +552,8 @@
     },
     {
       "path": "qto-components-points/scripts/build_component_instances_from_neutral.py",
-      "sha256": "f498c0040206193d3e69976f9fae3923fd974a3ffae3627957765402e69aa619",
-      "bytes": 138803
+      "sha256": "421b889b14602a46f2022c2fe8575e1fa72c9480cf881dafa6acaeb14dcd4fa2",
+      "bytes": 148535
     },
     {
       "path": "qto-components-points/scripts/build_network_endpoint_handoff.py",
@@ -552,8 +562,8 @@
     },
     {
       "path": "qto-components-points/scripts/build_point_coverage_ledger.py",
-      "sha256": "25a5365f9c76498e3f59c563667de8a8fa56110ed8c5ac1a20873ee816103ee1",
-      "bytes": 107007
+      "sha256": "347d533558cf21c457673a5c38a70ce27a044ef47ea0f93bc2e5d34e2fde98cd",
+      "bytes": 111120
     },
     {
       "path": "qto-components-points/scripts/count_reconciled_instances.py",
@@ -566,9 +576,14 @@
       "bytes": 3217
     },
     {
+      "path": "qto-components-points/scripts/point_name_candidates.py",
+      "sha256": "b6e85b49717c4b8af0cff24882f0051fcb99bdfe40267bc240c9f9cd044d0932",
+      "bytes": 16519
+    },
+    {
       "path": "qto-components-points/SKILL.md",
-      "sha256": "5ac23d789fdbcd8776d434b0593fc3e4fd81c18362efa33da4e12a5cc4e82d46",
-      "bytes": 8408
+      "sha256": "067d70a9ab57c8308c82cbb926984fcc90afbccd6a9a23ddf8b82fe04e4d0a1d",
+      "bytes": 9074
     },
     {
       "path": "qto-concrete-formwork/agents/openai.yaml",
@@ -987,8 +1002,8 @@
     },
     {
       "path": "qto-electrical-routes/SKILL.md",
-      "sha256": "fec6744853f06d137a30fdf5f9babd64d07e1eb4c85dd25b1f669f5d45083d1d",
-      "bytes": 8812
+      "sha256": "2135c5742b511fc91e8cdf9d83733e58b119281ed6eec5007686718bcb460de8",
+      "bytes": 9295
     },
     {
       "path": "qto-framing-supports/agents/openai.yaml",

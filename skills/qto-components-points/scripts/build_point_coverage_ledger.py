@@ -149,6 +149,7 @@ class Ledger:
         self.legend_inventory_gaps: list[dict[str, str]] = []
         self.source_inventory: dict[tuple[str, str], dict[str, Any]] = {}
         self.project_corrections: list[dict[str, Any]] = []
+        self.number_audit_rows: list[dict[str, Any]] = []
 
     def problem(self, check: str, where: str, message: str) -> None:
         self.problems.append({"check": check, "where": where, "message": message})
@@ -259,6 +260,33 @@ class Ledger:
                          original_adapter_disposition={k: row.get(k) for k in
                              ("disposition", "basis", "rule_ids", "adjudication_id", "merged_into")},
                          handle=pid[len("PT-CAD-"):].upper() if top and pid.startswith("PT-CAD-") else None, top_level=top)
+            if report.get("number_audit") is not None:
+                audit_path = Path(str(artifacts.get("number_audit") or ""))
+                if not audit_path.is_file() or sha256(audit_path) != artifacts.get("number_audit_sha256"):
+                    self.problem("C-1", str(report_path), "编号反查文件缺失或SHA256不一致")
+                else:
+                    audit = load_json(audit_path)
+                    if audit.get("schema_version") != "qto-point-number-audit/1.0" or audit.get("source_sha256") != source.get("source_sha256"):
+                        self.problem("C-1", str(audit_path), "编号反查版本或原图来源不一致")
+                    else:
+                        self.files.append({"role": "number_audit", "drawing": drawing, "path": str(audit_path), "sha256": sha256(audit_path)})
+                        for clue in audit.get("rows") or []:
+                            if clue.get("status") not in ("linked", "excluded_annotation", "unresolved") or not clue.get("object_id"):
+                                self.problem("C-1", str(audit_path), "编号反查记录缺原图对象或去向未知"); continue
+                            cid = clue["object_id"] + "#编号反查"
+                            if cid in seen:
+                                self.problem("C-1", str(audit_path), f"编号线索重复：{cid}"); continue
+                            seen.add(cid)
+                            point = clue.get("point") or [None, None]
+                            self.add(drawing, cid, kind="编号线索", symbol="<NUMBER-LABEL>",
+                                     destination="待识别" if clue["status"] == "unresolved" else "有据排除",
+                                     layer=clue.get("layer") or "", parent_block=clue.get("parent_block"),
+                                     basis=clue["basis"] + "；编号文字不增加物理设备数量",
+                                     source_object_id=clue["object_id"], instance_path=clue.get("instance_path"),
+                                     x=point[0] / factor if point[0] is not None else None,
+                                     y=point[1] / factor if point[1] is not None else None,
+                                     placement_basis="原图编号文字插入点")
+                            self.number_audit_rows.append({"drawing": drawing, "coverage_id": cid, **clue})
             for oid in report.get("unmatched_recognition_object_ids") or []:
                 self.add(drawing, f"{oid}#未承接", symbol=str(oid), kind="未承接对象", destination="无去向",
                          basis="模型识别台账列了、适配器没有承接")
@@ -1468,6 +1496,7 @@ class Ledger:
                 "by_drawing": by_drawing, "uncovered_drawings": uncovered, "legend_rows_without_destination": pending,
                 "source_coverage_gaps": self.source_coverage_gaps, "legend_inventory_gaps": self.legend_inventory_gaps,
                 "project_corrections": self.project_corrections,
+                "number_audit_rows": self.number_audit_rows,
                 "adapter_excluded_project_counted": sum(r["project_destination"] == "已计" and
                     r["original_adapter"].get("disposition") in {"excluded", "not_applicable"} for r in self.project_corrections),
                 "class_completeness": self.completeness(),

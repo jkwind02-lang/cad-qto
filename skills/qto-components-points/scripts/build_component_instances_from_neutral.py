@@ -31,6 +31,7 @@ from qto_spatial import BoundsIndex
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
+import point_name_candidates as name_candidates
 
 VERSION = "qto-component-neutral-adapter/1.10.1"
 # Only these two codes can be released by a dynamic_state_adjudication on an include or exclude rule (registration
@@ -240,8 +241,12 @@ def normalize_rules(values: Any, entries: dict[str, dict[str, Any]], evidence_id
         if decision not in {"include", "exclude", "container", "unresolved"}:
             fail(f"{rule_id}.decision 无效")
         entity_types = rule.get("entity_types", ["INSERT"])
-        if not isinstance(entity_types, list) or not entity_types or any(kind not in ("INSERT", "HATCH") for kind in entity_types):
-            fail(f"{rule_id}.entity_types 只能为 INSERT、HATCH 的非空数组")
+        if not isinstance(entity_types, list) or not entity_types or any(kind not in ("INSERT", "HATCH", "ATTDEF") for kind in entity_types):
+            fail(f"{rule_id}.entity_types 只能为 INSERT、HATCH、ATTDEF 的非空数组")
+        if rule.get("name_attribute_condition") is not None and entity_types != ["INSERT"]:
+            fail(f"{rule_id}.name_attribute_condition 只适用于INSERT")
+        if "ATTDEF" in entity_types and (decision == "container" or rule.get("text_condition") or rule.get("dynamic_state_adjudication")):
+            fail(f"{rule_id} ATTDEF候选只支持显式组成后的include/exclude/unresolved")
         if "HATCH" in entity_types and (decision == "container" or rule.get("text_condition") or rule.get("dynamic_state_adjudication")):
             fail(f"{rule_id} HATCH 规则不支持 container、旁注或动态块状态；按实体/图层及识别记录明确处置")
         rule.update(
@@ -256,6 +261,8 @@ def normalize_rules(values: Any, entries: dict[str, dict[str, Any]], evidence_id
                 "dynamic_adjudication": dynamic_adjudication(rule.get("dynamic_state_adjudication"), rule_id, decision,
                                                              evidence_ids, known_blocks),
                 "text_cond": text_condition(rule.get("text_condition"), rule_id, decision),
+                "name_cond": name_candidates.normalize_name_condition(rule["name_attribute_condition"]) if rule.get("name_attribute_condition") is not None else None,
+                "name_text_re": compile_pattern(rule.get("name_text_pattern", ".*"), f"{rule_id}.name_text_pattern"),
             }
         )
         if decision != "unresolved":
@@ -353,7 +360,8 @@ def clean_text(value: Any) -> str:
 
 
 def choose_rule(block: str, layer: str, parent_block: str, rules: list[dict[str, Any]], object_id: str | None = None,
-                text_ok: Iterable[str] = (), entity_type: str = "INSERT") -> tuple[dict[str, Any] | None, list[str]]:
+                text_ok: Iterable[str] = (), entity_type: str = "INSERT",
+                attribute_evidence: list[dict[str, Any]] | None = None, name_text: str = "") -> tuple[dict[str, Any] | None, list[str]]:
     """text_ok: rules whose text_condition this instance satisfies (bind_side_texts); other text rules do not apply."""
     text_ok = set(text_ok)
     matches = [
@@ -363,6 +371,8 @@ def choose_rule(block: str, layer: str, parent_block: str, rules: list[dict[str,
         and rule["parent_re"].search(parent_block)
         and applies_to(rule, object_id)
         and (rule.get("text_cond") is None or rule["rule_id"] in text_ok)
+        and (rule.get("name_cond") is None or name_candidates.match_name_condition(rule["name_cond"], attribute_evidence or [])[0])
+        and (entity_type != "ATTDEF" or rule["name_text_re"].search(name_text))
     ]
     if not matches:
         return None, []
@@ -1316,6 +1326,7 @@ def main() -> int:
         empty_blocks = {name for name, item in inventory.items()
                         if cad_geometry.is_empty_definition(item) and name not in definitions}
         identity = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0)
+        name_inventory = name_candidates.NameCandidates(profile, known_evidence, expected_source, factor, coordinate_unit)
         dispositions: list[dict[str, Any]] = []
         adopted: list[dict[str, Any]] = []
         endpoint_instances: list[dict[str, Any]] = []
@@ -1478,6 +1489,7 @@ def main() -> int:
                 extent_incomplete["insertion_point_guard"] += 1
             physical_id = f"PT-{path}"
             seen_blocks[block_name].add(physical_id)
+            attributes = name_candidates.attribute_evidence(insert, definitions)
             released = None
             is_empty = block_name in empty_blocks
             dynamic = bool(insert.get("geometry_issues")) and dynamic_only(insert)
@@ -1489,7 +1501,7 @@ def main() -> int:
                 codes = insert.get("geometry_issue_codes")
                 if not suppressed_by and dynamic:
                     rule, conflicts = choose_rule(block_name, effective_layer, parent_block, rules, physical_id,
-                                                  (side_texts.get(physical_id) or {}).get("ok", ()))
+                                                  (side_texts.get(physical_id) or {}).get("ok", ()), attribute_evidence=attributes)
                     adjudication = (rule.get("dynamic_adjudication") if rule and not conflicts and rule["decision"] in ("include", "exclude")
                                     else None)
                     if (adjudication and (not adjudication["block_names"] or block_name in adjudication["block_names"])
@@ -1522,6 +1534,8 @@ def main() -> int:
                     "physical_id": physical_id,
                     "source_record_id": source_record_id,
                     "source_sha256": expected_source,
+                    **name_inventory.context,
+                    "name_attribute_evidence": attributes,
                     "block_name": block_name,
                     "layer": effective_layer,
                     "parent_block": parent_block or None,
@@ -1561,7 +1575,12 @@ def main() -> int:
                                                    if key in side}})
                     else:
                         rule, conflicts = choose_rule(block_name, effective_layer, parent_block, rules, physical_id,
-                                                      side["ok"] if side else ())
+                                                      side["ok"] if side else (), attribute_evidence=attributes)
+                    name_hints = [r for r in rules if r.get("name_cond") and r["block_re"].search(block_name)
+                                  and r["layer_re"].search(effective_layer) and r["parent_re"].search(parent_block)
+                                  and applies_to(r, physical_id)]
+                    if not rule and name_hints and not conflicts:
+                        base["basis"] = "；".join(sorted({name_candidates.match_name_condition(r["name_cond"], attributes)[1] for r in name_hints}))
                     if conflicts:
                         base.update({"basis": "同优先级识别规则冲突", "rule_ids": conflicts})
                     elif rule is None and side and side["status"] == "无文字":
@@ -1624,6 +1643,9 @@ def main() -> int:
                                 "layer": effective_layer,
                                 "source_record_id": source_record_id,
                                 "source_sha256": expected_source,
+                                "instance_path": path,
+                                **name_inventory.context,
+                                "name_attribute_evidence": attributes,
                             }
                             if bound:
                                 instance["side_text"] = {key: bound[key] for key in ("text", "text_id", "distance", "rule_id", "via", "leader_handles",
@@ -1710,6 +1732,8 @@ def main() -> int:
                 return
             matrix = compose(parent_matrix, matrix_for_insert(insert, origins.get(block_name, [0.0, 0.0, 0.0])))
             for child in definitions[block_name]:
+                collect_name_evidence(child, matrix, f"{path}/{block_name}/{child.get('record_id') or 'NO-ID'}",
+                                      block_name, effective_layer, next_suppressed)
                 if str(child.get("entity_type") or "").upper() == "HATCH":
                     visit_hatch(child, matrix, f"{path}/{block_name}/{child.get('record_id') or 'NO-ID'}", block_name,
                                 effective_layer, next_suppressed)
@@ -1728,10 +1752,59 @@ def main() -> int:
                     False,
                 )
 
+        def collect_name_evidence(row, matrix, path, parent_block, inherited_layer, suppressed_by):
+            if row.get("entity_type") not in name_candidates.TEXT_TYPES | {"POINT"}:
+                return
+            coords = [row.get(axis) for axis in ("x", "y", "z")]
+            valid = all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in coords)
+            point = transform_point(coords, matrix) if valid else None
+            if point is not None and not point_in_bounds(point, bounds):
+                return
+            layer = str(row.get("layer") or "")
+            layer = inherited_layer if layer in {"", "0"} and inherited_layer else layer
+            name_inventory.add({**row, "text": clean_text(row.get("text") or ""), "raw_text": row.get("text")},
+                               path, parent_block, point, layer, suppressed_by)
+
+        def visit_name(candidate):
+            physical_id = candidate["physical_id"]
+            base = {**candidate, "block_name": "", "point_basis": "name_attdef_insertion_anchor_not_connection_port",
+                    "scope_geometry_bbox": None, "scope_location_basis": "text_insertion_anchor",
+                    "disposition": "unresolved", "rule_ids": [],
+                    "basis": "图面名称ATTDEF候选，尚无逐对象组成和识别依据；不按名称文字计设备"}
+            rule, conflicts = choose_rule("", base["layer"], "", rules, physical_id,
+                                          entity_type="ATTDEF", name_text=base["text"])
+            if conflicts:
+                base.update(rule_ids=conflicts, basis="同优先级名称识别规则冲突")
+            elif rule:
+                base.update(rule_ids=[rule["rule_id"]], adjudication_id=rule.get("adjudication_id"),
+                            recognition_record_ref=record_ref(rule), basis=str(rule.get("basis") or f"识别规则 {rule['rule_id']}"))
+                if rule["decision"] == "exclude":
+                    base["disposition"] = "excluded"
+                elif rule["decision"] == "include":
+                    if not base.get("composition"):
+                        base["basis"] += "；缺少原图名称ATTDEF、独立的1标记与可选POINT的显式组成绑定，保留待判"
+                    elif base["point"] is None or base["geometry_issues"]:
+                        base["basis"] += "；名称定位或几何取证不完整，坐标不补0"
+                    else:
+                        base["disposition"] = "adopted"
+                        evidence = f"EV-CAD-{base['source_record_id']}|{rule['authority']['source_id']}|{unit_source_id}"
+                        adopted.append({**{k: base.get(k) for k in (*name_candidates.IDENTITY_KEYS, "physical_id", "source_record_id", "source_sha256", "instance_path", "entity_handle", "entity_type", "point", "coordinate_unit", "layer", "composition")},
+                                        **{k: rule[k] for k in ("category", "system", "spec", "unit", "quantity_level")},
+                                        "block_name": "", "evidence": evidence, "recognition_record": rule["authority"],
+                                        "point_basis": base["point_basis"]})
+                        geometry[physical_id] = {"angle": 0.0, "mirrored": False, "world_box": None}
+                        endpoint_instances.append({"physical_id": physical_id, "category": rule["category"], "system": rule["system"],
+                                                   "evidence": evidence, "point": base["point"],
+                                                   "network_ports": [{"port_id": f"{physical_id}-NA", "network_disposition": "unresolved",
+                                                                      "reason": "名称插入点不是已核连接端口"}]})
+            dispositions.append(base)
+
         side_texts, side_summary = bind_side_texts(layout_path, definitions, origins, rules, target_layout, factor,
                                                    max_depth, bounds, scope_of)
         top_insert_count = 0
         for row in load_stream(layout_path):
+            if row.get("row_type") == "entity" and row.get("layout") == target_layout:
+                collect_name_evidence(row, identity, str(row.get("record_id") or "NO-ID"), "", str(row.get("layer") or ""), None)
             if row.get("row_type") == "entity" and row.get("layout") == target_layout and str(row.get("entity_type") or "").upper() == "HATCH":
                 visit_hatch(row, identity, str(row.get("record_id") or "NO-ID"), "", str(row.get("layer") or ""), None)
             if (
@@ -1750,6 +1823,10 @@ def main() -> int:
                     None,
                     True,
                 )
+
+        name_inventory.resolve_groups()
+        for candidate in name_inventory.candidates():
+            visit_name(candidate)
 
         # A dynamic-state adjudication must name blocks and instances that exist in scope; a typo or a stale list
         # is an input error, not a silent no-op (registration 20261016-1709). Since dynamic blocks are cut by the bounds
@@ -1851,6 +1928,8 @@ def main() -> int:
         for group in duplicate_review["groups"]:
             for physical_id in group["physical_ids"]:
                 disposition_by_id[physical_id].setdefault("duplicate_group_id", group["group_id"])
+        number_audit = name_inventory.number_audit(adopted)
+        pending_number_labels = sum(r["status"] == "unresolved" for r in number_audit["rows"]) if number_audit else 0
         pending_duplicates = duplicate_review["pending_instance_count"]
         disposition_counts = Counter(item["disposition"] for item in dispositions)
         if sum(disposition_counts.values()) != len(dispositions):
@@ -1867,7 +1946,7 @@ def main() -> int:
         model_object_ids = {oid for entry in entries.values() if entry.get("decision_origin") == "model" for oid in entry["object_ids"]}
         missing_model_objects = sorted(model_object_ids - {item["physical_id"] for item in dispositions})
         source_complete = (bool(rules) and not disposition_counts.get("unresolved", 0) and not failures and not missing_model_objects
-                           and not pending_duplicates and not grouping["unresolved_groups"] and not scale_unbound)
+                           and not pending_duplicates and not grouping["unresolved_groups"] and not scale_unbound and not pending_number_labels)
         # 计数输入带几何审查凭据：计数器重算实例集指纹，自造或改过的实例列表对不上（登记 R1）
         count_input = {
             "schema_version": "qto-reconciled-instance-input/1.0",
@@ -1931,6 +2010,10 @@ def main() -> int:
             "count_input": str(count_input_path),
             **({"endpoint_handoff_input": str(endpoint_input_path), "endpoint_handoff": str(endpoint_output_path)} if not count_only else {}),
         }
+        if number_audit is not None:
+            audit_path = output / "点位编号反查.json"
+            audit_path.write_text(json.dumps(number_audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            artifacts.update(number_audit=str(audit_path), number_audit_sha256=sha256(audit_path))
         if adopted:
             counter_script = Path(__file__).resolve().with_name("count_reconciled_instances.py")
             count_run = subprocess.run(
@@ -2038,7 +2121,9 @@ def main() -> int:
             "scope": scope,
             "counts": {
                 "top_level_insert_count": top_insert_count,
-                "scoped_insert_instance_count": sum(item.get("entity_type") != "HATCH" for item in dispositions),
+                "scoped_insert_instance_count": sum(item.get("entity_type", "INSERT") == "INSERT" for item in dispositions),
+                "scoped_name_candidate_count": sum(item.get("entity_type") == "ATTDEF" for item in dispositions),
+                "unresolved_number_label_count": pending_number_labels,
                 "scoped_hatch_instance_count": sum(item.get("entity_type") == "HATCH" for item in dispositions),
                 "scoped_physical_instance_count": len(dispositions),
                 "adopted_physical_instance_count": len(adopted),
@@ -2054,6 +2139,8 @@ def main() -> int:
                 "near_tolerance_mm_effective": duplicate_review["near_tolerance_mm_effective"],
                 "dynamic_state_adjudicated_count": sum(item["released_instance_count"] for item in dynamic_summary),
             },
+            "name_candidate_basis": {"text_type": "ATTDEF", "classification": "explicit_source_members_and_recognition_only", "automatic_distance_binding": False},
+            **({"number_audit": {k: v for k, v in number_audit.items() if k != "rows"}} if number_audit is not None else {}),
             "dynamic_state_adjudication": dynamic_summary,
             "empty_block_definitions": empty_summary,
             "scope_extent_incomplete": {

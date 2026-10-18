@@ -21,9 +21,17 @@ try{
  // One physical object carried by several packages (scene mapping contract 6): point objects with the same scene and id whose first
  // points lie within the unit tolerance share one marker; same id farther apart stays separate and is flagged in the details.
  const TWIN_TOL={mm:1,cm:.1,m:.001};
+ function contextValue(v){
+  if(v===null||v===undefined)return ['null'];
+  if(Array.isArray(v))return ['array',v.map(contextValue)];
+  if(typeof v==='object')return ['object',Object.keys(v).sort().map(k=>[k,contextValue(v[k])])];
+  if(typeof v==='number'){const b=new ArrayBuffer(8);new DataView(b).setFloat64(0,v===0?0:v,false);return ['number',Array.from(new Uint8Array(b),x=>x.toString(16).padStart(2,'0')).join('')];}
+  return [typeof v,v];
+ }
+ const objectContext=o=>['object_type','version','floor','scope_id'].map(k=>contextValue(o.attributes?.[k]??null));
  function twinIndex(){
   const byId=new Map(),out=new Map();
-  for(const o of data.objects){if(o.kind!=='point'||!o.scene_id||!o.points?.length)continue;const k=JSON.stringify([o.scene_id,o.id]);if(!byId.has(k))byId.set(k,[]);byId.get(k).push(o);}
+  for(const o of data.objects){if(o.kind!=='point'||!o.scene_id||!o.points?.length)continue;const k=JSON.stringify([o.scene_id,o.id,...objectContext(o)]);if(!byId.has(k))byId.set(k,[]);byId.get(k).push(o);}
   for(const os of byId.values()){
    if(os.length<2)continue;const tol=TWIN_TOL[scenes.get(os[0].scene_id)?.coordinate_unit]??0,clusters=[];
    for(const o of os){const p=o.points[0],c=clusters.find(c=>Math.hypot(c[0].points[0][0]-p[0],c[0].points[0][1]-p[1])<=tol);c?c.push(o):clusters.push([o]);}
@@ -44,7 +52,7 @@ try{
  const screen=p=>[(p[0]-cx)*scale+cw/2,(p[1]-cy)*scale*sign()+ch/2];
  const world=p=>[(p[0]-cw/2)/scale+cx,(p[1]-ch/2)/scale*sign()+cy];
  const visible=o=>!!scene&&o.kind!=='unlocated'&&o.scene_id===scene.id;
- function catalogue(){return Array.from(new Map(data.objects.map(o=>[o.professional+'|'+o.category+'|'+o.id,o])).values());}
+ function catalogue(){return Array.from(new Map(data.objects.map(o=>[JSON.stringify([o.professional,o.category,o.id,...objectContext(o)]),o])).values());}
  function source(){return mode==='groups'?data.groups:catalogue();}
  function option(select,value,label){const o=document.createElement('option');o.value=value;o.textContent=label;select.append(o);}
  function populateCategories(preferred){
@@ -60,7 +68,7 @@ try{
   items=source().filter(o=>(prof==='全部'||(o.member_keys?groupProfessional(o).includes(prof):o.professional===prof))&&(cat==='全部'||o.category===cat)&&(!q||JSON.stringify(o).toLowerCase().includes(q)));
   page=Math.min(page,Math.max(0,Math.ceil(items.length/PAGE)-1));$('list').replaceChildren();
   for(const i of items.slice(page*PAGE,(page+1)*PAGE)){
-   const b=document.createElement('button');b.className='item';b.dataset.key=i.id;
+   const b=document.createElement('button');b.className='item';b.dataset.key=i.id;b.dataset.selectionKey=key(i);
    const strong=document.createElement('strong');strong.textContent=i.title;
    const sub=document.createElement('small');sub.textContent=i.category+' · '+i.status+(i.member_keys?' · '+i.member_keys.length+'处':qtyText(i)?' · '+qtyText(i):'');
    b.append(strong,sub);b.onclick=()=>select(i);$('list').append(b);
@@ -69,7 +77,7 @@ try{
   $('list-page').textContent=(page+1)+' / '+Math.max(1,Math.ceil(items.length/PAGE));$('list-prev').disabled=page===0;$('list-next').disabled=(page+1)*PAGE>=items.length;draw();
  }
  function select(i){
-  selected=i;focused=null;syncUnlocated();memberPage=0;document.querySelectorAll('.item').forEach(b=>b.classList.toggle('active',b.dataset.key===i.id));
+  selected=i;focused=null;syncUnlocated();memberPage=0;document.querySelectorAll('.item').forEach(b=>b.classList.toggle('active',b.dataset.selectionKey===key(i)));
   const note=feedback.drafts[key(i)]||feedback.annotations[key(i)];
   checked=new Set(i.member_keys?(note?.selected_object_keys||i.member_keys).filter(k=>i.member_keys.includes(k)):[]);
   $('members-panel').hidden=!i.member_keys;if(i.member_keys)renderMembers();reviewShow(i);
@@ -114,6 +122,17 @@ try{
   $('detail').textContent='对象：'+i.id+'\n专业：'+data.professional_labels[i.professional]+'\n图页：'+(scenes.get(i.scene_id)?.title||'未定位')+'\n状态：'+i.status+'\n'+i.detail+'\n来源：'+i.source+'\n属性：'+JSON.stringify(i.attributes||{},null,2);
   if(data.legacy_records?.[i.catalog_key])$('detail').textContent+='\n兼容迁移的完整原记录：'+JSON.stringify(data.legacy_records[i.catalog_key],null,2);
   const tw=twins.get(i.catalog_key);if(tw)$('object-facts').append(twinBox(i,tw));
+  const drifts=i.attributes?.suspected_number_drifts||[],cross=i.attributes?.cross_drawing_candidates||[];
+  if(drifts.length||cross.length){
+   const box=document.createElement('div');box.className='twins';box.dataset.role='number-drift';
+   const heading=document.createElement('strong');heading.textContent='跨图/编号候选：仅提示，未合并、未扣量';box.append(heading);
+   for(const c of drifts){
+    const line=document.createElement('div');line.textContent='疑似编号漂移：'+c.object_ids.join(' ↔ ')+(c.context_conflicts?.length?'；上下文冲突：'+c.context_conflicts.join('、'):'')+(c.missing_context?.length?'；待补：'+c.missing_context.join('、'):'');
+    for(const k of c.records||[]){const o=objects.get(k);if(!o||o.catalog_key===i.catalog_key)continue;const b=document.createElement('button');b.className='link';b.textContent='查看 '+o.id;b.onclick=()=>selected?.member_keys||external?focus(o):select(o);line.append(b);}box.append(line);
+   }
+   for(const c of cross){const line=document.createElement('div');line.textContent=(c.suspected_number_drift?'疑似编号漂移：':'几何对应候选：')+c.object_ids.join(' ↔ ')+'；距离 '+c.distance_m+' m'+(c.context_conflicts?.length?'；上下文冲突：'+c.context_conflicts.join('、'):'')+(c.missing_context?.length?'；待补：'+c.missing_context.join('、'):'');box.append(line);}
+   $('object-facts').append(box);
+  }
   const rc=data.receipts[key(selected)],saved=feedback.annotations[key(selected)],state=core.receiptState(rc,saved),box=$('current-adoption');box.hidden=!rc&&!i.adoption_result;
   box.textContent=(i.adoption_result?'当前采用：'+i.adoption_result+'\n'+(i.adoption_reason||'')+'\n'+(i.adoption_note||''):'')+(rc?'\n处理回执：'+rc.status+'\n'+rc.assistant_response+(state==='stale'?'\n意见或成果版本已变化，旧回执不能证明当前结果已复核。':''):'');
   if(rc?.member_results){const row=rc.member_results.find(r=>r.object_id===i.id||r['对象编号']===i.id);if(row)box.textContent+='\n本成员处理：'+JSON.stringify(row,null,2);}

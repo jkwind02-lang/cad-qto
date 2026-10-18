@@ -7,6 +7,7 @@ import argparse, copy, csv, hashlib, json, math, os, re
 from collections import Counter, defaultdict
 from pathlib import Path
 from qto_review_contract import normalize_view, VIEW_SCHEMA_COMPARISON
+from qto_cross_drawing_registration import canonical_context_key
 from qto_review_comparison import ComparisonError, LEVELS, close, COMPARABILITY_KEYS
 COMPARISON_FIELDS = tuple('compare_' + k for k in COMPARABILITY_KEYS)
 
@@ -511,21 +512,23 @@ def shared_object_stats(view, cap=50):
  so does a handle with a record whose drawing is unknown (unlocated), so a real double count is not hidden."""
  drawing_of = {s['id']: s.get('source_id') or s['id'].split('|', 1)[0] for s in view.get('scenes', [])}
  by_id = defaultdict(list)
- for o in view.get('objects', []): by_id[o['id']].append(o)
+ for o in view.get('objects', []):
+  context = canonical_context_key([(o.get('attributes') or {}).get(k) for k in ('object_type', 'version', 'floor', 'scope_id')])
+  by_id[(o['id'], context)].append(o)
  groups, collisions = {}, []
- for k, v in sorted(by_id.items()):
+ for (k, context), v in sorted(by_id.items(), key=lambda x: str(x[0])):
   drs = [drawing_of.get(o.get('scene_id')) for o in v]
   if len(v) > 1 and HANDLE_LIKE.fullmatch(str(k)) and None not in drs and len(set(drs)) > 1:
-   for d in sorted(set(drs)): groups[(k, d)] = [o for o, x in zip(v, drs) if x == d]
+   for d in sorted(set(drs)): groups[(k, d, context)] = [o for o, x in zip(v, drs) if x == d]
    carrying = sorted({x for o, x in zip(v, drs) if o.get('quantities')})
    if len(carrying) > 1: collisions.append({'object_id': k, 'drawings': carrying, 'records': [o['catalog_key'] for o in v if o.get('quantities')]})
-  else: groups[(k, None)] = v
+  else: groups[(k, None, context)] = v
  shared = {key: v for key, v in groups.items() if len(v) > 1}
  units = {s['id']: s.get('coordinate_unit') for s in view.get('scenes', [])}
  multi = [{'object_id': k, **({'drawing': d} if d else {}), 'records': [o['catalog_key'] for o in v if o.get('quantities')]}
-          for (k, d), v in shared.items() if sum(1 for o in v if o.get('quantities')) > 1]
+          for (k, d, _), v in shared.items() if sum(1 for o in v if o.get('quantities')) > 1]
  apart = []
- for (k, _), v in shared.items():
+ for (k, _, _), v in shared.items():
   per_scene = defaultdict(list)
   for o in v:
    if o.get('kind') == 'point' and o.get('scene_id') and o.get('points'): per_scene[o['scene_id']].append(o)
@@ -564,12 +567,15 @@ def build(a, report, filters):
  if base_view: info['base_views'] = base_view['base_views']
  if base_view and base_view['renamed_groups']: info['renamed_groups'] = base_view['renamed_groups']
  if base_view and base_view['merged_scenes']: info['merged_scenes'] = base_view['merged_scenes']
+ from qto_cross_drawing_registration import annotate_number_drift
+ number_drifts = annotate_number_drift(view)
  normalized = normalize_view(view, out_dir if a.base_view else None)
  a.output.parent.mkdir(parents=True, exist_ok=True)
  with a.output.open('x', encoding='utf-8', newline='\n') as f: json.dump(view, f, ensure_ascii=False, indent=1)
  check = normalized['comparison']['generation_check']
  report.update(status='PASS', output=str(a.output), mapping_sha256=sha_file(a.mapping), **info, comparison_counts=check['counts'], comparison_exceptions=check['exceptions'],
-               result_fingerprint=normalized['result_fingerprint'], shared_objects=shared_object_stats(view))
+               result_fingerprint=normalized['result_fingerprint'], shared_objects=shared_object_stats(view),
+               suspected_number_drifts={'count': len(number_drifts), 'rows': number_drifts})
  return 0
 
 
