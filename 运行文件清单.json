@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 320,
+  "runtime_file_count": 327,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -351,6 +351,11 @@
       "bytes": 11092
     },
     {
+      "path": "_qto-shared-evidence/scripts/qto_impact_recompute.py",
+      "sha256": "64645af807a23a1a91abebe304d90eb8f23cd85f5ac2bbe4e60fc73a9d292187",
+      "bytes": 34129
+    },
+    {
       "path": "_qto-shared-evidence/scripts/qto_instance_requirements.py",
       "sha256": "f65d9866f65671bfc677bd1caf42e6c9c2b9b21be3fa92f6db6c2ccfc914d971",
       "bytes": 29507
@@ -666,6 +671,11 @@
       "bytes": 1733
     },
     {
+      "path": "qto-coordinator/references/协调台账与交付接收执行契约.md",
+      "sha256": "f63ff0c577fa31244c1310099da3d97cc022a8c107526b292fa6f97b13bfbbe9",
+      "bytes": 10783
+    },
+    {
       "path": "qto-coordinator/references/跨能力范围拆分.md",
       "sha256": "26cda00d1acc0ed64d77ba55888a33e01c92c74c64b6da2290ee5a7ce4a0361c",
       "bytes": 6796
@@ -676,9 +686,19 @@
       "bytes": 2762
     },
     {
+      "path": "qto-coordinator/scripts/coordination_contract.py",
+      "sha256": "f502cfaa5375d6339b3c3b038488c463aad36eb31d6415b0a1109879487ff24e",
+      "bytes": 41143
+    },
+    {
+      "path": "qto-coordinator/scripts/qto_coordination.py",
+      "sha256": "47461620a1cfb0928bbbd2c5ae59ecb29b53fd73b2c3e740947d291c75271923",
+      "bytes": 6046
+    },
+    {
       "path": "qto-coordinator/SKILL.md",
-      "sha256": "60dd2dc9aa88f1bfcec6c7cb76fb8a675810ef049ad405f090bb6a9700a73c82",
-      "bytes": 10071
+      "sha256": "e0842ea8af66def68e3ed8b5ea371655b1a8a69f50294413670b79bc3520fcaa",
+      "bytes": 11156
     },
     {
       "path": "qto-duct-air-systems/agents/openai.yaml",
@@ -846,6 +866,11 @@
       "bytes": 2773
     },
     {
+      "path": "qto-electrical-routes/references/无回路号混连网络拆分与归属.md",
+      "sha256": "d7a9dd6339ed4978a282da2f97b1869c048a57be3bdcd347a5ab919500c66ed6",
+      "bytes": 10517
+    },
+    {
       "path": "qto-electrical-routes/references/有据标高差与附加长度依据.md",
       "sha256": "c4ac7b552eff17ca4f3fc24ecdb59f1d41419bf2d9deead578b8c0b033403a05",
       "bytes": 9193
@@ -906,6 +931,11 @@
       "bytes": 3372
     },
     {
+      "path": "qto-electrical-routes/references/高影响假定裁决与相关范围重算.md",
+      "sha256": "f43126b85f242d25acf2ec5deb49eea06440d760665c703401fc3d79e4f8a8c8",
+      "bytes": 7199
+    },
+    {
       "path": "qto-electrical-routes/scripts/bind_electrical_objects.py",
       "sha256": "eb0a33ceaac3ba1a7e7dba5b6ecb7df93026899c306c59ebf03d4f57e9db831f",
       "bytes": 51562
@@ -931,6 +961,11 @@
       "bytes": 25998
     },
     {
+      "path": "qto-electrical-routes/scripts/partition_electrical_route_network.py",
+      "sha256": "8e987c618b4e2750f29f2a9a0db324bf6efdd9a498403d98c2f796b9ef66dce1",
+      "bytes": 49662
+    },
+    {
       "path": "qto-electrical-routes/scripts/qto_electrical_evidence.py",
       "sha256": "852ac454fe6d455fc42fb03ba04d25fb4ec7eded729ea94b32ec4bde4d5daf69",
       "bytes": 18089
@@ -952,8 +987,8 @@
     },
     {
       "path": "qto-electrical-routes/SKILL.md",
-      "sha256": "ccab44463b6460e7e2b317bfa2cbb71b964fa58f079e76bcecdf51935f174ec5",
-      "bytes": 7850
+      "sha256": "fec6744853f06d137a30fdf5f9babd64d07e1eb4c85dd25b1f669f5d45083d1d",
+      "bytes": 8812
     },
     {
       "path": "qto-framing-supports/agents/openai.yaml",
