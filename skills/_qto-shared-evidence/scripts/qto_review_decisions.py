@@ -32,7 +32,17 @@ def decision_conflicts(package, view):
         return r.get('verdict') or {'确认现结果': '同意', '修改结果': '要改', '排除对象': '要改', '暂缓计算': '要改'}.get(r.get('instruction'))
     live = [(k, r, target(r)) for k, r in package.get('annotations', {}).items()
             if r.get('applicability_state') == 'current' and not r.get('merge_conflict')]
-    found = []
+    found = [{'annotation_keys': [k], 'decision_id': r['decision_snapshot']['id'],
+              'kind': 'unified_decision_conflict', 'candidates': r['decision_conflict']['candidates'],
+              'processing': '同一审核事项意见冲突，完整候选保留；不按时间择一，须人工核对'}
+             for k, r in package.get('annotations', {}).items()
+             if r.get('decision_snapshot') and r.get('decision_conflict')]
+    for pending in package.get('decision_migration_pending', []):
+        for ident in pending.get('candidate_decision_ids', []):
+            key = '审核事项|' + ident
+            if key in package.get('annotations', {}) and not package['annotations'][key].get('decision_conflict'):
+                found.append({'annotation_keys': [key], 'decision_id': ident, 'kind': 'decision_migration_required',
+                              'state': 'migration_required', 'processing': '本事项仍有明确关联的待迁移或歧义旧意见，动作暂挂；须核对迁移后再审核'})
     for (ka, a, ta), (kb, b, tb) in combinations(live, 2):
         if ta[0] == tb[0]: continue
         explicit = bool(ta[1] and tb[1])
@@ -54,9 +64,11 @@ def hold_decision_conflicts(package, view, unmatched):
     for conflict in found:
         for key in conflict['annotation_keys']:
             record = package['annotations'][key]
-            record['applicability_state'] = 'conflict'
+            record['applicability_state'] = conflict.get('state', 'conflict')
             record['applicability_reason'] = conflict['processing']
+            if conflict.get('state') == 'migration_required':
+                record['identity_hold'] = conflict['processing']
             if key not in seen:
-                unmatched.append({'annotation_key': key, 'state': 'conflict', 'reason': conflict['processing']})
+                unmatched.append({'annotation_key': key, 'state': conflict.get('state', 'conflict'), 'reason': conflict['processing']})
                 seen.add(key)
     return package, unmatched

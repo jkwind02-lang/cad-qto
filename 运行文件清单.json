@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 313,
+  "runtime_file_count": 320,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -17,23 +17,28 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
-      "sha256": "c04a3b7bf52c39d375699eadd578204518b533f06e014cc77c15ed825af7d8c3",
-      "bytes": 40777
+      "sha256": "d704d69e6156db3f1180e571fe8f82921a4da5a8b359dc05b513c718cecf8cba",
+      "bytes": 41622
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-audit.js",
-      "sha256": "fcbb65fda5445d00945ce827fa51bd4ae6ab61019c98e6e2839b91322b1d87e0",
-      "bytes": 62405
+      "sha256": "f22d0408a2cc5ef5ba3f5a4eedd6ca79e72d0314b2a63bf917af00f290ac6d79",
+      "bytes": 62540
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-core.js",
-      "sha256": "c3dce5f9a32431ec002cf0fbab0961dad0fb3f56ec3de47e73672ecf25ba683e",
-      "bytes": 25928
+      "sha256": "4629b8deb0f3ab2e8d04f972748335bf3c7c158a95890c59bcfe5af0b33e124f",
+      "bytes": 28090
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-delivery.js",
-      "sha256": "4fa042474b0a0cec26c259397f13c8a6d45a16c2d8f7ab367d4f3b42ec548c46",
-      "bytes": 35048
+      "sha256": "64a11f421d3eeb1511a1cfb9e222c8f6a1f456640da590f5fde4a3e9e18f635e",
+      "bytes": 35640
+    },
+    {
+      "path": "_qto-shared-evidence/assets/review/review-identity.js",
+      "sha256": "adc27556088d9060f66be6e25cf23dca97f667d19a1ab6cb935fda0927700e6e",
+      "bytes": 25575
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-shell.html",
@@ -67,8 +72,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
-      "sha256": "c0bd0afddf1179524eacbfb77fa807a126dff05e74d8aed6d37353883f42e06a",
-      "bytes": 24432
+      "sha256": "f7ab02700a1559e15f1c70371b3cab33cc8cb95f570ed7ef77e541e6dda60539",
+      "bytes": 27292
     },
     {
       "path": "_qto-shared-evidence/references/PDF图片与表格提取.md",
@@ -127,8 +132,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/按人工算量顺序执行与重算.md",
-      "sha256": "c6cb4a394bc20a4d6f61f1e5cc5b2a7786b3777f3bc95b6e7ea2909115715f15",
-      "bytes": 11484
+      "sha256": "1aa1a6843ab17c228f3ee0a9f2027fcc589e2bd9c04e76417953c33d0f61c4b2",
+      "bytes": 12263
     },
     {
       "path": "_qto-shared-evidence/references/按任务阶段读取.md",
@@ -217,8 +222,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/build_comparison_view_from_tables.py",
-      "sha256": "a6dec924243262152937dada712f20b5ed75976468514aaccb287fe94059dc1f",
-      "bytes": 43678
+      "sha256": "b0ea971a8b707cb5d75ff4e6710ead34cd16a3196dfe5a9f168838338390c48b",
+      "bytes": 44382
     },
     {
       "path": "_qto-shared-evidence/scripts/build_qto_delivery_excel.py",
@@ -227,13 +232,13 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/build_qto_review_html.py",
-      "sha256": "b78ed87bb7dcd707a7b86c86784ee944cf22a562a786021141bf8df80ac294d7",
-      "bytes": 9102
+      "sha256": "d45a58541a52aa0c38880110d933c56a728766b4413fe2a206b35725af223f6e",
+      "bytes": 9073
     },
     {
       "path": "_qto-shared-evidence/scripts/build_review_scenes_from_tables.py",
-      "sha256": "5d2ff6ca458d7012ab789e704da84e1abeaa808ed0ce64a10bd1c393992977e3",
-      "bytes": 51278
+      "sha256": "cb68ca0311581edcd6f9d5b27bdf42840e10301533262538900dde0fc50f1c9f",
+      "bytes": 52161
     },
     {
       "path": "_qto-shared-evidence/scripts/cad_native/__init__.py",
@@ -331,6 +336,11 @@
       "bytes": 27859
     },
     {
+      "path": "_qto-shared-evidence/scripts/qto_electrical_basis.py",
+      "sha256": "96527fabc61173c8cb3a0c475de47454547cfb873d64ce6d8e95a7d69c2c568a",
+      "bytes": 7855
+    },
+    {
       "path": "_qto-shared-evidence/scripts/qto_elevation_facts.py",
       "sha256": "783a955729e4f63408de0d2bce4e3158ef135e0c1ec9e4490ecc0a92175803a8",
       "bytes": 26117
@@ -372,13 +382,13 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
-      "sha256": "168246ff53c646d8819cbb98e4a4a841cdda22a6db9f568c33d96c90ca39bece",
-      "bytes": 29110
+      "sha256": "270b68a25188b9cf910182e495cb9d9d160d8f2ef14fc7e9f9ed9dc07e6f854d",
+      "bytes": 29404
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_decisions.py",
-      "sha256": "74a73399ef9e8703bf17d8815c84803ff1ae42ee7c77109f79021b77238b1198",
-      "bytes": 3552
+      "sha256": "99fb0af3f1f7faf4899dd541eb6a544fd12521cdee595f669fddd1e158af1dc9",
+      "bytes": 4743
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_delivery.py",
@@ -386,9 +396,14 @@
       "bytes": 25672
     },
     {
+      "path": "_qto-shared-evidence/scripts/qto_review_identity.py",
+      "sha256": "071d4692d418e64d910ceffe2667568e66ef5152f3a581716eb8ff0ae69cf809",
+      "bytes": 21947
+    },
+    {
       "path": "_qto-shared-evidence/scripts/qto_review_revision.py",
-      "sha256": "25949ac62b3467a2d9d52d272392f3167f59bbc4280e0a686b5d31d5380c9045",
-      "bytes": 12867
+      "sha256": "be40b7751c72e6c873e8132f98d41e71fae0a52bf395469e79e0d3180e1ff7bc",
+      "bytes": 13152
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_statistics.py",
@@ -417,8 +432,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/read_qto_review_feedback.py",
-      "sha256": "ccad487ac86c7b5b84351a183f2c886209cb164dc44d34f180f737ed951c5630",
-      "bytes": 7053
+      "sha256": "8605fdcb82e53b12b202df8e1cffb16301db7c25784a4b015072e04e6a8b9836",
+      "bytes": 7776
     },
     {
       "path": "_qto-shared-evidence/scripts/recompute_qto_dependencies.py",
@@ -831,9 +846,24 @@
       "bytes": 2773
     },
     {
+      "path": "qto-electrical-routes/references/有据标高差与附加长度依据.md",
+      "sha256": "c4ac7b552eff17ca4f3fc24ecdb59f1d41419bf2d9deead578b8c0b033403a05",
+      "bytes": 9193
+    },
+    {
       "path": "qto-electrical-routes/references/案例与接入清单.md",
       "sha256": "6d4a9647f0669a71154a1bcf79584f59591b49eb801774e278b22f7f149d9da2",
       "bytes": 657
+    },
+    {
+      "path": "qto-electrical-routes/references/电气原图对象包.schema.json",
+      "sha256": "41463aa4746559e5f9e4d6edaefb5972220efc514fba89f4e6b957b4f78f36bd",
+      "bytes": 3057
+    },
+    {
+      "path": "qto-electrical-routes/references/电气原图对象绑定.md",
+      "sha256": "bbc7be2ca8b3df4a6c62e0600f6e2d6434dcbb3df14bb56eeec6cb0aa4baba7b",
+      "bytes": 12180
     },
     {
       "path": "qto-electrical-routes/references/电气图面映射样例.json",
@@ -862,8 +892,8 @@
     },
     {
       "path": "qto-electrical-routes/references/计算与证据流程.md",
-      "sha256": "c348bd0cb506cce43e7058fd960da26d87f7135fdad0b6c7871a4d6e2d8c4df7",
-      "bytes": 23122
+      "sha256": "680680299197100af47ff0ef32dd55da85401df460eb690b61efe4ae564f90cb",
+      "bytes": 23838
     },
     {
       "path": "qto-electrical-routes/references/计量口径选择.md",
@@ -876,14 +906,19 @@
       "bytes": 3372
     },
     {
+      "path": "qto-electrical-routes/scripts/bind_electrical_objects.py",
+      "sha256": "eb0a33ceaac3ba1a7e7dba5b6ecb7df93026899c306c59ebf03d4f57e9db831f",
+      "bytes": 51562
+    },
+    {
       "path": "qto-electrical-routes/scripts/calculate_electrical_paths.py",
-      "sha256": "00c96c7ed16ac14d8ac66d4aae639d1ae282859fc2afd1fd331523856b6ac223",
-      "bytes": 13572
+      "sha256": "7cd126f1f4dcbb946f6d133614b99801dcf4ee8926b22a45ae5afc594ea1df36",
+      "bytes": 19949
     },
     {
       "path": "qto-electrical-routes/scripts/calculate_electrical_routes_reference.py",
-      "sha256": "cd013d13fe08cbd19f8b61573dedfd7bb43a230838c3b5899dee8854824ec53b",
-      "bytes": 2034
+      "sha256": "7b3bae78330ab6d3fbe8b20a300e243ea726631e9774096c750b039a4f5b6002",
+      "bytes": 2046
     },
     {
       "path": "qto-electrical-routes/scripts/extract_design_clauses.py",
@@ -917,8 +952,8 @@
     },
     {
       "path": "qto-electrical-routes/SKILL.md",
-      "sha256": "7b25075d57e94c6677b9cb5d28b312b15d4b5fe084b07382b8fc90c59d93f3ce",
-      "bytes": 7270
+      "sha256": "ccab44463b6460e7e2b317bfa2cbb71b964fa58f079e76bcecdf51935f174ec5",
+      "bytes": 7850
     },
     {
       "path": "qto-framing-supports/agents/openai.yaml",

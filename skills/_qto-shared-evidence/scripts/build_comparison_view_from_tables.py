@@ -360,13 +360,14 @@ def build_view(mapping, base, base_view):
          'sources': copy.deepcopy(v.get('sources', [])), 'scenes': [], 'objects': objects, 'groups': [], 'receipts': {}, 'summary': copy.deepcopy(v.get('summary', [])),
          'scope_notes': copy.deepcopy(v.get('scope_notes', []))}
  if base_view:
-  for k in ('scenes', 'groups', 'background_sets', 'receipts', 'default_category'):
+  for k in ('scenes', 'groups', 'background_sets', 'receipts', 'default_category', 'review_workflow'):
    if k in base_view: view[k] = copy.deepcopy(base_view[k])
   have = {s['id']: s for s in view['sources']}
   for s in base_view.get('sources', []):
    if s['id'] in have and have[s['id']]['sha256'].lower() != s['sha256'].lower(): raise ValueError('基础视图与映射的来源编号相同但哈希不同：' + s['id'])
    have.setdefault(s['id'], s)
   view['sources'] = list(have.values())
+ if 'review_workflow' in v: view['review_workflow'] = copy.deepcopy(v['review_workflow'])
  comp_map['items'] = [items[i] for i in order]
  comp_map['issues'] = [issues[q] for q in iorder]
  if commons: comp_map['common_issues'] = [commons[g] for g in corder]
@@ -455,7 +456,7 @@ def merge_base_views(paths, out_dir, filters=None):
  merged = {'scenes': [], 'objects': [], 'groups': [], 'background_sets': {}, 'receipts': {}, 'sources': [], 'renamed_groups': [], 'base_views': [], 'merged_scenes': []}
  seen = {'scenes': {}, 'objects': {}, 'groups': {}}; src = {}
  for path in paths:
-  base = json.loads(path.read_text(encoding='utf-8-sig')); name = path.name
+  base = json.loads(path.read_text(encoding='utf-8-sig')); name = path.name; renamed_for_base = {}
   merged['base_views'].append({'view': name, **{f: len(base.get(f, [])) for f in ('scenes', 'objects', 'groups')}})
   for field, ident, label in (('scenes', 'id', '图页编号'), ('objects', 'catalog_key', '对象 catalog_key'), ('groups', 'id', '问题组编号')):
    for x in base.get(field, []):
@@ -464,7 +465,7 @@ def merge_base_views(paths, out_dir, filters=None):
     if field == 'groups' and x[ident] in seen[field]:
      new = path.stem + '|' + x[ident]
      if new in seen[field]: raise ValueError(f'几份基础视图的{label}相同，改名后仍重复：{new}')
-     merged['renamed_groups'].append({'view': name, 'from': x[ident], 'to': new}); x[ident] = new
+     merged['renamed_groups'].append({'view': name, 'from': x[ident], 'to': new}); renamed_for_base[x[ident]] = new; x[ident] = new
     if field == 'scenes' and x.get('raster_path'):
      target = (path.resolve().parent / x['raster_path']).resolve()
      try: x['raster_path'] = os.path.relpath(target, out_dir)
@@ -483,6 +484,13 @@ def merge_base_views(paths, out_dir, filters=None):
    for k, v in base.get(field, {}).items():
     if k in merged[field] and merged[field][k] != v: raise ValueError(f'几份基础视图的 {field} 键相同而内容不同：{k}（{name}）')
     merged[field][k] = copy.deepcopy(v)
+  if 'review_workflow' in base:
+   workflow = copy.deepcopy(base['review_workflow'])
+   for matter in workflow.get('decisions', []):
+    for ref in matter.get('refs', []):
+     if ref.get('kind') == 'group' and ref.get('id') in renamed_for_base: ref['id'] = renamed_for_base[ref['id']]
+   if 'review_workflow' in merged and merged['review_workflow'] != workflow: raise ValueError('几份基础视图的审核事项工作流不同，须由项目显式统一稳定身份及范围，不自动合并')
+   merged['review_workflow'] = workflow
   for s in base.get('sources', []):
    if s['id'] in src and src[s['id']]['sha256'].lower() != s['sha256'].lower(): raise ValueError('几份基础视图的来源编号相同但哈希不同：' + s['id'])
    src.setdefault(s['id'], s)

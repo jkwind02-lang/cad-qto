@@ -23,6 +23,6 @@ def main():
    total=r["parallel_count"]*(r["path_length_m"]+r["extra_each_m"])
    out.append({"id":r["id"],"kind":r["kind"],"system":r["system"],"spec":r["spec"],"parallel_count":r["parallel_count"],"physical_or_conductor_length_m":round(total,6),"evidence":r["evidence"]})
   print(json.dumps({"status":"REFERENCE_ONLY","business_adoption_allowed":False,"explicit_paths_only":True,"items":out},ensure_ascii=False,indent=2));return 0
- except (OSError,ValueError,json.JSONDecodeError) as e:
+ except (OSError,ValueError,KeyError,TypeError,OverflowError) as e:
   print(json.dumps({"status":"INPUT_REQUIRED","stop":True,"error":str(e)},ensure_ascii=False,indent=2));return 2
 if __name__=="__main__":sys.exit(main())

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "电气原图对象绑定包",
+  "type": "object",
+  "required": ["schema", "project_id", "status", "business_adoption_allowed", "objects", "ledger", "quantity_result", "coverage", "todo", "provenance"],
+  "properties": {
+    "schema": {"const": "qto-electrical-object-package/1.0"},
+    "project_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["REVIEW_REQUIRED", "BOUND_REFERENCE"]},
+    "business_adoption_allowed": {"const": false},
+    "official_adoption": {"const": false},
+    "measurement_mode": {"enum": ["plan", "spatial"]},
+    "objects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "physical_id", "catalog_key", "status", "source_steps", "known_path_length_each_m", "complete_length_m", "official_length_m", "pending_components", "errors"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "physical_id": {"type": "string", "minLength": 1},
+          "catalog_key": {"type": "string", "minLength": 1},
+          "decision_id": {"type": ["string", "null"]},
+          "status": {"enum": ["UNRESOLVED", "BOUND_REFERENCE"]},
+          "known_path_length_each_m": {"type": ["number", "null"], "minimum": 0},
+          "known_length_m": {"type": ["number", "null"], "minimum": 0},
+          "complete_length_m": {"type": ["number", "null"], "minimum": 0},
+          "official_length_m": {"type": "null"},
+          "pending_components": {"type": "array", "items": {"type": "string"}},
+          "errors": {"type": "array", "items": {"type": "string"}},
+          "source_steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["source_id", "part_index", "instance_path", "sheet_id", "floor", "fraction_range", "direction", "role", "basis_source_ids", "from_point_m", "to_point_m", "length_m"],
+              "properties": {
+                "source_id": {"type": "string", "minLength": 1},
+                "part_index": {"type": "integer", "minimum": 0},
+                "instance_path": {"type": "string", "minLength": 1},
+                "fraction_range": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": 0, "maximum": 1}},
+                "direction": {"enum": [-1, 1]},
+                "role": {"enum": ["horizontal", "vertical", "offset"]},
+                "length_m": {"type": "number", "exclusiveMinimum": 0}
+              }
+            }
+          }
+        }
+      }
+    },
+    "ledger": {"type": "object", "required": ["schema", "unit", "paths", "channels", "circuits"], "properties": {"schema": {"const": "qto-electrical-path-ledger/1.0"}, "unit": {"const": "m"}}},
+    "coverage": {"type": "object", "required": ["universe", "excluded", "unprocessed", "unsupported", "closed"]},
+    "todo": {"type": "array"},
+    "provenance": {"type": "object", "required": ["fingerprints", "fingerprints_after", "stable"], "properties": {"stable": {"const": true}}}
+  }
+}

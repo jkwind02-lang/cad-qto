@@ -61,7 +61,7 @@ def build(data_path,output,feedback_path=None,feedback_url=None,feedback_backup_
   embedded_feedback.pop('delivery_snapshot',None)
   embedded_feedback['delivery_snapshot_ref']={'result_fingerprint':view['result_fingerprint']}
  page=page.replace('__FEEDBACK__',json.dumps(embedded_feedback,ensure_ascii=False,indent=0).replace('<','\\u003c'))
- page=page.replace('__REVIEW_CORE__',(assets/'review-core.js').read_text(encoding='utf-8')).replace('__REVIEW_AUDIT__',(assets/'review-audit.js').read_text(encoding='utf-8')).replace('__REVIEW_APP__',(assets/'review-app.js').read_text(encoding='utf-8'))
+ page=page.replace('__REVIEW_CORE__',(assets/'review-identity.js').read_text(encoding='utf-8')+'\n'+(assets/'review-core.js').read_text(encoding='utf-8')).replace('__REVIEW_AUDIT__',(assets/'review-audit.js').read_text(encoding='utf-8')).replace('__REVIEW_APP__',(assets/'review-app.js').read_text(encoding='utf-8'))
  page=page.replace('__REVIEW_DELIVERY__',(assets/'review-delivery.js').read_text(encoding='utf-8'))
  page=page.replace('__PROBLEM_CONFIG__',json.dumps(config,ensure_ascii=False).replace('<','\\u003c')).replace('__PROBLEM_FEEDBACK__',(assets/'problem-feedback.js').read_text(encoding='utf-8'))
  assert unpack_payload(gzip.decompress(base64.b64decode(payload)))==view,'页面载荷解包后与视图不一致'

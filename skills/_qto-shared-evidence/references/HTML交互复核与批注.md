@@ -175,3 +175,18 @@ python build_review_scenes_from_tables.py --mapping 图面映射.json --neutral-
 ## 2026-09-20 成果快照绑定（优先于旧版回执说明）
 
 来源身份继续使用项目、复核范围和图纸哈希；另由规范化器重算对象/问题组 result_fingerprint。批注及成员快照须绑定该值。数量、规格、几何、采用依据变化时旧意见标为 stale，保留在历史中而不进入当前可执行 actions；缺失对象标为 unmatched。组成员逐一核对 object_id，不能仅比较 catalog_key。旧版无绑定批注不自动升级。页面标题或单纯revision标签变化不使工程判断失效。方法意见的理由可参考，旧数字确认不能继承。回执同时绑定 source_annotation_updated_at 与 source_result_fingerprint；两者任一不符都显示过期。
+
+
+## 8. 统一审核事项与唯一填写入口（可选）
+
+同一个工程决定需从图面、工程量或对照问题进入时，在复核视图顶层提供 `review_workflow`：`schema: qto-review-workflow/1.0`、`enabled: true`、`decisions` 列表。表格图面/对照生成器读取 `mapping.view.review_workflow`；电气原图对象适配器可由请求的同名字段透传。未启用的旧视图保留原行为，不因升级自动迁移用户意见。
+
+每个事项提供稳定 `id`、`revision`、`title`、`question`、`kind`，以及 `scope: {member_keys, excluded_member_keys, basis}`。成员使用本视图现存 `catalog_key`，边界由项目事实声明；`kind` 为 `business_choice` 时才开放填写，`data_gap/category` 只读。`facts/gaps/impacts` 分列已核事实、资料缺口和按单位/层级/范围的影响，未知值为 `null`，不跨单位相加。
+
+事项 `refs` 显式绑定入口：`object` 的 `id` 是对象 `catalog_key`，`group/item/issue/common` 使用各自ID；`item` 是对照条目，`delivery_item` 才是交付工程量项，不能因裸编号相同合并。同一目标也可显式给 `decision_id`；表格支持标准列/常量，属性中唯一的显式值可提升，多值或两种映射相反须待核，不按最近文字、标题或成员重叠猜同一事项。图面保留原图证据导航，关联事项在唯一编辑器中填写，工程量默认仍可只读查看。
+
+`recommendation` 提供 `id/version/status/text/reason/assistant_source/evidence_ids/business_option_id/scope_member_keys`，具体做法列在 `business_options`。只有当前建议、证据存在且声明 `state: verified`、范围匹配且无旧意见待迁移/冲突时才能快捷采用；这些是项目提供的依据，不等于插件独立证明证据真实。保存保留建议快照、引用来源和用户选择，不能把助手理由冒充用户亲写。过期、扩大范围、参考/退役成员、已有特例及T02/T04采用门控继续核对。
+
+旧双通道意见只有显式启用 `migrate_legacy` 后才进入迁移：保留原意见、草稿、成员排除、历史和来源；无唯一身份或相反意见暂挂，不按更新时间择一，不冒充用户重新审核。新特例须单列稳定事项、显式 `exception_of` 和作用范围；父事项采用不覆盖特例。批注仍绑定当前成果指纹，方法答复不构成数量核准。
+
+统一批注键为 `审核事项|<id>`。由[批注读取器](../scripts/read_qto_review_feedback.py)核对建议快照、版本、适用范围和冲突后输出待专业处理动作；再由对应专业复算和更新采用状态。迁移、填写和交接本身不改工程量，`quantity_changes` 为0。实现与字段校验见[审核事项接口](../scripts/qto_review_identity.py)，不从HTML直接发布规则或修改安装包。

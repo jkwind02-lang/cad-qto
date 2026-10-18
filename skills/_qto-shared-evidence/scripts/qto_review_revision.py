@@ -129,6 +129,11 @@ def audit_target(record):
 
 
 def assess_record(record, view):
+    from qto_review_identity import enabled, is_record, assess_record as assess_decision
+    if is_record(record):
+        return assess_decision(record, view)
+    if enabled(view):
+        return 'migration_required', '旧通道意见须显式迁移到唯一事项，未冒充重审'
     delivery_state = delivery_record_state(record, view)
     if delivery_state is not None:
         return delivery_state

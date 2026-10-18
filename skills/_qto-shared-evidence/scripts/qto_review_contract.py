@@ -4,6 +4,7 @@ from pathlib import Path
 from qto_review_delivery import normalize_delivery, bind_delivery_feedback
 from qto_review_revision import bind_result_versions, classify_feedback, settle_merge_conflict
 from qto_review_comparison import normalize_comparison, VERDICTS, CONCLUSIONS, BAND_CLASSES
+from qto_review_identity import normalize_workflow, migrate_package, is_record as is_decision_record, clean_record as clean_decision_record
 
 VIEW_SCHEMA = 'qto-review-view/1.0'
 VIEW_SCHEMA_COMPARISON = 'qto-review-view/1.1'
@@ -162,6 +163,7 @@ def normalize_view(raw, base_dir=None):
  d['professional_labels']=PROFESSIONALS;d.setdefault('scope_notes',[])
  normalize_delivery(d)
  bind_result_versions(d)
+ normalize_workflow(d)
  json.dumps(d,ensure_ascii=False,allow_nan=False)
  return d
 
@@ -200,6 +202,7 @@ def validate_feedback(raw, view):
  require(isinstance(p.get('annotations'),dict),'缺少已保存批注')
  p.setdefault('drafts',{});p.setdefault('custom_markers',[])
  require(isinstance(p['drafts'],dict) and isinstance(p['custom_markers'],list),'草稿或新增标记无效')
+ migrate_package(p,view)
  scene_ids={s['id'] for s in view['scenes']};keys={o['catalog_key'] for o in view['objects']};groups={g['id']:g for g in view['groups']};unmatched=[]
  comparison=view.get('comparison') or {};items={i['id']:i for i in comparison.get('items',[])};issues={q['id']:q for q in comparison.get('issues',[])};commons={g['id']:g for g in comparison.get('common_issues',[])}
  for m in p['custom_markers']:
@@ -214,6 +217,8 @@ def validate_feedback(raw, view):
  for field in ['annotations','drafts']:
   for key,r in p[field].items():
    require(key not in ['__proto__','constructor','prototype'] and isinstance(r,dict),'批注键或结构无效')
+   if is_decision_record(r):
+    p[field][key]=clean_decision_record(r,key,field=='annotations');continue
    # A merge conflict is re-judged on this view first: candidates that went stale no longer conflict (contract 9.1).
    mc=r.get('merge_conflict')
    if any(r.get(k) is not None for k in AUDIT_SNAPSHOTS) and isinstance(mc,dict) and isinstance(mc.get('candidates'),list) and len(mc['candidates'])>=2 and all(isinstance(x,dict) for x in mc['candidates']):

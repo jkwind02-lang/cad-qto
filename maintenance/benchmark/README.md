@@ -19,6 +19,8 @@
 
 两者不重复，按用途选用。
 
+新增电气歧义组试点使用 [ambiguity-protocol.md](ambiguity-protocol.md) 与 `scripts/evaluate_ambiguities.py`：显式全集分母、对象/关系遗漏、额外输出、参照权威、数据隔离和同配置配对重复报告。它不改写阶段一历史冻结评分器，不把独立模型参照称为人工核准，也不替代全图工程交付验收。真实输入和私有参照均保留维护区、不进Git或运行包。
+
 ## 回归与运行
 
 - `tests/test_benchmark_scorer_mutations.py`（仓库回归）调用 `tests/run_mutation_tests.py`，要求 8 种变异全部检出且两次结果一致。

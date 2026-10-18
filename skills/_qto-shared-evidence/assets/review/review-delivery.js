@@ -36,7 +36,7 @@ function attach(api){
  $('import-file').onchange=async()=>{const file=$('import-file').files[0];if(!file)return;try{
   const incoming=core.parse(await core.readFileTextAsync(await file.text()),data),historical=[...(feedback.historical_delivery_snapshots||[]),...(incoming.historical_delivery_snapshots||[])];
   feedback=core.mergePackages(feedback,incoming);feedback.historical_delivery_snapshots=historical.filter((x,n)=>historical.findIndex(y=>JSON.stringify(x)===JSON.stringify(y))===n);
-  backup();audit?.refresh();show();message('已导入；旧意见及旧交付快照保留历史，当前采用仍以本页数据为准。');
+  backup();audit?.refresh();identity?.refresh();show();message('已导入；旧意见及旧交付快照保留历史，当前采用仍以本页数据为准。');
  }catch(e){message('导入未应用：'+e.message);}finally{$('import-file').value='';}};
  root.QtoProblemFeedback?.attach({data,getFeedback:()=>feedback,saveLocal:saveHTML});
  const adoptionText=d.adoption_boundary+(d.adoption_note===d.adoption_boundary?'':' '+d.adoption_note);
@@ -147,6 +147,7 @@ function attach(api){
   const item=entry.item;
   if(item){
    const title=el('h2',item.title);detailPane.append(title,rowTable(item));
+   if(root.QtoReviewIdentity?.enabled(data))detailPane.append(button('查看关联审核事项',()=>root.QtoReviewIdentity.active.openTarget('delivery_item',item.id)));
    const facts=el('div',null,'delivery-facts');line(facts,'清单编号',item.id);line(facts,'本次量',num(item.quantity,item.unit));line(facts,'原量',num(item.original_quantity,item.original_unit||item.unit));line(facts,'清单范围',scopeText(item.scope));line(facts,'覆盖状态',stateText(item.coverage?.state||item.coverage));
    for(const [k,v] of Object.entries(item.dimensions||{}))line(facts,k,Array.isArray(v)?v.join('、'):v);
    if(item.display){if(typeof item.display==='string')line(facts,'清单原文',item.display);else for(const [k,v] of Object.entries(item.display))line(facts,k,typeof v==='object'?JSON.stringify(v):v);}
@@ -156,7 +157,7 @@ function attach(api){
   if(entry.finding){const f=entry.finding;detailPane.append(el('h2','独立覆盖查漏 · '+(f.code||f.id)));line(detailPane,'状态',stateText(f.status));line(detailPane,'说明',f.reason);line(detailPane,'清单项',f.item_id||(f.item_ids||[]).join('、')||'全局');line(detailPane,'范围',scopeText(f.scope));line(detailPane,'关联明细',(f.row_ids||[]).join('、')||'无');line(detailPane,'关联对象',(f.object_ids||[]).join('、')||'无');return;}
   if(entry.node){const walk=(node,parent='')=>{detailPane.append(missingCard(node,parent));for(const child of node.children||[])walk(child,node.title);};walk(entry.node);return;}
   if(entry.row){const r=entry.row;detailPane.append(rowDetails(r));if(r.state==='current'||r.state==='reference'){const keys=validKeys(r.member_keys);if(keys.length)locate(keys,r.state==='current'?'当前采用成员':'参考定位');else clearMap('本条明细无可靠图面对象；数量及来源依据保留，已清除上次图面。');}return;}
-  if(entry.decision){const t=entry.decision,card=el('article',null,'delivery-card');line(card,'真实业务取舍',t.reason);card.append(button('填写此项业务意见',()=>{if(audit){panel.hidden=true;$('action-message').hidden=false;audit.apply('mode=resolve&'+(t.kind==='common'?'common':'issue')+'='+encodeURIComponent(t.id));$('mode-tabs').hidden=true;}}));detailPane.append(card);return;}
+  if(entry.decision){const t=entry.decision,card=el('article',null,'delivery-card');line(card,'真实业务取舍',t.reason);card.append(button('填写此项业务意见',()=>{if(root.QtoReviewIdentity?.active){root.QtoReviewIdentity.active.openTarget(t.kind,t.id);return;}if(audit){panel.hidden=true;$('action-message').hidden=false;audit.apply('mode=resolve&'+(t.kind==='common'?'common':'issue')+'='+encodeURIComponent(t.id));$('mode-tabs').hidden=true;}}));detailPane.append(card);return;}
   const card=el('article',null,'delivery-card historical');card.append(el('h3',entry.title));line(card,'适用状态',entry.value?.applicability_state||'历史');line(card,'说明',entry.value?.applicability_reason||'');line(card,'意见',entry.value?.confirmed_result||entry.value?.verdict||'');line(card,'原因',entry.value?.reason||'');
   const details=el('details');details.append(el('summary','完整历史与快照'),el('pre',JSON.stringify(entry.value,null,2)));card.append(details);detailPane.append(card);
  }
@@ -221,6 +222,7 @@ function attach(api){
  }
  root.addEventListener?.('keydown',e=>{if(e.key==='Escape'&&fullscreen){fullscreen=false;workspace.classList.remove('delivery-fullscreen');fullscreenButton.textContent='放大图纸';drawMap();}});
  if(d.mode==='decisions')audit=root.QtoReviewAudit.attach({data,core,getFeedback:()=>feedback,backup,status:message,draw(){},resize(){},locate(){return false;},review(){},selectGroup(){return false;},selectObject(){return false;},scene(){return false;}});
+ const identity=root.QtoReviewIdentity?.attach({data,core,getFeedback:()=>feedback,backup,showQuantity(){tab='quantity';show();},showEvidence(id){tab='quantity';show();const matter=data.review_workflow.decisions.find(x=>x.id===id);locate(validKeys(matter?.scope.member_keys||[]),'审核事项证据');}});
  show();message(d.decision_targets.length?'仅填写已声明的真实业务取舍；意见经专业回算后才更新数量。':'只读交付；没有数量审核表单。');
  return root.QtoReviewDelivery.active={show,getFeedback:()=>feedback,tab:()=>tab,state:()=>({tab,page,selected,selectedRow,mapKeys:[...mapKeys],focusKey,ratio})};
 }

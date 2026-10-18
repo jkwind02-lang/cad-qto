@@ -5,7 +5,7 @@ declared coordinate transforms, looks geometry up by CAD handle and clips the dr
 bounds. It never computes an engineering quantity, guesses a sheet or an origin, or invents a coordinate:
 anything it cannot place becomes an unlocated object with a reason code.
 """
-import argparse, base64, csv, gzip, hashlib, json, math, os, re
+import argparse, base64, copy, csv, gzip, hashlib, json, math, os, re
 from collections import Counter, defaultdict
 from pathlib import Path
 from qto_review_contract import normalize_view, pack_payload, VIEW_SCHEMA_COMPARISON, PROFESSIONALS
@@ -19,9 +19,9 @@ NOTE_KEYS = ('handle', 'kept_handle', 'note', 'drawing')
 SPEC_FIELDS = {'path', 'columns', 'constants', 'value_maps', 'list_separators'}
 SHEET_KEYS = ('sheet_id', 'drawing', 'title', 'floor', 'sheet_kind', 'x1', 'y1', 'x2', 'y2', 'raster_path', 'length_factor')
 OBJECT_KEYS = ('object_id', 'catalog_key', 'sheet', 'drawing', 'kind', 'title', 'category', 'status', 'detail', 'source', 'professional',
-               'unlocated_reason', 'unlocated_note', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'points', 'handle')
+               'unlocated_reason', 'unlocated_note', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'points', 'handle', 'decision_id')
 OBJECT_FIELDS = SPEC_FIELDS | {'key', 'filter', 'geometry', 'transform', 'coords', 'group_by', 'attributes', 'quantities', 'professional'}
-GROUP_KEYS = ('id', 'title', 'category', 'status', 'proposal', 'reason')
+GROUP_KEYS = ('id', 'title', 'category', 'status', 'proposal', 'reason', 'decision_id')
 GROUP_FIELDS = SPEC_FIELDS | {'members'}
 DRAWING_FIELDS = {'id', 'neutral_dir', 'coordinate_unit', 'precision', 'title', 'background'}
 SCENE_FIELDS = {'id', 'drawing', 'title', 'base', 'dx', 'dy', 'overlays', 'background'}
@@ -477,6 +477,13 @@ def build(m, base, neutral_root, problems, files):
        'points': polys[0] if kind else [], 'title': opt(first, 'title'), 'category': opt(first, 'category'), 'status': opt(first, 'status'),
        'detail': detail, 'source': src, 'quantities': quantities, 'attributes': attrs,
        '_rows': [(spec['key'], x['rec']['_n']) for x in rows], '_bounds_known': bool(sheet and sheet['bounds'])}
+  # Explicit decision identity is data, never inferred from labels, CAD ids or overlap.
+  decision_values = {opt(x['rec'], 'decision_id') for x in rows if opt(x['rec'], 'decision_id')}
+  decision_column = (spec.get('attributes') or {}).get('decision_id')
+  if decision_column:
+   decision_values.update((x['rec']['_raw'].get(decision_column) or '').strip() for x in rows if (x['rec']['_raw'].get(decision_column) or '').strip())
+  if len(decision_values) > 1: problems.append({'check':'S-0','where': first['_where'],'message':'合并对象有多个显式decision_id，须拆分或核对事项身份'})
+  elif decision_values: o['decision_id'] = next(iter(decision_values))
   if kind == 'line' and len(polys) > 1: o['parts'] = polys
   if kind == 'polygon': o['points'] = polys[0]
   if not kind:
@@ -600,11 +607,13 @@ def build(m, base, neutral_root, problems, files):
   for r in rows:
    gid = opt(r, 'id')
    g = {'id': gid, **{k: opt(r, k) for k in ('title', 'category', 'status', 'proposal', 'reason')}, 'member_keys': list(dict.fromkeys(mem.get(gid, [])))}
+   if opt(r, 'decision_id'): g['decision_id'] = opt(r, 'decision_id')
    groups.append(g)
  sources = [{'id': d, 'title': drawings[d]['title'], 'sha256': drawings[d]['sha256']} for d in used_drawings if d in drawings]
  view = {'schema': VIEW_SCHEMA_COMPARISON, **{k: view_cfg[k] for k in ('project_id', 'review_id', 'title', 'revision') if k in view_cfg},
          'sources': sources, 'scenes': scenes, 'background_sets': background_sets, 'objects': draws, 'groups': groups, 'receipts': {}, 'summary': [],
          'scope_notes': list(view_cfg.get('scope_notes') or [])}
+ if 'review_workflow' in view_cfg: view['review_workflow'] = copy.deepcopy(view_cfg['review_workflow'])
  # Bidirectional checks S-1..S-5 (contract 12).
  checks = {}
  total_rows = sum(t['rows'] for t in report_tables); skipped = sum(sum(t['skipped'].values()) for t in report_tables)

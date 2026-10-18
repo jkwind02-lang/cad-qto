@@ -37,6 +37,7 @@ function cleanAudit(r,key,complete){
 }
 function cleanRecord(r,key,complete=true){
  ensure(r&&typeof r==='object'&&!Array.isArray(r),'批注结构无效');
+ if(root.QtoReviewIdentity?.isRecord(r))return root.QtoReviewIdentity.cleanRecord(r,key,complete);
  if(isAudit(r)){const q=cleanAudit(r,key,complete);ensure(Array.isArray(q.history),'历史记录无效');return q;}
  ensure(typeof r.confirmed_result==='string'&&typeof r.reason==='string','结果和原因须为文字');
  if(complete)ensure(r.confirmed_result.trim()&&r.reason.trim(),'请填写结论和判断原因；需要助手判断时也请说明问题');
@@ -76,6 +77,8 @@ function bindDeliveryFeedback(p,view){
  p.delivery_snapshot=snapshot;return p;
 }
 function assessRecord(record,view){
+ if(root.QtoReviewIdentity?.isRecord(record))return root.QtoReviewIdentity.assessRecord(record,view);
+ if(root.QtoReviewIdentity?.enabled(view))return {state:'migration_required',reason:'旧通道意见须显式迁移到唯一事项，未冒充重审'};
  const delivery=deliveryValidity(record,view);if(delivery)return delivery;
  if(isAudit(record)){
   const [field,ident,pool,label]=auditTarget(record),snap=record[field],c=view.comparison||{};
@@ -103,6 +106,7 @@ function assessRecord(record,view){
 
 function parse(input,view){
  const raw=typeof input==='string'?JSON.parse(input):input,p=clone(raw);
+ if(view.review_workflow?.enabled)ensure(root.QtoReviewIdentity,'本页缺少统一审核事项模块，请用当前生成器重建；未应用意见');
  const legacy=['cad-qto-review-feedback/1.0','cad-qto-review-feedback/1.1'].includes(p.schema);
  ensure(legacy||p.schema===schema||p.schema===comparisonSchema,'不是支持的复核批注文件');
  if(legacy)ensure(view.legacy_source_sha256&&p.source_sha256===view.legacy_source_sha256,'旧版批注未绑定到本图，不可跨项目导入');
@@ -114,6 +118,7 @@ function parse(input,view){
  }
  if(legacy){p.legacy_schema=p.schema;p.legacy_source_sha256=p.source_sha256;}
  p.schema=p.schema===comparisonSchema?comparisonSchema:schemaFor(view);p.project_id=view.project_id;p.review_id=view.review_id;p.source_sha256=view.source_sha256;
+ root.QtoReviewIdentity?.migratePackage(p,view);
  const auditItems=new Map((view.comparison?.items||[]).map(i=>[i.id,i]));
  ensure(p.annotations&&typeof p.annotations==='object'&&!Array.isArray(p.annotations),'缺少已保存批注');
  const keys=new Set(view.objects.map(o=>o.catalog_key)),groups=new Map(view.groups.map(g=>[g.id,g])),sceneIds=new Set(view.scenes.map(s=>s.id));
@@ -149,6 +154,7 @@ function parse(input,view){
  return p;
 }
 function holdDecisionConflicts(pkg,view){
+ for(const r of Object.values(pkg.annotations||{}))if(r.decision_snapshot)delete r.identity_hold;
  const c=view.comparison||{},objects=new Map(view.objects.map(x=>[x.catalog_key,x])),groups=new Map(view.groups.map(x=>[x.id,x]));
  const items=new Map((c.items||[]).map(x=>[x.id,x])),issues=new Map((c.issues||[]).map(x=>[x.id,x])),commons=new Map((c.common_issues||[]).map(x=>[x.id,x]));
  const itemKeys=ids=>new Set([...ids].flatMap(id=>(items.get(id)?.detail_rows||[]).flatMap(r=>r.member_keys||[])));
@@ -161,7 +167,8 @@ function holdDecisionConflicts(pkg,view){
  }
  const vote=r=>r.verdict||({'确认现结果':'同意','修改结果':'要改','排除对象':'要改','暂缓计算':'要改'}[r.instruction]);
  const live=[];for(const [k,r] of Object.entries(pkg.annotations||{})){const a=assessRecord(r,view);r.applicability_state=a.state;r.applicability_reason=a.reason;if(a.state==='current'&&!r.merge_conflict)live.push([k,r,target(r)]);}
- const found=[];
+ const found=Object.entries(pkg.annotations||{}).filter(([k,r])=>r.decision_snapshot&&r.decision_conflict).map(([k,r])=>({annotation_keys:[k],decision_id:r.decision_snapshot.id,kind:'unified_decision_conflict',candidates:r.decision_conflict.candidates,processing:'同一审核事项意见冲突，完整候选保留；不按时间择一，须人工核对'}));
+ for(const p of pkg.decision_migration_pending||[])for(const id of p.candidate_decision_ids||[]){const k='审核事项|'+id;if(pkg.annotations?.[k]&&!pkg.annotations[k].decision_conflict)found.push({annotation_keys:[k],decision_id:id,kind:'decision_migration_required',state:'migration_required',processing:'本事项仍有明确关联的待迁移或歧义旧意见，动作暂挂；须核对迁移后再审核'});}
  for(let i=0;i<live.length;i++)for(let j=i+1;j<live.length;j++){
   const [ka,a,ta]=live[i],[kb,b,tb]=live[j];if(ta[0]===tb[0])continue;
   const explicit=!!(ta[1]&&tb[1]);if(explicit&&ta[1]!==tb[1])continue;
@@ -169,12 +176,13 @@ function holdDecisionConflicts(pkg,view){
   const votes=new Set([vote(a),vote(b)]);if(!votes.has('同意')||!votes.has('要改'))continue;
   found.push({annotation_keys:[ka,kb],decision_id:explicit?ta[1]:null,kind:explicit?'decision_conflict':'decision_identity_required',overlap_member_keys:overlap,processing:'跨入口意见相反，动作暂挂；由所属专业核对是否同一决策事项，不按同号或重叠自动合并'});
  }
- for(const f of found)for(const k of f.annotation_keys){pkg.annotations[k].applicability_state='conflict';pkg.annotations[k].applicability_reason=f.processing;}
+ for(const f of found)for(const k of f.annotation_keys){pkg.annotations[k].applicability_state=f.state||'conflict';pkg.annotations[k].applicability_reason=f.processing;if(f.state==='migration_required')pkg.annotations[k].identity_hold=f.processing;}
  pkg.decision_conflicts=found;return found;
 }
 function saveRecord(previous,next,key,now){
  const q=cleanRecord(next,key,true);q.updated_at=now;q.entry_origin='用户在HTML保存';delete q.merge_conflict;   // re-saving one opinion settles a merge conflict
  q.history=clone(previous?.history||[]);
+ if(root.QtoReviewIdentity?.isRecord(q)){delete q.decision_conflict;delete q.migration_state;q.entry_origin=next.entry_origin||'用户在统一事项编辑器保存';}
  if(previous){const old=clone(previous);delete old.history;q.history.push(old);}
  return q;
 }
@@ -202,6 +210,7 @@ function mergeRecords(local,incoming){
  for(const [k,r] of Object.entries(incoming)){
   const old=annotations[k];if(!old){annotations[k]=r;continue;}
   if(JSON.stringify(old)===JSON.stringify(r))continue;
+  if(root.QtoReviewIdentity?.isRecord(old)&&root.QtoReviewIdentity.isRecord(r)){annotations[k]=root.QtoReviewIdentity.mergeRecord(old,r);if(annotations[k].decision_conflict)conflicts++;continue;}
   // Two different current opinions are not settled by time: both are kept until the user re-saves one. A stale one never blocks or hides a current one.
   if(isAudit(old)&&isAudit(r)){
    const mine=old.merge_conflict?.candidates||[bare(old)],theirs=r.merge_conflict?.candidates||[bare(r)],cands=[...mine,...theirs];
@@ -220,8 +229,9 @@ function mergePackages(local,incoming){
  ensure(local.project_id===incoming.project_id&&local.review_id===incoming.review_id&&local.source_sha256===incoming.source_sha256,'不能合并异项目批注');
  const a=mergeRecords(local.annotations,incoming.annotations),d=mergeRecords(local.drafts,incoming.drafts),markers=clone(local.custom_markers);
  for(const m of incoming.custom_markers){const old=markers.find(x=>x.id===m.id);ensure(!old||JSON.stringify(old)===JSON.stringify(m),'新增标记编号冲突，已保留当前批注并停止导入');if(!old)markers.push(m);}
- for(const [k,r] of Object.entries(d.annotations))if((Date.parse(a.annotations[k]?.updated_at)||0)>=(Date.parse(r.updated_at)||0))delete d.annotations[k];
+ for(const [k,r] of Object.entries(d.annotations))if(!root.QtoReviewIdentity?.isRecord(r)&&(Date.parse(a.annotations[k]?.updated_at)||0)>=(Date.parse(r.updated_at)||0))delete d.annotations[k];
  const out={...local,annotations:a.annotations,drafts:d.annotations,custom_markers:markers,merge_conflicts:a.conflicts+d.conflicts};
+ for(const field of ['legacy_review_records','decision_migration_pending'])if(local[field]||incoming[field])out[field]=[...(local[field]||[]),...(incoming[field]||[])].filter((x,n,all)=>all.findIndex(y=>JSON.stringify(x)===JSON.stringify(y))===n).map(clone);
  const history=[...(local.historical_delivery_snapshots||[]),...(incoming.historical_delivery_snapshots||[])];
  if(incoming.delivery_snapshot&&JSON.stringify(incoming.delivery_snapshot)!==JSON.stringify(local.delivery_snapshot))history.push(incoming.delivery_snapshot);
  if(history.length||local.historical_delivery_snapshots||incoming.historical_delivery_snapshots)out.historical_delivery_snapshots=history.filter((x,n)=>history.findIndex(y=>JSON.stringify(x)===JSON.stringify(y))===n).map(clone);

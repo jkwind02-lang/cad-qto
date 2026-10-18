@@ -1,6 +1,7 @@
 """Read saved HTML/JSON feedback as data; never executes HTML or changes results."""
 import argparse,json
 from pathlib import Path
+from qto_review_identity import handoff_actions, is_record as is_decision_record
 from qto_review_contract import normalize_view,validate_feedback,extract_json_file
 
 def comparison_actions(view,current):
@@ -41,15 +42,19 @@ def main():
   fb,unmatched=validate_feedback(extract_json_file(a.feedback),view)
   current={k:r for k,r in fb['annotations'].items() if r.get('applicability_state')=='current'}
   audit=lambda r:any(r.get(k) is not None for k in ('item_snapshot','issue_snapshot','common_issue_snapshot'))
-  actions=[{'annotation_key':k,'instruction':r.get('instruction'),'user_result':r['confirmed_result'],'user_reason':r['reason'],'object_ids':r.get('object_ids',[]),'selected_object_keys':r.get('selected_object_keys',[]),'excluded_object_keys':r.get('excluded_object_keys',[]),'scope':r.get('scope'),'updated_at':r.get('updated_at'),'processing':'供所属专业复核并重算；未自动写回数量'} for k,r in current.items() if not audit(r)]
+  actions=[{'annotation_key':k,'instruction':r.get('instruction'),'user_result':r['confirmed_result'],'user_reason':r['reason'],'object_ids':r.get('object_ids',[]),'selected_object_keys':r.get('selected_object_keys',[]),'excluded_object_keys':r.get('excluded_object_keys',[]),'scope':r.get('scope'),'updated_at':r.get('updated_at'),'processing':'供所属专业复核并重算；未自动写回数量'} for k,r in current.items() if not audit(r) and not is_decision_record(r)]
   out={'schema':'qto-review-handoff/1.0','project_id':view['project_id'],'review_id':view['review_id'],'source_sha256':view['source_sha256'],'result_fingerprint':view['result_fingerprint'],'feedback':fb,'actions':actions,'historical_annotations':{k:r for k,r in fb['annotations'].items() if r.get('applicability_state')!='current'},'unmatched':unmatched,'quantity_changes':0,'drafts_are_not_decisions':True}
   extra=comparison_actions(view,current) if 'comparison' in view else {}
+  unified_conflicts=[{'annotation_key':k,'decision_id':r['decision_snapshot']['id'],'candidates':r['decision_conflict']['candidates'],'processing':'同一事项相反或不同意见，未按时间采用任何一份；须人工核对'} for k,r in fb['annotations'].items() if is_decision_record(r) and r.get('decision_conflict')]
+  if unified_conflicts:extra['conflicts']=[*extra.get('conflicts',[]),*unified_conflicts]
   out.update(extra)
+  out['decision_actions']=handoff_actions(view,fb)
+  out['decision_migration_pending']=fb.get('decision_migration_pending',[])
   if 'delivery' in view:out.update(delivery=view['delivery'],delivery_snapshot=fb.get('delivery_snapshot'),historical_delivery_snapshots=fb.get('historical_delivery_snapshots',[]))
-  actionable=len(actions)+sum(len(extra.get(k,[])) for k in ('item_actions','issue_actions','common_issue_actions'))
+  actionable=len(actions)+len(out['decision_actions'])+sum(len(extra.get(k,[])) for k in ('item_actions','issue_actions','common_issue_actions'))
   a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
   scope_growth=any(any(a.get('added_since_answer',{}).get(k,[]) for k in ('issue_ids','item_ids')) for a in extra.get('common_issue_actions',[]))
-  status='REVIEW_REQUIRED' if unmatched or extra.get('conflicts') or scope_growth else 'PASS'
+  status='REVIEW_REQUIRED' if unmatched or extra.get('conflicts') or scope_growth or out['decision_migration_pending'] else 'PASS'
   print(json.dumps({'status':status,'saved':len(fb['annotations']),'actionable':actionable,'drafts':len(fb['drafts']),'unmatched':len(unmatched),'conflicts':len(extra.get('conflicts',[])),'overlaps':len(extra.get('overlaps',[])),'quantity_changes':0},ensure_ascii=False));return 0
  except (OSError,ValueError,KeyError,TypeError) as e:print(json.dumps({'status':'INPUT_REQUIRED','error':str(e),**({'problems':e.problems} if hasattr(e,'problems') else {})},ensure_ascii=False));return 2
 if __name__=='__main__':raise SystemExit(main())
