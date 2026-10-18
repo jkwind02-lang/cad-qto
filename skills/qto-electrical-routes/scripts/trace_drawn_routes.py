@@ -31,7 +31,7 @@ import qto_cad_geometry as cad_geometry  # noqa: E402
 import qto_segment_graph as segment_graph  # noqa: E402
 from qto_spatial import BoundsIndex  # noqa: E402
 
-VERSION = "qto-drawn-route-tracer/1.3.1"
+VERSION = "qto-drawn-route-tracer/1.4.0"
 REQUEST_SCHEMA = "qto-drawn-route-request/1.0"
 RESULT_SCHEMA = "qto-drawn-route-trace/1.0"
 PATHS_SCHEMA = "qto-drawn-route-paths/1.0"
@@ -143,10 +143,14 @@ def source_from_manifest(path: Path) -> tuple[Path, Path, dict[str, Any]]:
 
 
 def parse_endpoint(raw: Any, label: str) -> dict[str, Any]:
-    if not isinstance(raw, dict) or ("instance_id" in raw) == ("point" in raw):
-        fail(f"{label} 须写 instance_id（点位实例号）或 point（输出单位坐标）其中一个")
-    if "instance_id" in raw:
-        return {"instance_id": text(raw["instance_id"], f"{label}.instance_id")}
+    if not isinstance(raw, dict) or sum(key in raw for key in ("instance_id", "instance_key", "point")) != 1:
+        fail(f"{label} 须写 instance_id、instance_key 或 point（输出单位坐标）其中一个")
+    key = next((key for key in ("instance_id", "instance_key") if key in raw), None)
+    if key:
+        return {key: text(raw[key], f"{label}.{key}"), **({"instance_source": text(raw["instance_source"], f"{label}.instance_source")}
+                                                     if "instance_source" in raw else {})}
+    if "instance_source" in raw:
+        fail(f"{label}.instance_source 只能限定实例端点")
     point = raw["point"]
     if not isinstance(point, list) or len(point) < 2:
         fail(f"{label}.point 须为 [x, y]")
@@ -235,7 +239,85 @@ def parse_overlaps(request: dict[str, Any], snap: float) -> dict[str, Any]:
             "groups": [pattern(g, f"overlaps.layer_groups[{i}]") for i, g in enumerate(groups)]}
 
 
-def parse_request(request: dict[str, Any]) -> dict[str, Any]:
+def parse_instance_sources(raw: Any, base: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Separate source namespaces; never merge by id or by geometry and never overwrite duplicate rows."""
+    if raw is None:
+        return [], []
+    if not isinstance(raw, list):
+        fail("instance_sources 须为数组")
+    sources, files, seen = [], [], set()
+    for index, spec in enumerate(raw):
+        label = f"instance_sources[{index}]"
+        if not isinstance(spec, dict):
+            fail(f"{label} 必须是对象")
+        sid = text(spec.get("source_id"), f"{label}.source_id")
+        if sid in seen:
+            fail(f"instance_sources.source_id 重复：{sid}")
+        seen.add(sid)
+        basis = text(spec.get("basis"), f"{label}.basis")
+        source = {"source_id": sid, "basis": basis, "drawing_id": spec.get("drawing_id"),
+                  "source_sha256": spec.get("source_sha256"), "instances": []}
+        if "path" in spec:
+            path = Path(text(spec["path"], f"{label}.path"))
+            path = path if path.is_absolute() else (base / path).resolve()
+            if not path.is_file():
+                fail(f"{label}.path 找不到：{path}")
+            if path.suffix.lower() in (".ndjson", ".jsonl"):
+                rows = list(load_stream(path))
+            else:
+                data = load_json(path)
+                rows = data.get("endpoint_instances", data.get("instances", data.get("reconciled_instances")))
+                detected_source = (data.get("inputs") or {}).get("source_sha256") or (data.get("geometry_review") or {}).get("source_sha256")
+                if detected_source:
+                    if source["source_sha256"] and source["source_sha256"] != detected_source:
+                        fail(f"{label}.source_sha256 与来源文件不符")
+                    source["source_sha256"] = detected_source
+            source.update(path=str(path), sha256=sha256(path))
+            files.append({"role": "instance_source", "source_id": sid, "path": str(path), "sha256": source["sha256"]})
+        else:
+            rows = spec.get("instances")
+        if not isinstance(rows, list):
+            fail(f"{label} 来源须含 instances 或 endpoint_instances 数组")
+        for row in rows:
+            if not isinstance(row, dict):
+                fail(f"{label} 实例必须是对象")
+            if row.get("disposition", "adopted") != "adopted":
+                continue
+            pid = text(row.get("physical_id", row.get("instance_id")), f"{label}.physical_id")
+            source["instances"].append({**row, "physical_id": pid,
+                                        "coordinate_unit": row.get("coordinate_unit", spec.get("coordinate_unit"))})
+        sources.append(source)
+    return sources, files
+
+
+def parse_route_constraints(route: dict[str, Any], label: str) -> dict[str, Any]:
+    via = route.get("via_handles", [])
+    if not isinstance(via, list) or any(not isinstance(h, str) or not h.strip() for h in via):
+        fail(f"{label}.via_handles 须为句柄或完整 source_id 数组")
+    via = [h.strip() for h in via]
+    if len(set(via)) != len(via):
+        fail(f"{label}.via_handles 不能重复（不能用重复句柄表示绕行）")
+    via_basis = text(route.get("via_basis"), f"{label}.via_basis") if via else None
+    pairs = route.get("bridge_pairs", [])
+    if not isinstance(pairs, list):
+        fail(f"{label}.bridge_pairs 须为数组")
+    parsed = []
+    for i, pair in enumerate(pairs):
+        if isinstance(pair, list) and len(pair) == 3:
+            pair = {"from_handle": pair[0], "to_handle": pair[1], "basis": pair[2]}
+        if not isinstance(pair, dict):
+            fail(f"{label}.bridge_pairs[{i}] 须为 [句柄1, 句柄2, basis] 或对象")
+        item = {k: text(pair.get(k), f"{label}.bridge_pairs[{i}].{k}") for k in ("from_handle", "to_handle", "basis")}
+        for key in ("from_end", "to_end"):
+            if key in pair:
+                if pair[key] not in ("start", "end"):
+                    fail(f"{label}.bridge_pairs[{i}].{key} 只能为 start 或 end")
+                item[key] = pair[key]
+        parsed.append(item)
+    return {"via_handles": via, "via_basis": via_basis, "bridge_pairs": parsed}
+
+
+def parse_request(request: dict[str, Any], base: Path | None = None) -> dict[str, Any]:
     common = parse_common(request, REQUEST_SCHEMA)
     routes = request.get("routes")
     if not isinstance(routes, list) or not routes:
@@ -250,17 +332,20 @@ def parse_request(request: dict[str, Any]) -> dict[str, Any]:
         seen.add(route_id)
         parsed.append({"route_id": route_id, "from": parse_endpoint(route.get("from"), f"routes[{index}].from"),
                        "to": parse_endpoint(route["to"], f"routes[{index}].to") if route.get("to") is not None else None,
-                       "circuit_label": route.get("circuit_label")})
+                       "circuit_label": route.get("circuit_label"), **parse_route_constraints(route, f"routes[{index}]")})
+        if route.get("to") is None and (parsed[-1]["via_handles"] or parsed[-1]["bridge_pairs"]):
+            fail("指定经由句柄或桥接对需要明确起终点")
     label_re = pattern(request["circuit_label_pattern"], "circuit_label_pattern") if request.get("circuit_label_pattern") else None
     if label_re is None and (request.get("circuit_label_layers") or request.get("circuit_label_radius") is not None):
         fail("写了 circuit_label_layers 或 circuit_label_radius 就要写 circuit_label_pattern（回路标注文字的正则）")
+    sources, source_files = parse_instance_sources(request.get("instance_sources"), base or Path.cwd())
     return {
         **common, "label_re": label_re,
         "label_layer_re": pattern(request["circuit_label_layers"], "circuit_label_layers") if request.get("circuit_label_layers") else None,
         "label_radius": tolerance(request, "circuit_label_radius") if label_re else None,
         "box_re": pattern(request["box_block_pattern"], "box_block_pattern") if request.get("box_block_pattern") else None,
         "endpoint": tolerance(request, "endpoint_tolerance"), "equal": tolerance(request, "equal_length_tolerance", 0.001),
-        "routes": parsed,
+        "routes": parsed, "instance_sources": sources, "instance_source_files": source_files,
     }
 
 
@@ -368,6 +453,55 @@ class Drawing:
             return {"problem": "不在范围内", "detail": "实例外框在范围外"}
         return {"insert": insert, "containers": containers, **here}
 
+    def locate_endpoint(self, spec: dict[str, Any]) -> dict[str, Any]:
+        key = "instance_id" if "instance_id" in spec else "instance_key"
+        wanted = spec[key]
+        sources = self.req.get("instance_sources", [])
+        sid = spec.get("instance_source")
+        candidates = [(source, row) for source in sources if sid is None or source["source_id"] == sid
+                      for row in source["instances"] if row.get("physical_id" if key == "instance_id" else key) == wanted]
+        if not candidates and key == "instance_id" and sid is None:
+            return self.locate(wanted)
+        if len(candidates) != 1:
+            return {"problem": "实例来源未唯一" if candidates else "实例在来源中找不到",
+                    "detail": f"{key}={wanted}；候选 {len(candidates)} 个，不改用坐标",
+                    "candidates": [{"source_id": s["source_id"], "physical_id": row["physical_id"]} for s, row in candidates]}
+        source, row = candidates[0]
+        provenance = {k: source[k] for k in ("source_id", "basis", "path", "sha256") if k in source}
+        provenance.update(physical_id=row["physical_id"], instance_key=row.get("instance_key"), side_text=row.get("side_text"))
+        source_drawing = row.get("drawing_id", source.get("drawing_id"))
+        if source_drawing and source_drawing != self.req["drawing_id"]:
+            return {"problem": "实例来源图纸不符", "detail": f"{source_drawing} 与 {self.req['drawing_id']} 不符"}
+        if row.get("measurement_geometry_available") is False or row.get("point_basis") == "location_bbox_center_not_insertion_or_connection_port":
+            return {"problem": "实例只有定位边界", "detail": "定位外包框中心不是连接端口，须另行确认路线端点"}
+        source_hash = row.get("source_sha256", source.get("source_sha256"))
+        authoritative_hash = (self.manifest.get("authoritative_source") or {}).get("sha256")
+        provenance["source_sha256"] = source_hash
+        if source_hash and source_hash != authoritative_hash:
+            return {"problem": "实例来源指纹不符", "detail": "来源实例属于另一份原图；不以同句柄或几何相似认作同一物理对象"}
+        if source_hash:
+            located = self.locate(row["physical_id"])
+            if "problem" not in located:
+                return {**located, "instance_provenance": provenance}
+        if row.get("coordinate_unit") != "m":
+            return {"problem": "实例来源缺坐标单位", "detail": "自建实例的 coordinate_unit 须为 m"}
+        box, point = row.get("box_m"), row.get("point")
+        if box is not None:
+            if not isinstance(box, list) or len(box) != 4:
+                fail(f"{wanted}.box_m 须为四个有限数值")
+            box = [finite(v, f"{wanted}.box_m") / self.req["factor"] for v in box]
+            if box[0] > box[2] or box[1] > box[3]:
+                fail(f"{wanted}.box_m 范围无效")
+            anchor = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2, 0.0]
+        elif isinstance(point, list) and len(point) >= 2:
+            anchor = [finite(point[i], f"{wanted}.point") / self.req["factor"] for i in (0, 1)] + [0.0]
+        else:
+            return {"problem": "实例来源缺坐标", "detail": "未找到可用 point 或 box_m，不用0补缺值"}
+        if not cad_geometry.point_in_scope(anchor, self.req["bounds"]):
+            return {"problem": "不在范围内", "detail": "来源实例坐标在范围外"}
+        return {"box": box, "anchor": anchor, "notes": [], "containers": [], "instance_provenance": provenance,
+                "insert": {"block_name": row.get("block_name", "")}, "source_point": box is None}
+
     def boxes(self, box_re: re.Pattern[str] | None, expand: set[str]) -> list[tuple[str, list[float]]]:
         """Box instances for the pass-through check: top level and inside the expanded blocks, scoped as above."""
         found: list[tuple[str, list[float]]] = []
@@ -435,8 +569,8 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
             end = route[which]
             if end is None:
                 continue
-            if "instance_id" in end:
-                located = drawing.locate(end["instance_id"])
+            if "instance_id" in end or "instance_key" in end:
+                located = drawing.locate_endpoint(end)
                 if "problem" not in located:
                     expand.update(located["containers"])
                 ends[(route["route_id"], which)] = {"spec": end, **located}
@@ -558,7 +692,7 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
             closest = [n for n in ends_here if band[n] <= low + 1e-9]
             pieces.append((low, {n: band[n] for n in ([n for n in closest if degree[n] == 1] or closest)}))
         name = str(end.get("insert", {}).get("block_name") or "")
-        feeds_many = req["box_re"] is not None and "spec" in end and "instance_id" in end["spec"] and bool(req["box_re"].search(name))
+        feeds_many = req["box_re"] is not None and "spec" in end and ("instance_id" in end["spec"] or "instance_key" in end["spec"]) and bool(req["box_re"].search(name))
         lowest = min((low for low, _ in pieces), default=0.0)
         near, dropped = {}, {}
         for low, nodes in pieces:
@@ -571,12 +705,15 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         if "point" in spec:
             record.update(basis="坐标", label=f"P({spec['point'][0]:g},{spec['point'][1]:g})")
         else:
-            record["label"] = spec["instance_id"]
+            record["label"] = spec.get("instance_id", spec.get("instance_key"))
+            if end.get("instance_provenance"):
+                record["instance_provenance"] = end["instance_provenance"]
             if end.get("box"):
                 record.update(basis="外框", box_m=[*m(end["box"][:2]), *m(end["box"][2:])],
                               extent_notes=cad_geometry.extent_note_labels(end["notes"]) if end.get("notes") else [])
             elif end.get("anchor") is not None:
-                record.update(basis="插入点", point_m=m(end["anchor"]), note="外框取不到，只这一端按插入点挂接")
+                record.update(basis="来源坐标" if end.get("source_point") else "插入点", point_m=m(end["anchor"]),
+                              note="来源表明确坐标挂接" if end.get("source_point") else "外框取不到，只这一端按插入点挂接")
         if near:
             node_id = min(near, key=lambda n: (near[n], n))
             record.update(attach_node_ids=sorted(near), attach_distance_m=near[node_id] * f)
@@ -591,12 +728,99 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         return sorted(s["segment_id"] for s in graph["segments"]
                       if chord_hits_box(s["start"], s["end"], end["box"]))[:10]
 
-    def shortest(sources: dict[str, float], targets: dict[str, float]) -> dict[str, Any]:
+    def route_constraints(route: dict[str, Any]) -> tuple[list[tuple[str, str, float, int]], dict[str, int], list[dict[str, Any]]]:
+        extra, via_of, problems = [], {}, []
+        cache = {}
+
+        def resolve(handle):
+            if handle in cache:
+                return cache[handle]
+            matches = [s for s in graph["segments"] if s["source_id"] == handle]
+            if not matches:
+                matches = [s for s in graph["segments"] if s["handle"].upper() == handle.upper()]
+            identities = {s["source_id"] for s in matches}
+            if len(identities) != 1:
+                problems.append({"problem": "指定句柄未唯一", "handle": handle, "source_ids": sorted(identities),
+                                 "detail": "同句柄的不同物理插入不合并；用完整 source_id 限定"})
+                cache[handle] = []
+            else:
+                cache[handle] = matches
+            return cache[handle]
+
+        def endpoint_nodes(items, end):
+            if not items:
+                return []
+            if end == "start":
+                return [items[0]["start_node"]]
+            if end == "end":
+                return [items[-1]["end_node"]]
+            counts = defaultdict(int)
+            for s in items:
+                counts[s["start_node"]] += 1; counts[s["end_node"]] += 1
+            return sorted(n for n, count in counts.items() if count == 1)
+
+        pairs = list(route["bridge_pairs"])
+        identities = []
+        for i, handle in enumerate(route["via_handles"]):
+            items = resolve(handle)
+            if items:
+                identities.append(items[0]["source_id"])
+            for s in items:
+                via_of[s["segment_id"]] = i
+        if len(set(identities)) != len(identities):
+            problems.append({"problem": "经由句柄重复同一物理线", "source_ids": identities})
+        specified = {(p["from_handle"], p["to_handle"]) for p in pairs} | {(p["to_handle"], p["from_handle"]) for p in pairs}
+        for a, b in zip(route["via_handles"], route["via_handles"][1:]):
+            if (a, b) not in specified:
+                pairs.append({"from_handle": a, "to_handle": b, "basis": route["via_basis"], "via_sequence": True})
+        added = set()
+        for pair in pairs:
+            left, right = resolve(pair["from_handle"]), resolve(pair["to_handle"])
+            if not left or not right:
+                continue
+            if left[0]["source_id"] == right[0]["source_id"]:
+                problems.append({"problem": "桥接对是同一物理线", "pair": pair}); continue
+            # Already drawn T contacts and shared endpoints require no supplement.
+            if pair.get("via_sequence") and any(
+                    (t["segment_id"] in {s["segment_id"] for s in left} and t["on_segment_id"] in {s["segment_id"] for s in right})
+                    or (t["segment_id"] in {s["segment_id"] for s in right} and t["on_segment_id"] in {s["segment_id"] for s in left})
+                    for t in used_t):
+                continue
+            a_nodes, b_nodes = endpoint_nodes(left, pair.get("from_end")), endpoint_nodes(right, pair.get("to_end"))
+            choices = sorted((math.dist(point_of[a][:2], point_of[b][:2]), a, b) for a in a_nodes for b in b_nodes)
+            if not choices:
+                problems.append({"problem": "桥接对没有唯一开放端", "pair": pair}); continue
+            low = choices[0][0]
+            nearest = [(a, b) for d, a, b in choices if abs(d - low) <= max(req["equal"] / f, 1e-9)]
+            if len(nearest) != 1:
+                problems.append({"problem": "桥接端对等距未决", "pair": pair, "node_pairs": nearest,
+                                 "detail": "用 from_end/to_end 指定原图元起止端，不按排列顺序硬选"}); continue
+            a, b = nearest[0]
+            if a == b:
+                continue
+            key = tuple(sorted((a, b)))
+            if key in added:
+                problems.append({"problem": "桥接对重复", "pair": pair}); continue
+            added.add(key)
+            # A project bridge belongs only to this route. It never changes automatic graph connectivity.
+            index = len(edges)
+            edges.append({"kind": "gap", "bridge_id": f"PROJECT-{route['route_id']}-{len(extra) + 1}", "nodes": (a, b),
+                          "weight": low, "project_basis": pair["basis"],
+                          "specified_handles": [pair["from_handle"], pair["to_handle"]]})
+            extra.append((a, b, low, index))
+        return extra, via_of, problems
+
+    def shortest(sources: dict[str, float], targets: dict[str, float], extra, via_of, via_count) -> dict[str, Any]:
         eps = req["equal"] / f
-        dist = {n: 0.0 for n in sources}
-        count = {n: 1 for n in sources}
-        pred: dict[str, list[tuple[str, int]]] = {n: [] for n in sources}
-        heap = [(0.0, n) for n in sorted(sources)]
+        more = defaultdict(list)
+        overridden = {frozenset((a, b)) for a, b, _, _ in extra}
+        for a, b, w, i in extra:
+            more[a].append((b, w, i)); more[b].append((a, w, i))
+        starts = [(n, -1) for n in sources]
+        dist = {n: 0.0 for n in starts}
+        count = {n: 1 for n in starts}
+        pred = {n: [] for n in starts}
+        heap = [(0.0, n) for n in sorted(starts)]
         done, best = set(), None
         while heap:
             d, u = heapq.heappop(heap)
@@ -605,9 +829,18 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
             if best is not None and d > best + eps:
                 break
             done.add(u)
-            if u in targets and (best is None or d < best):
+            if u[0] in targets and (not via_count or u[1] == via_count - 1) and (best is None or d < best):
                 best = d
-            for v, w, i in adjacency.get(u, ()):
+            for node, w, i in [*adjacency.get(u[0], ()), *more.get(u[0], ())]:
+                if edges[i]["kind"] == "gap" and not edges[i].get("project_basis") and frozenset((u[0], node)) in overridden:
+                    continue
+                progress = u[1]
+                if via_count and edges[i]["kind"] == "segment":
+                    next_index = via_of.get(edges[i]["segment_id"])
+                    if next_index is None or next_index not in (progress, progress + 1):
+                        continue
+                    progress = next_index
+                v = (node, progress)
                 nd = d + w
                 if v not in dist or nd < dist[v] - eps:
                     dist[v], count[v], pred[v] = nd, count[u], [(u, i)]
@@ -616,14 +849,14 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                     count[v] += count[u]; pred[v].append((u, i))
         if best is None:
             return {"found": False}
-        reached = [t for t in targets if t in dist and dist[t] <= best + eps]
+        reached = [t for t in dist if t[0] in targets and (not via_count or t[1] == via_count - 1) and dist[t] <= best + eps]
         target = min(reached, key=lambda t: (dist[t], t))
         steps, node = [], target
         while pred.get(node):
             u, i = pred[node][0]
-            steps.append((u, node, i)); node = u
+            steps.append((u[0], node[0], i)); node = u
         return {"found": True, "count": sum(count[t] for t in reached), "length": dist[target], "steps": steps[::-1],
-                "start": node, "target": target}
+                "start": node[0], "target": target[0]}
 
     def nearest_gap(sources: dict[str, float], targets: dict[str, float]) -> float | None:
         a_parts, b_parts = {find(n) for n in sources}, {find(n) for n in targets}
@@ -646,7 +879,8 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                     continue
                 out.append({"kind": "segment", "segment_id": e["segment_id"], "_f": (fa, fb), "_from": u, "_to": v})
             elif e["kind"] == "gap":
-                out.append({"kind": "gap", "bridge_id": e["bridge_id"], "_from": u, "_to": v, "length": e["weight"]})
+                out.append({"kind": "gap", "bridge_id": e["bridge_id"], "_from": u, "_to": v, "length": e["weight"],
+                            **{k: e[k] for k in ("project_basis", "specified_handles") if k in e}})
             else:
                 out.append({"kind": "t", "t": e["t"], "_from": u, "_to": v})
         result = []
@@ -661,7 +895,8 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                 if (lo, hi) != (0.0, 1.0):
                     row["fraction_range"] = [lo, hi]
             elif p["kind"] == "gap":
-                row = {"kind": "gap", "bridge_id": p["bridge_id"], "length_m": p["length"] * f, "from_point": m(a), "to_point": m(b)}
+                row = {"kind": "gap", "bridge_id": p["bridge_id"], "length_m": p["length"] * f, "from_point": m(a), "to_point": m(b),
+                       **{k: p[k] for k in ("project_basis", "specified_handles") if k in p}}
             else:
                 t = p["t"]
                 row = {"kind": "t", "free_end_segment_id": t["segment_id"], "free_end_handle": segs[t["segment_id"]]["handle"],
@@ -692,10 +927,9 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         each label text within the radius belongs to the part(s) nearest to it; two labelled parts in a row (an
         unlabelled part between them is skipped) with no label in common are a review flag."""
         tees = [p for p in pieces if p["kind"] == "t"]
-        if not tees:
-            return
         if req["label_re"] is None:
-            out["review_flags"].append({"flag": "T接未核回路标注", "t_count": len(tees),
+            if tees:
+                out["review_flags"].append({"flag": "T接未核回路标注", "t_count": len(tees),
                                         "detail": "请求没写 circuit_label_pattern，T 接两侧是不是同一回路没核"})
             return
         parts: list[list[dict[str, Any]]] = [[]]
@@ -724,6 +958,7 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
             row["circuit_labels_before"], row["circuit_labels_after"] = sorted(found[k]), sorted(found[k + 1])
         out["circuit_labels_by_part"] = [[{"label": label, "text": item["text"], "layer": item["layer"], "handle": item["handle"],
                                            "distance_m": v * f} for label, (v, item) in sorted(part.items())] for part in found]
+        out["terminal_branch_labels"] = out["circuit_labels_by_part"][-1]
         changes, last = [], None
         for i, labels in enumerate(found):
             if not labels:
@@ -741,6 +976,10 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
     for route in req["routes"]:
         rid = route["route_id"]
         out: dict[str, Any] = {"route_id": rid, "circuit_label": route["circuit_label"], "problems": [], "review_flags": []}
+        extra, via_of, constraint_problems = route_constraints(route)
+        out["problems"].extend(constraint_problems)
+        if route["via_handles"]:
+            out["via_handles"], out["via_basis"] = route["via_handles"], route["via_basis"]
         near = {}
         for which in ("from", "to"):
             end = ends.get((rid, which))
@@ -748,7 +987,8 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                 continue
             if "problem" in end:
                 out[which] = dict(end["spec"])
-                out["problems"].append({"problem": f"{END_NAME[which]}{end['problem']}", "detail": end["detail"]})
+                out["problems"].append({"problem": f"{END_NAME[which]}{end['problem']}", "detail": end["detail"],
+                                        **({"candidates": end["candidates"]} if "candidates" in end else {})})
                 continue
             near[which], best, dropped = attach(end)
             out[which] = end_record(end, near[which], dropped)
@@ -778,7 +1018,7 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
         if set(near["from"]) & set(near["to"]):
             out["problems"].append({"problem": "起终点挂在同一节点", "node_ids": sorted(set(near["from"]) & set(near["to"]))})
             out["status"] = "待办"; results.append(out); continue
-        found = shortest(near["from"], near["to"])
+        found = shortest(near["from"], near["to"], extra, via_of, len(route["via_handles"]))
         if not found["found"]:
             involved = {find(n) for n in [*near["from"], *near["to"]]}
             out["problems"].append({"problem": "网络断开", "nearest_gap_m": nearest_gap(near["from"], near["to"]),
@@ -815,7 +1055,7 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
             out["review_flags"].append({"flag": "经过别的箱", "instance_ids": sorted(passed),
                                         "detail": "回路可能在那只箱断开或串接，核对系统图"})
         start_part = find(found["start"])
-        if len(part_edges[start_part]) >= len(part_nodes[start_part]):
+        if not extra and len(part_edges[start_part]) >= len(part_nodes[start_part]):
             out["review_flags"].append({"flag": "走线网络有环，取最短"})
         check_tees(out, pieces)
         slopes = [x for x in got["plan"]["sloped_lines_in_plan"] if x["segment_id"] in {p.get("segment_id") for p in pieces}]
@@ -839,10 +1079,15 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                                         "detail": "路线在同层共线重合处两段都走过，重合部分计了两次：核图后写 overlap_resolutions"})
         drawn = math.fsum(p["length_m"] for p in pieces if p["kind"] == "segment") - taken
         gaps = math.fsum(p["length_m"] for p in pieces if p["kind"] == "gap")
+        project_gaps = math.fsum(p["length_m"] for p in pieces if p["kind"] == "gap" and p.get("project_basis"))
+        if project_gaps:
+            out["review_flags"].append({"flag": "项目指定桥接补长", "length_m": project_gaps,
+                                        "detail": "未画连接按项目指定端对直线补长，依据与补长另列；不自动升级数量层级"})
         clean = lambda p: {k: v for k, v in p.items() if not k.startswith("drawing_") and not k.startswith("_")}   # noqa: E731
         if twice:
             out["overlaps_walked_twice"] = twice
-        out.update(status="已追踪", path_id=f"DRAWN-{rid}", drawn_length_m=drawn, bridged_gap_length_m=gaps, overlap_deducted_m=taken,
+        out.update(status="已追踪", path_id=f"DRAWN-{rid}", drawn_length_m=drawn, bridged_gap_length_m=gaps,
+                   project_bridged_gap_length_m=project_gaps, overlap_deducted_m=taken,
                    length_m=drawn + gaps, segments=[clean(p) for p in pieces if p["kind"] == "segment"],
                    bridged_gaps=[clean(p) for p in pieces if p["kind"] == "gap"],
                    t_junctions=[clean(p) for p in pieces if p["kind"] == "t"], _pieces=pieces)
@@ -873,6 +1118,8 @@ def trace_routes(drawing: Drawing, req: dict[str, Any]) -> dict[str, Any]:
                           "source_ids": [prefix + s["segment_id"] for s in out["segments"]],
                           "source_handles": handles, "drawn_length_m": out["drawn_length_m"],
                           "bridged_gap_length_m": out["bridged_gap_length_m"], "circuit_label": out["circuit_label"],
+                          "project_bridged_gap_length_m": out["project_bridged_gap_length_m"],
+                          "project_bridges": [p for p in out["bridged_gaps"] if p.get("project_basis")],
                           "partial_segments": [{"segment_id": s["segment_id"], "fraction_range": s["fraction_range"]}
                                                for s in out["segments"] if "fraction_range" in s],
                           "review_flags": [flag["flag"] for flag in out["review_flags"]]})
@@ -1512,6 +1759,10 @@ def write_layer_outputs(args: argparse.Namespace, drawing: Drawing, req: dict[st
         "totals": done["totals"], "checks": done["checks"], "warnings": done["warnings"], "components": done["components"],
         "excluded_segments": [clean(x) for x in done["excluded"]], "segments_crossing_sheets": done["crossing"],
         "feeders": done["feeders"], "l1_routes": done["l1_routes"], "overlaps": done["overlaps"], "todo": done["todo"],
+        "endpoint_instances": [{**{k: row[k] for k in ("physical_id", "block_name")},
+                                "box_m": [v * f for v in row["box"]], "coordinate_unit": "m", "drawing_id": req["drawing_id"],
+                                "source_sha256": (drawing.manifest.get("authoritative_source") or {}).get("sha256")}
+                               for row in (ends_cfg["instances"] if ends_cfg else [])],
         "meaning": "按图层量出的平面线长（只计画出的线，桥接缺口另列；共线重合只扣项目处置为 drop_overlap 的区间）；分量两端按项目给的半径和类别映射归类，"
                    "不按长度分摊，未决、未连单列；归箱只按画出的连线，与系统图回路对账另做",
     }
@@ -1582,7 +1833,7 @@ def main() -> int:
             req = parse_layer_request(raw, args.request.resolve().parent)
             drawing = Drawing(args.cad_manifest.resolve(), req)
             return write_layer_outputs(args, drawing, req, measure_layers(drawing, req))
-        req = parse_request(raw)
+        req = parse_request(raw, args.request.resolve().parent)
         drawing = Drawing(args.cad_manifest.resolve(), req)
         traced = trace_routes(drawing, req)
         graph, got = traced["graph"], traced["collected"]
@@ -1592,7 +1843,8 @@ def main() -> int:
             "schema": RESULT_SCHEMA, "version": VERSION, "status": "REVIEW_REQUIRED" if todo or conflicts else "REFERENCE_ONLY",
             "inputs": {"cad_manifest": str(args.cad_manifest.resolve()), "cad_manifest_sha256": sha256(args.cad_manifest),
                        "source_sha256": (drawing.manifest.get("authoritative_source") or {}).get("sha256"),
-                       "request": str(args.request.resolve()), "request_sha256": sha256(args.request)},
+                       "request": str(args.request.resolve()), "request_sha256": sha256(args.request),
+                       "instance_sources": req["instance_source_files"]},
             "parameters": {"layout": req["layout"], "route_layers": req["route_re"].pattern, "factor_to_output": req["factor"],
                            "unit_source_id": req["unit_source_id"], "scope_bounds": req["bounds"],
                            "tolerances_m": {"snap": req["snap"], "gap": req["gap"], "endpoint": req["endpoint"], "equal_length": req["equal"]},

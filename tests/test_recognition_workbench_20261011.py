@@ -250,6 +250,60 @@ def test_located_unmeasured_hatch_and_spline_stay_unmeasured(tmp_path):
     row=i['objects'][0]
     assert row['entity_type']=='HATCH' and row['geometry_status']=='unsupported_measurement'
     assert row['bbox']==pytest.approx([0,0,100,100]) and row['geometry'] is None and row['raw_length'] is None
+    assert row['measurement_geometry_available'] is False and row['location_status']=='bounded'
+    assert row['location_bbox3d']==pytest.approx([0,0,0,100,100,0])
+
+
+@pytest.mark.parametrize('mode,kept', [('positive',False),('negative',True),('zero',True),('fit_only',True)])
+def test_workbench_uses_only_proven_spline_location_hulls_for_scope(tmp_path,mode,kept):
+    d=ezdxf.new();d.units=4
+    points=[(10000,0),(10100,100),(10200,0),(10300,0)]
+    if mode=='fit_only':
+        d.modelspace().add_spline(points,degree=3)
+    else:
+        spline=d.modelspace().add_open_spline(points,degree=3)
+        spline.weights={'positive':[1,2,1,1],'negative':[1,-1,1,1],'zero':[1,0,1,1]}[mode]
+    i=w.build_index(source(d,tmp_path),scope_bounds=[-1,-1,101,101])
+    assert bool(i['objects']) is kept
+    assert i['inventory']['total']==int(kept)
+    if kept:
+        row=i['objects'][0]
+        assert row['geometry'] is row['raw_length'] is row['bbox'] is None
+        assert row['issues'] and row['geometry_status']=='unresolved'
+    else:
+        assert i['index_scope']['proven_geometry_or_text_anchor_outside_count']==1
+
+
+def test_workbench_unknown_open_hatch_is_retained_without_a_guessed_envelope(tmp_path):
+    d=ezdxf.new();h=d.modelspace().add_hatch()
+    h.paths.add_edge_path().add_line((10000,0),(10100,0))
+    i=w.build_index(source(d,tmp_path),scope_bounds=[-1,-1,101,101])
+    assert len(i['objects'])==1
+    row=i['objects'][0]
+    assert row['bbox'] is row['geometry'] is row['raw_length'] is None and row['issues']
+
+
+def test_workbench_nested_hatch_envelope_preserves_affine_location_and_crossing_scope(tmp_path):
+    d=ezdxf.new();d.units=4
+    leaf=d.blocks.new('LEAF',base_point=(2,3,0));h=leaf.add_hatch()
+    h.paths.add_polyline_path([(0,0),(8,0),(0,4)],is_closed=True)
+    middle=d.blocks.new('MID')
+    inner=middle.add_blockref('LEAF',(5,7),dxfattribs={'rotation':23,'xscale':-2,'yscale':.5})
+    outer=d.modelspace().add_blockref('MID',(1000,2000),dxfattribs={'rotation':37,'xscale':3,'yscale':-.5})
+    src=source(d,tmp_path)
+    # An independent Matrix44 composition bounds the local hull's corners, including the block base point.
+    corners=[outer.matrix44().transform(inner.matrix44().transform((x,y,0))) for x in (0,8) for y in (0,4)]
+    box=[min(p[k] for p in corners) for k in range(3)]+[max(p[k] for p in corners) for k in range(3)]
+    i=w.build_index(src)
+    row=next(r for r in i['objects'] if r['entity_type']=='HATCH')
+    assert row['bbox3d']==pytest.approx(box) and row['location_bbox3d']==pytest.approx(box)
+    assert row['geometry'] is row['raw_length'] is None and row['measurement_geometry_available'] is False
+    assert row['geometry_status']=='unsupported_measurement' and row['source_handle']==h.dxf.handle
+    crossing=[box[0]-1,box[1]-1,box[0]+1,box[4]+1]
+    local=w.build_index(src,scope_bounds=crossing)
+    assert any(r['entity_type']=='HATCH' for r in local['objects'])  # a crossing envelope cannot be pruned by its centre
+    far=w.build_index(src,scope_bounds=[box[3]+10000,box[4]+10000,box[3]+10100,box[4]+10100])
+    assert far['objects']==[]
 
 
 def test_source_excerpt_cannot_cut_mm_into_m(tmp_path):

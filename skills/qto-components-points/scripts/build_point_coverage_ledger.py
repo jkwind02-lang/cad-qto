@@ -27,7 +27,7 @@ from search_negative_evidence import OUTPUT_SCHEMA as SEARCH_SCHEMA, record_prob
 
 SCHEMA = "qto-point-coverage-input/1.0"
 LEDGER_SCHEMA = "qto-point-coverage-ledger/1.0"
-VERSION = "qto-point-coverage-ledger/1.4.0"
+VERSION = "qto-point-coverage-ledger/1.5.0"
 DESTINATIONS = ("已计", "有据排除", "待识别", "版本冲突", "无去向")
 DISPOSITION_DEST = {"adopted": "已计", "merged": "已计", "excluded": "有据排除", "not_applicable": "有据排除",
                     "duplicate_excluded": "有据排除", "unresolved": "待识别"}
@@ -56,7 +56,7 @@ COUNT_KEYS = ("drawing", "handle", "category", "sheet")
 EXCLUSION_KEYS = ("drawing", "handle", "basis")
 TOP_FIELDS = {"schema_version", "scope_id", "drawings", "count_tables", "handle_exclusions", "sheets", "legend_coverage",
               "version_conflicts", "excluded_classes", "auto_exclude_sheet_kinds", "detail_copy_sheets", "search_records",
-              "frame_blocks", "frame_dispositions"}
+              "frame_blocks", "frame_dispositions", "count_overrides"}
 FRAME_DISPOSITIONS = ("封面", "目录", "空白", "说明或图例", "旧版副本", "非本专业底图", "已补进图页表", "其他")
 FRAME_TODO_COLUMNS = ("todo_id", "drawing", "kind", "id", "handle", "block_name", "insert_x", "insert_y", "x1", "y1", "x2", "y2",
                       "placement_basis", "hint")
@@ -69,7 +69,7 @@ XREF_PREFIX_RE = re.compile(r"^(?:[^$]*\$\d+\$)+")   # bound xref names: XREF$0$
 LIST_SPLIT_RE = re.compile(r"[；;，,]")
 CLAIM_SEP = "::"   # matched_symbols "block::category"; AutoCAD block names cannot contain a colon (checkpoint 1, 3.4)
 INSERT_KEYS = ("record_id", "entity_handle", "block_name", "layer", "x", "y", "z", "rotation", "scale_factors",
-               "extrusion", "insert_matrix_wcs")
+               "extrusion", "insert_matrix_wcs", "attributes", "geometry_status", "geometry_issues", "geometry_issue_codes")
 MAX_DEPTH = 16
 
 
@@ -143,6 +143,12 @@ class Ledger:
         self.unconfirmed_detail: Counter[tuple[str, str]] = Counter()
         self.nested: dict[str, tuple[dict[str, Any], list[dict[str, Any]]]] = {}   # drawing -> (block index, unexpanded tops)
         self.expanded: dict[str, Counter[str]] = {}
+        self.neutral_sources: dict[str, Any] = {}
+        self.neutral_source_identities: dict[str, str] = {}
+        self.source_coverage_gaps: list[dict[str, str]] = []
+        self.legend_inventory_gaps: list[dict[str, str]] = []
+        self.source_inventory: dict[tuple[str, str], dict[str, Any]] = {}
+        self.project_corrections: list[dict[str, Any]] = []
 
     def problem(self, check: str, where: str, message: str) -> None:
         self.problems.append({"check": check, "where": where, "message": message})
@@ -167,6 +173,34 @@ class Ledger:
                 self.problem("C-1", str(value), "适配器报告不存在"); continue
             self.files.append({"role": "report", "drawing": drawing, "path": str(report_path), "sha256": sha256(report_path)})
             report = load_json(report_path)
+            source = report.get("neutral_source") or {}
+            manifest_value = source.get("manifest") or report.get("cad_manifest")
+            source_checked = False
+            if manifest_value:
+                manifest_path = Path(str(manifest_value))
+                if not manifest_path.is_absolute():
+                    manifest_path = report_path.parent / manifest_path
+                if manifest_path.is_file():
+                    manifest = load_json(manifest_path)
+                    expected = source.get("source_sha256")
+                    actual = (manifest.get("authoritative_source") or {}).get("sha256")
+                    if expected and expected != actual:
+                        self.problem("C-1", str(report_path), "报告与中性清单来源 SHA256 不一致")
+                    elif not isinstance(actual, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", actual):
+                        pass  # readable files without an original drawing identity do not establish source coverage
+                    elif drawing in self.neutral_source_identities and self.neutral_source_identities[drawing] != actual:
+                        self.problem("C-1", str(report_path), "同图纸的报告引用不同原图身份，不能合并为全覆盖")
+                    else:
+                        loaded = self.neutral_sources.get(drawing) or self.layout(drawing, manifest_path.parent)
+                        if loaded is not None:
+                            self.neutral_sources[drawing] = loaded
+                            self.neutral_source_identities[drawing] = actual
+                            self.files.append({"role": "neutral_manifest", "drawing": drawing,
+                                "path": str(manifest_path), "sha256": sha256(manifest_path)})
+                            source_checked = True
+            if not source_checked:
+                self.source_coverage_gaps.append({"drawing": drawing, "report": str(report_path),
+                    "reason": "该适配器报告缺少可核验的中性来源，未核全图图框及图例行"})
             artifacts = report.get("artifacts") or {}
             disp_path = Path(str(artifacts.get("neutral_instance_dispositions") or ""))
             if not disp_path.is_file() or sha256(disp_path) != artifacts.get("neutral_instance_dispositions_sha256"):
@@ -215,11 +249,15 @@ class Ledger:
                     x, y = ix, iy
                     placed = DYNAMIC_BASIS if row.get("scope_location_basis") == "insertion_anchor_dynamic_state_adjudicated" else INSERT_BASIS
                 top = "/" not in pid
-                self.add(drawing, pid, symbol=str(row.get("block_name") or ""), layer=str(row.get("layer") or ""),
+                entity_type = str(row.get("entity_type") or "INSERT").upper()
+                self.add(drawing, pid, symbol=(str(row.get("block_name") or "") if entity_type == "INSERT" else f"<{entity_type}>"),
+                         kind="块" if entity_type == "INSERT" else "非块", layer=str(row.get("layer") or ""),
                          parent_block=row.get("parent_block"), destination=dest, category=category, basis=basis,
                          x=x, y=y, insert_x=ix, insert_y=iy, placement_basis=placed,
                          box=[float(v) for v in box[:4]] if placed in (GEOMETRY_BASIS, PARTIAL_BASIS) else None,
                          adjudication_id=row.get("adjudication_id"),
+                         original_adapter_disposition={k: row.get(k) for k in
+                             ("disposition", "basis", "rule_ids", "adjudication_id", "merged_into")},
                          handle=pid[len("PT-CAD-"):].upper() if top and pid.startswith("PT-CAD-") else None, top_level=top)
             for oid in report.get("unmatched_recognition_object_ids") or []:
                 self.add(drawing, f"{oid}#未承接", symbol=str(oid), kind="未承接对象", destination="无去向",
@@ -260,11 +298,13 @@ class Ledger:
                     continue
                 entry = blocks.get(str(parent))
                 if entry is None:
-                    entry = blocks[str(parent)] = {"inserts": [], "folder": cad_geometry.DefinitionExtentFolder(
+                    entry = blocks[str(parent)] = {"inserts": [], "texts": [], "folder": cad_geometry.DefinitionExtentFolder(
                         empty, cad_geometry.DYNAMIC_STATE_CODES)}
                 entry["folder"].add(row)
                 if str(row.get("entity_type") or "").upper() == "INSERT":
                     entry["inserts"].append({k: row.get(k) for k in INSERT_KEYS})
+                elif str(row.get("entity_type") or "").upper() in {"TEXT", "MTEXT"} and row.get("text"):
+                    entry["texts"].append({k: row.get(k) for k in ("text", "x", "y", "z", "raw_geometry")})
         with paths["layout_entities"].open(encoding="utf-8") as handle:
             for line in handle:
                 if '"parent_block":null' not in line and '"parent_block": null' not in line:   # block children: handle only
@@ -357,6 +397,7 @@ class Ledger:
         if loaded is None:
             return
         top, in_block, blocks, meta = loaded
+        self.neutral_sources[drawing] = loaded
         for name in sorted(expand_set):
             if name not in blocks:
                 state = meta.get(name)
@@ -482,13 +523,62 @@ class Ledger:
                 handle_id, error = normalize_id(row["handle"])
                 if error:
                     self.problem("C-3", row["_where"], error); continue
-                if drawings.get(drawing) != "tables":
+                if drawings.get(drawing) != "tables" and not (key == "handle_exclusions" and drawings.get(drawing) == "reports"):
                     self.problem("C-3", row["_where"], f"图纸 {drawing} 不在 drawings 里，或不是“中性清单 + 计数表”来源"); continue
                 prev = out[drawing].get(handle_id)
                 if prev is not None:
                     self.problem("C-3", row["_where"], f"同一句柄在{key}里出现两次：{handle_id}（另见 {prev['_where']}）"); continue
                 out[drawing][handle_id] = row
         return out
+
+    def apply_project_corrections(self, excluded):
+        """Coverage destinations only: retain adapter evidence; never create or approve a quantity instance."""
+        by_id = {}
+        for c in self.candidates:
+            normalized, error = normalize_id(c["id"])
+            if not error:
+                by_id[(c["drawing"], normalized)] = c
+        seen = set()
+        specs = self.data.get("count_overrides") or []
+        if not isinstance(specs, list):
+            self.problem("C-3", "count_overrides", "须为数组，每项写 drawing、physical_id、category、basis")
+            return
+        for i, spec in enumerate(specs):
+            where = f"count_overrides[{i}]"
+            if not isinstance(spec, dict) or not all(nonempty(spec.get(k)) for k in ("drawing", "physical_id", "category", "basis")):
+                self.problem("C-3", where, "drawing、physical_id、category、basis 必填"); continue
+            pid, error = normalize_id(spec["physical_id"])
+            key = (spec["drawing"], pid)
+            c = by_id.get(key)
+            if error or self.sources.get(spec["drawing"]) != "reports" or c is None:
+                self.problem("C-3", where, error or "项目补收只能引用 reports 来源中实际存在的唯一实例"); continue
+            if key in seen or pid in excluded.get(spec["drawing"], {}):
+                self.problem("C-3", where, "同一实例重复补收或同时写了项目排除"); continue
+            seen.add(key)
+            original = c.get("original_adapter_disposition") or {}
+            if original.get("disposition") not in {"excluded", "not_applicable", "unresolved"}:
+                self.problem("C-3", where, "只更正适配器排除或未决实例；已计、合并、重复剔除须回适配器核对唯一身份"); continue
+            if c["destination"] == "版本冲突":
+                self.problem("C-3", where, "实例尚有版本冲突，不能用项目补收绕过版本核对"); continue
+            self.project_corrections.append({"drawing": c["drawing"], "physical_id": c["id"],
+                "original_adapter": original, "previous_coverage_destination": c["destination"],
+                "project_destination": "已计", "category": spec["category"], "basis": spec["basis"],
+                "quantity_validation_performed": False})
+            c.update(destination="已计", category=spec["category"], basis=f"项目补收：{spec['basis']}；原处置：{original}")
+        for drawing, rows in excluded.items():
+            if self.sources.get(drawing) != "reports":
+                continue
+            for pid, spec in rows.items():
+                c = by_id.get((drawing, pid))
+                if c is None:
+                    self.problem("C-3", spec["_where"], f"排除编号不在报告候选里：{pid}"); continue
+                if c["destination"] in {"已计", "版本冲突"}:
+                    self.problem("C-3", spec["_where"], "不能用覆盖台账排除已计或版本冲突实例；回适配器核对计数及版本"); continue
+                original = c.get("original_adapter_disposition") or {}
+                self.project_corrections.append({"drawing": drawing, "physical_id": c["id"], "original_adapter": original,
+                    "previous_coverage_destination": c["destination"], "project_destination": "有据排除",
+                    "basis": spec["basis"], "quantity_validation_performed": False})
+                c.update(destination="有据排除", basis=f"项目排除：{spec['basis']}；原处置：{original}")
 
     # ---------- common rules ----------
     def load_sheets(self) -> dict[str, list[dict[str, Any]]]:
@@ -646,8 +736,10 @@ class Ledger:
         by_class = {ex["class_id"]: (ex, block, layer) for ex, block, layer, _ in self.class_rules}
         for i, spec in enumerate(specs):
             where = f"frame_blocks[{i}]"
-            if not isinstance(spec, dict) or nonempty(spec.get("class_id")) == nonempty(spec.get("block_pattern")):
-                self.problem("C-5", where, "每项只写 block_pattern（图框块名正则）或 class_id（excluded_classes 的规则号）之一"); continue
+            if (not isinstance(spec, dict) or
+                    (nonempty(spec.get("class_id")) ==
+                     (nonempty(spec.get("block_pattern")) or nonempty(spec.get("layer_pattern"))))):
+                self.problem("C-5", where, "每项写 class_id，或 block_pattern / layer_pattern（两种正则可同时写，须同时命中）"); continue
             drawing = str(spec.get("drawing") or "").strip()
             if nonempty(spec.get("class_id")):
                 hit = by_class.get(str(spec["class_id"]).strip())
@@ -657,8 +749,9 @@ class Ledger:
                 self.frames.append((drawing or ex["drawing"], block, layer, str(spec["class_id"]).strip()))
             else:
                 block = self.regex(spec.get("block_pattern"), where)
-                if block is not None:
-                    self.frames.append((drawing or "*", block, None, block.pattern))
+                layer = self.regex(spec.get("layer_pattern"), where)
+                if block is not None or layer is not None:
+                    self.frames.append((drawing or "*", block, layer, " & ".join(p.pattern for p in (block, layer) if p is not None)))
 
     def frame_disposition_rules(self) -> None:
         """frame_dispositions (checkpoint 3): the project's answer to one reported frame - a cover, a catalogue, a blank
@@ -709,7 +802,9 @@ class Ledger:
         cannot be checked: listed, not counted as a missing sheet. Report only."""
         if self.data.get("frame_blocks") is None:
             return
-        found = [c for c in self.candidates if self.is_frame(c)]
+        inventory = { (c["drawing"], c["id"]): c for c in self.source_inventory.values() }
+        inventory.update({(c["drawing"], c["id"]): c for c in self.candidates})
+        found = [c for c in inventory.values() if self.is_frame(c)]
         ids = {c["id"] for c in found}
 
         def inside_frame(cid: str) -> bool:
@@ -760,6 +855,8 @@ class Ledger:
                                     "placement_basis": c.get("placement_basis"), "hint": hint})
         for drawing in sorted(d for d, kind in drawings.items() if kind != "legend_only" and not sheets.get(d)):
             own = [t for t in self.frame_todo if t["drawing"] == drawing]
+            if not own and any(c["drawing"] == drawing for c in self.frame_disposed):
+                continue
             self.warnings["frames_without_sheet_table"].append({"drawing": drawing, "frame_count": len(own), "sample_ids": [t["id"] for t in own[:3]],
                                                                 "hint": "这张图没有图页表，图框和图页都没核：写图页表后重算"})
         for key, given in sorted(self.frame_dispositions.items()):
@@ -776,7 +873,8 @@ class Ledger:
         self.frame_coverage = {"checked": True, "rules": [label for *_, label in self.frames], "frame_count": len(frames),
                                "nested_frames_skipped": len(found) - len(frames), "uncovered_frame_count": uncovered,
                                "unchecked_frame_count": unchecked, "todo_count": len(self.frame_todo),
-                               "disposed": self.frame_disposed, "conclusion": conclusion}
+                               "disposed": self.frame_disposed, "source_coverage_gaps": self.source_coverage_gaps,
+                               "conclusion": conclusion if not self.source_coverage_gaps else conclusion + "；部分来源未核，不能证明全图覆盖"}
 
     @staticmethod
     def class_hits(ex, block, layer, kind, c) -> bool:
@@ -839,12 +937,136 @@ class Ledger:
             return None
 
     # ---------- legend coverage ----------
+    def prepare_source_inventory(self, sheets):
+        """Raw neutral top-level INSERT inventory supplements scoped reports for frames and legend evidence only."""
+        existing = {(c["drawing"], c["id"]): c for c in self.candidates}
+        for drawing, (top, _, blocks, meta) in self.neutral_sources.items():
+            memo = {}
+            for handle, row in top.items():
+                if row.get("entity_type") != "INSERT":
+                    continue
+                name = str(row.get("block_name") or "")
+                if "array_instances_not_expanded" in (row.get("geometry_issue_codes") or []) and (
+                        self.data.get("frame_blocks") is not None or any(s["kind"] == LEGEND_KIND for s in sheets.get(drawing, []))):
+                    self.source_coverage_gaps.append({"drawing": drawing,
+                        "reason": f"来源块 PT-CAD-{handle} 是未展开阵列，不能用首个单元证明图框/图例全覆盖"})
+                point = (row.get("x"), row.get("y"))
+                x, y, basis, box = self.placed(blocks, meta, memo, name, self.matrix(row, meta), point)
+                c = {"drawing": drawing, "id": f"PT-CAD-{handle}", "symbol": name, "kind": "块",
+                     "layer": str(row.get("layer") or ""), "parent_block": None, "handle": handle, "top_level": True,
+                     "x": x, "y": y, "insert_x": point[0], "insert_y": point[1], "placement_basis": basis, "box": box,
+                     "sheet": UNSHEETED, "sheet_title": UNSHEETED, "sheet_kind": None,
+                     "destination": "有据排除", "category": None, "basis": "仅供图框/图例清点的来源记录"}
+                s = self.locate(sheets, drawing, x, y)
+                if s:
+                    c.update(sheet=s["sheet_id"], sheet_title=s["title"], sheet_kind=s["kind"])
+                self.source_inventory[(drawing, c["id"])] = c
+                target = existing.get((drawing, c["id"]))
+                if target and self.sources.get(drawing) == "reports" and not target.get("box") and target.get("placement_basis") != GUARD_BASIS:
+                    target.update({k: c[k] for k in ("x", "y", "box", "placement_basis")})
+
+    @staticmethod
+    def legend_label(child, entry):
+        attrs = child.get("attributes") or {}
+        if isinstance(attrs, dict):
+            if nonempty(attrs.get("A")):
+                return attrs["A"].strip()
+            values = [v.strip() for v in attrs.values() if nonempty(v)]
+            if len(values) == 1:
+                return values[0]
+        x, y = child.get("x"), child.get("y")
+        matches = []
+        if x is not None and y is not None:
+            for text in entry.get("texts", []):
+                if text.get("x") is None or text.get("y") is None:
+                    continue
+                height = float((text.get("raw_geometry") or {}).get("height") or 0)
+                if abs(text["y"]-y) <= max(height*1.5, 1e-6):
+                    matches.append((abs(text["x"]-x), str(text["text"])))
+        matches.sort()
+        if matches and (len(matches) == 1 or matches[0][0] < matches[1][0]):
+            return matches[0][1]
+        return ""
+
+    def legend_source_copies(self):
+        copies = []
+        inventory = dict(self.source_inventory)
+        # Sources lacking a verifiable neutral inventory remain visible but cannot establish completeness.
+        for c in self.candidates:
+            inventory.setdefault((c["drawing"], c["id"]), c)
+        for c in inventory.values():
+            if c["kind"] != "块" or not c.get("top_level"):
+                continue
+            legend_sheets = [s for s in self.sheets.get(c["drawing"], []) if s["kind"] == LEGEND_KIND]
+            if not legend_sheets:
+                continue
+            if self.is_frame(c):
+                if c["sheet_kind"] == LEGEND_KIND:
+                    copies.append(c)
+                continue
+            loaded = self.neutral_sources.get(c["drawing"])
+            if not loaded:
+                if c["sheet_kind"] == LEGEND_KIND:
+                    copies.append(c)
+                continue
+            top, _, blocks, meta = loaded
+            row = top.get(c["handle"])
+            entry = blocks.get(c["symbol"], {})
+            children = entry.get("inserts", [])
+            if not children or (len(children) == 1 and not entry.get("texts") and not children[0].get("attributes")):
+                descendant = str(children[0].get("block_name") or "") if children else ""
+                seen = set()
+                while descendant and descendant not in seen:
+                    seen.add(descendant)
+                    nested = blocks.get(descendant, {}).get("inserts", [])
+                    if len(nested) > 1:
+                        box = c.get("box")
+                        possible = [s for s in legend_sheets if box is None or not (
+                            box[2] < s["bounds"][0] or box[0] > s["bounds"][2] or
+                            box[3] < s["bounds"][1] or box[1] > s["bounds"][3])]
+                        for possible_sheet in possible:
+                            self.legend_inventory_gaps.append({"drawing": c["drawing"], "sheet": possible_sheet["sheet_id"],
+                                "reason": f"图例 {c['id']} 的多个符号藏在更深容器中，第一层不能证明逐行覆盖"})
+                        break
+                    descendant = str(nested[0].get("block_name") or "") if nested else ""
+                if c["sheet_kind"] == LEGEND_KIND:
+                    copies.append({**c, "label_text": self.legend_label(row or {}, {})})
+                continue
+            matrix = self.matrix(row, meta) if row else None
+            if matrix is None:
+                self.legend_inventory_gaps.append({"drawing": c["drawing"], "sheet": c["sheet"],
+                    "reason": f"图例容器 {c['id']} 缺少有效变换，第一层图例行未完整读取"})
+                continue
+            memo = {}
+            for child in children:
+                handle, name = str(child.get("entity_handle") or ""), str(child.get("block_name") or "")
+                child_matrix = self.matrix(child, meta)
+                if not handle or child_matrix is None or child.get("x") is None or child.get("y") is None:
+                    self.legend_inventory_gaps.append({"drawing": c["drawing"], "sheet": c["sheet"],
+                        "reason": f"图例容器 {c['id']} 内有缺少身份或变换的子块"})
+                    continue
+                world = cad_geometry.compose_matrix(matrix, child_matrix)
+                point = cad_geometry.transform_point([child["x"], child["y"], child.get("z") or 0.], matrix)
+                x, y, basis, box = self.placed(blocks, meta, memo, name, world, point)
+                child_sheet = self.locate(self.sheets, c["drawing"], x, y)
+                if child_sheet is None or child_sheet["kind"] != LEGEND_KIND:
+                    continue
+                if "array_instances_not_expanded" in (child.get("geometry_issue_codes") or []):
+                    self.legend_inventory_gaps.append({"drawing": c["drawing"], "sheet": child_sheet["sheet_id"],
+                        "reason": f"图例容器 {c['id']} 内有未逐实例展开的阵列，图例行数未核全"})
+                copies.append({**c, "id": f"{c['id']}/{c['symbol']}/CAD-{handle}",
+                    "handle": f"{c['id']}/{c['symbol']}/CAD-{handle}", "symbol": name,
+                    "x": x, "y": y, "insert_x": point[0], "insert_y": point[1], "box": box,
+                    "placement_basis": basis, "label_text": self.legend_label(child, entry), "top_level": False,
+                    "sheet": child_sheet["sheet_id"], "sheet_title": child_sheet["title"], "sheet_kind": LEGEND_KIND})
+        return copies
+
     def plan_candidates(self) -> dict[str, list[dict[str, Any]]]:
         """Block candidates that count as plan instances: not on legend or detail sheets, nor on auto-excluded kinds."""
         skip = {LEGEND_KIND, DETAIL_KIND, *self.auto_kinds}
         plan: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for c in self.candidates:
-            if c["kind"] == "块" and c["sheet_kind"] not in skip:
+            if c["kind"] in {"块", "非块"} and c["sheet_kind"] not in skip:
                 plan[c["drawing"]].append(c)
         return plan
 
@@ -852,8 +1074,8 @@ class Ledger:
         auto: list[dict[str, str]] = []
         by_drawing: dict[str, list[dict[str, Any]]] = defaultdict(list)
         frames_here: set[tuple[str, str]] = set()
-        for c in self.candidates:
-            if c["kind"] == "块" and c.get("top_level") and c["sheet_kind"] == LEGEND_KIND:
+        for c in self.legend_source_copies():
+            if c["kind"] == "块" and c["sheet_kind"] == LEGEND_KIND:
                 if self.is_frame(c):            # a frame or title block on the legend sheet is no legend row (1945)
                     self.legend_frames[c["drawing"]] += 1
                     frames_here.add((c["drawing"], (c["handle"] or "").upper()))
@@ -883,7 +1105,7 @@ class Ledger:
                 same = [p for p in plan_of[drawing] if base_symbol(p["symbol"]) == base_symbol(c["symbol"])]
                 cats = {p["category"] for p in same if p["destination"] == "已计"}
                 prefill = bool(same) and all(p["destination"] == "已计" for p in same) and len(cats) == 1
-                auto.append({"drawing": drawing, "legend_row": number, "legend_handle": c["handle"] or "", "legend_text": "",
+                auto.append({"drawing": drawing, "legend_row": number, "legend_handle": c["handle"] or "", "legend_text": c.get("label_text") or "",
                              "symbol": c["symbol"], "symbol_kind": "块", "matched_symbols": "", "plan_count": str(len(same)),
                              "count_source": "自动", "variant_flag": "", "destination": "已计" if prefill else "",
                              "target_or_reason": next(iter(cats)) if prefill else "", "suspected_category": "", "search_record_id": ""})
@@ -922,6 +1144,18 @@ class Ledger:
             if filled_count and filled_count != row["plan_count"]:
                 self.warnings["plan_count_conflicts"].append({"drawing": row["drawing"], "legend_row": row["legend_row"],
                                                               "filled": filled_count, "automatic": row["plan_count"]})
+        for drawing in self.data.get("drawings") or []:
+            if not isinstance(drawing, dict):
+                continue
+            name = drawing.get("drawing")
+            legend_sheets = [s for s in getattr(self, "sheets", {}).get(name, []) if s["kind"] == LEGEND_KIND]
+            for sheet in legend_sheets:
+                hand_rows = len(legend_sheets) == 1 and any(r["drawing"] == name for r in filled)
+                if not hand_rows and not any(c["sheet"] == sheet["sheet_id"] for c in by_drawing.get(name, [])):
+                    gap = {"drawing": name, "sheet": sheet["sheet_id"],
+                           "reason": "图例页没有可列的图例行（可能在容器块内或缺少来源），图例逐行覆盖未核"}
+                    self.legend_inventory_gaps.append(gap)
+                    self.warnings["legend_sheets_without_rows"].append(gap)
         return rows
 
     def match_legend(self, rows: list[dict[str, Any]], plan_of: dict[str, list[dict[str, Any]]]) -> None:
@@ -933,7 +1167,7 @@ class Ledger:
         records_of: dict[str, set[str]] = defaultdict(set)
         categories_of: dict[tuple[str, str], set[str]] = defaultdict(set)
         for c in self.candidates:
-            if c["kind"] == "块":
+            if c["kind"] in {"块", "非块"}:
                 names_of[c["drawing"]] |= {c["symbol"], base_symbol(c["symbol"])}
                 if c.get("adjudication_id"):
                     records_of[c["drawing"]].add(str(c["adjudication_id"]))
@@ -968,7 +1202,8 @@ class Ledger:
             if (r["_claims"] is None and r["symbol_kind"] == "块" and r["legend_handle"] and r["destination"] == "已计"
                     and r["target_or_reason"] and targets[(r["drawing"], r["target_or_reason"])] == 1):
                 names = sorted({p["symbol"] for p in plan_of[r["drawing"]]
-                                if p["destination"] == "已计" and p["category"] == r["target_or_reason"]} - {r["symbol"]})
+                                if p["kind"] == "块" and p["destination"] == "已计" and
+                                p["category"] == r["target_or_reason"]} - {r["symbol"]})
                 if names:
                     r["_claims"], r["matched_symbols"], r["count_source"] = names, "；".join(names), "类别一对一默认"
         # block::category claims split one block name's instances between rows by category (1945); a row claiming its
@@ -1112,12 +1347,16 @@ class Ledger:
             count = int(r["plan_count"]) if re.fullmatch(r"\d+", r["plan_count"]) else 0
             unconfirmed = count == 0 and not r["search_record_id"]   # every destination, not only 不计 (cross-check B4A-B1-01)
             issue = self.search_issue(r, self.search_records) if count == 0 and r["search_record_id"] else None
+            physical_nonblocks = [c for c in self.candidates if c["drawing"] == r["drawing"] and c["kind"] == "非块"
+                and (c["symbol"] == r["symbol"] or (c["category"] and c["category"] == r["target_or_reason"]))]
+            if r["symbol_kind"] == "非块" and count > 0 and not r.get("_claims") and physical_nonblocks:
+                r["_conflict"] = "本图已有同类非块唯一实例，须用 matched_symbols 或 @识别记录认领，避免图例汇总重复列候选"
             if not r["destination"] or unconfirmed or issue or r.get("_conflict"):
                 reason = (r["_conflict"] if r.get("_conflict") else
                           "实例数为 0、没有检索记录（待确认）" if unconfirmed and r["destination"] else
                           issue if issue and r["destination"] else "去向为空")
                 pending.append({"drawing": r["drawing"], "legend_row": r["legend_row"], "symbol": r["symbol"], "reason": reason})
-            if r["symbol_kind"] != "非块" or count == 0 or r.get("_claims"):
+            if r["symbol_kind"] != "非块" or count == 0 or r.get("_claims") or physical_nonblocks:
                 continue   # a non-block row matched to blocks: those blocks are already candidates
             dest = {"已计": "已计", "归他专业": "有据排除", "不计": "有据排除", "待识别": "待识别", "": "无去向"}[r["destination"]]
             basis = {"已计": "", "归他专业": f"归他专业：{r['target_or_reason']}", "不计": f"不计：{r['target_or_reason']}",
@@ -1172,8 +1411,11 @@ class Ledger:
                 self.from_tables(d["drawing"], self.path(str(d["neutral_dir"])), counted.get(d["drawing"], {}),
                                  excluded.get(d["drawing"], {}), {str(v).strip() for v in d.get("expand_blocks") or []})
         sheets = self.load_sheets()
+        self.sheets = sheets
+        self.prepare_source_inventory(sheets)
         self.place(sheets)
         self.apply_rules(self.sheet_kind_rules(sheets, drawings))
+        self.apply_project_corrections(excluded)
         self.frame_rules()
         self.frame_disposition_rules()
         self.check_frames(sheets, drawings)
@@ -1224,6 +1466,10 @@ class Ledger:
         placement = Counter(c.get("placement_basis") or "无坐标" for c in self.candidates if c["kind"] in ("块", "非块"))
         return {"by_destination": {d: by_dest.get(d, 0) for d in DESTINATIONS}, "candidate_total": total,
                 "by_drawing": by_drawing, "uncovered_drawings": uncovered, "legend_rows_without_destination": pending,
+                "source_coverage_gaps": self.source_coverage_gaps, "legend_inventory_gaps": self.legend_inventory_gaps,
+                "project_corrections": self.project_corrections,
+                "adapter_excluded_project_counted": sum(r["project_destination"] == "已计" and
+                    r["original_adapter"].get("disposition") in {"excluded", "not_applicable"} for r in self.project_corrections),
                 "class_completeness": self.completeness(),
                 "auto_exclude_sheet_kinds": self.auto_kinds,
                 "auto_excluded_by_sheet_kind": dict(sorted(self.auto_excluded.items())),
@@ -1282,7 +1528,8 @@ def main(argv: list[str] | None = None) -> int:
                          ensure_ascii=False), file=sys.stderr)
         return 2
     complete = (not result["by_destination"]["待识别"] and not result["by_destination"]["无去向"]
-                and not result["uncovered_drawings"] and not result["legend_rows_without_destination"])
+                and not result["uncovered_drawings"] and not result["legend_rows_without_destination"]
+                and not result["source_coverage_gaps"] and not result["legend_inventory_gaps"] and not result["frame_todo"])
     out = args.output_dir.resolve(); out.mkdir(parents=True, exist_ok=True)
     legend_rows = result.pop("legend_rows")
     report = {"schema_version": LEDGER_SCHEMA, "script_version": VERSION, "scope_id": ledger.data.get("scope_id"),

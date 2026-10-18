@@ -59,7 +59,8 @@ def package(tmp_path):
     wide = doc.blocks.new('BASEMAP_W'); wide.add_line((90000, 0), (110000, 0))
     # K3 guard: drawing 200 m above the insertion point; HSYM also holds a fill, so its extent is incomplete
     hsym = doc.blocks.new('HSYM'); hsym.add_line((0, 200000), (1000, 200000))
-    fill = hsym.add_hatch(); fill.paths.add_polyline_path([(0, 200000), (1000, 200000), (1000, 201000)], is_closed=True)
+    # T13 locates closed triangles; this test specifically needs an unknown fill to exercise the insertion guard.
+    fill = hsym.add_hatch(); fill.paths.add_edge_path().add_line((0, 200000), (1000, 200000))
     lsym = doc.blocks.new('LSYM'); lsym.add_line((0, 200000), (1000, 200000))
     tagged = {}
     tagged['a1'] = m.add_line((1000, 1000), (50000, 1000), dxfattribs={'layer': 'PIPE'})

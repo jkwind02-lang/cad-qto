@@ -663,7 +663,8 @@ def transform_geometry(geometry, matrix):
 def transform_row(row, matrix, instance_path, target_layout):
     result = copy.deepcopy(row)
     original = str(row.get("record_id") or "NO-ID")
-    result.update(source_definition_record_id=original, record_id=f"CADINST-{instance_path}/{original}", instance_path=instance_path, layout=target_layout)
+    definition_id = str(row.get("source_definition_record_id") or original)
+    result.update(source_definition_record_id=definition_id, record_id=f"CADINST-{instance_path}/{definition_id}", instance_path=instance_path, layout=target_layout)
     result["candidate_physical_id"] = result["record_id"]
     result["instance_transform"] = list(matrix16(matrix))
     if row.get("external_reference"):
@@ -694,13 +695,134 @@ def transform_row(row, matrix, instance_path, target_layout):
         if box is not None:
             points = [transform_point([x,y,z], matrix) for x in (box[0],box[3]) for y in (box[1],box[4]) for z in (box[2],box[5])]
             result["bbox"] = [min(p[0] for p in points),min(p[1] for p in points),max(p[0] for p in points),max(p[1] for p in points)]
+            result["bbox3d"] = [min(p[i] for p in points) for i in range(3)]+[max(p[i] for p in points) for i in range(3)]
         else:
             # Unknown bounds must not silently discard an in-scope instance.
             result["bbox"] = None
+            result["bbox3d"] = None
+    if row.get("location_schema_version") == LOCATION_SCHEMA:
+        result["location_bbox3d"] = transform_bounds(row.get("location_bbox3d"), matrix)
     return result
 
 
-def entity_geometry(entity: Any):
+LOCATION_SCHEMA = "qto-cad-location-evidence/1.0"
+
+
+def _point_hull(points):
+    points = [xyz(p) for p in points]
+    return ([min(p[i] for p in points) for i in range(3)] +
+            [max(p[i] for p in points) for i in range(3)]) if points else None
+
+
+def _spline_control_hull(points, degree, knots, weights):
+    """Only valid positive-weight B-splines have the control-hull guarantee; fit points do not."""
+    points, knots, weights = list(points), list(knots), list(weights)
+    if (degree < 1 or len(points) <= degree or len(knots) != len(points) + degree + 1
+            or not all(math.isfinite(float(k)) for k in knots)
+            or any(a > b for a, b in zip(knots, knots[1:]))
+            or not knots[degree] < knots[len(points)]
+            or (weights and (len(weights) != len(points) or
+                            any(not math.isfinite(float(w)) or float(w) <= 0 for w in weights)))):
+        return None
+    return _point_hull(points)
+
+
+def _hatch_location(entity):
+    """Conservative WCS boundary hull, never a filled area or a measurable centreline.
+
+    Curved edges use their full conic envelope; spline edges require the positive-weight hull guarantee.
+    One unbounded path makes the whole hatch unknown, without discarding any other entity.
+    """
+    from ezdxf.math import bulge_to_arc
+    from ezdxf.entities.boundary_paths import PolylinePath, LineEdge, ArcEdge, EllipseEdge, SplineEdge
+    ocs, points = entity.ocs(), []
+    z = float(entity.dxf.elevation.z)
+    def point(p):
+        points.append(xyz(ocs.to_wcs((p[0], p[1], z))))
+    def ellipse(center, major, ratio):
+        c = xyz(ocs.to_wcs((center[0], center[1], z)))
+        u = xyz(ocs.to_wcs((major[0], major[1], 0)))
+        v = xyz(ocs.to_wcs((-major[1]*ratio, major[0]*ratio, 0)))
+        radii = [math.hypot(u[i], v[i]) for i in range(3)]
+        points.extend([[c[i]-radii[i] for i in range(3)], [c[i]+radii[i] for i in range(3)]])
+    if not entity.paths:
+        return None
+    for path in entity.paths:
+        if isinstance(path, PolylinePath):
+            vertices = list(path.vertices)
+            if len(vertices) < 3 or not path.is_closed:
+                return None
+            for a, b in zip(vertices, vertices[1:] + vertices[:1]):
+                point(a)
+                if a[2]:
+                    c, _, _, r = bulge_to_arc(a[:2], b[:2], a[2])
+                    ellipse(c, (r, 0), 1.)
+        else:
+            if not path.edges:
+                return None
+            ends = [(xyz(edge.real_start_point), xyz(edge.real_end_point)) for edge in path.edges]
+            if any(math.dist(a[1], b[0]) > 1e-7 for a, b in zip(ends, ends[1:] + ends[:1])):
+                return None  # open or disconnected edge loops do not establish a filled boundary
+            for edge in path.edges:
+                if isinstance(edge, LineEdge):
+                    point(edge.start); point(edge.end)
+                elif isinstance(edge, ArcEdge):
+                    if not math.isfinite(edge.radius) or edge.radius <= 0:
+                        return None
+                    ellipse(edge.center, (edge.radius, 0), 1.)
+                elif isinstance(edge, EllipseEdge):
+                    if not math.isfinite(edge.ratio) or edge.ratio <= 0:
+                        return None
+                    ellipse(edge.center, edge.major_axis, edge.ratio)
+                elif isinstance(edge, SplineEdge):
+                    hull = _spline_control_hull(edge.control_points, edge.degree, edge.knot_values, edge.weights)
+                    if hull is None:
+                        return None
+                    for x in (hull[0], hull[3]):
+                        for y in (hull[1], hull[4]):
+                            point((x, y))
+                else:
+                    return None
+    return _point_hull(points)
+
+
+def _insert_location(entity, cache, stack):
+    name = str(entity.dxf.name)
+    if name in stack or len(stack) >= 16:
+        return None
+    block = entity.block()
+    if block is None:
+        return None
+    if any(not attrib.is_invisible for attrib in entity.attribs):
+        return None  # rendered instance attributes need glyph extents, not just their insertion points
+    if name not in cache:
+        boxes = []
+        for child in block:
+            # Invisible attribute definitions are not rendered block geometry. Text glyph extents are unknown.
+            if child.dxftype() == "ATTDEF" and child.is_invisible:
+                continue
+            if child.dxftype() in {"TEXT", "MTEXT", "ATTRIB", "ATTDEF"}:
+                cache[name] = None
+                return None
+            facts = entity_geometry(child, location_cache=cache, location_stack=(*stack, name))
+            box = facts.get("location_bbox3d") or facts.get("bbox3d")
+            if not _valid_box3(box) or (facts.get("geometry") is None and facts.get("location_status") != "bounded"):
+                cache[name] = None
+                return None
+            boxes.append(box)
+        cache[name] = ([min(b[i] for b in boxes) for i in range(3)] +
+                       [max(b[i+3] for b in boxes) for i in range(3)]) if boxes else None
+    box = cache[name]
+    if box is None:
+        return None
+    m = entity.matrix44()
+    columns = [m.transform_direction(p) for p in ((1.,0.,0.), (0.,1.,0.), (0.,0.,1.))]
+    zero = m.transform((0.,0.,0.))
+    matrix = [float(columns[j][i]) if j < 3 else float(zero[i]) for i in range(3) for j in range(4)] + [0.,0.,0.,1.]
+    return transform_bounds(box, matrix)
+
+
+def entity_geometry(entity: Any, *, location_cache=None, location_stack=()):
     if entity.dxftype() in ('ACAD_PROXY_ENTITY','ACAD_PROXY_OBJECT') or entity.dxftype().startswith('TCH_'):
         from cad_native import native_geometry_facts
         return native_geometry_facts(entity)
@@ -716,6 +838,7 @@ def entity_geometry(entity: Any):
     extrusion = xyz(entity.dxf.get("extrusion", (0, 0, 1))) if entity.dxf.is_supported("extrusion") else None
     raw["extrusion"] = extrusion
     evidence_points = []
+    location_box, location_basis, location_error = None, None, None
     def line(a, b):
         parts.append({"kind": "line", "start": xyz(a), "end": xyz(b)})
     def arc(center, u, v, start, sweep):
@@ -845,12 +968,24 @@ def entity_geometry(entity: Any):
         anchor = evidence_points[0] if evidence_points else xyz(entity.dxf.insert)
     elif kind=="SPLINE":
         raw.update(control_points=[xyz(p) for p in entity.control_points],fit_points=[xyz(p) for p in entity.fit_points],knots=list(entity.knots),weights=list(entity.weights),degree=int(entity.dxf.degree))
+        location_box = _spline_control_hull(raw["control_points"], raw["degree"], raw["knots"], raw["weights"])
+        location_basis = "spline_control_hull" if location_box is not None else None
+        if location_box is None:
+            location_error = "控制数据不满足正权重B样条凸包条件；拟合点不作保守外框"
         unresolved("spline_not_measured", "样条保留原始控制数据；本测量器不以控制折线或弦长冒充曲线", "native_or_exact_spline_measurement_required")
     elif kind=="HATCH":
         # HATCH is intentionally measured by the existing surface adapter. It
         # must not be presented as a neutral curve, or as an extraction crash.
         capability = "specialized_adapter_required"
-        raw.update(boundary_path_count=len(entity.paths), hatch_style=int(entity.dxf.hatch_style))
+        raw.update(boundary_path_count=len(entity.paths), hatch_style=int(entity.dxf.hatch_style),
+                   solid_fill=bool(entity.dxf.solid_fill))
+        try:
+            location_box = _hatch_location(entity)
+            location_basis = "hatch_boundary_control_hull" if location_box is not None else None
+            if location_box is None:
+                location_error = "边界不完整或不满足保守外框条件；定位仍未知"
+        except (ValueError, TypeError, AttributeError, IndexError, ArithmeticError) as exc:
+            location_error = f"{type(exc).__name__}: {exc}"
         actions.append("qto-surfaces-envelope/scripts/extract_surface_regions.py")
     elif kind=="POINT":
         capability = "point_evidence"
@@ -862,6 +997,12 @@ def entity_geometry(entity: Any):
                 anchor=xyz(value)
                 break
         unresolved("entity_type_not_supported", f"{kind}尚无中性几何解析器；保留对象身份，不将未取得的几何视为零", "native_geometry_read_required")
+    if kind == "INSERT" and not issues:
+        try:
+            location_box = _insert_location(entity, {} if location_cache is None else location_cache, location_stack)
+            location_basis = "insert_definition_control_envelope" if location_box is not None else None
+        except (ValueError, TypeError, AttributeError, IndexError, ArithmeticError) as exc:
+            location_error = f"{type(exc).__name__}: {exc}"
     geometry={"schema":GEOMETRY_SCHEMA,"coordinate_system":"WCS","parts":parts,"closed":closed} if parts else None
     summary=summarize(geometry) if geometry else {"start":None,"end":None,"bbox":None,"bbox3d":None,"length":None,"signature":None,"length_error_estimate":None}
     anchor=anchor or summary.get("anchor")
@@ -878,6 +1019,11 @@ def entity_geometry(entity: Any):
         hi = [max(p[i] for p in evidence_points) for i in range(3)]
         summary["bbox3d"] = lo + hi
         summary["bbox"] = [lo[0], lo[1], hi[0], hi[1]]
+    if location_box is not None:
+        summary["bbox3d"] = location_box
+        summary["bbox"] = [location_box[0], location_box[1], location_box[3], location_box[4]]
+        if kind != "INSERT":
+            anchor = [(location_box[i]+location_box[i+3])/2 for i in range(3)]
     if geometry is not None:
         capability = "measurable_curve"
     elif kind in MEASURABLE_CURVE_TYPES and not issues:
@@ -890,6 +1036,9 @@ def entity_geometry(entity: Any):
                    recommended_actions=actions,geometry_issues=issues,
                    insert_matrix_wcs=insert_matrix,extrusion=extrusion,
                    external_reference=external_reference)
+    summary.update(location_schema_version=LOCATION_SCHEMA, location_basis=location_basis,
+                   location_bbox3d=location_box, location_status="bounded" if location_box is not None else "unknown",
+                   location_error=location_error, measurement_geometry_available=geometry is not None)
     return summary
 
 
@@ -931,7 +1080,8 @@ def is_empty_definition(item: Any) -> bool:
 
 def _valid_box3(box):
     return (isinstance(box, (list, tuple)) and len(box) == 6
-            and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in box))
+            and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in box)
+            and all(box[i] <= box[i+3] for i in range(3)))
 
 
 def definition_extent(name, definitions, origins, max_depth=16, cache=None, stack=(), empty=frozenset(),
@@ -1005,6 +1155,9 @@ def extent_row_kind(row, empty=frozenset(), allowed_insert_codes=frozenset()):
         if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in anchor):
             return "unknown", None
         return "annotation", [*anchor, *anchor]
+    if (not is_insert and row.get("location_schema_version") == LOCATION_SCHEMA
+            and row.get("location_status") == "bounded" and _valid_box3(row.get("location_bbox3d"))):
+        return "solid", list(row["location_bbox3d"])
     if entity_type in EXTENT_FILL_TYPES and (unsupported or row.get("geometry") is None or not _valid_box3(row.get("bbox3d"))):
         return "fill", None
     if not is_insert and row.get("geometry") is None and _valid_box3(row.get("bbox3d")):

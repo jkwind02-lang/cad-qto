@@ -27,11 +27,12 @@ from search_negative_evidence import MTEXT_CODE
 import qto_cad_geometry as cad_geometry
 import qto_segment_graph as segment_graph
 from qto_actor_identity import is_model_identity
+from qto_spatial import BoundsIndex
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
 
-VERSION = "qto-component-neutral-adapter/1.9.3"
+VERSION = "qto-component-neutral-adapter/1.10.1"
 # Only these two codes can be released by a dynamic_state_adjudication on an include or exclude rule (registration
 # 20261016-1709; exclude added after checkpoint 1);
 # arrays, xrefs and missing definitions stay unresolved whatever the rule says.
@@ -238,10 +239,16 @@ def normalize_rules(values: Any, entries: dict[str, dict[str, Any]], evidence_id
         decision = text(rule.get("decision"), f"{rule_id}.decision")
         if decision not in {"include", "exclude", "container", "unresolved"}:
             fail(f"{rule_id}.decision 无效")
+        entity_types = rule.get("entity_types", ["INSERT"])
+        if not isinstance(entity_types, list) or not entity_types or any(kind not in ("INSERT", "HATCH") for kind in entity_types):
+            fail(f"{rule_id}.entity_types 只能为 INSERT、HATCH 的非空数组")
+        if "HATCH" in entity_types and (decision == "container" or rule.get("text_condition") or rule.get("dynamic_state_adjudication")):
+            fail(f"{rule_id} HATCH 规则不支持 container、旁注或动态块状态；按实体/图层及识别记录明确处置")
         rule.update(
             {
                 "rule_id": rule_id,
                 "decision": decision,
+                "entity_types": set(entity_types),
                 "priority": int(rule.get("priority", 0)),
                 "block_re": compile_pattern(rule.get("block_pattern", ".*"), f"{rule_id}.block_pattern"),
                 "layer_re": compile_pattern(rule.get("layer_pattern", ".*"), f"{rule_id}.layer_pattern"),
@@ -303,6 +310,8 @@ def text_condition(raw: Any, rule_id: str, decision: str) -> dict[str, Any] | No
         fail(f"{label}.role 只能是 classify（只分型的旁注可以几只候选共用），不写就是不共用")
     if role == "classify" and as_key:
         fail(f"{label}.role 为 classify 时不能作实例键（实例键的旁注一律不共用）")
+    if leader and leader["allow_shared_text"] and role != "classify":
+        fail(f"{label}.leader.allow_shared_text 只用于 role=classify 的范围引注，不产生逐台实例键")
     return {"pattern": compile_pattern(raw.get("pattern"), f"{label}.pattern"), "radius": radius,
             "layer_re": compile_pattern(raw.get("layer_pattern", ".*"), f"{label}.layer_pattern"),
             "basis": text(raw.get("basis"), f"{label}.basis"), "as_instance_key": as_key, "leader": leader,
@@ -332,7 +341,11 @@ def leader_condition(raw: Any, label: str) -> dict[str, Any]:
     most = raw.get("max_segments", LEADER_MAX_SEGMENTS)
     if isinstance(most, bool) or not isinstance(most, int) or most < 1:
         fail(f"{label}.max_segments 必须是正整数")
-    return {"layer_re": layer_re, "touch_tolerance": touch, "text_tolerance": reach, "snap_tolerance": snap, "max_segments": most}
+    shared = raw.get("allow_shared_text", False)
+    if not isinstance(shared, bool):
+        fail(f"{label}.allow_shared_text 必须为 true 或 false")
+    return {"layer_re": layer_re, "touch_tolerance": touch, "text_tolerance": reach, "snap_tolerance": snap,
+            "max_segments": most, "allow_shared_text": shared}
 
 
 def clean_text(value: Any) -> str:
@@ -340,12 +353,12 @@ def clean_text(value: Any) -> str:
 
 
 def choose_rule(block: str, layer: str, parent_block: str, rules: list[dict[str, Any]], object_id: str | None = None,
-                text_ok: Iterable[str] = ()) -> tuple[dict[str, Any] | None, list[str]]:
+                text_ok: Iterable[str] = (), entity_type: str = "INSERT") -> tuple[dict[str, Any] | None, list[str]]:
     """text_ok: rules whose text_condition this instance satisfies (bind_side_texts); other text rules do not apply."""
     text_ok = set(text_ok)
     matches = [
         rule for rule in rules
-        if rule["block_re"].search(block)
+        if entity_type in rule.get("entity_types", {"INSERT"}) and rule["block_re"].search(block)
         and rule["layer_re"].search(layer)
         and rule["parent_re"].search(parent_block)
         and applies_to(rule, object_id)
@@ -777,7 +790,7 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
         effective_layer = inherited_layer if layer in {"", "0"} and inherited_layer else layer
         physical_id = f"PT-{path}"
         hits = [rule for rule in text_rules
-                if rule["block_re"].search(block_name) and rule["layer_re"].search(effective_layer)
+                if "INSERT" in rule.get("entity_types", {"INSERT"}) and rule["block_re"].search(block_name) and rule["layer_re"].search(effective_layer)
                 and rule["parent_re"].search(parent_block) and applies_to(rule, physical_id)]
         if hits:
             anchor = [finite(insert.get(axis, 0.0), f"{insert.get('record_id')}.{axis}") for axis in ("x", "y", "z")]
@@ -832,6 +845,8 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
                 found.append(text_item(item, distance))
         return found
 
+    candidate_boxes = [(pid, c["box"]) for pid, c in candidates.items() if c["box"] is not None]
+    candidate_index = BoundsIndex(candidate_boxes) if candidate_boxes else None
     # One segment graph per leader layer pattern and snap tolerance, in drawing units (tolerances / factor).
     graphs: dict[tuple, dict[str, Any]] = {}
     for rule in leader_rules:
@@ -843,17 +858,70 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
         got = segment_graph.collect_segments(line_rows, definitions, origins, layer_pattern=lead["layer_re"],
                                              expand_blocks=sorted(containers), scope=bounds, max_depth=max_depth)
         graph = segment_graph.build_graph(got["segments"], snap_tolerance=lead["snap_tolerance"] / factor)
-        component_of = {node: comp["component_id"] for comp in graph["components"] for node in comp["node_ids"]}
+        raw_component_of = {node: comp["component_id"] for comp in graph["components"] for node in comp["node_ids"]}
+        seg_by_id = {seg["segment_id"]: seg for seg in graph["segments"]}
+        node_by_id = {node["node_id"]: node for node in graph["nodes"]}
+        # The shared graph deliberately reports endpoint-on-interior contacts without joining them. Leaders
+        # consume only unique straight hosts within the existing snap tolerance; interior/interior crossings
+        # never appear in t_contacts and are not joined. Multiple possible hosts stay unresolved.
+        contacts_by_node = defaultdict(list)
+        for contact in graph["t_contacts"]:
+            contacts_by_node[contact["node_id"]].append(contact)
+        used_contacts, refused_contacts = [], []
+        for node_id, contacts in sorted(contacts_by_node.items()):
+            if len({c["on_segment_id"] for c in contacts}) != 1:
+                refused_contacts.extend({**c, "reason": "multiple_host_segments"} for c in contacts)
+            elif seg_by_id[contacts[0]["on_segment_id"]]["kind"] != "line":
+                refused_contacts.extend({**c, "reason": "host_not_straight"} for c in contacts)
+            else:
+                used_contacts.append(contacts[0])
+        link = {comp["component_id"]: comp["component_id"] for comp in graph["components"]}
+
+        def root_component(component_id):
+            while link[component_id] != component_id:
+                link[component_id] = link[link[component_id]]
+                component_id = link[component_id]
+            return component_id
+
+        for contact in used_contacts:
+            host = seg_by_id[contact["on_segment_id"]]
+            a, b = root_component(raw_component_of[contact["node_id"]]), root_component(host["component_id"])
+            if a != b:
+                link[max(a, b)] = min(a, b)
+        continuous = defaultdict(lambda: {"segment_ids": [], "node_ids": [], "t_contacts": []})
+        for comp in graph["components"]:
+            group = continuous[root_component(comp["component_id"])]
+            group["segment_ids"].extend(comp["segment_ids"])
+            group["node_ids"].extend(comp["node_ids"])
+        for component_id, comp in continuous.items():
+            comp["component_id"] = component_id
+            comp["segment_ids"].sort(); comp["node_ids"].sort()
+        component_of = {node: component_id for component_id, comp in continuous.items() for node in comp["node_ids"]}
         segment_handle = {seg["segment_id"]: seg["handle"] for seg in graph["segments"]}
+        edges_at = defaultdict(list)
+        for seg in graph["segments"]:
+            edges_at[seg["start_node"]].append((seg, seg["end_node"]))
+            edges_at[seg["end_node"]].append((seg, seg["start_node"]))
+        for contact in used_contacts:
+            host = seg_by_id[contact["on_segment_id"]]
+            # A branch endpoint now has the host's two incident arms and cannot be mistaken for an arrow tip.
+            edges_at[contact["node_id"]].extend((host, host[which]) for which in ("start_node", "end_node"))
+            projected = [host["start"][axis] + contact["fraction"] * (host["end"][axis] - host["start"][axis]) for axis in range(3)]
+            continuous[component_of[contact["node_id"]]]["t_contacts"].append({
+                "free_end_segment_id": contact["segment_id"], "free_end_handle": segment_handle[contact["segment_id"]],
+                "on_segment_id": contact["on_segment_id"], "on_handle": segment_handle[contact["on_segment_id"]],
+                "node_id": contact["node_id"], "fraction": contact["fraction"], "distance": contact["distance"] * factor,
+                "point": [value * factor for value in node_by_id[contact["node_id"]]["point"]],
+                "projected_point": [value * factor for value in projected], "basis": "free_endpoint_on_straight_segment_interior"})
         reach = max(r["text_cond"]["leader"]["touch_tolerance"] for r in leader_rules) / factor
         node_cell = max(reach, max(r["text_cond"]["leader"]["text_tolerance"] for r in leader_rules) / factor, 1e-9)
         node_grid: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
         for node in graph["nodes"]:
             node_grid[(math.floor(node["point"][0] / node_cell), math.floor(node["point"][1] / node_cell))].append(node)
         graphs[key] = {"rule_ids": [rule["rule_id"]], "graph": graph, "collected": got, "component_of": component_of,
-                       "components": {comp["component_id"]: comp for comp in graph["components"]},
+                       "components": dict(continuous), "t_contacts_used": used_contacts, "t_contacts_unresolved": refused_contacts,
                        "nodes": {node["node_id"]: node for node in graph["nodes"]},
-                       "segment_handle": segment_handle, "node_grid": node_grid, "node_cell": node_cell}
+                       "segment_handle": segment_handle, "node_grid": node_grid, "node_cell": node_cell, "edges_at": edges_at}
 
     def box_distance(point: list[float], box: list[float]) -> float:
         return math.hypot(max(box[0] - point[0], 0.0, point[0] - box[2]), max(box[1] - point[1], 0.0, point[1] - box[3]))
@@ -871,6 +939,47 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
                         out.append((distance, item))
         return out
 
+    def terminal_claim(node: dict[str, Any], entry: dict[str, Any], candidate: dict[str, Any], lead: dict[str, Any]):
+        """A terminal landing inside exactly one drawn outline wins over a neighbouring tolerance band.
+        Otherwise only a straight terminal's forward direction, within the existing touch band, can decide.
+        Overlapping outlines, curved terminals and a ray reaching two boxes remain ambiguous."""
+        point, touch = node["point"], lead["touch_tolerance"] / factor
+        possible = candidate_index.query_box([point[0] - touch, point[1] - touch, point[0] + touch, point[1] + touch]) if candidate_index else []
+        nearby = [c for pid in possible if (c := candidates[pid]) is not None and box_distance(point, c["box"]) <= touch
+                  and any(r["text_cond"]["leader"] and
+                          r["text_cond"]["leader"]["layer_re"].pattern == lead["layer_re"].pattern for r in c["rules"])]
+        exact = [c for c in nearby if box_distance(point, c["box"]) <= 1e-9]
+        edges = entry["edges_at"].get(node["node_id"], [])
+        mode, winners, direction = None, [], None
+        if len(edges) == 1:
+            if len(exact) == 1:
+                mode, winners = "terminal_inside_outline", exact
+            elif not exact and edges[0][0]["kind"] == "line":
+                other = entry["nodes"][edges[0][1]]["point"]
+                dx, dy = point[0] - other[0], point[1] - other[1]
+                length = math.hypot(dx, dy)
+                if length:
+                    direction = [dx / length, dy / length]
+                    for c in nearby:
+                        lo, hi = 0.0, touch
+                        for axis, (lower, upper) in enumerate(((c["box"][0], c["box"][2]), (c["box"][1], c["box"][3]))):
+                            v = direction[axis]
+                            if abs(v) < 1e-12:
+                                if not lower <= point[axis] <= upper:
+                                    hi = -1.0
+                            else:
+                                a, b = sorted(((lower - point[axis]) / v, (upper - point[axis]) / v))
+                                lo, hi = max(lo, a), min(hi, b)
+                        if lo <= hi + 1e-9 and hi >= 0:
+                            winners.append(c)
+                    if len(winners) == 1:
+                        mode = "terminal_forward_direction"
+        if mode and len(winners) == 1:
+            return winners[0] is candidate, {"node_id": node["node_id"], "mode": mode,
+                    "point": [point[0] * factor, point[1] * factor], "incoming_direction": direction,
+                    "segment_id": edges[0][0]["segment_id"]}
+        return True, None
+
     def trace(candidate: dict[str, Any], rule: dict[str, Any]) -> dict[str, Any]:
         """Leaders of one candidate under one rule: none, no drawn box, or the touching components with the texts
         reached from their nodes off the box."""
@@ -883,12 +992,19 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
         c = entry["node_cell"]
         x0, y0, x1, y1 = (math.floor((box[0] - touch) / c), math.floor((box[1] - touch) / c),
                           math.floor((box[2] + touch) / c), math.floor((box[3] + touch) / c))
-        touching = set()
+        touching, terminal_proof, terminal_touch = set(), defaultdict(list), set()
         for gx in range(x0, x1 + 1):
             for gy in range(y0, y1 + 1):
                 for node in entry["node_grid"].get((gx, gy), ()):
                     if box_distance(node["point"], box) <= touch and not texts_near(node["point"], cond, lead["text_tolerance"]):
-                        touching.add(entry["component_of"][node["node_id"]])
+                        claim, proof = terminal_claim(node, entry, candidate, lead)
+                        if claim:
+                            component_id = entry["component_of"][node["node_id"]]
+                            touching.add(component_id)
+                            if len(entry["edges_at"].get(node["node_id"], [])) == 1:
+                                terminal_touch.add(component_id)
+                            if proof:
+                                terminal_proof[component_id].append(proof)
         if not touching:
             return {"kind": "none"}
         comps = []
@@ -906,9 +1022,11 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
                             reached[item["text_id"]] = (distance, item)
             leaves = any(box_distance(entry["nodes"][node_id]["point"], box) > touch for node_id in comp["node_ids"])
             comps.append({"segment_ids": comp["segment_ids"], "too_long": too_long, "leaves": leaves,
+                          "touches_terminal": component_id in terminal_touch,
                           "handles": sorted({entry["segment_handle"][s] for s in comp["segment_ids"]}),
                           "texts": {tid: dict(text_item(item, distance), via="leader", leader_segment_ids=comp["segment_ids"],
-                                              leader_handles=sorted({entry["segment_handle"][s] for s in comp["segment_ids"]}))
+                                              leader_handles=sorted({entry["segment_handle"][s] for s in comp["segment_ids"]}),
+                                              leader_terminal_evidence=terminal_proof[component_id], leader_t_contacts=comp["t_contacts"])
                                     for tid, (distance, item) in reached.items()}})
         return {"kind": "traced", "comps": comps}
 
@@ -919,8 +1037,20 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
     for physical_id, candidate in candidates.items():
         for rule in candidate["rules"]:
             if rule["text_cond"]["leader"]:
-                traced = traces[physical_id][rule["rule_id"]] = trace(candidate, rule)
+                traces[physical_id][rule["rule_id"]] = trace(candidate, rule)
+    confirmed_tips = set()
+    for physical_id, candidate in candidates.items():
+        for rule in candidate["rules"]:
+            for comp in traces[physical_id].get(rule["rule_id"], {}).get("comps", []):
+                if any(note.get("leader_terminal_evidence") for note in comp["texts"].values()):
+                    confirmed_tips.add((rule["text_cond"]["pattern"].pattern, tuple(comp["segment_ids"])))
+    for physical_id, candidate in candidates.items():
+        for rule in candidate["rules"]:
+            if rule["text_cond"]["leader"]:
+                traced = traces[physical_id][rule["rule_id"]]
                 for comp in traced.get("comps") or ():
+                    if not comp["touches_terminal"] and (rule["text_cond"]["pattern"].pattern, tuple(comp["segment_ids"])) in confirmed_tips:
+                        comp["texts"] = {}   # a bend passing another box is not a second physical arrow end
                     for text_id in comp["texts"]:
                         leader_of[text_id].setdefault(physical_id, set()).update(comp["segment_ids"])
 
@@ -974,7 +1104,15 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
             # the same words drawn twice at one leader end are one note: nearest kept, the copies listed
             distinct: dict[str, dict[str, Any]] = {}
             for text_id, item in sorted(reached.items(), key=lambda kv: (kv[1]["distance"], kv[0])):
-                distinct.setdefault(item["text"], item)
+                previous = distinct.setdefault(item["text"], dict(item))
+                if previous is not item:
+                    for field in ("leader_segment_ids", "leader_handles"):
+                        previous[field] = sorted(set(previous.get(field, [])) | set(item.get(field, [])))
+                    for field in ("leader_terminal_evidence", "leader_t_contacts"):
+                        proof = previous.setdefault(field, [])
+                        for record in item.get(field, []):
+                            if record not in proof:
+                                proof.append(record)
             per_rule[rule_id] = []                            # the leader's texts win over the radius of this candidate
             for item in distinct.values():
                 copies = sorted(t for t, other in reached.items() if other["text"] == item["text"] and t != item["text_id"])
@@ -1003,7 +1141,23 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
         listed = sorted(found.values(), key=lambda t: (t["distance"], t["text_id"]))
         extra = {**({"leader_notes": item["notes"]} if item["notes"] else {}),
                  **({"leader_texts_elsewhere": item["elsewhere"]} if item["elsewhere"] else {})}
-        contested = sorted(text_id for text_id, text in found.items() if text.get("via") == "leader" and len(leader_of[text_id]) > 1)
+        group_texts = set()
+        for text_id, note in found.items():
+            owners = leader_of.get(text_id) or {}
+            if note.get("via") != "leader" or len(owners) < 2:
+                continue
+            # Range notes require explicit project configuration and a single continuous leader group.
+            allowed = all(any(r["text_cond"]["classify"] and r["text_cond"]["leader"] and
+                              r["text_cond"]["leader"]["allow_shared_text"] and
+                              any(text_id in c["texts"] and c["texts"][text_id].get("leader_terminal_evidence")
+                                  for c in traces[pid].get(r["rule_id"], {}).get("comps", []))
+                              for r in candidates[pid]["rules"]) for pid in owners)
+            common = set.intersection(*(set(s) for s in owners.values()))
+            if allowed and common:
+                group_texts.add(text_id)
+                note["leader_group"] = {"text_id": text_id, "physical_ids": sorted(owners)}
+        contested = sorted(text_id for text_id, text in found.items() if text.get("via") == "leader"
+                           and len(leader_of[text_id]) > 1 and text_id not in group_texts)
         if contested:
             # the only leader conflict left: two candidates' leaders reach one text
             mine = set().union(*(leader_of[text_id][physical_id] for text_id in contested))
@@ -1031,7 +1185,8 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
             "rule_ids": item["rule_ids"],
             "ok": sorted(rule_id for rule_id, items in per_rule.items() if items) if status == "已绑定" else [],
             "texts": listed,
-            "shared_with": sorted(set().union(*(set(radius_claims[text_id]) for text_id in shared)) - {physical_id}) if shared else [],
+            "shared_with": sorted((set().union(*(set(radius_claims[text_id]) for text_id in shared),
+                                                *(set(leader_of[text_id]) for text_id in group_texts)) - {physical_id})),
             "leader": item["leader"], "radius": item["radius"], **extra,
         }
     key_rules = [rule for rule in text_rules if rule["text_cond"]["as_instance_key"]]
@@ -1046,6 +1201,9 @@ def bind_side_texts(layout_path: Path, definitions: dict[str, list[dict[str, Any
     ]
     leader_graphs = [{"layer_pattern": key[0], "snap_tolerance": key[2], "rule_ids": entry["rule_ids"],
                       "expanded_blocks": sorted(containers), "counts": entry["graph"]["counts"],
+                      "continuous_component_count": len(entry["components"]),
+                      "t_contacts_used": [c for comp in entry["components"].values() for c in comp["t_contacts"]],
+                      "t_contacts_unresolved": entry["t_contacts_unresolved"],
                       "unsupported": entry["collected"]["unsupported"],
                       "geometry_problem_count": len(entry["collected"]["geometry_problems"]),
                       "expansion_problem_count": len(entry["collected"]["expansion_problems"]),
@@ -1218,6 +1376,76 @@ def main() -> int:
             world_box = [world_box3d[0], world_box3d[1], world_box3d[3], world_box3d[4]]
             return cad_geometry.extent_in_scope(world_box3d, notes, anchor, bounds), world_box, notes
 
+        def visit_hatch(row, parent_matrix, path, parent_block, inherited_layer, suppressed_by):
+            """Explicit physical HATCH candidates only. A conservative location hull supports scope and display,
+            never a measurable shape, an insertion point, a connection port or an area quantity."""
+            layer = str(row.get("layer") or "")
+            layer = inherited_layer if layer in {"", "0"} and inherited_layer else layer
+            candidates = [r for r in rules if "HATCH" in r["entity_types"] and r["block_re"].search("")
+                          and r["layer_re"].search(layer) and r["parent_re"].search(parent_block)]
+            if not candidates:
+                return
+            physical_id = f"PT-{path}"
+            box3d = row.get("location_bbox3d")
+            valid_location = (row.get("location_schema_version") == "qto-cad-location-evidence/1.0"
+                              and row.get("location_status") == "bounded" and isinstance(box3d, list) and len(box3d) == 6
+                              and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in box3d)
+                              and all(box3d[i] <= box3d[i + 3] for i in range(3)))
+            world = transformed_box(box3d, parent_matrix) if valid_location else None
+            if world and bounds and (world[3] < bounds["xmin"] or world[0] >= bounds["xmax_exclusive"] or
+                                     world[4] < bounds["ymin"] or world[1] >= bounds["ymax_exclusive"]):
+                pruned[physical_id] = ""
+                return
+            box = [world[0], world[1], world[3], world[4]] if world else None
+            point = [(world[i] + world[i + 3]) * factor / 2 for i in range(3)] if world else None
+            base = {"object_id": physical_id, "physical_id": physical_id, "source_record_id": row.get("record_id"),
+                    "source_sha256": expected_source,
+                    "entity_handle": row.get("entity_handle"), "entity_type": "HATCH", "block_name": "", "layer": layer,
+                    "source_definition_record_id": row.get("source_definition_record_id", row.get("record_id") if parent_block else None),
+                    "parent_block": parent_block or None, "instance_path": path, "point": point, "coordinate_unit": coordinate_unit,
+                    "scope_geometry_bbox": box, "scope_location_basis": row.get("location_basis") if world else "location_unknown",
+                    "location_schema_version": row.get("location_schema_version"), "location_status": "bounded" if world else "unknown",
+                    "location_bbox3d": world, "measurement_geometry_available": False,
+                    "point_basis": "location_bbox_center_not_insertion_or_connection_port" if world else "unknown",
+                    "disposition": "unresolved", "rule_ids": [], "basis": "显式HATCH候选，未命中可采用的识别规则"}
+            if suppressed_by:
+                base.update(disposition="not_applicable", suppressed_by=suppressed_by,
+                            basis=f"由父实例 {suppressed_by['physical_id']} 承担或排除专业身份，内部填充不另计")
+            else:
+                rule, conflicts = choose_rule("", layer, parent_block, candidates, physical_id, entity_type="HATCH")
+                if conflicts:
+                    base.update(rule_ids=conflicts, basis="同优先级HATCH识别规则冲突")
+                elif rule:
+                    base.update(rule_ids=[rule["rule_id"]], adjudication_id=rule.get("adjudication_id"),
+                                recognition_record_ref=record_ref(rule), basis=str(rule.get("basis") or f"识别规则 {rule['rule_id']}"))
+                    if rule["decision"] == "exclude":
+                        base["disposition"] = "excluded"
+                    elif rule["decision"] == "include" and not world:
+                        base["basis"] += "；缺少有版本的HATCH定位证据，保留待核，不用0补坐标"
+                    elif rule["decision"] == "include":
+                        # A hull crossing the package boundary cannot establish which side owns the instance.
+                        crosses = bounds and not (world[0] >= bounds["xmin"] and world[3] < bounds["xmax_exclusive"]
+                                                  and world[1] >= bounds["ymin"] and world[4] < bounds["ymax_exclusive"])
+                        if crosses:
+                            base["basis"] += "；保守定位边界跨工作范围，归属待核"
+                        else:
+                            base["disposition"] = "adopted"
+                            evidence = f"EV-CAD-{row.get('record_id')}|{rule['authority']['source_id']}|{unit_source_id}"
+                            adopted.append({"physical_id": physical_id, **{k: rule[k] for k in ("category", "system", "spec", "unit", "quantity_level")},
+                                            "evidence": evidence, "recognition_record": rule["authority"], "point": point,
+                                            "coordinate_unit": coordinate_unit, "block_name": "", "layer": layer,
+                                            "entity_type": "HATCH", "entity_handle": row.get("entity_handle"), "instance_path": path,
+                                            "source_definition_record_id": base["source_definition_record_id"],
+                                            "source_record_id": row.get("record_id"), "measurement_geometry_available": False,
+                                            "source_sha256": expected_source,
+                                            "point_basis": base["point_basis"], "location_bbox3d": world})
+                            geometry[physical_id] = {"angle": 0.0, "mirrored": False, "world_box": None}
+                            endpoint_instances.append({"physical_id": physical_id, "category": rule["category"], "system": rule["system"],
+                                                       "evidence": evidence, "point": point,
+                                                       "network_ports": [{"port_id": f"{physical_id}-NA", "network_disposition": "unresolved",
+                                                                          "reason": "HATCH定位框中心不是连接端口；须另行提供已核端口"}]})
+            dispositions.append(base)
+
         def visit(
             insert: dict[str, Any],
             parent_matrix: tuple[float, ...],
@@ -1293,6 +1521,7 @@ def main() -> int:
                     "object_id": physical_id,
                     "physical_id": physical_id,
                     "source_record_id": source_record_id,
+                    "source_sha256": expected_source,
                     "block_name": block_name,
                     "layer": effective_layer,
                     "parent_block": parent_block or None,
@@ -1394,10 +1623,11 @@ def main() -> int:
                                 "block_name": block_name,
                                 "layer": effective_layer,
                                 "source_record_id": source_record_id,
+                                "source_sha256": expected_source,
                             }
                             if bound:
                                 instance["side_text"] = {key: bound[key] for key in ("text", "text_id", "distance", "rule_id", "via", "leader_handles",
-                                                                                     "shared_with")
+                                                                                     "leader_segment_ids", "leader_terminal_evidence", "leader_t_contacts", "leader_group", "shared_with")
                                                          if key in bound}
                                 if "instance_key" in base:
                                     instance["instance_key"] = base["instance_key"]
@@ -1480,6 +1710,10 @@ def main() -> int:
                 return
             matrix = compose(parent_matrix, matrix_for_insert(insert, origins.get(block_name, [0.0, 0.0, 0.0])))
             for child in definitions[block_name]:
+                if str(child.get("entity_type") or "").upper() == "HATCH":
+                    visit_hatch(child, matrix, f"{path}/{block_name}/{child.get('record_id') or 'NO-ID'}", block_name,
+                                effective_layer, next_suppressed)
+                    continue
                 if str(child.get("entity_type") or "").upper() != "INSERT":
                     continue
                 child_id = str(child.get("record_id") or "NO-ID")
@@ -1498,6 +1732,8 @@ def main() -> int:
                                                    max_depth, bounds, scope_of)
         top_insert_count = 0
         for row in load_stream(layout_path):
+            if row.get("row_type") == "entity" and row.get("layout") == target_layout and str(row.get("entity_type") or "").upper() == "HATCH":
+                visit_hatch(row, identity, str(row.get("record_id") or "NO-ID"), "", str(row.get("layer") or ""), None)
             if (
                 row.get("row_type") == "entity"
                 and row.get("layout") == target_layout
@@ -1802,7 +2038,9 @@ def main() -> int:
             "scope": scope,
             "counts": {
                 "top_level_insert_count": top_insert_count,
-                "scoped_insert_instance_count": len(dispositions),
+                "scoped_insert_instance_count": sum(item.get("entity_type") != "HATCH" for item in dispositions),
+                "scoped_hatch_instance_count": sum(item.get("entity_type") == "HATCH" for item in dispositions),
+                "scoped_physical_instance_count": len(dispositions),
                 "adopted_physical_instance_count": len(adopted),
                 "endpoint_port_count": sum(len(item["network_ports"]) for item in endpoint_instances),
                 "block_expansion_failure_count": len(failures),

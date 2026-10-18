@@ -681,28 +681,33 @@ def test_extent_in_scope_guard(box, notes, anchor, kept):
     assert geometry.extent_in_scope(box, notes, anchor, scope) is kept
 
 
-def k3_doc():
+def k3_doc(guard_bounded=False):
     """Frame (0,0)-(10000,10000). Square symbols, 100 mm. Each block name says what it holds."""
     doc = ezdxf.new('R2013'); doc.units = 4
 
     def square(block, dx=0):
         block.add_lwpolyline([(x + dx, y) for x, y in SQUARE], close=True)
 
-    def hatch(block, dx=0):
-        h = block.add_hatch(); h.paths.add_polyline_path([(x + dx, y) for x, y in SQUARE], is_closed=True)
+    def hatch(block, dx=0, bounded=True):
+        h = block.add_hatch()
+        if bounded:
+            h.paths.add_polyline_path([(x + dx, y) for x, y in SQUARE], is_closed=True)
+        else:
+            # T13 now bounds legal closed HATCHes. An open loop deliberately preserves the old unknown-fill guard.
+            h.paths.add_edge_path().add_line((dx - 50, -50), (dx + 50, -50))
 
     b = doc.blocks.new('TXTREACH'); square(b); b.add_text('7AL1', dxfattribs={'insert': (-15000, 0)})
-    b = doc.blocks.new('HGUARD'); square(b, 15000); hatch(b, 15000)          # drawing 15 m to the right of the base point
+    b = doc.blocks.new('HGUARD'); square(b, 15000); hatch(b, 15000, bounded=guard_bounded)
     b = doc.blocks.new('PLAINOUT'); square(b, 15000)                         # same, no fill: complete extent
     b = doc.blocks.new('HATCHED'); square(b); hatch(b)
-    b = doc.blocks.new('FILLTEXT'); hatch(b); b.add_text('X', dxfattribs={'insert': (0, 0)})
+    b = doc.blocks.new('FILLTEXT'); hatch(b, bounded=False); b.add_text('X', dxfattribs={'insert': (0, 0)})
     b = doc.blocks.new('SPL'); square(b); b.add_spline([(0, 0), (30, 40), (60, 0), (90, 40)])
     b = doc.blocks.new('SPLOUT'); square(b, 15000); b.add_spline([(15000, 0), (15030, 40), (15060, 0), (15090, 40)])
     msp = doc.modelspace()
     at = {'TXTREACH': (20000, 5000),   # base and square outside, the label lands at (5000, 5000) inside
-          'HGUARD': (5000, 5000),      # base inside, square at (20000, 5000) outside, fill skipped
+          'HGUARD': (5000, 5000),      # base inside, square outside; an unknown fill keeps the insertion guard
           'PLAINOUT': (5000, 6000),    # base inside, square outside, complete: pruned as before
-          'HATCHED': (3000, 3000),     # inside
+          'HATCHED': (3000, 3000),     # legal closed HATCH: located completely, still not length/area measurement
           'HATCHFAR': (50000, 5000),   # HATCHED block far outside: now pruned (the registration's case)
           'FILLTEXT': (60000, 5000),   # fills and labels only: no extent, kept
           'SPL': (70000, 5000),        # spline: no extent, kept
@@ -725,13 +730,37 @@ def test_k3_scope_and_basis_of_incomplete_extents(tmp_path):
     assert guard['scope_location_basis'] == 'insertion_anchor_incomplete_extent_guard' and guard['scope_extent_notes'] == ['包围盒未含填充']
     assert pid['PLAINOUT'] not in disp and pid['HATCHFAR'] not in disp
     inside = disp[pid['HATCHED']]
-    assert inside['scope_location_basis'] == 'transformed_geometry_extent_incomplete'
+    assert inside['scope_location_basis'] == 'transformed_geometry_extent' and 'scope_extent_notes' not in inside
     assert inside['scope_geometry_bbox'] == pytest.approx([2950, 2950, 3050, 3050])
     for key in ('FILLTEXT', 'SPL'):
         assert disp[pid[key]]['scope_location_basis'] == 'insertion_anchor_fallback_requires_review'
         assert disp[pid[key]]['scope_geometry_bbox'] is None and 'scope_extent_notes' not in disp[pid[key]]
     counts = report['scope_extent_incomplete']['instances_by_note']
-    assert counts == {'包围盒未含填充': 2, '注记按插入点计': 1, '插入点在包内、按护栏保留': 1}
+    assert counts == {'包围盒未含填充': 1, '注记按插入点计': 1, '插入点在包内、按护栏保留': 1}
+
+
+@pytest.mark.parametrize('bounded', [False, True])
+def test_k3_known_hatch_extent_and_unknown_hatch_guard_stay_distinct(tmp_path, bounded):
+    """The same INSERT anchor is inside and the same square is outside. Only a proven HATCH envelope removes the guard."""
+    doc, handles = k3_doc(guard_bounded=bounded)
+    dxf, neutral = extract(tmp_path, doc, partial=True)
+    manifest = manifest_of(neutral)
+    rows = [json.loads(line) for line in Path(manifest['artifacts']['block_definitions']['path']).read_text(encoding='utf-8').splitlines()]
+    hatch = next(row for row in rows if row.get('parent_block') == 'HGUARD' and row.get('entity_type') == 'HATCH')
+    assert hatch['geometry_status'] == 'requires_adapter' and hatch['geometry'] is hatch['raw_length'] is None
+    assert hatch['measurement_geometry_available'] is False
+    assert hatch['location_status'] == ('bounded' if bounded else 'unknown')
+    assert hatch['bbox3d'] == ([14950, -50, 0, 15050, 50, 0] if bounded else None)
+    result, out = adapt(tmp_path, dxf, neutral,
+                        [{'rule_id': 'GUARD', 'block_pattern': '^HGUARD$', 'decision': 'include'}],
+                        bounds=(0, 0, 10000, 10000))
+    _, dispositions, _ = outcome(result, out)
+    pid = f"PT-CAD-{handles['HGUARD']}"
+    if bounded:
+        assert pid not in dispositions  # full known shape outside; an inside anchor is not a reason to retain it
+    else:
+        assert dispositions[pid]['scope_location_basis'] == 'insertion_anchor_incomplete_extent_guard'
+        assert dispositions[pid]['scope_extent_notes'] == ['包围盒未含填充']
 
 
 def test_k3_coverage_ledger_places_sheets_by_the_same_extent(tmp_path):
@@ -752,9 +781,9 @@ def test_k3_coverage_ledger_places_sheets_by_the_same_extent(tmp_path):
     done = run(POINTS / 'build_point_coverage_ledger.py', '--input', tmp_path / 'input.json', '--output-dir', tmp_path / 'out')
     assert done.returncode == 0, done.stdout + done.stderr
     report = json.loads((tmp_path / 'out/点位覆盖台账.json').read_text(encoding='utf-8'))
-    # PLAINOUT complete; TXTREACH, HGUARD, HATCHED, HATCHFAR incomplete; SPL and SPLOUT placed by their square with the
+    # PLAINOUT, legal HATCHED/HATCHFAR complete; TXTREACH and the unknown HGUARD incomplete; SPL/SPLOUT use the square with the
     # unmeasured spline skipped (decision 10-17, as 0.3.10 placed sheets); FILLTEXT has nothing measurable
-    assert report['placement_basis_counts'] == {'图形范围中心': 1, '图形范围中心（范围不完整：未含填充或注记按插入点计）': 4,
+    assert report['placement_basis_counts'] == {'图形范围中心': 3, '图形范围中心（范围不完整：未含填充或注记按插入点计）': 2,
                                                 '图形范围中心（范围不完整（估算）：跳过了取不到范围的对象）': 2,
                                                 '插入点（定不出图形范围）': 1}
     mismatch = {w['id']: (w['insert_sheet'], w['geometry_sheet']) for w in report['warnings']['insert_geometry_sheet_mismatch']}

@@ -76,7 +76,7 @@ def test_default_serializes_referenced_closure_only(tmp_path):
     assert coverage['block_definition_serialization'] == serialization
     assert 'unreferenced block definitions are inventoried' in coverage['counting_basis']
     assert manifest['artifacts']['block_definitions']['count'] == len(rows)
-    assert manifest['extractor_version'] == 'qto-cad-neutral-extractor/1.5.2'
+    assert manifest['extractor_version'] == extract.VERSION
 
 
 def test_all_blocks_flag_restores_full_serialization(tmp_path):

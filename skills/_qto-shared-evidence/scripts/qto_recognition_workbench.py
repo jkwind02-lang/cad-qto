@@ -18,7 +18,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from qto_cad_geometry import (IDENTITY, compose_matrix, entity_geometry,
+from qto_cad_geometry import (IDENTITY, LOCATION_SCHEMA, compose_matrix, entity_geometry,
     measure_part, part_extrema, summarize, transform_geometry, transform_point, transform_bounds,
     read_dxf_with_diagnostics)
 from qto_cad_source_contract import canonical_scale, verify_source_file, unit_tokens, verify_unit_declaration_texts, verify_unit_corroboration, UNIT_APPLIES_TO
@@ -55,26 +55,18 @@ def index_digest(index):
     return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(",",":"),allow_nan=False).encode("utf-8")).hexdigest()
 
 
-def _unmeasured_envelope(entity):
-    """Strict conservative location only, never a measurement substitute."""
-    boxes=[];kind=entity.dxftype()
-    if kind=='SPLINE':
-        points=[list(p) for p in entity.control_points]
-        weights=list(entity.weights)
-        if points and (not weights or all(math.isfinite(x) and x>0 for x in weights)):
-            boxes.append([min(p[i] for p in points) for i in range(3)]+[max(p[i] for p in points) for i in range(3)])
-        else:return None
-    elif kind=='HATCH':
-        from ezdxf.entities import LWPolyline
-        for path in entity.paths:
-            if not hasattr(path,'vertices'):return None
-            outline=LWPolyline.new(dxfattribs={'elevation':entity.dxf.elevation.z,'extrusion':entity.dxf.extrusion})
-            outline.set_points(path.vertices,format='xyb');outline.closed=path.is_closed
-            geometry=entity_geometry(outline)
-            if geometry.get('bbox3d') is None:return None
-            boxes.append(geometry['bbox3d'])
-    else:return None
-    return ([min(b[i] for b in boxes) for i in range(3)]+[max(b[i+3] for b in boxes) for i in range(3)]) if boxes else None
+def _unmeasured_envelope(entity, facts=None):
+    """Reuse the shared conservative-location guarantee; anchors and fit points are not envelopes."""
+    if entity.dxftype() not in {'HATCH', 'SPLINE'}:
+        return None
+    facts = facts if facts is not None else entity_geometry(entity)
+    box = facts.get('location_bbox3d')
+    if (facts.get('location_schema_version') == LOCATION_SCHEMA and facts.get('location_status') == 'bounded'
+            and isinstance(box, (list, tuple)) and len(box) == 6
+            and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in box)
+            and all(box[i] <= box[i+3] for i in range(3))):
+        return list(box)
+    return None
 
 
 def _annotation_dn(label,dn):
@@ -150,11 +142,13 @@ def build_index(source, layout="Model", authoritative_source=None, max_depth=32,
                                 boxes.append(transform_bounds(child,mat))
                 elif f.get('geometry'):
                     boxes.append(f['bbox3d'])
-                elif _unmeasured_envelope(e) is not None:
-                    boxes.append(_unmeasured_envelope(e))
                 else:
-                    # Glyph anchors are not glyph extents; don't certify them.
-                    complete=False
+                    location_box = _unmeasured_envelope(e, f)
+                    if location_box is not None:
+                        boxes.append(location_box)
+                    else:
+                        # Glyph anchors and unknown fill/spline data are not complete extents.
+                        complete=False
             except Exception:
                 complete=False
         box=([min(b[i] for b in boxes) for i in range(3)]+[max(b[i+3] for b in boxes) for i in range(3)]) if boxes else None
@@ -207,11 +201,21 @@ def build_index(source, layout="Model", authoritative_source=None, max_depth=32,
             row["anchor"] = transform_point(facts.get("anchor"), matrix)
             if kind in {"TEXT", "MTEXT", "ATTRIB", "ATTDEF"}:
                 row["text"] = entity.plain_text() if kind == "MTEXT" else str(entity.dxf.text)
+            location_box = _unmeasured_envelope(entity, facts)
             if facts.get("geometry"):
                 row["geometry"] = transform_geometry(facts["geometry"], matrix)
                 summary = summarize(row["geometry"])
                 row.update(bbox=summary["bbox"], bbox3d=summary["bbox3d"],
                            raw_length=summary["length"], geometry_status="measurable")
+            elif location_box is not None:
+                # Shared HATCH/SPLINE anchors now exist. Consume their envelope before an anchor can mask it.
+                world_box = transform_bounds(location_box, matrix)
+                row.update(bbox3d=world_box, bbox=[world_box[0],world_box[1],world_box[3],world_box[4]],
+                           geometry_status='unsupported_measurement', location_method='conservative_source_envelope',
+                           location_schema_version=LOCATION_SCHEMA, location_status='bounded',
+                           location_bbox3d=world_box, location_basis=facts.get('location_basis'),
+                           measurement_geometry_available=False)
+                row['issues'].append('仅获得保守定位范围，量测仍须相应专业解析器或原生工具')
             elif row["anchor"] is not None:
                 p = row["anchor"]
                 row.update(bbox=[p[0], p[1], p[0], p[1]], bbox3d=p+p,
@@ -223,13 +227,6 @@ def build_index(source, layout="Model", authoritative_source=None, max_depth=32,
                 row['bbox']=row['bbox3d']=None
                 row['geometry_status']='native_fields_read' if facts['native_data']['read_status']=='SERIALIZATION_COMPLETE' else 'native_fields_partial'
                 row['text']=facts['native_data']['basic_data'].get('text',{}).get('content')
-            if not row['geometry'] and row['bbox'] is None:
-                envelope_box=transform_bounds(_unmeasured_envelope(entity),matrix)
-                if envelope_box is not None:
-                    row.update(bbox3d=envelope_box,bbox=[envelope_box[0],envelope_box[1],envelope_box[3],envelope_box[4]],
-                        geometry_status='unsupported_measurement',location_method='conservative_source_envelope')
-                    row['issues']=[s for s in row['issues'] if not s.startswith('没有可定位的完整几何')]
-                    row['issues'].append('仅获得保守定位范围，量测仍须相应专业解析器或原生工具')
             if kind == "INSERT":
                 row["block_name"] = str(entity.dxf.name)
                 row["attributes"] = {str(a.dxf.tag): str(a.dxf.text) for a in entity.attribs}
@@ -304,7 +301,7 @@ def build_index(source, layout="Model", authoritative_source=None, max_depth=32,
     result.sort(key=lambda r: r["object_id"])
     if len({r["object_id"] for r in result}) != len(result):
         raise ValueError("实例身份碰撞；不能合并或静默覆盖")
-    output = dict(schema_version=SCHEMA, kind="index", source=source,
+    output = dict(schema_version=SCHEMA, location_schema_version=LOCATION_SCHEMA, kind="index", source=source,
                 authoritative_source=authoritative_source, layout=layout,
                 source_identity_issues=read_diagnostics['source_identity_issues'],source_read_diagnostics=read_diagnostics,
                 source_identity_advisories=read_diagnostics.get('source_identity_advisories', []),

@@ -76,7 +76,8 @@ def drawing2(tmp_path_factory):
     doc.blocks.new('A1').add_lwpolyline(square, close=True)
     doc.blocks.new('TB').add_lwpolyline([(0, 0), (2000, 0), (2000, 1000), (0, 1000)], close=True)
     a0 = doc.blocks.new('A0'); a0.add_lwpolyline(square, close=True); a0.add_blockref('TB', (8000, 0))
-    doc.blocks.new('A2').add_hatch().paths.add_polyline_path(square, is_closed=True)
+    # T13 now locates valid HATCH boundaries. Keep this guard fixture genuinely unbounded: an open edge loop.
+    doc.blocks.new('A2').add_hatch().paths.add_edge_path().add_line((0, 0), (10000, 0))
     msp, h = doc.modelspace(), {}
     for key, name, at in (('F_AREA', 'A1', (0, 0)), ('F_FULL', 'A1', (20000, 0)), ('F_NEXT', 'A1', (30000, 0)),
                           ('F_NEST', 'A0', (0, 20000)), ('F_FILL', 'A2', (40000, 0)), ('F_CORNER', 'A1', (0, 40000))):

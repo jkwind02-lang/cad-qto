@@ -23,9 +23,9 @@ except ImportError as exc:  # pragma: no cover - exercised by deployment checks
     raise SystemExit("缺少 ezdxf；请使用工作区 Python 运行时或安装 ezdxf>=1.4") from exc
 
 
-from qto_cad_geometry import GEOMETRY_SCHEMA, entity_geometry as extract_geometry_facts, read_dxf_with_diagnostics, resolve_underlay_dependency
+from qto_cad_geometry import GEOMETRY_SCHEMA, LOCATION_SCHEMA, entity_geometry as extract_geometry_facts, read_dxf_with_diagnostics, resolve_underlay_dependency
 
-VERSION = "qto-cad-neutral-extractor/1.5.2"
+VERSION = "qto-cad-neutral-extractor/1.6.0"
 # Entity types whose named block is drawn as part of the entity (geometry blocks).
 GEOMETRY_BLOCK_TYPES = {"DIMENSION", "ARC_DIMENSION", "LARGE_RADIAL_DIMENSION", "ACAD_TABLE", "TABLE"}
 CURVE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "CIRCLE", "ELLIPSE", "SPLINE"}
@@ -119,15 +119,15 @@ def entity_text(entity: Any) -> str | None:
     return None
 
 
-def entity_geometry(entity: Any) -> dict[str, Any]:
+def entity_geometry(entity: Any, location_cache=None) -> dict[str, Any]:
     """Preserve WCS parametric geometry; never substitute an end-point chord."""
-    return extract_geometry_facts(entity)
+    return extract_geometry_facts(entity, location_cache=location_cache)
 
 
-def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: str, raw_unit: str, sequence: int, dependency_context: dict | None = None) -> dict[str, Any]:
+def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: str, raw_unit: str, sequence: int, dependency_context: dict | None = None, location_cache=None) -> dict[str, Any]:
     kind = entity.dxftype()
     handle = str(get_dxf(entity, "handle") or f"NOHANDLE-{sequence}")
-    geometry = entity_geometry(entity)
+    geometry = entity_geometry(entity, location_cache)
     anchor = geometry["anchor"]
     block_name = str(get_dxf(entity, "name")) if kind == "INSERT" and get_dxf(entity, "name") else None
     attributes = None
@@ -181,6 +181,12 @@ def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: 
         "length_error_estimate": geometry["length_error_estimate"],
         "external_reference": resolve_underlay_dependency(geometry["external_reference"], dependency_context) if geometry.get("external_reference") else None,
     }
+    for key in ("location_schema_version", "location_basis", "location_bbox3d", "location_status", "location_error",
+                "measurement_geometry_available"):
+        record[key] = geometry.get(key)
+    record["location_schema_version"] = LOCATION_SCHEMA
+    record["location_status"] = geometry.get("location_status") or "unknown"
+    record["measurement_geometry_available"] = geometry.get("geometry") is not None
     if geometry.get('native_data') is not None:
         record['native_data']=geometry['native_data']
         record['geometry_method']='tianzheng_native_fields/0.5.1'
@@ -203,6 +209,8 @@ def failed_record(entity, layout, parent_block, source_hash, raw_unit, sequence,
                   recommended_actions=["native_geometry_read_required"],
                   raw_geometry={"entity_type": kind}, closed=None,
                   block_name=str(get_dxf(entity, "name", "")) if kind == "INSERT" else None)
+    record.update(location_schema_version=LOCATION_SCHEMA, location_status="unknown", location_bbox3d=None,
+                  location_basis=None, location_error=error, measurement_geometry_available=False)
     for key in ("x", "y", "z", "bbox", "bbox3d", "start", "end", "raw_length", "text",
                 "rotation", "scale_factors", "attributes", "geometry_signature", "geometry",
                 "extrusion", "insert_matrix_wcs", "length_error_estimate"):
@@ -237,6 +245,7 @@ def record_coverage(coverage, record):
 
 
 def write_stream(path: Path, groups: Iterable[tuple[str, str | None, Iterable[Any]]], source_hash: str, raw_unit: str, *, coverage: dict | None = None, dependency_context: dict | None = None) -> tuple[int, Counter[str], list[dict[str, Any]]]:
+    location_cache = {}
     count = 0
     types: Counter[str] = Counter()
     failures: list[dict[str, Any]] = []
@@ -245,7 +254,7 @@ def write_stream(path: Path, groups: Iterable[tuple[str, str | None, Iterable[An
             ordered = sorted(entities, key=lambda entity: str(get_dxf(entity, "handle", "")))
             for sequence, entity in enumerate(ordered, 1):
                 try:
-                    record = convert(entity, layout=layout, parent_block=parent_block, source_hash=source_hash, raw_unit=raw_unit, sequence=sequence, dependency_context=dependency_context)
+                    record = convert(entity, layout=layout, parent_block=parent_block, source_hash=source_hash, raw_unit=raw_unit, sequence=sequence, dependency_context=dependency_context, location_cache=location_cache)
                     encoded = json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
                 except Exception as exc:  # retain evidence instead of silently skipping
                     record = failed_record(entity, layout, parent_block, source_hash, raw_unit, sequence, f"{type(exc).__name__}: {exc}")
@@ -441,6 +450,7 @@ def main(argv=None) -> int:
             "schema_version": "qto-cad-neutral-evidence/1.0",
             "extractor_version": VERSION,
             "geometry_schema_version": GEOMETRY_SCHEMA,
+            "location_schema_version": LOCATION_SCHEMA,
             "status": coverage["status"],
             "neutral_extraction_status": "PASS" if not failures else "PARTIAL",
             "read_coverage": {key: coverage[key] for key in ("entity_count", "capability_counts", "status_counts", "read_failed_count", "pending_object_count", "external_reference_count", "source_identity_issue_count", "source_identity_advisory_count", "source_read_warning_count", "quantity_coverage_proven")},

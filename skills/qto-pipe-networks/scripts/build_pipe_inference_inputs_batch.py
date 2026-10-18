@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-eviden
 
 import build_pipe_inference_input as adapter
 
-VERSION = "qto-pipe-batch-frame-adapter/1.4.0"
+VERSION = "qto-pipe-batch-frame-adapter/1.4.1"
 MAPPING_SCHEMA = "qto-pipe-batch-family-mapping/1.0"
 FRAMES_SCHEMA = "qto-pipe-batch-frames/1.0"
 SUMMARY_SCHEMA = "qto-pipe-batch-conversion-summary/1.0"
@@ -402,6 +402,23 @@ def located_frame_ids(row: dict[str, Any], frames: list[dict[str, Any]], insert_
     """
     bounds = bounds_by_frame if bounds_by_frame is not None else {f['frame_id']: frame_bounds_of(f) for f in frames}
     hits = {fid: anchor_in(row, box) for fid, box in bounds.items()}
+    if (row.get('location_schema_version') == 'qto-cad-location-evidence/1.0'
+            and row.get('location_basis') == 'spline_control_hull' and row.get('location_status') == 'bounded'
+            and row.get('measurement_geometry_available') is False):
+        box = row.get('bbox')
+        if (not isinstance(box, list) or len(box) != 4 or
+                not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in box)
+                or box[0] > box[2] or box[1] > box[3]):
+            return None, 'invalid_spline_control_hull'
+        owners = [fid for fid, yes in hits.items() if yes]
+        if not owners:
+            return [], 'spline_control_hull_outside_selected_frames'
+        contained = [fid for fid in owners if isinstance(box, list) and len(box) == 4
+                     and bounds[fid]['xmin'] < box[0] <= box[2] < bounds[fid]['xmax_exclusive']
+                     and bounds[fid]['ymin'] < box[1] <= box[3] < bounds[fid]['ymax_exclusive']]
+        if len(owners) == 1 and contained == owners:
+            return owners, 'spline_control_hull'
+        return None, 'ambiguous_spline_control_hull'  # drawing-level once; never a measured curve or duplicated per frame
     if any(v is not None for v in hits.values()):
         return [fid for fid, yes in hits.items() if yes], 'own_geometry'
     for key in reversed(path_prefixes(str(row.get('instance_path') or ''))):

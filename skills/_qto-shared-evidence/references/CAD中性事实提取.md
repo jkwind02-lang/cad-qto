@@ -19,6 +19,17 @@
 
 ## 可提取的中性事实
 
+### 定位外框与量测几何（提取器 1.6.0）
+
+新提取清单及记录声明 `location_schema_version=qto-cad-location-evidence/1.0`。`bbox` 为二维投影，`bbox3d` 和 `location_bbox3d` 顺序均为 `[xmin,ymin,zmin,xmax,ymax,zmax]`，保持图纸原单位；只有 `location_status=bounded` 才有本节的保守定位外框保证。它不等于真实外形、接触面、臂长、长度或面积，不能据外框尺寸补量。`measurement_geometry_available` 只说明是否有中性参数曲线，不授予专业量测或正式采用资格。
+
+- HATCH：闭合多段线边界、连通闭合线/弧/椭圆边界，及满足正权重凸包条件的样条边界可建立定位外框；弧、bulge、椭圆按完整圆/椭圆的外框包住，可能偏大。`location_basis=hatch_boundary_control_hull`，`x/y/z` 为外框中心，**不是填充形心或插入点**。仍保留 `geometry_status=requires_adapter`、`geometry=null`、`raw_length=null`、`measurement_geometry_available=false`，面积交给面层适配器。`raw_geometry.solid_fill` 保留是否实心；中性提取不把任意 HATCH 判成设备。
+- SPLINE：仅有效控制点、非递减有效节点、正权重（或非有理无权重）的 B 样条采用 `location_basis=spline_control_hull`。仅有拟合点、非正权重、节点或控制数据无效时定位仍未知。保留 `spline_not_measured`；不把控制折线、外框或弦长作为样条长度。
+- INSERT：定义内可界定几何经块基点、嵌套插入矩阵、旋转、镜像及非等比缩放得到保守外框，`location_basis=insert_definition_control_envelope`。缺定义、循环/超深、未展开阵列、未核动态状态、未知子对象或缺少字形外框的可见文字/属性，均不据插入点虚填完整外框。`x/y/z` 仍保留插入锚点。定位框可复核对象范围，不能推出管件臂长；量测仍需实际曲线或原生几何。
+- 子对象局部未知只保留该对象身份、未知原因和待补读，不删除同包其他已取得几何。`transform_row` 同步变换锚点、二维/三维定位外框，保留原定义编号及实例路径。
+
+旧包缺少本定位 schema 时不按新保证解释，也不补写其原清单或 NDJSON。取得旧 HATCH 边界或新增的记录级 INSERT/SPLINE 定位字段时，须从绑定的同版 DXF 重新提取到新目录，并使报告、图页覆盖与复核页引用新清单及 SHA；旧 HATCH 仅有路径数量，不能据此恢复坐标。旧包已有完整定义几何及插入矩阵的，覆盖台账仍可只读回算图框范围，无需为该消费端修复强制重抽。旧 INSERT 的 `bbox` 可能只是插入点；`location_status=unknown` 时该点不代表完整外框。只依赖已有量测曲线且来源仍有效的专业计算，不因新增定位字段而一律重做。
+
 - 原始实体类型、句柄或稳定对象编号；
 - 原始图层名、颜色、线型及可见状态；
 - 原始块名、有效块名、块实例位置、旋转、比例和属性文字；
