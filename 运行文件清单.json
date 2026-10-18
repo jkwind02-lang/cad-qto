@@ -67,8 +67,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/人工思路识图与算量流程.md",
-      "sha256": "8e5da85ff71ccf282cb8bfa6fd55505aee21a4d19f17dffc121fefa0a236bf5a",
-      "bytes": 9397
+      "sha256": "d55f123799701aea0b476233bc9bd3db495aeebc8d07a84ab1085b3f932e241f",
+      "bytes": 9801
     },
     {
       "path": "_qto-shared-evidence/references/公共资源调用与停止条件.md",
@@ -592,8 +592,8 @@
     },
     {
       "path": "qto-coordinator/references/跨能力范围拆分.md",
-      "sha256": "1763e0a9870e5153643ae1b182a4cb021e672af5cb85585ef5efe039914dc8bb",
-      "bytes": 5497
+      "sha256": "26cda00d1acc0ed64d77ba55888a33e01c92c74c64b6da2290ee5a7ce4a0361c",
+      "bytes": 6796
     },
     {
       "path": "qto-coordinator/references/重复归属检查.md",
@@ -602,8 +602,8 @@
     },
     {
       "path": "qto-coordinator/SKILL.md",
-      "sha256": "134cd7644de235c6327bcbce5f60a13fb2e64fde1efbffd4acffc60bcc1eae7d",
-      "bytes": 8518
+      "sha256": "8104138892de518101c28c9473fca780436d4ac43214d8d653fb89f74c6cd551",
+      "bytes": 8914
     },
     {
       "path": "qto-duct-air-systems/agents/openai.yaml",
