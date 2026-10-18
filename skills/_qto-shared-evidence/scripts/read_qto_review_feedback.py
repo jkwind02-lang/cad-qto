@@ -45,6 +45,7 @@ def main():
   out={'schema':'qto-review-handoff/1.0','project_id':view['project_id'],'review_id':view['review_id'],'source_sha256':view['source_sha256'],'result_fingerprint':view['result_fingerprint'],'feedback':fb,'actions':actions,'historical_annotations':{k:r for k,r in fb['annotations'].items() if r.get('applicability_state')!='current'},'unmatched':unmatched,'quantity_changes':0,'drafts_are_not_decisions':True}
   extra=comparison_actions(view,current) if 'comparison' in view else {}
   out.update(extra)
+  if 'delivery' in view:out.update(delivery=view['delivery'],delivery_snapshot=fb.get('delivery_snapshot'),historical_delivery_snapshots=fb.get('historical_delivery_snapshots',[]))
   actionable=len(actions)+sum(len(extra.get(k,[])) for k in ('item_actions','issue_actions','common_issue_actions'))
   a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
   scope_growth=any(any(a.get('added_since_answer',{}).get(k,[]) for k in ('issue_ids','item_ids')) for a in extra.get('common_issue_actions',[]))

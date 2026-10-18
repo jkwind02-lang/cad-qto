@@ -25,7 +25,7 @@ except ImportError as exc:  # pragma: no cover - exercised by deployment checks
 
 from qto_cad_geometry import GEOMETRY_SCHEMA, entity_geometry as extract_geometry_facts, read_dxf_with_diagnostics, resolve_underlay_dependency
 
-VERSION = "qto-cad-neutral-extractor/1.5.1"
+VERSION = "qto-cad-neutral-extractor/1.5.2"
 # Entity types whose named block is drawn as part of the entity (geometry blocks).
 GEOMETRY_BLOCK_TYPES = {"DIMENSION", "ARC_DIMENSION", "LARGE_RADIAL_DIMENSION", "ACAD_TABLE", "TABLE"}
 CURVE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "CIRCLE", "ELLIPSE", "SPLINE"}

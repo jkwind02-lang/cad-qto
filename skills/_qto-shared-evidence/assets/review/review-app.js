@@ -9,6 +9,7 @@ try{
  let feedback=core.parse(JSON.parse($('feedback-seed').textContent),data),storageOK=true,cacheProblem='';
  const storageKey='qto-review-2-'+data.source_sha256;
  try{const cached=localStorage.getItem(storageKey);if(cached)feedback=core.mergePackages(feedback,core.parse(cached,data));}catch(e){storageOK=false;cacheProblem=e.message;}
+ if(data.delivery){globalThis.QtoReviewDelivery.attach({data,core,feedback,originalHTML,storageKey});$('loading').remove();return;}
  const scenes=new Map(data.scenes.map(s=>[s.id,s])),objects=new Map(data.objects.map(o=>[o.catalog_key,o]));
  const backgrounds=new Map(data.scenes.map(s=>[s.id,[...(s.background_refs||[]).flatMap(k=>data.background_sets[k]),...s.background]])),boundsCache=new WeakMap();
  function pointBounds(points){const b=[Infinity,Infinity,-Infinity,-Infinity];for(const p of points){b[0]=Math.min(b[0],p[0]);b[1]=Math.min(b[1],p[1]);b[2]=Math.max(b[2],p[0]);b[3]=Math.max(b[3],p[1]);}return b;}

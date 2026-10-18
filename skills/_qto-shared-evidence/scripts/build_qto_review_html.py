@@ -56,6 +56,7 @@ def build(data_path,output,feedback_path=None,feedback_url=None,feedback_backup_
  page=template.replace('__PAGE_TITLE__',html.escape(view['title'])).replace('__PAYLOAD__',payload)
  page=page.replace('__FEEDBACK__',json.dumps(feedback,ensure_ascii=False,indent=0).replace('<','\\u003c'))
  page=page.replace('__REVIEW_CORE__',(assets/'review-core.js').read_text(encoding='utf-8')).replace('__REVIEW_AUDIT__',(assets/'review-audit.js').read_text(encoding='utf-8')).replace('__REVIEW_APP__',(assets/'review-app.js').read_text(encoding='utf-8'))
+ page=page.replace('__REVIEW_DELIVERY__',(assets/'review-delivery.js').read_text(encoding='utf-8'))
  page=page.replace('__PROBLEM_CONFIG__',json.dumps(config,ensure_ascii=False).replace('<','\\u003c')).replace('__PROBLEM_FEEDBACK__',(assets/'problem-feedback.js').read_text(encoding='utf-8'))
  assert unpack_payload(gzip.decompress(base64.b64decode(payload)))==view,'页面载荷解包后与视图不一致'
  # The page's own decoder must give the same background too (review view contract 11.1); skipped only when node is missing.
@@ -73,6 +74,7 @@ def build(data_path,output,feedback_path=None,feedback_url=None,feedback_backup_
  if output.stat().st_size>2_000_000:warnings.append('HTML超过2MB提醒值；资料完整保留，需按用途检查实际打开性能')
  if longest>10_000:warnings.append('存在超过10000字符的行，需复核源码预览性能')
  report={'status':'PASS_WITH_WARNINGS' if warnings or unmatched else 'PASS','output':str(output),'schema':view['schema'],'source_sha256':view['source_sha256'],'object_records':len(view['objects']),'distinct_object_ids':len({o['id'] for o in view['objects']}),'professional_count':len({o['professional'] for o in view['objects']}),'scene_count':len(view['scenes']),'group_count':len(view['groups']),'saved_annotations':len(feedback['annotations']),'drafts':len(feedback['drafts']),'bytes':output.stat().st_size,'size_estimate':{'raw_json_bytes':len(raw),'gzip_bytes':len(gzip.compress(raw,mtime=0)),'payload_gzip_bytes':len(packed_gz),'background_packed':packed.startswith(PACK_MAGIC),'html_bytes':output.stat().st_size},'longest_line':longest,'unmatched_historical_feedback':unmatched,'warnings':warnings,'quantity_changes':0,'native_browser_validation':'not performed by this builder'}
+ if 'delivery' in view:report['delivery']=view['delivery']['generation_check']
  if 'comparison' in view:
   check=view['comparison']['generation_check'];report.update(comparison_counts=check['counts'],comparison_exceptions=check['exceptions'],consistent_band={k:view['comparison']['thresholds'].get(k) for k in ('consistent_band','count_units')},legacy_search_evidence=view['comparison'].get('legacy_search_evidence'))
  return report

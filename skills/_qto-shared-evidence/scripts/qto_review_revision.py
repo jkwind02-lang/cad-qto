@@ -9,6 +9,7 @@ import copy
 import hashlib
 import json
 from datetime import datetime
+from qto_review_delivery import delivery_record_state
 
 OBJECT_FIELDS = (
     "id", "catalog_key", "professional", "scene_id", "kind", "points", "holes",
@@ -24,6 +25,7 @@ def fingerprint(value):
 
 def bind_result_versions(view):
     """Recompute, never trust caller-supplied result fingerprints."""
+    delivery_context = fingerprint(view["delivery"]) if "delivery" in view else None
     scenes = {s["id"]: s for s in view["scenes"]}
     bykey = {}
     for obj in view["objects"]:
@@ -31,6 +33,7 @@ def bind_result_versions(view):
         if obj.get('decision_id') is not None: value['decision_id'] = obj['decision_id']
         scene = scenes.get(obj.get("scene_id"), {})
         value["coordinate_context"] = {key: scene.get(key) for key in ("source_id", "coordinate_unit", "y_axis", "transform")}
+        if delivery_context is not None: value["delivery_context"] = delivery_context
         obj["result_fingerprint"] = fingerprint(value)
         bykey[obj["catalog_key"]] = obj
     for group in view["groups"]:
@@ -53,6 +56,16 @@ def bind_result_versions(view):
         total["items"] = sorted((i["id"], i["result_fingerprint"]) for i in comparison["items"])
         total["issues"] = sorted((q["id"], q["result_fingerprint"]) for q in comparison["issues"])
         total["common_issues"] = sorted((g["id"], g["result_fingerprint"]) for g in comparison.get("common_issues", []))
+    if delivery_context is not None:
+        total["delivery"] = delivery_context
+        # Adoption, evidence status and scopes are semantic even if CAD/list bytes stay the same.
+        for pool in (view["groups"], *((comparison or {}).get(k, []) for k in ("items", "issues", "common_issues"))):
+            for target in pool:
+                target["result_fingerprint"] = fingerprint({"result": target["result_fingerprint"], "delivery": delivery_context})
+        total["groups"] = sorted((g["id"], g["result_fingerprint"]) for g in view["groups"])
+        if comparison is not None:
+            for name, pool in (("items", "items"), ("issues", "issues"), ("common_issues", "common_issues")):
+                total[name] = sorted((x["id"], x["result_fingerprint"]) for x in comparison.get(pool, []))
     view["result_fingerprint"] = fingerprint(total)
     view["result_version_schema"] = "qto-review-result-version/1.0"
     return view
@@ -116,6 +129,9 @@ def audit_target(record):
 
 
 def assess_record(record, view):
+    delivery_state = delivery_record_state(record, view)
+    if delivery_state is not None:
+        return delivery_state
     """Called after structural validation; Python/JS parity has golden tests."""
     objects = {o["catalog_key"]: o for o in view["objects"]}
     groups = {g["id"]: g for g in view["groups"]}

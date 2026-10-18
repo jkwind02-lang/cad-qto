@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 297,
+  "runtime_file_count": 301,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -17,23 +17,28 @@
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-app.js",
-      "sha256": "ee3300d5cccea421af88f669aa07e408b1ae59c3365d89c5ddd7c704f40e1ada",
-      "bytes": 40460
+      "sha256": "ba70e3b1c02aa9815eae44bd81c403052697910ecd24b35ba6f7ff5bf8e21695",
+      "bytes": 40592
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-audit.js",
-      "sha256": "bee6367283e6a2320938f2b58acdff41c9a95ec1b78ed4f2a7ad677daf89df5e",
-      "bytes": 62172
+      "sha256": "bfdadc615957ca24abe025ca1018821d8ce19320b69c31ac1d3408e33047684f",
+      "bytes": 62323
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-core.js",
-      "sha256": "b0242fa9803dd6f61cee7aca24c91f530bfa848c6f5b06292012398c964b7cc5",
-      "bytes": 21274
+      "sha256": "fffe95cbd93bc935301ace5f1827ab97b3a13df6e559f6c4ed0da50b581f153c",
+      "bytes": 23148
+    },
+    {
+      "path": "_qto-shared-evidence/assets/review/review-delivery.js",
+      "sha256": "176ceb2c847cb0a7b5d394849aa62d364f8a6504e2f1a2d0e67a3528822c60cf",
+      "bytes": 12784
     },
     {
       "path": "_qto-shared-evidence/assets/review/review-shell.html",
-      "sha256": "28e448e70414e60245103d08933cb5b0a7cfbb5d11dd2d080bc7ae5ee9a99479",
-      "bytes": 23085
+      "sha256": "92518765c9b001087b84002382b8a822b30474c1eb5803bc0e07afbae64452c3",
+      "bytes": 23886
     },
     {
       "path": "_qto-shared-evidence/assets/插件问题登记模板.md",
@@ -57,8 +62,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/HTML交互复核与批注.md",
-      "sha256": "1780068f79504b021176796af2b6bcbded91ec42785044e564d5cb9506ecec46",
-      "bytes": 23490
+      "sha256": "865a7b4b0ad0e2fab6b5265b08ebfb39b1d927028a96e5ffd2b60058cca063f0",
+      "bytes": 23816
     },
     {
       "path": "_qto-shared-evidence/references/PDF图片与表格提取.md",
@@ -82,8 +87,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/否定结论检索.md",
-      "sha256": "34b1ee1144fb906650b52d9b18cc3f16fc624a1be6ab78e3cb40ba15deba9fac",
-      "bytes": 12772
+      "sha256": "e3212de2c54cf64a791b0b91aa09f197090713b83e7bd53da6ad901de419c298",
+      "bytes": 14427
     },
     {
       "path": "_qto-shared-evidence/references/图纸与资料范围筛选.md",
@@ -109,6 +114,11 @@
       "path": "_qto-shared-evidence/references/工程量成果最小字段.schema.json",
       "sha256": "31df37f3976271ca50eea8245eaa1cf85c2d85fb1cac5e4a4b64f34c52a58213",
       "bytes": 22547
+    },
+    {
+      "path": "_qto-shared-evidence/references/当前采用与缺资料只读交付契约.md",
+      "sha256": "70808b332e13087ee5f6693372fd9265ef4066cef64451dce0df1a5669845c33",
+      "bytes": 9081
     },
     {
       "path": "_qto-shared-evidence/references/按人工算量顺序执行与重算.md",
@@ -197,8 +207,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/build_qto_review_html.py",
-      "sha256": "ea069dc656c6d4ab71116ab161fda48582d3b0c5d31709eb5cdf8f5ae6cdb3f2",
-      "bytes": 8558
+      "sha256": "db1b69e9b12ffa5e67fd462d398f52326f223a026ef3fd4066ae31ba5c0357e2",
+      "bytes": 8737
     },
     {
       "path": "_qto-shared-evidence/scripts/build_review_scenes_from_tables.py",
@@ -257,7 +267,7 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/extract_cad_neutral.py",
-      "sha256": "614815365fd49b99b6517fb9d0782c72e16ddf7ea4ab58aa548d2a8c917b5335",
+      "sha256": "7c5826c03ea0e59ed775c338b89475c0bea4941a6b725cb6168c62b89c5e1b7c",
       "bytes": 28572
     },
     {
@@ -277,8 +287,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_cad_geometry.py",
-      "sha256": "8a7e95a0cb9e732a049c4b713c883fe7503d3fa0ac134e935e1f655b5633dda8",
-      "bytes": 61733
+      "sha256": "9b1a067c8f800e7c38b367a8d39511d839493cf457f253ca2091c9ba9c3c6c91",
+      "bytes": 61973
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_cad_source_contract.py",
@@ -337,8 +347,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_contract.py",
-      "sha256": "540a3e801f9df46d9f8285a49baf55dba8f05b59c642dabc5b31125b5ee5d7eb",
-      "bytes": 27790
+      "sha256": "ec8b8e1db705b263a8ea833f8c279e13978f73a28d65755a1e2d97e3ed9f6f4d",
+      "bytes": 28109
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_decisions.py",
@@ -346,9 +356,19 @@
       "bytes": 3552
     },
     {
+      "path": "_qto-shared-evidence/scripts/qto_review_delivery.py",
+      "sha256": "96d00fb0bd30ae88275f72b037467d76d15da19216fe2dbe1d65f591961f74e4",
+      "bytes": 14359
+    },
+    {
       "path": "_qto-shared-evidence/scripts/qto_review_revision.py",
-      "sha256": "7988a3ab9ed502817f211d36145f211400531b20e263d934ff816af8d3da6628",
-      "bytes": 11714
+      "sha256": "25949ac62b3467a2d9d52d272392f3167f59bbc4280e0a686b5d31d5380c9045",
+      "bytes": 12867
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_search_text_lines.py",
+      "sha256": "a6fab2ea4a22a4c9cfa1f708da7d7f291b6c2693f6288a857075fa284d0cc93d",
+      "bytes": 2510
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_segment_graph.py",
@@ -367,8 +387,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/read_qto_review_feedback.py",
-      "sha256": "f0705d97cc844aa6b3cb2818b515374b58ce335c9be30ae28397b893559f659b",
-      "bytes": 6872
+      "sha256": "ccad487ac86c7b5b84351a183f2c886209cb164dc44d34f180f737ed951c5630",
+      "bytes": 7053
     },
     {
       "path": "_qto-shared-evidence/scripts/recompute_qto_dependencies.py",
@@ -382,8 +402,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/search_negative_evidence.py",
-      "sha256": "b8478d0f409e3a7feff7d3d5ccea0f3ded3cc6edf17937198ac303cf3138fcee",
-      "bytes": 46211
+      "sha256": "e336505681ef0308791b373f191fa576dadcdcd44d7b1f432697903b660cf88d",
+      "bytes": 55133
     },
     {
       "path": "_qto-shared-evidence/scripts/validate_minimum_result.py",
@@ -472,8 +492,8 @@
     },
     {
       "path": "qto-components-points/scripts/build_component_instances_from_neutral.py",
-      "sha256": "e8b96845d59c3e8e032068ce10da5a39ab33e9372496245686a3253c7a50c2ca",
-      "bytes": 119528
+      "sha256": "8c3f0d7fe0acd272fe5363ce9a5bc949b5b2a407ca48d4760d6840e91f570471",
+      "bytes": 120099
     },
     {
       "path": "qto-components-points/scripts/build_network_endpoint_handoff.py",
@@ -497,8 +517,8 @@
     },
     {
       "path": "qto-components-points/SKILL.md",
-      "sha256": "ad2897e6bf857a7ba5c526df5116be5b94dfb921e8c3e0ef9937241b9e8bae2f",
-      "bytes": 7951
+      "sha256": "5ac23d789fdbcd8776d434b0593fc3e4fd81c18362efa33da4e12a5cc4e82d46",
+      "bytes": 8408
     },
     {
       "path": "qto-concrete-formwork/agents/openai.yaml",

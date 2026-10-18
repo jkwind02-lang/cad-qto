@@ -1,6 +1,7 @@
 """Shared offline review data contract. Does not recognize objects or alter quantities."""
 import base64, copy, gzip, hashlib, json, math, re
 from pathlib import Path
+from qto_review_delivery import normalize_delivery, bind_delivery_feedback
 from qto_review_revision import bind_result_versions, classify_feedback, settle_merge_conflict
 from qto_review_comparison import normalize_comparison, VERDICTS, CONCLUSIONS, BAND_CLASSES
 
@@ -58,7 +59,7 @@ def normalize_view(raw, base_dir=None):
  d['source_sha256']=fingerprint
  if d.get('legacy_source_sha256'):
   require(len(sources)==1 and d['legacy_source_sha256']==sources[0]['sha256'],'旧版导入只能显式绑定同一单来源')
- scenes=d.get('scenes');require(isinstance(scenes,list) and (scenes or v11),'至少提供一张图页/视图')
+ scenes=d.get('scenes');require(isinstance(scenes,list) and (scenes or v11 or 'delivery' in d),'至少提供一张图页/视图')
  d.setdefault('background_sets',{});require(isinstance(d['background_sets'],dict),'共用底图集无效')
  scene_ids=set();source_ids={s['id'] for s in sources}
  for s in scenes:
@@ -118,7 +119,7 @@ def normalize_view(raw, base_dir=None):
    require(mime is not None,'底图图片仅支持PNG/JPEG，SVG须转为可信几何或栅格')
    s['raster_data_uri']='data:'+mime+';base64,'+base64.b64encode(raw_image).decode();s.pop('raster_path')
   if s.get('raster_data_uri'):require(re.fullmatch(r'data:image/(png|jpeg);base64,[A-Za-z0-9+/=\s]+',s['raster_data_uri']) is not None,'不允许外部或可执行底图图片')
- objects=d.get('objects');require(isinstance(objects,list) and (objects or 'comparison' in d),'缺少可复核对象')
+ objects=d.get('objects');require(isinstance(objects,list) and (objects or 'comparison' in d or 'delivery' in d),'缺少可复核对象')
  keys=set()
  for o in objects:
   for k in ['id','catalog_key','title','category','detail','source','status']:require(string(o.get(k)),'对象'+str(o.get('id'))+'缺少'+k)
@@ -159,6 +160,7 @@ def normalize_view(raw, base_dir=None):
   require(string(q.get('label')) and string(q.get('unit')) and string(q.get('scope')),'汇总须含范围、名称和单位')
   require(q.get('value') is None or number(q['value']),'汇总数值无效')
  d['professional_labels']=PROFESSIONALS;d.setdefault('scope_notes',[])
+ normalize_delivery(d)
  bind_result_versions(d)
  json.dumps(d,ensure_ascii=False,allow_nan=False)
  return d
@@ -186,6 +188,8 @@ def validate_feedback(raw, view):
  scene_ids={s['id'] for s in view['scenes']};keys={o['catalog_key'] for o in view['objects']};groups={g['id']:g for g in view['groups']};unmatched=[]
  comparison=view.get('comparison') or {};items={i['id']:i for i in comparison.get('items',[])};issues={q['id']:q for q in comparison.get('issues',[])};commons={g['id']:g for g in comparison.get('common_issues',[])}
  for m in p['custom_markers']:
+  if 'delivery' in view:
+   require(isinstance(m,dict),'历史新增标记须为对象');continue
   if legacy and not m.get('scene_id'):
    m['scene_id']=view.get('legacy_scene_map',{}).get(m.get('plan_side','supply'));m['professional']=view.get('legacy_professional')
    m.setdefault('catalog_key','我的新增标记|'+m['id']);m.setdefault('quantities',[]);m.setdefault('attributes',{})
@@ -236,7 +240,7 @@ def validate_feedback(raw, view):
     require(set(r.get('object_ids',[]))=={sm[k]['object_id'] for k in sel},'对象清单和成员快照不一致')
     if field=='annotations':require(bool(sel),'整组未选择成员')
     g=groups.get(r['group_id'])
-    if g:require(set(sm)==set(g['member_keys']),'批注组成员与当前视图不同，须先核对版本及成员迁移')
+    if g and 'delivery' not in view:require(set(sm)==set(g['member_keys']),'批注组成员与当前视图不同，须先核对版本及成员迁移')
     missing=[k for k in sel if k not in keys]
     if not g or missing:unmatched.append({'annotation_key':key,'missing_member_keys':missing,'reason':'历史组或对象需重新对应，不自动应用'})
    elif r.get('object_snapshot'):
@@ -246,13 +250,13 @@ def validate_feedback(raw, view):
     else:
      obj=next((o for o in view['objects'] if o['catalog_key']==snap['catalog_key']),None)
      if obj:require(obj['id']==snap['object_id'],'单对象快照与当前对象身份不一致')
- return classify_feedback(p,view,unmatched)
+ return classify_feedback(bind_delivery_feedback(p,view),view,unmatched)
 
 def feedback_schema(view):
  return FEEDBACK_SCHEMA_COMPARISON if view.get('schema')==VIEW_SCHEMA_COMPARISON else FEEDBACK_SCHEMA
 
 def empty_feedback(view):
- return {'schema':feedback_schema(view),'project_id':view['project_id'],'review_id':view['review_id'],'source_sha256':view['source_sha256'],'drawing_revision':view['revision'],'result_fingerprint':view['result_fingerprint'],'annotations':{},'drafts':{},'custom_markers':[]}
+ return bind_delivery_feedback({'schema':feedback_schema(view),'project_id':view['project_id'],'review_id':view['review_id'],'source_sha256':view['source_sha256'],'drawing_revision':view['revision'],'result_fingerprint':view['result_fingerprint'],'annotations':{},'drafts':{},'custom_markers':[]},view)
 
 # Page payload (review view contract 11.1): transport only, the view itself is unchanged.
 # Background items become a shared style table plus delta-coded integer coordinates; a set whose

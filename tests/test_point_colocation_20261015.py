@@ -68,6 +68,7 @@ def build(tmp_path, placements=PLACEMENTS, **profile_extra):
                             'kind': 'cad_property', 'locator': 'Model', 'observation': '合成'}], 'entries': entries}
     lp = tmp_path / 'ledger.json'; lp.write_text(json.dumps(ledger, ensure_ascii=False), encoding='utf-8')
     profile = {'schema_version': 'qto-component-recognition-profile/1.0', 'profile_id': 'P', 'profile_version': '1',
+               'consumer_skill':'qto-pipe-networks',  # these cases also assert explicit network handoff
                'expected_source_sha256': src, 'adjudication_ledger': {'ledger_id': 'L', 'ledger_version': '1', 'sha256': sha(lp)},
                'scope': {'layout': 'Model'}, 'unit': {'factor_to_output': .001, 'output_coordinate_unit': 'm', 'source_id': 'INSUNITS=4'},
                'rules': [{'rule_id': rid, 'adjudication_id': f'M-{rid}', 'block_pattern': pattern, 'decision': 'include',

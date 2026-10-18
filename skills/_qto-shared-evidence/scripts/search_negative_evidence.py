@@ -14,8 +14,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qto_cad_geometry as cad_geometry  # noqa: E402
+from qto_search_text_lines import line_candidates  # noqa: E402
 
-VERSION = '1.1.4'
+VERSION = '1.2.0'
 INPUT_SCHEMA, OUTPUT_SCHEMA = 'qto-negative-search-input/1.0', 'qto-negative-search/1.0'
 KINDS = ('spec', 'tray', 'box', 'model', 'pipe', 'text', 'block')
 SHEET_KINDS = ('平面', '系统图', '表与说明', '图例', '详图', '其他')
@@ -33,7 +34,7 @@ XREF_PREFIX_RE = re.compile(r'^(?:[^$]*\$\d+\$)+')
 TEXT_BASIS = '文字插入点'
 HIT_DETAIL = '否定结论检索命中明细.csv'
 HIT_COLUMNS = ['检索记录编号', '条目', '命中类别', '图号', '图页', '图页名', '图页类型', '句柄', '块内句柄', '图层', '文字', '统一写法',
-               '经由', '定位依据', '判定', '判定序号', '判定依据']
+               '经由', '定位依据', '判定', '判定序号', '判定依据', '来源图元类型', '参与句柄', '排除词']
 
 
 class InputError(ValueError):
@@ -207,13 +208,19 @@ def chain(a, b):
 def texts_of(r):
     """(text, via) pairs a record carries: its own text and every attribute value."""
     out = []
-    if r.get('entity_type') in ('TEXT', 'MTEXT', 'ATTRIB') and r.get('text'): out.append((r['text'], 'text'))
+    if r.get('entity_type') == 'ATTDEF':
+        raw=r.get('raw_geometry') or {};seen=set()
+        for field,value in (('text',r.get('text')),('default',raw.get('default')),('tag',raw.get('tag'))):
+            if value not in (None,'') and str(value) not in seen:
+                seen.add(str(value));out.append((str(value),'ATTDEF:'+field))
+    elif r.get('entity_type') in ('TEXT', 'MTEXT', 'ATTRIB'):
+        if r.get('text'):out.append((str(r['text']),'text'))
     for tag, val in (r.get('attributes') or {}).items():
         if val not in (None, ''): out.append((str(val), 'attribute:' + str(tag)))
     return out
 
 
-def read_drawing(d, base, non_drawing, overrides, problems):
+def read_drawing(d, base, non_drawing, overrides, problems, sheet_rows=()):
     """One drawing: layout text occurrences, block text occurrences, the nested INSERT graph and what could not be read."""
     nd = base / d['neutral_dir']
     lay, blk = nd / '中性布局图元.ndjson', nd / '中性块定义图元.ndjson'
@@ -248,13 +255,30 @@ def read_drawing(d, base, non_drawing, overrides, problems):
                 for text, via in texts_of(r):
                     # an INSERT's attribute values are placed with the INSERT (own carries its block and matrix)
                     rec = {'text': text, 'flat': flat(text), 'flat_sep': flat_sep(text), 'via': via, 'layer': r.get('layer'),
-                           'handle': r.get('entity_handle'), 'x': r.get('x'), 'y': r.get('y'), 'layout': r.get('layout'), **own}
+                           'handle': r.get('entity_handle'), 'x': r.get('x'), 'y': r.get('y'), 'layout': r.get('layout'),
+                           'entity_type':et,'rotation':r.get('rotation'),'height':(r.get('raw_geometry') or {}).get('height'),
+                           'width_factor':(r.get('raw_geometry') or {}).get('width_factor') or 1, **own}
                     if layer_kind == 'layout': occ.append(rec)
                     elif parent and not parent.startswith('*D'): binst[parent].append(rec)   # dimension blocks only hold measured values
                 if et == 'INSERT' and r.get('block_name'):
                     rec = {'layer': r.get('layer'), 'handle': r.get('entity_handle'), 'x': r.get('x'), 'y': r.get('y'), 'layout': r.get('layout'), 'via': 'block', **own}
                     if layer_kind == 'layout': occ.append({**rec, 'text': None, 'flat': '', 'flat_sep': ''})
                     elif parent: binst[parent].append({**rec, 'text': None, 'flat': '', 'flat_sep': ''})
+    def sheet_key(o):
+        page=place(sheet_rows,o.get('layout'),o.get('x'),o.get('y'))
+        return page['sheet'] if page else None
+    def join_in_scope(o):
+        page=place(sheet_rows,o.get('layout'),o.get('x'),o.get('y'))
+        return page is not None and not non_drawing.search(str(o.get('layer') or '')) and not (d.get('_exclude') and d['_exclude'].search(page['title']))
+    joined,missing=line_candidates([o for o in occ if join_in_scope(o)],sheet_key)
+    for o in joined:o.update(flat=flat(o['text']),flat_sep=flat_sep(o['text']))
+    occ.extend(joined)
+    block_missing=[]
+    for name,rows in binst.items():
+        more,miss=line_candidates(rows)
+        block_missing.extend((name,o) for o in rows if o.get('entity_type')=='TEXT' and o.get('handle') in miss)
+        for o in more:o.update(flat=flat(o['text']),flat_sep=flat_sep(o['text']))
+        rows.extend(more);joined.extend(more)
     definitions = {name: folder.rows() for name, folder in folders.items()}
     origins = {n: (b.get('origin') or [0.0, 0.0, 0.0]) for n, b in meta.items()}
     extents = {}
@@ -267,9 +291,23 @@ def read_drawing(d, base, non_drawing, overrides, problems):
                                                   skip_unknown=True)
         except (ValueError, TypeError, IndexError):
             return None, frozenset()
-    return {'occ': occ, 'blocks': binst, 'parents': parents, 'tops': tops, 'inserted': inserted, 'unread': unread, 'extent': extent,
-            'neutral': {'dir': str(nd), 'layout_sha256': sha_file(lay), 'block_sha256': sha_file(blk)},
-            'unserialized_blocks': sum(1 for b in man.get('blocks', []) if b.get('serialized') is False)}
+    dr={'occ': occ, 'blocks': binst, 'parents': parents, 'tops': tops, 'inserted': inserted, 'unread': unread, 'extent': extent,
+            'neutral': {'dir': str(nd.resolve()), 'layout_sha256': sha_file(lay), 'block_sha256': sha_file(blk),
+                        'manifest_present':(nd/'CAD中性取证清单.json').exists(),
+                        'manifest_sha256':sha_file(nd/'CAD中性取证清单.json') if (nd/'CAD中性取证清单.json').exists() else None},
+            'unserialized_blocks': sum(1 for b in man.get('blocks', []) if b.get('serialized') is False),
+            'joined_count':len(joined),'join_geometry_missing_handles':missing}
+    cache={}
+    for name,o in block_missing:
+        inst=instances(dr,name,cache)
+        # Legacy *T table pictures are serialized in world coordinates; other
+        # anonymous definitions (notably unused *U dynamic blocks) are not draws.
+        if not inst and name.startswith('*T'):inst=[([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],'Model',None)]
+        for m,layout,top in inst:
+            x,y,_=anchor(dr,o,m);page=place(sheet_rows,layout,x,y)
+            if page is None or non_drawing.search(str(o.get('layer') or '')) or (d.get('_exclude') and d['_exclude'].search(page['title'])):continue
+            missing.append({'top_handle':top,'inner_handle':o.get('handle'),'block':name,'sheet':page['sheet']})
+    return dr
 
 
 def classify(r, non_drawing, overrides, did):
@@ -345,31 +383,39 @@ def anchor(dr, o, m=None):
     return x, y, basis
 
 
-def search(item, var, drawings, data, sheets):
+def search(item, var, drawings, data, sheets, apply_exclusions=True):
     hits, second, unplaced = [], [], Counter()
     for d in drawings:
         dr = data.get(d['id'])
         if dr is None: continue
         cache = {}
         for which, pats, excl in (('main', var['main'], var['exclude']), ('second', var['second'], var['exclude'] + var['second_exclude'])):
-            if not pats and not (which == 'main' and var['blocks']) and not (which == 'second' and var.get('box_aliases')): continue
+            if not apply_exclusions:excl=[]
+            if not pats and not (which == 'main' and var['blocks']) and not (which == 'second' and (var.get('box_aliases') or dr['joined_count'])): continue
             bag = hits if which == 'main' else second
+            def qualifies(o):
+                if o.get('member_handles'):
+                    return which=='second' and (match(o,var['main'],[] if not apply_exclusions else var['exclude'],var) or match(o,pats,excl,var,'second'))
+                return not (o['text'] is None and which=='second') and match(o,pats,excl,var,which)
             for o in dr['occ']:
-                if (o['text'] is None and which == 'second') or not match(o, pats, excl, var, which): continue
+                if not qualifies(o): continue
                 x, y, basis = anchor(dr, o)
                 bag.append(hit(d, sheets[d['id']], o, x, y, o.get('layout'), 'layout' if o['text'] is not None else 'block', basis=basis))
             for name, rows in dr['blocks'].items():
-                found = [o for o in rows if not (o['text'] is None and which == 'second') and match(o, pats, excl, var, which)]
+                found = [o for o in rows if qualifies(o)]
                 if not found: continue
                 inst = instances(dr, name, cache)
-                if not inst and not name.startswith('*'):
+                if not inst and not name.startswith('*T'):
                     if which == 'main': unplaced[(d['id'], name)] += len(found)
                     continue
-                if not inst:   # anonymous geometry blocks (tables, multileaders) sit in world coordinates and are drawn once
+                if not inst:   # legacy *T table pictures sit in world coordinates and are drawn once
                     inst = [([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], 'Model', None)]
                 for m, lay, top in inst:
                     for o in found:
                         x, y, basis = anchor(dr, o, m)
+                        if o.get('member_points'):
+                            pages=[place(sheets[d['id']],lay,*apply(m,*p)) for p in o['member_points']]
+                            if any(p is None for p in pages) or len({p['sheet'] for p in pages})!=1:continue
                         bag.append(hit(d, sheets[d['id']], o, x, y, lay, f'块 {name}（插入 {len(inst)} 次）', top, basis))
     return hits, second, unplaced
 
@@ -379,10 +425,14 @@ def hit(d, sheets, o, x, y, layout, via, top=None, basis=None):
     scope = d.get('role', 'scope') == 'scope' and not (s and d.get('_exclude') and d['_exclude'].search(s['title']))
     how = {'layout': '布局文字', 'block': '块名'}.get(via, via)
     if o['text'] is not None and o['via'].startswith('attribute:'): how += ' 属性 ' + o['via'].split(':', 1)[1]
+    if o.get('via','').startswith('ATTDEF'):how+=' '+o['via']
+    if o.get('member_handles'):how+=' 同基线拼接候选'
     return {'drawing': d['id'], 'group': d.get('group') or ('本次范围' if d.get('role', 'scope') == 'scope' else '参照'), 'scope': scope,
             'sheet': s['sheet'] if s else '', 'sheet_title': s['title'] if s else '', 'sheet_kind': s['kind'] if s else OFF_SHEET,
             'handle': top or o.get('handle'), 'inner_handle': o.get('handle') if top else None, 'layer': o.get('layer'),
-            'text': o['text'] if o['text'] is not None else o.get('block'), 'via': how, 'placement_basis': basis}
+            'text': o['text'] if o['text'] is not None else o.get('block'), 'via': how, 'placement_basis': basis,
+            'is_text':o['text'] is not None,'entity_type':o.get('entity_type'),
+            **({k:o[k] for k in ('member_handles','source_texts')} if o.get('member_handles') else {})}
 
 
 def existing(item, var, tables):
@@ -421,18 +471,20 @@ def judge(sec, judgments):
     return used
 
 
-def detail_rows(record_id, item_id, main, stamp, sec):
+def detail_rows(record_id, item_id, main, stamp, sec, excluded=()):
     """One row per hit for HIT_DETAIL: every hit the record counts, not the samples (registration 20261017-0015)."""
     rows = []
     for category, hs in (('主命中', [h for h in main if h['scope']]), ('参照（主写法）', [h for h in main if not h['scope']]),
                          ('次级', [h for h in sec if h['scope']]), ('次级（参照）', [h for h in sec if not h['scope']]),
-                         ('印章水印（不算命中）', stamp)):
+                         ('印章水印（不算命中）', stamp), ('已排除',excluded)):
         for h in hs:
             rows.append({'检索记录编号': record_id, '条目': item_id, '命中类别': category, '图号': h['drawing'], '图页': h['sheet'] or OFF_SHEET,
                          '图页名': h['sheet_title'], '图页类型': h['sheet_kind'], '句柄': h['handle'] or '', '块内句柄': h['inner_handle'] or '',
                          '图层': h['layer'] or '', '文字': h['text'] or '', '统一写法': flat(h['text'] or ''), '经由': h['via'],
                          '定位依据': h.get('placement_basis') or '', '判定': h.get('judgment') or ('未判' if category == '次级' else ''),
-                         '判定序号': h.get('judgment_index', ''), '判定依据': h.get('judgment_basis') or ''})
+                         '判定序号': h.get('judgment_index', ''), '判定依据': h.get('judgment_basis') or '',
+                         '来源图元类型':h.get('entity_type') or '', '参与句柄':'；'.join(h.get('member_handles') or []),
+                         '排除词':'；'.join(h.get('exclusion_patterns') or [])})
     return rows
 
 
@@ -482,18 +534,21 @@ def build(cfg, base):
     for n, t in enumerate(cfg.get('existing_results') or []):
         try:
             with (base / t['path']).open(encoding='utf-8-sig', newline='') as f: rows = list(enumerate(csv.DictReader(f), 2))
-            tables.append({'label': t.get('label') or Path(t['path']).stem, 'rows': rows, 'id_column': t.get('id_column') or '', 'text_columns': t.get('text_columns') or []})
+            tables.append({'label': t.get('label') or Path(t['path']).stem, 'rows': rows, 'id_column': t.get('id_column') or '', 'text_columns': t.get('text_columns') or [],
+                           'source_input':{'role':'existing_results','path':str((base/t['path']).resolve()),'sha256':sha_file(base/t['path'])}})
             if not tables[-1]['text_columns']: problems.append(f'existing_results[{n}] 要写 text_columns')
         except (OSError, KeyError) as e: problems.append(f'existing_results[{n}] 读不了：{e}')
     sheets = {d['id']: read_sheets(d.get('sheets'), base, d['id'], problems) for d in drawings if d.get('id')}
     if problems: raise InputError(problems)
     data, scope_info = {}, []
     for d in drawings:
-        dr = read_drawing(d, base, non_drawing, overrides, problems)
+        dr = read_drawing(d, base, non_drawing, overrides, problems,sheets[d['id']])
         data[d['id']] = dr
         kinds = Counter(s['kind'] for s in sheets[d['id']])
         scope_info.append({'drawing': d['id'], 'group': d.get('group') or '', 'role': d.get('role', 'scope'), 'read': dr is not None,
-                           'sheets': len(sheets[d['id']]), 'sheet_kinds': dict(kinds), **({'neutral': dr['neutral'], 'unserialized_blocks': dr['unserialized_blocks']} if dr else {})})
+                           'sheets': len(sheets[d['id']]), 'sheet_kinds': dict(kinds),
+                           **({'sheet_table':{'path':str((base/d['sheets']['path']).resolve()),'sha256':sha_file(base/d['sheets']['path'])}} if d.get('sheets') else {}),
+                           **({'neutral': dr['neutral'], 'unserialized_blocks': dr['unserialized_blocks']} if dr else {})})
     searched = {d['id'] for d in drawings if data.get(d['id']) is not None}
     uncovered = [{'drawing': x, 'reason': '没给中性取证包' if x not in ids else '中性取证包读不了'} for x in declared if x not in searched]
     unread = [{'drawing': d['id'], 'role': d.get('role', 'scope'), 'kind': k, 'layer': lay, 'class': cls, 'count': c}
@@ -505,7 +560,18 @@ def build(cfg, base):
     records, stale, detail = [], [], []
     for i in items:
         var = vars_[i['item_id']]
-        hs, sec, unplaced = search(i, var, drawings, data, sheets)
+        hs, sec, unplaced = search(i, var, drawings, data, sheets,apply_exclusions=False)
+        raw_main_keys={(h['drawing'],h['handle'],h['inner_handle'],h['text'],h['sheet']) for h in hs}
+        sec=[h for h in sec if (h['drawing'],h['handle'],h['inner_handle'],h['text'],h['sheet']) not in raw_main_keys]
+        excluded=[]
+        def retain(bag,patterns,category):
+            kept=[]
+            for h in bag:
+                found=[p.pattern for p in patterns if h.get('is_text') and p.search(flat(h['text']))]
+                if found:excluded.append({**h,'excluded_from':category,'exclusion_patterns':found})
+                else:kept.append(h)
+            return kept
+        hs=retain(hs,var['exclude'],'main');sec=retain(sec,var['exclude']+var['second_exclude'],'secondary')
         # Text on stamp and watermark layers is not drawing content (registration 2019, expectation 6): listed, never a hit.
         stamp = [h for h in hs if non_drawing.search(str(h['layer'] or ''))]
         key = lambda h: (h['drawing'], h['handle'], h['inner_handle'], h['text'], h['sheet'])
@@ -524,25 +590,32 @@ def build(cfg, base):
         same = sum(1 for h in scoped if h.get('judgment') == '同一对象')
         unjudged = sum(1 for h in scoped if not h.get('judgment'))
         # Full coverage also needs every secondary hit judged 非同一对象 (checkpoint 2: double counts hide in same-section rewrites).
+        missing_join=[{'drawing':d['id'],'handles':data[d['id']]['join_geometry_missing_handles']} for d in drawings if d['id'] in scope_ids and data.get(d['id']) and data[d['id']]['join_geometry_missing_handles']] if i['kind']!='block' else []
         reasons = ([f'未覆盖的图 {len(uncovered)} 张'] if uncovered else []) + \
+                  (['旧中性文字缺字高/方向，拆分文字覆盖未证明，须重新抽取'] if missing_join else []) + \
                   ([f'可能含图面内容的未读对象 {sum(u["count"] for u in may_contain)} 个'] if may_contain else []) + \
                   ([f'次级命中 {unjudged} 处未判定'] if unjudged else []) + ([f'次级命中 {same} 处判为同一对象'] if same else [])
         status = 'hit' if n else 'no_hit_partial' if reasons else 'no_hit_full'
-        detail += detail_rows('NS-' + str(i['item_id']), i['item_id'], hs, stamp, sec)
+        detail += detail_rows('NS-' + str(i['item_id']), i['item_id'], hs, stamp, sec,excluded)
         records.append({
             'record_id': 'NS-' + str(i['item_id']), 'item_id': i['item_id'], 'item': {k: i[k] for k in ('package', 'building', 'bill_no', 'name', 'features', 'bill_quantity') if k in i},
             'conclusion': i['conclusion'], 'kind': i['kind'], 'term': i.get('term'),
             'targets': {'written_forms': var['shown'], 'notes': var['notes'], 'patterns': [p.pattern for p, _ in var['main']],
                         'pattern_forms': [form for _, form in var['main']], 'block_names': [p.pattern for p in var['blocks']],
-                        'layers': '全部图层', 'reads': ['布局图元文字', '块定义文字（按插入次数展开，含嵌套）', '块属性（全部属性值）']},
+                        'exclude':list(i.get('exclude') or []),'exclusion_patterns_normalized':[p.pattern for p in var['exclude']],
+                        'text_join':'同图页/层/方向/基线的相邻TEXT只列次级候选，保留全部参与句柄',
+                        'layers': '全部图层', 'reads': ['布局图元文字（含顶层ATTDEF）', '块定义文字（按插入次数展开，含嵌套）', '块属性（全部属性值）']},
             'secondary': {'description': var['second_note'], 'patterns': [p.pattern for p, _ in var['second']], 'pattern_forms': [form for _, form in var['second']],
-                          'exclude': [p.pattern for p in var['second_exclude']]} if var['second'] else None,
+                          'exclude': list((i.get('secondary') or {}).get('exclude') or []),
+                          'exclusion_patterns_normalized':[p.pattern for p in var['second_exclude']]} if var['second'] or var['second_exclude'] or var.get('box_aliases') or sn else None,
             'method': f'中性取证包检索：_qto-shared-evidence/scripts/search_negative_evidence.py {VERSION}；布局、块定义（按插入次数展开，含嵌套）、块属性三层，'
                       '命中按图页表定位（块名和块属性命中按块的图形范围中心、定不出用插入点，与点位覆盖台账同一算法；文字按其插入点；落进几张图页取面积最小的）',
             'drawings_searched': sorted(searched), 'drawing_roles': roles, 'sheet_kinds_searched': kinds_searched,
             'result': {'hits': n, 'hits_by_sheet_kind': by_kind, 'hits_by_group': by_group, 'context_hits': sum(1 for h in hs if not h['scope']),
                        'placement_basis_counts': dict(sorted(Counter(h.get('placement_basis') or '无坐标' for h in hs).items())),
                        'samples': hs[:SAMPLES], 'non_drawing_hits': len(stamp), 'non_drawing_samples': stamp[:SAMPLES], 'unplaced_block_hits': [{'drawing': a, 'block': b, 'texts': c} for (a, b), c in sorted(unplaced.items())],
+                       'excluded_hits':sum(1 for h in excluded if h['scope']),'excluded_context_hits':sum(1 for h in excluded if not h['scope']),
+                       'excluded_samples':excluded[:SAMPLES], 'text_join_geometry_missing':missing_join,
                        'secondary_hits': sn, 'secondary_samples': scoped[:SAMPLES],
                        'secondary_judged': sn - unjudged, 'secondary_same_object': same, 'secondary_unjudged': unjudged,
                        'secondary_unjudged_samples': [h for h in scoped if not h.get('judgment')][:SAMPLES],
@@ -554,6 +627,7 @@ def build(cfg, base):
                'declared_drawings': declared, 'searched_drawings': sorted(searched), 'outside_declared': sorted(searched - set(declared))}
     return {'schema': OUTPUT_SCHEMA, 'tool': {'script': '_qto-shared-evidence/scripts/search_negative_evidence.py', 'version': VERSION},
             'scope': scope_info, 'records': records, 'reverse_check': reverse,
+            'supporting_inputs':[t['source_input'] for t in tables],
             'summary': dict(Counter(r['status'] for r in records)), '_detail': detail}
 
 
@@ -595,6 +669,8 @@ def record_problems(rec):
         return ['有未覆盖的图或可能含图面内容的未读对象，检索状态只能是待确认']
     if status == 'no_hit_full' and result.get('secondary_hits') and (result.get('secondary_unjudged') != 0 or result.get('secondary_same_object') != 0):
         return ['的次级命中没有逐条判为非同一对象，检索状态只能是待确认']
+    if status == 'no_hit_full' and result.get('text_join_geometry_missing'):
+        return ['的拆分文字覆盖未证明，检索状态只能是待确认；须用新版中性提取补字高和方向']
     return []
 
 
@@ -610,7 +686,7 @@ def csv_row(r, scope):
             '检索图纸': '；'.join(f'{g}：' + '、'.join(v) for g, v in groups.items()),
             '检索对象': '、'.join(r['targets']['written_forms']) + ('；' + '；'.join(r['targets']['notes']) if r['targets']['notes'] else '') + ('；块名 ' + '、'.join(r['targets']['block_names']) if r['targets']['block_names'] else ''),
             '方法': r['method'],
-            '结果': f'主命中 {res["hits"]}（' + '，'.join(f'{k} {res["hits_by_sheet_kind"].get(k, 0)}' for k in (*SHEET_KINDS, OFF_SHEET)) + '）' + (f'；参照图 {res["context_hits"]}' if res['context_hits'] else '') + (f'；印章水印图层 {res["non_drawing_hits"]}（不算命中）' if res['non_drawing_hits'] else ''),
+            '结果': f'主命中 {res["hits"]}（' + '，'.join(f'{k} {res["hits_by_sheet_kind"].get(k, 0)}' for k in (*SHEET_KINDS, OFF_SHEET)) + '）' + (f'；参照图 {res["context_hits"]}' if res['context_hits'] else '') + (f'；印章水印图层 {res["non_drawing_hits"]}（不算命中）' if res['non_drawing_hits'] else '') + (f'；已排除 {res.get("excluded_hits",0)}（参照 {res.get("excluded_context_hits",0)}）' if res.get('excluded_hits') or res.get('excluded_context_hits') else ''),
             '命中样例': sample(res['samples']),
             '未插入块定义命中': '；'.join(f'{u["drawing"]} {u["block"]} {u["texts"]} 处' for u in res['unplaced_block_hits']) or '无',
             '次级检索': (f'{r["secondary"]["description"]}：{res["secondary_hits"]}；' + sample(res['secondary_samples'])) if r['secondary'] else '无',
@@ -623,9 +699,39 @@ def csv_row(r, scope):
                 + ''.join(f'；{j.get("handle") or j.get("text_pattern")} {j["judgment"]} {j["matched"]} 处：{j["basis"]}' for j in r['secondary_judgments'])}
 
 
+def replay_input(path):
+    previous=json.loads(path.read_text(encoding='utf-8-sig'));meta=previous.get('input') or {}
+    if not meta.get('base_dir') or not meta.get('frozen_path'):
+        raise InputError(['该旧记录未冻结原始输入及基准目录，不能伪称可复现'])
+    frozen=path.parent/meta['frozen_path']
+    raw=frozen.read_bytes()
+    if hashlib.sha256(raw).hexdigest()!=meta.get('sha256') or hashlib.sha256(raw).hexdigest()!=meta.get('frozen_sha256'):
+        raise InputError(['冻结输入哈希不符，停止重放'])
+    base=Path(meta['base_dir']);checks=list(previous.get('supporting_inputs') or [])
+    for row in previous.get('scope') or []:
+        if row.get('sheet_table'):checks.append(row['sheet_table'])
+        if row.get('neutral'):
+            n=row['neutral'];folder=Path(n['dir'])
+            checks.extend([{'path':folder/'中性布局图元.ndjson','sha256':n['layout_sha256']},
+                           {'path':folder/'中性块定义图元.ndjson','sha256':n['block_sha256']}])
+            manifest=folder/'CAD中性取证清单.json'
+            if not isinstance(n.get('manifest_present'),bool):
+                raise InputError(['该旧记录未冻结中性清单存在状态，不能伪称可复现'])
+            if manifest.exists()!=n['manifest_present']:
+                raise InputError(['检索证据输入已变更（中性清单存在状态）：'+str(manifest)])
+            if n['manifest_present']:
+                checks.append({'path':manifest,'sha256':n['manifest_sha256']})
+    for source in checks:
+        if sha_file(source['path'])!=source['sha256']:
+            raise InputError(['检索证据输入已变更，不能重放：'+str(source['path'])])
+    return raw,base,meta['path']
+
+
 def main():
     p = argparse.ArgumentParser(description='否定结论检索：在中性取证包里检索“图上无”类结论的对象，出检索记录')
-    p.add_argument('--input', required=True, type=Path); p.add_argument('--output-dir', required=True, type=Path)
+    source=p.add_mutually_exclusive_group(required=True)
+    source.add_argument('--input',type=Path);source.add_argument('--replay-record',type=Path)
+    p.add_argument('--output-dir', required=True, type=Path)
     a = p.parse_args()
     report = {'status': 'INPUT_REQUIRED'}
     jp, cp, dp = a.output_dir / '否定结论检索记录.json', a.output_dir / '否定结论检索记录.csv', a.output_dir / HIT_DETAIL
@@ -636,10 +742,17 @@ def main():
             w = csv.DictWriter(f, HIT_COLUMNS); w.writeheader(); w.writerows(rows)
         return {'path': HIT_DETAIL, 'rows': len(rows), 'sha256': sha_file(dp)}
     try:
-        cfg = json.loads(a.input.read_text(encoding='utf-8-sig'))
-        if jp.exists() or cp.exists(): raise InputError(['输出目录里已有检索记录，请用新的目录'])
-        out = build(cfg, a.input.resolve().parent)
-        out['input'] = {'path': str(a.input), 'sha256': sha_file(a.input)}
+        if a.replay_record:input_bytes,base,input_label=replay_input(a.replay_record.resolve())
+        else:input_bytes,base,input_label=a.input.read_bytes(),a.input.resolve().parent,str(a.input)
+        cfg = json.loads(input_bytes.decode('utf-8-sig'));frozen_cfg=json.loads(input_bytes.decode('utf-8-sig'))
+        frozen=a.output_dir/'检索输入_冻结.json'
+        if jp.exists() or cp.exists() or frozen.exists(): raise InputError(['输出目录里已有检索记录或冻结输入，请用新的目录'])
+        out = build(cfg, base)
+        a.output_dir.mkdir(parents=True,exist_ok=True)
+        with frozen.open('xb') as handle:handle.write(input_bytes)
+        out['input'] = {'path': input_label, 'base_dir':str(base),'sha256': hashlib.sha256(input_bytes).hexdigest(),
+                        'frozen_path':frozen.name,'frozen_sha256':sha_file(frozen),'snapshot':frozen_cfg}
+        if a.replay_record:out['replayed_from']={'path':str(a.replay_record.resolve()),'sha256':sha_file(a.replay_record)}
         out['hit_detail'] = write_detail(out.pop('_detail'))
         jp.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding='utf-8')
         with cp.open('w', encoding='utf-8-sig', newline='') as f:

@@ -15,7 +15,8 @@ def m(x, y): return [1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, 0, 0, 0, 0, 1]
 
 def rec(h, et, layer, x=0.0, y=0.0, text=None, block=None, matrix=None, attrs=None, parent=None, raw=None, obj=None):
     return {'entity_handle': h, 'entity_type': et, 'object_name': obj or et, 'layer': layer, 'layout': 'BlockDefinition' if parent else 'Model',
-            'parent_block': parent, 'text': text, 'x': x, 'y': y, 'block_name': block, 'insert_matrix_wcs': matrix, 'attributes': attrs, 'raw_geometry': raw or {}}
+            'parent_block': parent, 'text': text, 'x': x, 'y': y, 'rotation':0.0, 'block_name': block, 'insert_matrix_wcs': matrix, 'attributes': attrs,
+            'raw_geometry': raw if raw is not None else ({'height':1.0,'width_factor':1.0} if et=='TEXT' else {})}
 
 
 LAYOUT = [

@@ -809,6 +809,11 @@ def entity_geometry(entity: Any):
     elif kind in {"TEXT","ATTRIB","ATTDEF"}:
         anchor=xyz(entity.ocs().to_wcs(entity.dxf.insert))
         raw["insert"]=xyz(entity.dxf.insert)
+        raw["height"]=entity.dxf.get("height",None)
+        raw["width_factor"]=entity.dxf.get("width",1.0)
+        if kind=="ATTDEF":
+            raw["tag"]=entity.dxf.get("tag",None)
+            raw["default"]=entity.dxf.get("text",None)
     elif kind=="MTEXT":
         anchor=xyz(entity.dxf.insert)  # MTEXT uses WCS, unlike TEXT.
         raw["rotation_degrees"] = entity.dxf.get("rotation", 0.0)

@@ -430,6 +430,7 @@ function attach(api){
  function editor(){
   const x=current,fields=['audit-verdict','audit-option','audit-exception','audit-result','audit-reason'];
   if(!x){for(const id of fields)byId(id).disabled=true;byId('audit-save').disabled=true;byId('audit-editor-title').textContent='先选问题或条目';for(const id of ['audit-result','audit-reason'])byId(id).value='';for(const id of ['audit-history','audit-entry-status','audit-excluded','audit-inherit'])byId(id).textContent='';show2('audit-option',false);show2('audit-exception',false);fill(verdictSelect,[['','（不选）']],'');return;}
+  const allowed=!data.delivery||core.deliveryAllowsTarget(data,kindOf(x),x.id);if(data.delivery)byId('audit-form').hidden=!allowed;if(!allowed)return;
   const k=kindOf(x),r=noteOf(x)||{},f=feedback(),key=keyOf(x),rule=editRule(x),own=savedOf(x);
   byId('audit-editor-title').textContent=({item:'条目：',issue:'问题：',common:'共性问题：'})[k]+titleOf(x);
   byId('audit-inherit').textContent=[k==='common'?'答复对适用范围内的个别问题 '+x.scope.issue_ids.length+' 条、条目 '+x.scope.item_ids.length+' 条一起生效。':'',inheritText(x),rule.how==='blocked'?rule.why:'',k==='item'&&overlap(x)?'同一条目有两处答复，请核对。':''].filter(Boolean).join('\n');

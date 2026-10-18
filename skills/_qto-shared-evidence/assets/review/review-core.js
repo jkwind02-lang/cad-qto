@@ -57,7 +57,26 @@ function cleanRecord(r,key,complete=true){
  else if(q.object_snapshot)ensure(q.object_id===q.object_snapshot.object_id&&q.object_ids.length===1&&q.object_ids[0]===q.object_snapshot.object_id,'单对象批注和对象快照不一致');
  return q;
 }
+function deliveryAllowsTarget(view,kind,ident){
+ const d=view.delivery;if(!d)return true;
+ return d.decision_targets.some(t=>t.kind===kind&&t.id===ident||t.kind==='common'&&['issue','item'].includes(kind)&&(view.comparison?.common_issues||[]).find(g=>g.id===t.id)?.scope?.[kind==='issue'?'issue_ids':'item_ids']?.includes(ident));
+}
+function deliveryValidity(record,view){
+ const d=view.delivery;if(!d)return null;
+ const snaps=record.group_id?(record.member_snapshot||[]):[record.object_snapshot||{}];
+ if(snaps.some(s=>d.retired_member_keys.includes(s.catalog_key)))return {state:'unmatched',reason:'退役对象意见仅保留历史，不得回流当前图面或采用量'};
+ for(const [kind,field,ident] of [['issue','issue_snapshot','issue_id'],['common','common_issue_snapshot','common_issue_id'],['item','item_snapshot','item_id']])if(record[field]&&deliveryAllowsTarget(view,kind,record[field][ident]))return null;
+ return {state:'stale',reason:'当前交付无对应真实业务取舍；意见保留为历史，不下发审核或改量动作'};
+}
+function bindDeliveryFeedback(p,view){
+ if(!view.delivery)return p;
+ const snapshot={result_fingerprint:view.result_fingerprint,delivery:clone(view.delivery)},old=p.delivery_snapshot;
+ p.historical_delivery_snapshots=p.historical_delivery_snapshots||[];ensure(Array.isArray(p.historical_delivery_snapshots),'历史交付快照须为列表');
+ if(old&&JSON.stringify(old)!==JSON.stringify(snapshot)&&!p.historical_delivery_snapshots.some(x=>JSON.stringify(x)===JSON.stringify(old)))p.historical_delivery_snapshots.push(clone(old));
+ p.delivery_snapshot=snapshot;return p;
+}
 function assessRecord(record,view){
+ const delivery=deliveryValidity(record,view);if(delivery)return delivery;
  if(isAudit(record)){
   const [field,ident,pool,label]=auditTarget(record),snap=record[field],c=view.comparison||{};
   const current=(c[pool]||[]).find(x=>x.id===snap[ident]);
@@ -95,6 +114,7 @@ function parse(input,view){
  const keys=new Set(view.objects.map(o=>o.catalog_key)),groups=new Map(view.groups.map(g=>[g.id,g])),sceneIds=new Set(view.scenes.map(s=>s.id));
  p.custom_markers=p.custom_markers||[];ensure(Array.isArray(p.custom_markers),'新增标记无效');
  for(const m of p.custom_markers){
+  if(view.delivery){ensure(plain(m),'历史新增标记须为对象');continue;}
   if(legacy&&!m.scene_id){m.scene_id=view.legacy_scene_map?.[m.plan_side||'supply'];m.professional=view.legacy_professional;m.catalog_key=m.catalog_key||'我的新增标记|'+m.id;m.quantities=m.quantities||[];m.attributes=m.attributes||{};}
   ensure(sceneIds.has(m.scene_id)&&view.professional_labels[m.professional],'新增标记缺少有效图页或专业');
   ensure(m.id&&Array.isArray(m.points)&&m.points.length===1&&m.points[0].length===2&&m.points[0].every(Number.isFinite),'新增标记坐标无效');
@@ -108,7 +128,7 @@ function parse(input,view){
    const q=cleanRecord(isAudit(r)&&r.merge_conflict&&Array.isArray(r.merge_conflict.candidates)&&r.merge_conflict.candidates.length>=2&&r.merge_conflict.candidates.every(plain)?settleOnView(r,view):r,k,field==='annotations');
    if(q.item_snapshot&&auditItems.has(q.item_snapshot.item_id)){const rows=new Set(auditItems.get(q.item_snapshot.item_id).detail_rows.map(x=>x.id));ensure(q.excluded_detail_row_ids.every(x=>rows.has(x)),'例外明细行不属于该条目');}
    if(q.object_snapshot){const obj=view.objects.find(o=>o.catalog_key===q.object_snapshot.catalog_key);ensure(!obj||obj.id===q.object_snapshot.object_id,'单对象快照与当前对象身份不一致');}
-   if(q.group_id&&groups.has(q.group_id)){
+   if(q.group_id&&groups.has(q.group_id)&&!view.delivery){
     const expected=groups.get(q.group_id).member_keys;
     ensure(q.member_snapshot.length===expected.length&&q.member_snapshot.every(m=>expected.includes(m.catalog_key)),'当前组成员已变化，请先核对历史批注适用范围');
    }
@@ -118,6 +138,7 @@ function parse(input,view){
   }
   p[field]=result;
  }
+ bindDeliveryFeedback(p,view);
  p.current_result_fingerprint=view.result_fingerprint;
  holdDecisionConflicts(p,view);
  return p;
@@ -216,5 +237,5 @@ async function readPayload(buf){
  }
  delete data.background_pack;return data;
 }
-root.QtoReviewCore={schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord,isAudit,opinion,unlocatedText,readPayload,holdDecisionConflicts};
+root.QtoReviewCore={deliveryAllowsTarget,bindDeliveryFeedback,schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord,isAudit,opinion,unlocatedText,readPayload,holdDecisionConflicts};
 })(globalThis);

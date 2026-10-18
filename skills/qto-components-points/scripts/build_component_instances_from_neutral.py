@@ -31,7 +31,7 @@ from qto_actor_identity import is_model_identity
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
 
-VERSION = "qto-component-neutral-adapter/1.9.2"
+VERSION = "qto-component-neutral-adapter/1.9.3"
 # Only these two codes can be released by a dynamic_state_adjudication on an include or exclude rule (registration
 # 20261016-1709; exclude added after checkpoint 1);
 # arrays, xrefs and missing definitions stay unresolved whatever the rule says.
@@ -1655,6 +1655,10 @@ def main() -> int:
         }
         count_input_path = output / "点位唯一实例计数输入.json"
         count_input_path.write_text(json.dumps(count_input, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        consumer = profile.get("consumer_skill")
+        count_only = consumer in (None, "", "qto-components-points")
+        if not count_only and consumer not in ("qto-pipe-networks", "qto-duct-air-systems", "qto-electrical-routes"):
+            fail("consumer_skill须为qto-pipe-networks/qto-duct-air-systems/qto-electrical-routes；只计数可以不填或写qto-components-points")
         endpoint_input = {
             "schema_version": "qto-network-endpoint-handoff-input/1.1",
             "recognition_basis": recognition_basis(ledger, ledger_path),
@@ -1666,31 +1670,30 @@ def main() -> int:
             "source_unresolved_grouping_count": len(grouping["unresolved_groups"]),
             "handoff_id": f"HANDOFF-{profile_id}-{profile_version}",
             "source_id": f"{profile_id}@{profile_version}:{sha256(profile_path)}",
-            "consumer_skill": str(profile.get("consumer_skill") or "qto-pipe-networks"),
+            "consumer_skill": consumer,
             "instances": endpoint_instances,
         }
         endpoint_input_path = output / "点位端点交接输入.json"
-        endpoint_input_path.write_text(json.dumps(endpoint_input, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         endpoint_output_path = output / "点位至网络端点交接.json"
-        handoff_script = Path(__file__).resolve().with_name("build_network_endpoint_handoff.py")
-        handoff_run = subprocess.run(
-            [sys.executable, str(handoff_script), "--input", str(endpoint_input_path), "--output", str(endpoint_output_path)],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-        )
-        if handoff_run.returncode != 0:
-            fail(f"端点交接生成失败: {handoff_run.stderr.strip() or handoff_run.stdout.strip()}")
-        handoff_result = load_json(endpoint_output_path)
-        if handoff_result.get("source_workpackage_complete") is not source_complete:
-            fail("端点交接的来源完整性与点位主报告不一致")
+        handoff_result = {}
+        if not count_only:
+            endpoint_input_path.write_text(json.dumps(endpoint_input, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            handoff_script = Path(__file__).resolve().with_name("build_network_endpoint_handoff.py")
+            handoff_run = subprocess.run(
+                [sys.executable, str(handoff_script), "--input", str(endpoint_input_path), "--output", str(endpoint_output_path)],
+                capture_output=True, text=True, encoding="utf-8", stdin=subprocess.DEVNULL,
+            )
+            if handoff_run.returncode != 0:
+                fail(f"端点交接生成失败: {handoff_run.stderr.strip() or handoff_run.stdout.strip()}")
+            handoff_result = load_json(endpoint_output_path)
+            if handoff_result.get("source_workpackage_complete") is not source_complete:
+                fail("端点交接的来源完整性与点位主报告不一致")
 
         artifacts: dict[str, Any] = {
             "neutral_instance_dispositions": str(disposition_path),
             "neutral_instance_dispositions_sha256": sha256(disposition_path),
             "count_input": str(count_input_path),
-            "endpoint_handoff_input": str(endpoint_input_path),
-            "endpoint_handoff": str(endpoint_output_path),
+            **({"endpoint_handoff_input": str(endpoint_input_path), "endpoint_handoff": str(endpoint_output_path)} if not count_only else {}),
         }
         if adopted:
             counter_script = Path(__file__).resolve().with_name("count_reconciled_instances.py")
@@ -1828,7 +1831,8 @@ def main() -> int:
             "disposition_closure_complete": sum(disposition_counts.values()) == len(dispositions),
             "point_workpackage_complete": source_complete,
             "unmatched_recognition_object_ids": missing_model_objects,
-            "endpoint_unresolved_count": handoff_result.get("unresolved_count", 0),
+            "endpoint_handoff_status": "not_requested" if count_only else "generated",
+            "endpoint_unresolved_count": None if count_only else handoff_result.get("unresolved_count", 0),
             "unresolved_groups_top15": unresolved_groups,
             "unresolved_group_count": len(group_counter),
             "unresolved_instance_count": sum(group_counter.values()),

@@ -44,6 +44,12 @@ main.audit{display:grid;grid-template-columns:300px minmax(380px,1fr) clamp(340p
 .audit-editor{display:flex;flex-direction:column;min-height:0;background:white;border-left:1px solid #dbe4eb}.audit-form{flex:1;min-height:0;overflow:auto;padding:10px 13px}.audit-form label{display:block;font-weight:bold;font-size:12px;margin:9px 0 4px}.audit-form select{width:100%}#audit-editor-title{display:block;font-size:14px;color:#154f72}#audit-result{min-height:80px}#audit-reason{min-height:120px}#audit-save{width:100%;padding:10px;background:#225e7c;color:white;font-weight:bold}#audit-entry-status{display:block;font-size:11px;line-height:1.6;margin-top:6px}#audit-history{white-space:pre-wrap;font-size:12px}
 @media(max-width:1050px){main.audit{grid-template-columns:240px minmax(300px,1fr) 320px}}
 @media(max-width:850px){main.audit{display:flex;flex-direction:column;overflow:visible}.audit-nav{height:400px}.audit-center{min-height:500px}.audit-editor{min-height:520px}}
+.delivery{flex:1;min-height:0;overflow:auto;padding:16px 22px;background:#f5f8fb}
+.delivery[hidden]{display:none!important}.delivery-nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.delivery-card{border:1px solid #d2dfe7;border-radius:8px;background:white;padding:14px;margin:10px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.delivery h2{font-size:17px}.delivery h3{font-size:15px;margin:4px 0 10px}.delivery p{line-height:1.75;margin:6px 0}
+.delivery-canvas{display:block;width:100%;max-width:900px;border:1px solid #c9d9e2;background:white;margin-top:10px}
+.delivery .reference{border-left:4px solid #b87a1c}.delivery .historical{color:#687d8c}.delivery button{margin:4px}
 </style>
 <header><div class="header-row"><h1 id="page-title">__PAGE_TITLE__</h1><nav id="mode-tabs" class="mode-tabs" aria-label="页面模式" hidden></nav><span id="review-status" aria-live="polite"></span><button id="save-html">保存带批注HTML</button>
 <details id="header-details"><summary>说明与更多</summary><div class="header-panel">
@@ -54,6 +60,7 @@ main.audit{display:grid;grid-template-columns:300px minmax(380px,1fr) clamp(340p
 </div></details></div><div id="action-message" role="status" hidden></div>
 <div id="audit-top" hidden><div id="resolve-counts"></div><div id="band-rule"></div><div id="route-message" role="status" hidden></div></div>
 </header>
+<section id="delivery" class="delivery" hidden></section>
 <main id="layout">
 <aside class="nav"><div class="modebar"><button id="mode-groups" class="on">按问题组</button><button id="mode-objects">全部对象</button></div>
 <div class="filters"><div><label for="professional">专业</label><select id="professional"></select></div><div><label for="category">问题/状态</label><select id="category"></select></div></div>
@@ -80,7 +87,7 @@ main.audit{display:grid;grid-template-columns:300px minmax(380px,1fr) clamp(340p
 <main id="audit" class="audit" hidden>
 <aside class="audit-nav"><div id="audit-filters" class="audit-filters"></div><input id="audit-search" placeholder="搜索编号、名称、特征、说明或问题" aria-label="搜索审核内容"><div id="audit-counter"></div><div id="audit-list"></div></aside>
 <section class="audit-center"><div class="audit-mapbar" id="audit-mapbar"><span>图面</span><button id="map-auto" class="on">自动</button><button id="map-open">展开</button><button id="map-close">收起</button><button id="member-prev2">上一处</button><button id="member-next2">下一处</button><span id="map-note" class="minor"></span></div><div id="audit-map-slot" hidden></div><div id="audit-detail"></div></section>
-<aside class="audit-editor"><div class="review-titlebar"><span>审核意见</span></div><div class="audit-form"><b id="audit-editor-title">先选问题或条目</b>
+<aside class="audit-editor"><div class="review-titlebar"><span>审核意见</span></div><div class="audit-form" id="audit-form"><b id="audit-editor-title">先选问题或条目</b>
 <div id="audit-inherit" class="minor"></div>
 <label for="audit-exception" id="audit-exception-label" hidden>设为例外</label><select id="audit-exception" hidden></select>
 <label for="audit-verdict">快捷结论</label><select id="audit-verdict"></select>
@@ -103,6 +110,7 @@ main.audit{display:grid;grid-template-columns:300px minmax(380px,1fr) clamp(340p
 <script>__REVIEW_CORE__</script>
 <script>__PROBLEM_FEEDBACK__</script>
 <script>__REVIEW_AUDIT__</script>
+<script>__REVIEW_DELIVERY__</script>
 <script id="payload" type="application/octet-stream">
 __PAYLOAD__
 </script>
