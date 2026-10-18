@@ -28,6 +28,7 @@ def bind_result_versions(view):
     bykey = {}
     for obj in view["objects"]:
         value = {key: obj.get(key) for key in OBJECT_FIELDS}
+        if obj.get('decision_id') is not None: value['decision_id'] = obj['decision_id']
         scene = scenes.get(obj.get("scene_id"), {})
         value["coordinate_context"] = {key: scene.get(key) for key in ("source_id", "coordinate_unit", "y_axis", "transform")}
         obj["result_fingerprint"] = fingerprint(value)
@@ -35,6 +36,7 @@ def bind_result_versions(view):
     for group in view["groups"]:
         group["result_fingerprint"] = fingerprint({
             "id": group["id"], "proposal": group.get("proposal"), "reason": group.get("reason"),
+            **({'decision_id': group['decision_id']} if group.get('decision_id') is not None else {}),
             "members": sorted((k, bykey[k]["result_fingerprint"]) for k in group["member_keys"]),
         })
         for snap in group["member_snapshot"]:
@@ -60,6 +62,7 @@ SEGMENT_FIELDS = (
     "source_id", "rows", "unit", "quantity", "difference", "conclusion", "third_party_corrected",
     "correction_note", "disposition_note", "redirect_to", "search_evidence", "missing_drawing_note",
     "unit_mismatch_note", "quantity_note",
+    "comparability", "comparison_state", "original_quantity_state", "scope_basis",
 )
 DETAIL_FIELDS = (
     "id", "level", "quantity", "unit", "basis", "aggregation", "aggregation_reason", "member_keys",
@@ -85,15 +88,16 @@ def bind_comparison_versions(comparison, bykey):
         members = sorted({k for row in item["detail_rows"] for k in row.get("member_keys", [])})
         item["result_fingerprint"] = fingerprint({
             "id": item["id"], "kind": item["kind"], "name": item.get("name"), "features": item.get("features"),
+            **({'decision_id': item['decision_id']} if item.get('decision_id') is not None else {}),
             "ours": {key: item["ours"].get(key) for key in ("unit", "levels", "total", "quantity_name", "note")},
             "dimensions": item.get("dimensions", {}), "segments": segments, "detail_rows": rows,
             "members": [(k, bykey[k]["result_fingerprint"]) for k in members],
         })
     for issue in comparison["issues"]:
-        issue["result_fingerprint"] = fingerprint({key: issue.get(key) for key in ISSUE_FIELDS})
+        issue["result_fingerprint"] = fingerprint({**{key: issue.get(key) for key in ISSUE_FIELDS}, **({'decision_id': issue['decision_id']} if issue.get('decision_id') is not None else {})})
     for common in comparison.get("common_issues", []):
         fields = IMPLIED_FIELDS if common.get("implied") else COMMON_FIELDS
-        common["result_fingerprint"] = fingerprint({key: common.get(key) for key in fields})
+        common["result_fingerprint"] = fingerprint({**{key: common.get(key) for key in fields}, **({'decision_id': common['decision_id']} if common.get('decision_id') is not None else {})})
 
 
 SNAPSHOTS = (
@@ -199,4 +203,5 @@ def classify_feedback(package, view, unmatched):
     # The package header describes the current view, not approval applicability.
     # The original per-record fingerprints are deliberately NOT rebound here.
     package["current_result_fingerprint"] = view["result_fingerprint"]
-    return package, unmatched
+    from qto_review_decisions import hold_decision_conflicts
+    return hold_decision_conflicts(package, view, unmatched)

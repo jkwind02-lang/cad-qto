@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qto_cad_geometry as cad_geometry  # noqa: E402
 
-VERSION = '1.1.3'
+VERSION = '1.1.4'
 INPUT_SCHEMA, OUTPUT_SCHEMA = 'qto-negative-search-input/1.0', 'qto-negative-search/1.0'
 KINDS = ('spec', 'tray', 'box', 'model', 'pipe', 'text', 'block')
 SHEET_KINDS = ('平面', '系统图', '表与说明', '图例', '详图', '其他')
@@ -27,6 +27,7 @@ NON_DRAWING = r'印章|签章|水印|签名|会签|STAMP|SEAL|WATERMARK|SIGNATUR
 MAX_DEPTH, SAMPLES = 16, 10
 MTEXT_CODE = re.compile(r'\\[ACcFfHhQTWp][^;\\]*;|\\[LlOoKkNnPpXx~]|[{}]')
 SPEC_GROUP = re.compile(r'(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)')
+XREF_PREFIX_RE = re.compile(r'^(?:[^$]*\$\d+\$)+')
 
 
 TEXT_BASIS = '文字插入点'
@@ -88,7 +89,7 @@ def variants(item):
     """Main and secondary patterns (on flat text), block-name patterns and a readable list of the written forms covered."""
     kind, term = item['kind'], str(item.get('term') or '')
     main, second, shown, notes = [], [], [], []
-    aliases = [flat(a) for a in item.get('aliases') or []]
+    aliases = [v for a in item.get('aliases') or [] if (v := flat(a))]
     if kind in ('spec', 'tray'):
         core = section_core(term)
         if not core: raise ValueError(f'{item["item_id"]}：{kind} 的 term 里找不到 a×b 规格')
@@ -131,13 +132,19 @@ def variants(item):
             if any(ch.isdigit() for ch in forms[0]): second.append((bounded(near, forms[0][0], forms[0][-1]), 'flat_sep')); notes.append('近似编号（数字不同或末尾多出编号）只作次级')
     elif kind == 'text':
         for t in [term, *(item.get('aliases') or [])]:
-            if t: main.append(re.escape(flat(t))); shown.append(t)
+            if not t: continue
+            normalized = flat(t)
+            if normalized: main.append(re.escape(normalized))
+            elif re.fullmatch(r'%%[Cc]|[ΦφØø∅]', str(t).strip()):
+                main.append((r'%%[Cc]|[ΦφØø∅]', 'text'))
+            else: raise ValueError(f'{item["item_id"]}：检索词规范化后为空，不能作为匹配全部文字的表达式')
+            shown.append(t)
     elif kind == 'block':
         pass
     main += [flat_regex(p) for p in item.get('patterns') or []]
     sec = item.get('secondary') or {}
     second += [flat_regex(p) for p in sec.get('patterns') or []]
-    blocks = [re.compile(p, re.I) for p in item.get('block_names') or []]
+    blocks = [re.compile(flat_regex(p), re.I) for p in item.get('block_names') or []]
     if kind == 'block' and not blocks: raise ValueError(f'{item["item_id"]}：block 类要写 block_names')
     if not main and not blocks: raise ValueError(f'{item["item_id"]}：没有可检索的写法')
     # (pattern, text form): user patterns and every kind but box read flat(); box numbers read flat_sep()
@@ -146,11 +153,14 @@ def variants(item):
             'exclude': [re.compile(flat_regex(p)) for p in item.get('exclude') or []],
             'second_exclude': [re.compile(flat_regex(p)) for p in sec.get('exclude') or []],
             'shown': list(dict.fromkeys(shown)), 'notes': notes,
+            'box_term': flat_sep(term) if kind == 'box' else None,
+            'box_aliases': [flat_sep(a) for a in item.get('aliases') or [] if flat_sep(a)] if kind == 'box' else [],
             'second_note': sec.get('description') or {'spec': '同截面任意型号，含更长规格的一部分', 'tray': '更长规格的一部分', 'box': '近似编号'}.get(kind, '次级写法')}
 
 
 def flat_regex(p):
     """User patterns are written for flat text; check they compile."""
+    if not isinstance(p,str) or not p.strip(): raise ValueError('检索或排除正则不能为空，不能用空表达式匹配或排除全部对象')
     re.compile(p); return p
 
 
@@ -285,9 +295,33 @@ def instances(dr, block, cache):
 
 # ---------- search ----------
 
-def match(o, pats, excl, var):
-    if o['text'] is None: return any(p.search(o['block']) for p in var['blocks'])
-    if not any(p.search(o[form]) for p, form in pats): return False
+def conflicting_box_alias(o, var):
+    term = var.get('box_term')
+    if not term or o.get('text') is None: return False
+    value = o['flat_sep']
+    core = lambda s: '-?'.join(re.escape(ch) for ch in flat(s))
+    if re.search(word_bounded(core(term), term[0], term[-1]), value): return False
+    conflicts = []
+    for alias in var.get('box_aliases', []):
+        if not term.endswith('-' + alias): continue
+        expected = term[:-len(alias)].strip('-').split('-')
+        for found in re.finditer(word_bounded(core(alias), alias[0], alias[-1]), value):
+            prefix = re.search(r'([A-Z0-9]+(?:-[A-Z0-9]+)*-)$', value[:found.start()])
+            actual = prefix.group(1).strip('-').split('-') if prefix else []
+            shared = min(len(actual), len(expected))
+            conflicts.append(bool(shared) and actual[-shared:] != expected[-shared:])
+    return bool(conflicts) and all(conflicts)
+
+
+def match(o, pats, excl, var, which='main'):
+    if o['text'] is None:
+        names = {o['block'], XREF_PREFIX_RE.sub('', o['block']) or o['block']}
+        return any(p.search(name) for p in var['blocks'] for name in names)
+    conflict = conflicting_box_alias(o, var)
+    matched = any(p.search(o[form]) for p, form in pats)
+    if which == 'main' and conflict: return False
+    if which == 'second' and conflict: matched = True
+    if not matched: return False
     return not any(p.search(o['flat']) for p in excl)
 
 
@@ -318,14 +352,14 @@ def search(item, var, drawings, data, sheets):
         if dr is None: continue
         cache = {}
         for which, pats, excl in (('main', var['main'], var['exclude']), ('second', var['second'], var['exclude'] + var['second_exclude'])):
-            if not pats and not (which == 'main' and var['blocks']): continue
+            if not pats and not (which == 'main' and var['blocks']) and not (which == 'second' and var.get('box_aliases')): continue
             bag = hits if which == 'main' else second
             for o in dr['occ']:
-                if (o['text'] is None and which == 'second') or not match(o, pats, excl, var): continue
+                if (o['text'] is None and which == 'second') or not match(o, pats, excl, var, which): continue
                 x, y, basis = anchor(dr, o)
                 bag.append(hit(d, sheets[d['id']], o, x, y, o.get('layout'), 'layout' if o['text'] is not None else 'block', basis=basis))
             for name, rows in dr['blocks'].items():
-                found = [o for o in rows if not (o['text'] is None and which == 'second') and match(o, pats, excl, var)]
+                found = [o for o in rows if not (o['text'] is None and which == 'second') and match(o, pats, excl, var, which)]
                 if not found: continue
                 inst = instances(dr, name, cache)
                 if not inst and not name.startswith('*'):
@@ -357,9 +391,9 @@ def existing(item, var, tables):
         for n, row in t['rows']:
             text = ' '.join(row.get(c) or '' for c in t['text_columns'])
             f = flat(text)
-            forms = {'flat': f, 'flat_sep': flat_sep(text)}
-            kind = ('main' if any(p.search(forms[form]) for p, form in var['main'])
-                    else 'second' if any(p.search(forms[form]) for p, form in var['second']) else None)
+            forms = {'flat': f, 'flat_sep': flat_sep(text), 'text': text}
+            kind = ('main' if match(forms, var['main'], var['exclude'], var)
+                    else 'second' if match(forms, var['second'], var['exclude'] + var['second_exclude'], var, 'second') else None)
             if kind and not any(p.search(f) for p in var['exclude'] + (var['second_exclude'] if kind == 'second' else [])):
                 out.append({'source': f'{t["label"]}:{n}', 'id': row.get(t['id_column']) or '', 'text': text.strip()[:200], 'match': '同写法' if kind == 'main' else '次级'})
     return out

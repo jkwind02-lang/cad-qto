@@ -122,7 +122,7 @@ if(art.comparison_html){
  const normalize=v=>{const r=spawnSync('python',['-c',"import sys,json;sys.path.insert(0,sys.argv[1]);from qto_review_contract import normalize_view;print(json.dumps(normalize_view(json.load(sys.stdin)),ensure_ascii=False))",path.resolve(root,'_qto-shared-evidence/scripts')],{input:JSON.stringify(v),encoding:'utf8'});assert.equal(r.status,0,r.stderr);return JSON.parse(r.stdout);};
  const head=(box,re)=>find(box,n=>n.tagName==='button'&&re.test(n.textContent||'')&&n.onclick);
  assert.equal(x.audit.hidden,false);assert.equal(x.layout.hidden,true);assert.deepEqual(x['mode-tabs'].children.map(b=>b.textContent),['成果','待解决问题','对照审核','图面复核']);assert.equal(act().state().mode,'results');
- assert.match(x['resolve-counts'].textContent,/清单的问题 4/);assert.match(x['resolve-counts'].textContent,/未分类 1/);assert.match(x['resolve-counts'].textContent,/没有依据、也没挂问题 2/);assert.match(x['band-rule'].textContent,/默认 计量 ±5%，计数 须相等/);
+ assert.match(x['resolve-counts'].textContent,/清单的问题 3/);assert.match(x['resolve-counts'].textContent,/未分类 1/);assert.match(x['resolve-counts'].textContent,/没有依据、也没挂问题 2/);assert.match(x['band-rule'].textContent,/默认 计量 ±5%，计数 须相等/);
  assert.deepEqual(keysOf(),['对照条目|I1','对照条目|E1','对照条目|I2','对照条目|I6']);assert.match(x['audit-list'].textContent,/一号楼 · 4 条 · 含估算 2/);assert.match(x['audit-list'].textContent,/配管 · 2 条 · 含估算 2/);
  assert.match(row('对照条目|I1').textContent,/规则推算 30 · 方案暂估 5 · 合计 35 m/);assert.match(row('对照条目|I1').textContent,/对照 合成审计清单：清单 34/);assert.match(row('对照条目|E1').textContent,/清单外新增/);assert.doesNotMatch(row('对照条目|I1').textContent,/I1 ·/);
  const scope=find(x['audit-filters'],n=>n.tagName==='select'&&n.children.some(o=>o.value==='extra'));scope.value='extra';scope.onchange();assert.match(x['audit-counter'].textContent,/筛选 1 条/);scope.value='全部';scope.onchange();
@@ -138,7 +138,8 @@ if(art.comparison_html){
  x['audit-reason'].value='出桥架段应单列';x['audit-reason'].oninput();x['audit-save'].click();
  let cpkg=cached();assert.equal(cpkg.schema,'qto-review-feedback/2.1');assert.equal(cpkg.annotations['问题|Q1'].verdict,'要改');assert.equal(cpkg.annotations['问题|Q1'].issue_snapshot.issue_id,'Q1');
  checks.push('问题条目显示涉及量与现做法；批注选“按现做法/不按现做法/暂不定”，无原因不能保存');
- tab('对照审核').click();assert.equal(act().state().mode,'audit');assert.deepEqual(keysOf(),['对照条目|I2','对照条目|I6','对照条目|I3','对照条目|I2']);
+ tab('对照审核').click();assert.equal(act().state().mode,'audit');assert.deepEqual(keysOf(),['对照条目|I2','对照条目|I3','对照条目|I2','对照条目|I6']);
+ assert.match(row('对照条目|I6').textContent,/原量未填/);assert.doesNotMatch(x['audit-list'].textContent,/清单的问题 · 清单漏量/);
  assert.match(x['audit-list'].textContent,/清单的问题 · 清单多计 · 1/);assert.match(x['audit-list'].textContent,/▸ 一致 · 1/);assert.match(x['audit-list'].textContent,/▸ 缺图（在待解决问题里） · 1/);assert.match(row('对照条目|I2').textContent,/· 清单的问题/);assert.match(x['audit-counter'].textContent,/筛选 6 条/);
  checks.push('对照审核按归因分组：清单的问题按类型一组，一致、归入他项、缺图收起；同一条目进两组时只计一次');
  const rate=find(x['audit-filters'],n=>n.type==='number'),alert=find(x['audit-filters'],n=>n.tagName==='label'&&n.children.includes(rate)),acb=find(alert,n=>n.type==='checkbox');rate.value='5';rate.oninput();acb.checked=true;acb.onchange();assert.match(x['audit-counter'].textContent,/筛选 1 条/);assert(row('对照条目|I2'));acb.checked=false;acb.onchange();
@@ -181,7 +182,7 @@ if(art.comparison_html){
  const st=()=>rh2.ctx.QtoReviewAudit.active.state();assert.deepEqual([st().mode,st().current],['results','I4']);assert.match(rh2.ids['audit-detail'].textContent,/去向/);assert.match(rh2.ids['audit-detail'].textContent,/没有明细/);
  loc.hash='#mode=audit&item=I4';listeners.hashchange();assert.deepEqual([st().mode,st().current],['audit','I4']);
  loc.hash='#mode=issues&issue=Q2';listeners.hashchange();assert.deepEqual([st().mode,st().current],['resolve','Q2']);
- loc.hash='#common='+encodeURIComponent('清单的问题|清单漏量');listeners.hashchange();assert.deepEqual([st().mode,st().current],['audit','清单的问题|清单漏量']);
+ loc.hash='#common='+encodeURIComponent('清单的问题|清单多计');listeners.hashchange();assert.deepEqual([st().mode,st().current],['audit','清单的问题|清单多计']);
  loc.hash='#common=NOPE';listeners.hashchange();assert.match(rh2.ids['route-message'].textContent,/未找到 共性问题 NOPE/);
  loc.hash='#item=NOPE';listeners.hashchange();assert.match(rh2.ids['route-message'].textContent,/未找到 条目 NOPE/);
  loc.hash='#mode=extras';listeners.hashchange();assert.equal(st().mode,'results');assert.match(rh2.ids['audit-counter'].textContent,/筛选 1 条/);
@@ -242,6 +243,7 @@ if(art.comparison_html){
  checks.push('共性问题并排列做法及影响、可选做法答复；挂在下面的个别问题显示待答或已按共性答复，只能设例外，与共性答复相同时不保存');
  vx['save-html'].click();const vsaved=await vh.downloads.at(-1).blob.text();c3.common_issues[0].item_ids.push('I6');
  const ah=harness(withData(vsaved,normalize(raw3)));await ah.start();ah.ctx.QtoReviewAudit.active.show('G1');assert.match(ah.ids['audit-detail'].textContent,/答复后新增 1 处/);assert.match(ah.ids['audit-detail'].textContent,/答复后新增（请抽查）/);
+ ah.ctx.QtoReviewAudit.active.show('I6');assert.match(ah.ids['audit-inherit'].textContent,/新增范围.*未继承旧答复/);assert.doesNotMatch(ah.ids['audit-inherit'].textContent,/已按共性答复/);
  const ck=JSON.parse(JSON.stringify(vpkg)),base=ck.annotations['共性问题|G1'];delete base.history;ck.annotations['共性问题|G1']={...base,merge_conflict:{candidates:[{...base},{...base,verdict:'同意',option_id:''}]}};
  const mh=harness(vh.ctx.QtoReviewCore.embed(withData(chtml,v3),ck));await mh.start();const ma=mh.ctx.QtoReviewAudit.active;ma.show('G1');assert.match(mh.ids['audit-entry-status'].textContent,/意见冲突/);assert.match(mh.ids['audit-detail'].textContent,/答复状态：意见冲突/);assert.match(find(mh.ids['audit-list'],n=>n.dataset?.key==='共性问题|G1').textContent,/意见冲突/);
  ma.show('E1');assert.match(mh.ids['audit-inherit'].textContent,/待共性答复（G1）/);ma.show('Q1');assert.match(mh.ids['audit-inherit'].textContent,/此处已设例外，不按 G1 的答复/);

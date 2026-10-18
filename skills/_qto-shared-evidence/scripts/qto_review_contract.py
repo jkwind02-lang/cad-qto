@@ -147,6 +147,9 @@ def normalize_view(raw, base_dir=None):
   g['member_snapshot']=[{'catalog_key':k,'object_id':bykey[k]['id'],'title':bykey[k]['title'],'scene_id':bykey[k].get('scene_id'),'professional':bykey[k]['professional'],'quantities':copy.deepcopy(bykey[k]['quantities']),'attributes':copy.deepcopy(bykey[k]['attributes'])} for k in members]
   g['count']=len(members);g['object_ids']=list(dict.fromkeys(bykey[k]['id'] for k in members))
  if 'comparison' in d:d['comparison']['generation_check']=normalize_comparison(d,keys)
+ for pool in [objects,groups,*[(d.get('comparison') or {}).get(k,[]) for k in ('items','issues','common_issues')]]:
+  for target in pool:
+   require(target.get('decision_id') is None or string(target['decision_id']),'decision_id须为非空文字；不同事项不可仅按裸编号关联')
  d.setdefault('receipts',{});require(isinstance(d['receipts'],dict),'receipts须为对象')
  for key,rc in d['receipts'].items():
   for k in ['status','assistant_response','source_annotation_updated_at']:require(string(rc.get(k)),'处理回执缺少'+k)

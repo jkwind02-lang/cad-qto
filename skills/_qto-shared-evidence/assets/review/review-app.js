@@ -100,7 +100,7 @@ try{
   $('review-instruction').value=r.instruction||'请助手复核';$('review-scope').disabled=!!i.member_keys;$('review-scope').value=i.member_keys?'本组勾选对象':r.scope||'仅所选对象';
   $('original').hidden=!r.original_message;$('original').textContent='原话：\n'+(r.original_message||'');
   $('history-content').textContent=(r.history||[]).map((h,n)=>(n+1)+'. '+(h.updated_at||'')+'\n'+(h.confirmed_result||'')+'\n原因：'+(h.reason||'')).join('\n\n')||'暂无修改历史';
-  $('entry-status').textContent=(r.applicability_state==='stale'||r.applicability_state==='unmatched')?'历史意见待重新核对：'+r.applicability_reason:feedback.drafts[key(i)]?'当前有草稿，未保存为结论。':feedback.annotations[key(i)]?'已有保存意见；实际应用状态见回执。':'尚未保存意见；建议不自动当作你的确认。';
+  $('entry-status').textContent=r.applicability_state==='conflict'?'跨入口意见冲突，动作暂挂：'+r.applicability_reason:(r.applicability_state==='stale'||r.applicability_state==='unmatched')?'历史意见待重新核对：'+r.applicability_reason:feedback.drafts[key(i)]?'当前有草稿，未保存为结论。':feedback.annotations[key(i)]?'已有保存意见；实际应用状态见回执。':'尚未保存意见；建议不自动当作你的确认。';
   if(i.member_keys)groupState();else{$('group-guidance').hidden=true;$('save-review').textContent='保存本对象批注';$('save-review').disabled=false;}
  }
  function showFacts(i){
@@ -228,7 +228,7 @@ try{
   const message=[extra,storageOK?'':'本机暂存不可用，请及时保存带批注HTML或导出JSON。',cacheProblem?'暂存提示：'+cacheProblem:''].filter(Boolean).join(' ');
   $('action-message').textContent=message;$('action-message').hidden=!message;
  }
- function backup(){feedback.drawing_revision=data.revision;feedback.current_result_fingerprint=data.result_fingerprint;feedback.exported_at=new Date().toISOString();try{localStorage.setItem(storageKey,JSON.stringify(feedback));storageOK=true;}catch(e){storageOK=false;}status();}
+ function backup(){core.holdDecisionConflicts(feedback,data);feedback.drawing_revision=data.revision;feedback.current_result_fingerprint=data.result_fingerprint;feedback.exported_at=new Date().toISOString();try{localStorage.setItem(storageKey,JSON.stringify(feedback));storageOK=true;}catch(e){storageOK=false;}status(feedback.decision_conflicts?.length?'跨入口意见冲突，相关动作已暂挂；请所属专业核对决策身份。':'');}
  function stash(){if(!selected)return;feedback.drafts[key(selected)]=core.cleanRecord(form(),key(selected),false);backup();$('entry-status').textContent='已暂存草稿；尚未保存为意见。';}
  for(const id of ['review-result','review-reason','review-evidence','review-scope','review-instruction'])$(id).oninput=stash;
  $('save-review').onclick=()=>{if(!selected)return;try{const k=key(selected);feedback.annotations[k]=core.saveRecord(feedback.annotations[k],form(),k,new Date().toISOString());delete feedback.drafts[k];backup();reviewShow(selected);if(focused)showFacts(focused);$('entry-status').textContent='意见已保存；专业复算后才更新实际数量。';}catch(e){$('entry-status').textContent=e.message;}};

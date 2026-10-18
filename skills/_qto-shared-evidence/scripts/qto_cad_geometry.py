@@ -811,6 +811,14 @@ def entity_geometry(entity: Any):
         raw["insert"]=xyz(entity.dxf.insert)
     elif kind=="MTEXT":
         anchor=xyz(entity.dxf.insert)  # MTEXT uses WCS, unlike TEXT.
+        raw["rotation_degrees"] = entity.dxf.get("rotation", 0.0)
+        if entity.dxf.hasattr("text_direction"):
+            direction = xyz(entity.dxf.text_direction)
+            raw["text_direction"] = direction
+            if not all(math.isfinite(v) for v in direction) or math.hypot(*direction[:2]) < 1e-12:
+                unresolved("invalid_text_direction", "MTEXT方向向量没有有效二维方向，不以0度代替", "review_text_direction")
+            elif abs(direction[2]) > 1e-12:
+                unresolved("nonplanar_text_direction", "MTEXT方向含Z分量，二维rotation仅为平面投影", "review_text_direction")
     elif kind=="DIMENSION":
         anchor=xyz(entity.dxf.defpoint)
         facts = dimension_measurement_facts(entity)

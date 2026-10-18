@@ -13,7 +13,8 @@ import math, re
 
 LEVELS = ('确认量', '规则推算量', '方案暂估量', '未决量')
 TOTAL_LEVELS = LEVELS[:3]
-CONCLUSIONS = ('一致', '多算', '少算', '第三方无量', '图上无', '缺图', '归入他项')
+CONCLUSIONS = ('一致', '多算', '少算', '第三方无量', '图上无', '缺图', '归入他项', '原量未填', '原量明确零', '不可比', '待核可比性', '本次量未形成', '本期不计')
+COMPARABILITY_KEYS = ('object_match', 'scope_match', 'specification_match', 'coverage_complete')
 SIGNED = ('一致', '多算', '少算')
 HANDLERS = {'decide': '需要你定口径', 'confirm': '需补资料或确认', 'assumed': '已按假设计入', 'closed': '已处理，仅留记录'}
 ROLES = ('overview', 'section', 'category', 'filter', 'technical')
@@ -21,8 +22,8 @@ ROLES = ('overview', 'section', 'category', 'filter', 'technical')
 NATURES = {'rule_gap': '现行规则无法判断', 'multi_method': '有多种判断方式', 'missing_info': '缺图纸或资料', 'drawing_conflict': '图纸矛盾或不清',
            'scope': '范围、分期或专业界面不清', 'assumption': '按假设或估算计入', 'tool_limit': '工具或方法限制', 'list_issue': '清单的问题'}
 # Deviation attribution (contract 5.5): which conclusions are deviations and which list-issue type each becomes.
-DEVIATIONS = ('多算', '少算', '第三方无量', '图上无')
-LIST_TYPES = {'多算': '清单少计', '少算': '清单多计', '第三方无量': '清单漏量', '图上无': '清单列了图上没有的'}
+DEVIATIONS = ('多算', '少算', '第三方无量', '图上无', '原量明确零')
+LIST_TYPES = {'多算': '清单少计', '少算': '清单多计', '第三方无量': '清单漏量', '图上无': '清单列了图上没有的', '原量明确零': '清单漏量'}
 CORRECTED_TYPE = '清单规格写错'
 LIST_PREFIX = '清单的问题|'
 LIST_QUESTION = '本次依据充分、与清单不符的，按本次计，差异交清单编制方核对？'
@@ -224,6 +225,39 @@ def normalize_comparison(view, object_keys):
    diff = seg.get('difference')
    if diff is not None and not (isinstance(diff, dict) and num_or_none(diff.get('value')) and num_or_none(diff.get('rate'))): bad('C3-5', sw, 'difference 须为 {value, rate}，数字或 null'); diff = None
    seg['difference'] = diff; seg.pop('band_check', None)
+   qualification = seg.get('comparability')
+   if qualification is not None and (not isinstance(qualification, dict) or any(qualification.get(k) is not None and not isinstance(qualification[k], bool) for k in COMPARABILITY_KEYS)):
+    bad('C3-5', sw, 'comparability须为对象；object_match/scope_match/specification_match/coverage_complete须为布尔或null'); qualification = None
+   proven = isinstance(qualification, dict) and all(qualification.get(k) is True for k in COMPARABILITY_KEYS)
+   if isinstance(qualification, dict) and not proven and not text(qualification.get('reason')):
+    bad('C3-5', sw, '不可比或资格未知时comparability.reason须写具体原因')
+   state = ('not_in_scope' if conclusion == '本期不计' else 'original_unknown' if qty is None else
+            'unit_mismatch' if not same_unit else 'current_unknown' if total is None and conclusion != '图上无' else
+            'comparable' if proven else 'not_comparable' if isinstance(qualification, dict) and any(qualification.get(k) is False for k in COMPARABILITY_KEYS) else 'unknown')
+   seg['comparison_state'] = state
+   seg['original_quantity_state'] = 'unknown' if qty is None else 'explicit_zero' if qty == 0 else 'present'
+   blocked = state != 'comparable'
+   replacements = {'original_unknown': '原量未填', 'not_comparable': '不可比', 'unit_mismatch': '不可比', 'unknown': '待核可比性', 'current_unknown': '本次量未形成'}
+   expected_derived = replacements.get(state, '原量明确零' if qty == 0 else None)
+   if conclusion in ('原量未填','原量明确零','不可比','待核可比性','本次量未形成') and conclusion != expected_derived:
+    bad('C3-5', sw, f'派生结论“{conclusion}”与实际数量及比较资格状态 {state} 不符；不能用标签代替资格校验')
+   if conclusion == '本期不计' and not text(seg.get('scope_basis')): bad('C3-5', sw, '本期不计须有scope_basis口径依据')
+   if blocked:
+    if diff is not None: seg.setdefault('diagnostic_difference', diff)
+    for old_field in ('attribution','excess','list_issue_types'):
+     old_value = seg.pop(old_field, None)
+     if old_value is not None and old_value != []:
+      legacy_derived = seg.setdefault('diagnostic_legacy_derivation',{})
+      if not isinstance(legacy_derived, dict):
+       bad('C3-5', sw, 'diagnostic_legacy_derivation须为对象'); legacy_derived = seg['diagnostic_legacy_derivation'] = {}
+      legacy_derived.setdefault(old_field, old_value)
+    diff = seg['difference'] = None
+    if conclusion not in ('本期不计','图上无','缺图','归入他项'):
+     conclusion = seg['conclusion'] = replacements.get(state, '不可比')
+    note('不作业务差额', sw, (qualification or {}).get('reason') or {'original_unknown':'原量未填，不以0替代','unknown':'未提供对象、范围、规格及覆盖完整性依据'}.get(state,state))
+   elif qty == 0 and conclusion not in ('图上无','缺图','归入他项'):
+    conclusion = seg['conclusion'] = '原量明确零'
+    if diff is None and total is not None: diff = seg['difference'] = {'value':total,'rate':None}
    if not same_unit:
     if not text(seg.get('unit_mismatch_note')): bad('C3-5', sw, f'单位 {unit} 与本次单位 {ours.get("unit")} 不同，须写 unit_mismatch_note')
     else: note('单位不同', sw, seg['unit_mismatch_note'] + ('；结论由专业判，不按带宽' if conclusion in SIGNED else ''))
@@ -233,7 +267,7 @@ def normalize_comparison(view, object_keys):
     value = diff.get('value') if diff else None
     # Default band (contract 5.4): one rule for the whole page, never a per-item judgement.
     # band_check lets the page re-show the three signed conclusions under a user tolerance.
-    judged = qty not in (None, 0) and total is not None and (conclusion is None or conclusion in SIGNED)
+    judged = not blocked and qty not in (None, 0) and total is not None and (conclusion is None or conclusion in SIGNED)
     if judged:
      b = band_for(unit)
      if b is None: bad('C3-5', sw, '按带宽判结论须给 thresholds.consistent_band')
@@ -247,8 +281,8 @@ def normalize_comparison(view, object_keys):
     elif conclusion is None: bad('C3-5', sw, '来源数量为空或 0、或本次没有合计，不能按带宽判，须写结论')
     elif conclusion in SIGNED: bad('C3-5', sw, f'结论“{conclusion}”只能用于同单位、来源数量不为 0 且本次有合计的段')
     if value is not None:
-     base = 0.0 if qty is None and conclusion == '第三方无量' else qty   # contract 5: no third-party quantity counts as 0
-     if total is None or base is None: bad('C3-5', sw, '有差额时本次合计和来源数量都须有值（仅“第三方无量”的来源数量可空，按 0 计）')
+     base = qty
+     if total is None or base is None: bad('C3-5', sw, '有差额时本次合计和来源数量都须有值；原量为空不以0替代')
      else:
       if not close(value, total - base): bad('C3-5', sw, f'差额 {value} 不等于本次合计 {total} − 来源数量 {base}')
       rate = diff.get('rate')
@@ -269,17 +303,17 @@ def normalize_comparison(view, object_keys):
    ev = seg.get('search_evidence'); seg.pop('search_incomplete', None)
    if ev is not None and not isinstance(ev, dict): bad('C3-5', sw, 'search_evidence 须为对象或 null'); ev = None
    elif ev is not None and ev.get('note') is not None and not isinstance(ev['note'], str): bad('C3-5', sw, 'search_evidence.note 须为文字')
-   if conclusion == '图上无':
+   if conclusion in ('图上无','本期不计'):
     if ev is None: missing = list(SEARCH_KEYS)
     else:
      missing = [k for k in ('drawings', 'targets') if not (text(ev.get(k)) or (isinstance(ev.get(k), list) and ev[k] and all(text(x) for x in ev[k])))]
      if not text(ev.get('method')): missing.append('method')
      if not (number(ev.get('hits')) and ev['hits'] >= 0): missing.append('hits')
-    if missing and legacy:
+    if missing and legacy and conclusion == '图上无':
      # Delivered before the search-record rule (contract 5): shown as incomplete, never turned into an open item.
      seg['search_incomplete'] = True; search_incomplete += 1
      note('检索记录不全', sw, '缺：' + '、'.join(missing) + (f"；说明：{ev['note']}" if ev and text(ev.get('note')) else ''))
-    elif missing and ev is None: bad('C3-5', sw, '结论“图上无”须附检索依据（drawings、targets、method、hits）')
+    elif missing and ev is None: bad('C3-5', sw, f'结论“{conclusion}”须附检索依据（drawings、targets、method、hits）')
     elif missing: bad('C3-5', sw, '检索依据缺：' + '、'.join(missing))
    if conclusion == '缺图' and not text(seg.get('missing_drawing_note')): bad('C3-5', sw, '结论“缺图”须写 missing_drawing_note')
    if conclusion == '第三方无量' and qty not in (None, 0): bad('C3-5', sw, '结论“第三方无量”时来源数量须为 null 或 0')
@@ -499,21 +533,22 @@ def normalize_comparison(view, object_keys):
   for seg in it.get('third_parties') or []:
    if not isinstance(seg, dict): continue
    con = seg.get('conclusion'); att = exc = None; kinds = []
-   if con in DEVIATIONS and seg.get('unit') == it['ours'].get('unit'):
+   deviation = con in DEVIATIONS and (con != '原量明确零' or number(total) and total > 0)
+   if deviation and seg.get('comparison_state') == 'comparable' and seg.get('unit') == it['ours'].get('unit'):
     mine = (0.0 if total is None else total) if con == '图上无' else total
-    theirs = (0.0 if seg.get('quantity') is None else seg['quantity']) if con == '第三方无量' else seg.get('quantity')
-    if number(mine) and number(theirs):
+    theirs = seg.get('quantity')
+    if number(mine) and number(theirs) and not close(mine, theirs):
      d = abs(mine - theirs)
      if not weak: att = 'list'
      elif d <= unc or close(d, unc): att = 'ours'
      else: att, exc = 'both', d - unc
    if att in ('list', 'both'): kinds.append(LIST_TYPES[con])
-   if seg.get('third_party_corrected') is True: kinds.append(CORRECTED_TYPE)
+   if seg.get('third_party_corrected') is True and seg.get('comparison_state') == 'comparable': kinds.append(CORRECTED_TYPE)
    sw = f"条目 {iid} 来源 {seg.get('source_id')}"
    if 'attribution' in seg and seg['attribution'] != att: bad('C3-11', sw, f"归因 {seg['attribution']} 与重算 {att} 不同；归因由生成器补，可以不写")
    if 'excess' in seg and not (num_or_none(seg['excess']) and close(seg['excess'], exc)): bad('C3-11', sw, f"excess {seg['excess']} 与重算 {exc} 不同；由生成器补，可以不写")
    seg['attribution'] = att; seg['excess'] = exc; seg['list_issue_types'] = kinds
-   if con in DEVIATIONS: attributed[att or 'none'] += 1
+   if deviation: attributed[att or 'none'] += 1
    for k in kinds: types[k].append({'item_id': iid, 'source_id': seg.get('source_id')})
    if att in ('ours', 'both') and not linked(it): weak_unlinked += 1; note('依据不足的偏差未挂问题', sw, f'归因 {att}；条目没挂未关闭的问题')
  # Each non-empty list-issue type becomes one implied common issue, answered once for the whole group.

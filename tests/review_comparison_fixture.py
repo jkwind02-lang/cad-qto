@@ -24,7 +24,8 @@ def segment(source, rows, unit, quantity, total, conclusion=None, **extra):
     if quantity not in (None, 0) and total is not None and unit == extra.pop('ours_unit', unit):
         value = round(total - quantity, 6)
         diff = {'value': value, 'rate': round(value / quantity, 4)}
-    seg = {'source_id': source, 'rows': rows, 'unit': unit, 'quantity': quantity, 'difference': diff}
+    seg = {'source_id': source, 'rows': rows, 'unit': unit, 'quantity': quantity, 'difference': diff,
+           'comparability': {k:True for k in ('object_match','scope_match','specification_match','coverage_complete')}}
     if conclusion is not None:
         seg['conclusion'] = conclusion
     seg.update(extra)

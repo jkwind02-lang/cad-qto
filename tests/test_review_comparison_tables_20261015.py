@@ -117,7 +117,7 @@ def tables(tmp_path, **override):
                                       {'id': 'division', 'title': '分部', 'role': 'section', 'values': [{'id': 'D1', 'title': '配管'}, {'id': 'D2', 'title': '设备'}]}],
                        'member_tables': [{'id': 'circuit', 'title': '逐回路台账', 'columns': [{'key': 'attributes.起点箱', 'title': '起点箱'}, {'key': 'quantities.水平长度', 'title': '水平 m'}]}]},
         'tables': {
-            'items': [{'path': 'tables/items.csv', 'constants': {'kind': 'third_party'}, 'columns': item_cols,
+            'items': [{'path': 'tables/items.csv', 'constants': {'kind': 'third_party', **{'compare_'+k:True for k in ('object_match','scope_match','specification_match','coverage_complete')}}, 'columns': item_cols,
                        'value_maps': {'conclusion': {'清单无量': '第三方无量'}}, 'list_separators': {'search_drawings': ';', 'search_targets': ';'}},
                       {'path': 'tables/extra.csv', 'constants': {'kind': 'extra'},
                        'columns': {'id': '条目', 'dim.building': '楼栋', 'dim.division': '分部', 'name': '名称', 'features': '特征', 'unit': '单位', '方案暂估量': '方案暂估'}}],
@@ -163,7 +163,7 @@ def test_tables_convert_to_a_valid_view_with_same_results_as_fixture(tmp_path):
     assert items['I2']['third_parties'][0]['difference'] == {'value': -1.0, 'rate': -0.091}
     assert items['I3']['third_parties'][0]['search_evidence'] == {'drawings': ['P1', 'P2'], 'targets': ['JDG25', 'JDG 25'], 'method': '文字检索', 'hits': 0.0}
     assert items['I4']['third_parties'][0]['redirect_to'] == ['I1']
-    assert items['I6']['third_parties'][0]['conclusion'] == '第三方无量' and items['I6']['third_parties'][0]['quantity'] is None
+    assert items['I6']['third_parties'][0]['conclusion'] == '原量未填' and items['I6']['third_parties'][0]['quantity'] is None
     assert items['E1']['kind'] == 'extra' and items['E1']['estimate_dominant'] is True
     assert i1['detail_rows'][0]['member_keys'] == ['成员|WL1', '成员|WL2', '成员|WL3']
     objs = {o['id']: o for o in v['objects']}

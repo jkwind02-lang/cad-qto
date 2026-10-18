@@ -21,7 +21,7 @@ def comparison_actions(view,current):
   snap=r.get('common_issue_snapshot')
   if snap is None:continue
   gid=snap['common_issue_id'];scope=commons[gid]['scope'];old=snap.get('scope') or {}
-  qids=[x for x in scope['issue_ids'] if (gid,'issue',x) not in exc|held];iids=[x for x in scope['item_ids'] if (gid,'item',x) not in exc|held]
+  qids=[x for x in scope['issue_ids'] if x in old.get('issue_ids',[]) and (gid,'issue',x) not in exc|held];iids=[x for x in scope['item_ids'] if x in old.get('item_ids',[]) and (gid,'item',x) not in exc|held]
   added={'issue_ids':[x for x in scope['issue_ids'] if x not in old.get('issue_ids',[])],'item_ids':[x for x in scope['item_ids'] if x not in old.get('item_ids',[])]}
   hold={'issue_ids':[x for x in scope['issue_ids'] if (gid,'issue',x) in held],'item_ids':[x for x in scope['item_ids'] if (gid,'item',x) in held]}
   common_actions.append({**base(k,r),'common_issue_id':gid,'nature':nature.get(gid),'scope':{'issue_ids':qids,'item_ids':iids},'added_since_answer':added,
@@ -47,7 +47,8 @@ def main():
   out.update(extra)
   actionable=len(actions)+sum(len(extra.get(k,[])) for k in ('item_actions','issue_actions','common_issue_actions'))
   a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
-  status='REVIEW_REQUIRED' if unmatched or extra.get('conflicts') else 'PASS'
+  scope_growth=any(any(a.get('added_since_answer',{}).get(k,[]) for k in ('issue_ids','item_ids')) for a in extra.get('common_issue_actions',[]))
+  status='REVIEW_REQUIRED' if unmatched or extra.get('conflicts') or scope_growth else 'PASS'
   print(json.dumps({'status':status,'saved':len(fb['annotations']),'actionable':actionable,'drafts':len(fb['drafts']),'unmatched':len(unmatched),'conflicts':len(extra.get('conflicts',[])),'overlaps':len(extra.get('overlaps',[])),'quantity_changes':0},ensure_ascii=False));return 0
  except (OSError,ValueError,KeyError,TypeError) as e:print(json.dumps({'status':'INPUT_REQUIRED','error':str(e),**({'problems':e.problems} if hasattr(e,'problems') else {})},ensure_ascii=False));return 2
 if __name__=='__main__':raise SystemExit(main())

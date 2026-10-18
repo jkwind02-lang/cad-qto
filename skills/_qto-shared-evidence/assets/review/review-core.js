@@ -12,7 +12,7 @@ const SNAPSHOTS=[['item_snapshot','item_id','items','对照条目'],['issue_snap
 const isAudit=r=>r&&typeof r==='object'&&SNAPSHOTS.some(([k])=>r[k]!=null);
 const auditTarget=r=>SNAPSHOTS.find(([k])=>r[k]!=null);
 const strList=x=>Array.isArray(x)&&x.every(v=>typeof v==='string');
-const conclusions=['一致','多算','少算','第三方无量','图上无','缺图','归入他项'],bandClasses=['计量','计数'];
+const conclusions=['一致','多算','少算','第三方无量','图上无','缺图','归入他项','原量未填','原量明确零','不可比','待核可比性','本次量未形成','本期不计'],bandClasses=['计量','计数'];
 const nonneg=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0,plain=v=>v&&typeof v==='object'&&!Array.isArray(v);
 // What the reviewer saw under the page tolerance (contract 9); never used for staleness.
 function pageViewOk(pv){if(!plain(pv))return false;const b=pv.consistent_band,c=pv.conclusions;const bandOk=nonneg(b)||(plain(b)&&Object.keys(b).length===bandClasses.length&&bandClasses.every(k=>nonneg(b[k])));return !!bandOk&&plain(c)&&Object.values(c).every(v=>conclusions.includes(v));}
@@ -119,7 +119,32 @@ function parse(input,view){
   p[field]=result;
  }
  p.current_result_fingerprint=view.result_fingerprint;
+ holdDecisionConflicts(p,view);
  return p;
+}
+function holdDecisionConflicts(pkg,view){
+ const c=view.comparison||{},objects=new Map(view.objects.map(x=>[x.catalog_key,x])),groups=new Map(view.groups.map(x=>[x.id,x]));
+ const items=new Map((c.items||[]).map(x=>[x.id,x])),issues=new Map((c.issues||[]).map(x=>[x.id,x])),commons=new Map((c.common_issues||[]).map(x=>[x.id,x]));
+ const itemKeys=ids=>new Set([...ids].flatMap(id=>(items.get(id)?.detail_rows||[]).flatMap(r=>r.member_keys||[])));
+ function target(r){
+  if(r.common_issue_snapshot){const s=r.common_issue_snapshot,t=commons.get(s.common_issue_id)||{},sc=s.scope||{},ids=new Set(sc.item_ids||[]);for(const q of sc.issue_ids||[])for(const i of issues.get(q)?.item_ids||[])ids.add(i);return ['audit',t.decision_id,itemKeys(ids)];}
+  if(r.issue_snapshot){const t=issues.get(r.issue_snapshot.issue_id)||{};return ['audit',t.decision_id,itemKeys(t.item_ids||[])];}
+  if(r.item_snapshot){const id=r.item_snapshot.item_id,t=items.get(id)||{};return ['audit',t.decision_id,itemKeys([id])];}
+  if(r.group_id)return ['drawing',groups.get(r.group_id)?.decision_id,new Set(r.selected_object_keys||[])];
+  const k=r.object_snapshot?.catalog_key;return ['drawing',objects.get(k)?.decision_id,new Set(k?[k]:[])];
+ }
+ const vote=r=>r.verdict||({'确认现结果':'同意','修改结果':'要改','排除对象':'要改','暂缓计算':'要改'}[r.instruction]);
+ const live=[];for(const [k,r] of Object.entries(pkg.annotations||{})){const a=assessRecord(r,view);r.applicability_state=a.state;r.applicability_reason=a.reason;if(a.state==='current'&&!r.merge_conflict)live.push([k,r,target(r)]);}
+ const found=[];
+ for(let i=0;i<live.length;i++)for(let j=i+1;j<live.length;j++){
+  const [ka,a,ta]=live[i],[kb,b,tb]=live[j];if(ta[0]===tb[0])continue;
+  const explicit=!!(ta[1]&&tb[1]);if(explicit&&ta[1]!==tb[1])continue;
+  const overlap=[...ta[2]].filter(k=>tb[2].has(k)).sort();if(!explicit&&!overlap.length)continue;
+  const votes=new Set([vote(a),vote(b)]);if(!votes.has('同意')||!votes.has('要改'))continue;
+  found.push({annotation_keys:[ka,kb],decision_id:explicit?ta[1]:null,kind:explicit?'decision_conflict':'decision_identity_required',overlap_member_keys:overlap,processing:'跨入口意见相反，动作暂挂；由所属专业核对是否同一决策事项，不按同号或重叠自动合并'});
+ }
+ for(const f of found)for(const k of f.annotation_keys){pkg.annotations[k].applicability_state='conflict';pkg.annotations[k].applicability_reason=f.processing;}
+ pkg.decision_conflicts=found;return found;
 }
 function saveRecord(previous,next,key,now){
  const q=cleanRecord(next,key,true);q.updated_at=now;q.entry_origin='用户在HTML保存';delete q.merge_conflict;   // re-saving one opinion settles a merge conflict
@@ -174,7 +199,7 @@ function mergePackages(local,incoming){
 }
 function embed(html,pkg){const json=JSON.stringify(pkg,null,1).replace(/^[ \t]+/gm,'').replace(/</g,'\\u003c');ensure(/id="feedback-seed"/.test(html),'页面缺少批注嵌入块');return html.replace(/(<script id="feedback-seed" type="application\/json">)[\s\S]*?(<\/script>)/,(_,a,b)=>a+json+b);}
 function readFileText(text){if(text.trimStart().startsWith('<')){const m=text.match(/<script id="feedback-seed" type="application\/json">([\s\S]*?)<\/script>/);ensure(m,'HTML没有批注数据块');return JSON.parse(m[1]);}return JSON.parse(text);}
-function receiptState(receipt,annotation){return receipt&&annotation&&annotation.result_fingerprint&&annotation.applicability_state!=='stale'&&annotation.applicability_state!=='unmatched'&&receipt.source_annotation_updated_at===annotation.updated_at&&receipt.source_result_fingerprint===annotation.result_fingerprint?'current':receipt?'stale':'none';}
+function receiptState(receipt,annotation){return receipt&&annotation&&annotation.result_fingerprint&&!['stale','unmatched','conflict'].includes(annotation.applicability_state)&&receipt.source_annotation_updated_at===annotation.updated_at&&receipt.source_result_fingerprint===annotation.result_fingerprint?'current':receipt?'stale':'none';}
 // Why an object has no drawing position (scene mapping contract 8); unknown codes are shown as written.
 const UNLOCATED={no_geometry:'没有坐标',handle_not_found:'句柄查不到',handle_in_block:'在块内，回不到',sheet_unknown:'图页不在图页表里',outside_sheet:'落在图页范围外',estimated:'估算，没有图面路径'};
 const unlocatedText=o=>o&&o.unlocated_reason?(UNLOCATED[o.unlocated_reason]||o.unlocated_reason)+(o.unlocated_note?'：'+o.unlocated_note:''):'';
@@ -191,5 +216,5 @@ async function readPayload(buf){
  }
  delete data.background_pack;return data;
 }
-root.QtoReviewCore={schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord,isAudit,opinion,unlocatedText,readPayload};
+root.QtoReviewCore={schema,comparisonSchema,schemaFor,verdicts,scopes,instructions,cleanRecord,parse,saveRecord,mergeRecords,mergePackages,embed,readFileText,receiptState,assessRecord,isAudit,opinion,unlocatedText,readPayload,holdDecisionConflicts};
 })(globalThis);

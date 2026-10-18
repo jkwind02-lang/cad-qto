@@ -238,9 +238,9 @@ def test_c3_5_difference_rate_and_conclusion_fields():
     v = fx.view(); seg(v, 'I2').pop('correction_note')
     assert any('correction_note' in p['message'] for p in problems(v))
     v = fx.view(); seg(v, 'I6')['conclusion'] = '多算'
-    assert any('只能用于同单位' in p['message'] for p in problems(v))
+    assert seg(norm(v), 'I6')['conclusion'] == '原量未填'
     v = fx.view(); seg(v, 'I6').pop('conclusion')
-    assert any('须写结论' in p['message'] for p in problems(v))
+    assert seg(norm(v), 'I6')['conclusion'] == '原量未填'
     v = fx.view(); fx.item(v, 'I1')['ours']['total'] = 36.0
     assert any('本次合计' in p['message'] for p in problems(v))
     v = fx.view(); fx.item(v, 'I1')['estimate_dominant'] = True
@@ -262,15 +262,17 @@ def test_c3_5_rate_rounding_tolerance_includes_the_boundary():
     assert any('差额率' in p['message'] for p in problems(v))
 
 
-def test_c3_5_no_third_party_quantity_difference_counts_from_zero():
-    v = fx.view(); seg(v, 'I6')['difference'] = {'value': 4.0, 'rate': None}     # electrical writes 差额 = 本次合计
-    assert seg(norm(v), 'I6')['conclusion'] == '第三方无量'
-    seg(v, 'I6')['difference'] = {'value': 3.0, 'rate': None}
+def test_c3_5_unknown_original_never_counts_from_zero():
+    v = fx.view(); seg(v, 'I6')['difference'] = {'value': 4.0, 'rate': None}
+    s = seg(norm(v), 'I6')
+    assert s['conclusion'] == '原量未填' and s['difference'] is None
+    assert s['quantity'] is None and s['diagnostic_difference']['value'] == 4.0
+    assert s['attribution'] is None and s['list_issue_types'] == []
+    v = fx.view(); s = seg(v, 'I6'); s['quantity'] = s['rows'][0]['quantity'] = 0
+    actual = seg(norm(v), 'I6')
+    assert actual['conclusion'] == '原量明确零' and actual['difference'] == {'value':4.0,'rate':None}
+    s['difference'] = {'value': 3.0, 'rate': None}
     assert any('不等于本次合计' in p['message'] for p in problems(v))
-    seg(v, 'I6')['difference'] = {'value': 4.0, 'rate': 1.0}
-    assert any('差额率须为 null' in p['message'] for p in problems(v))
-    v = fx.view(); seg(v, 'I5')['difference'] = {'value': 1.0, 'rate': None}     # only 第三方无量 may count from 0
-    assert any('都须有值' in p['message'] for p in problems(v))
 
 
 def test_c3_9_uncertain_items_should_reach_an_open_issue():

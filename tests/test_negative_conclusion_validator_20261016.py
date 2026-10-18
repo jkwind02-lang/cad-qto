@@ -70,6 +70,24 @@ def test_items_without_negative_conclusion_are_not_affected(base, records):
     assert validate_document(copy.deepcopy(base)) == []      # no records at all
 
 
+@pytest.mark.parametrize('label',['本期不计','图上有、本期不计'])
+def test_deliberate_out_of_period_keeps_real_hits_and_requires_basis(base, records, label):
+    d=doc(base,records);identifier=zero_with_negative(d,['NS-A'])
+    q=d['工程量结果'][0]
+    q['否定结论'].update(结论=label,口径依据='合成口径K9：预留回路本期不计')
+    assert validate_document(d)==[]
+    jsonschema.Draft202012Validator(SCHEMA).validate(d)
+    assert d['否定结论检索记录'][0]['status']=='hit'
+    q['否定结论'].pop('口径依据')
+    assert validate_document(d)==[f'{identifier}的本期不计缺少口径依据']
+
+
+def test_out_of_period_cannot_hide_missing_search_record(base, records):
+    d=doc(base,records);identifier=zero_with_negative(d,['NS-A'])
+    d['工程量结果'][0]['否定结论'].update(结论='本期不计',口径依据='合成口径K9',检索记录=[])
+    assert validate_document(d)==[f'{identifier}的否定结论没有检索记录，只能列为待确认的未决事项']
+
+
 def test_pending_record_with_insufficient_evidence_state_passes(base, records):
     d = doc(base, records)
     d['工程量结果'][2]['否定结论'] = {'结论': '图上无 消防广播', '检索记录': ['NS-P'], '清单量': None}

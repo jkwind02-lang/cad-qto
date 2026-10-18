@@ -9,6 +9,7 @@ const VERDICT_LABELS={item:{同意:'同意',要改:'要改',待定:'待定'},iss
 // What kind of answer each nature asks for (contract 6.1); the group heading tells the reviewer what to give.
 const NATURE_ASK={rule_gap:'定一条计算规则，覆盖全部同类内容',multi_method:'在列出的做法里选一种，或另写',missing_info:'给资料；或定“缺这类资料时怎么处理”的兜底口径',drawing_conflict:'定取舍顺序（以哪种图为准、标注还是量取为准），或请设计确认',scope:'定计、不计或列清单外',assumption:'接受该估算方法（作方案暂估），或要求补资料',tool_limit:'接受近似，或等插件改进',list_issue:'确认“本次依据充分，按本次计，差异交清单编制方”'};
 const LIST_TYPES=['清单少计','清单多计','清单漏量','清单列了图上没有的','清单规格写错'],LIST_PREFIX='清单的问题|',DEVIATIONS=['多算','少算','第三方无量','图上无'];
+const deviation=s=>DEVIATIONS.includes(s.conclusion)||(s.conclusion==='原量明确零'&&s.difference?.value>0);
 const UNSORTED='未分类',UNLINKED='没有依据、也没挂问题',KEY_PREFIX={item:'对照条目|',issue:'问题|',common:'共性问题|'};
 const ATTRIBUTION={list:'清单的问题',ours:'本次依据不足',both:'部分是清单的问题'};
 const PAGE=60;
@@ -53,14 +54,14 @@ function attach(api){
  const inOverview=x=>overview==='全部'||!overDim||vals(x,overDim).includes(overview);
  const dimsOK=x=>filterDims.every(d=>!F.dims[d.id]||F.dims[d.id]==='全部'||vals(x,d).includes(F.dims[d.id]));
  const query=()=>byId('audit-search').value.trim().toLowerCase(),searched=x=>{const q=query();return !q||haystack(x).includes(q);};
- const isAlert=s=>s&&s.difference?.rate!=null&&Math.abs(s.difference.rate)*100>F.alertRate;
+ const isAlert=s=>s&&s.comparison_state==='comparable'&&s.difference?.rate!=null&&Math.abs(s.difference.rate)*100>F.alertRate;
  const incomplete=i=>i.third_parties.some(s=>s.search_incomplete);
 
  // ---------- opinions: own note, common answers, inheritance (contract 9.1) ----------
  const feedback=()=>api.getFeedback(),keyOf=x=>KEY_PREFIX[kindOf(x)]+x.id;
  const noteOf=x=>{const f=feedback(),k=keyOf(x);return f.drafts[k]||f.annotations[k];};
  const savedOf=x=>feedback().annotations[keyOf(x)];
- const answerOf=x=>{const r=savedOf(x);return r&&r.applicability_state!=='stale'&&r.applicability_state!=='unmatched'&&!r.merge_conflict?r:null;};
+ const answerOf=x=>{const r=savedOf(x);return r&&!['stale','unmatched','conflict'].includes(r.applicability_state)&&!r.merge_conflict?r:null;};
  const optionText=(x,id)=>(x.options||[]).find(o=>o.id===id)?.text||id;
  const answerText=(x,a)=>(a.verdict?VERDICT_LABELS[kindOf(x)==='item'?'item':'issue'][a.verdict]:'已答复')+(a.option_id?'，'+optionText(x,a.option_id):'')+(!a.verdict&&a.confirmed_result?'：'+a.confirmed_result:'');
  // Commons covering a target: an issue's own common; for an item every common whose scope holds it, including list-issue groups.
@@ -68,15 +69,16 @@ function attach(api){
  // How a covered place stands towards one common answer (contract 9.1): its exception is in conflict (held), it has its own exception,
  // its exception expired, or it takes the answer (inherited) / waits for it. Only inherited and expired places follow the common answer.
  const standing=(x,g)=>{const r=savedOf(x);if(r?.merge_conflict&&r.merge_conflict.candidates.some(c=>c.exception_of===g.id))return 'held';
+  const a=answerOf(g),old=a?.common_issue_snapshot?.scope;if(a&&!(old?.[kindOf(x)==='issue'?'issue_ids':'item_ids']||[]).includes(x.id))return 'new';
   if(answerOf(x)?.exception_of===g.id)return 'exception';if(r?.exception_of===g.id)return 'expired';return answerOf(g)?'inherited':'waiting';};
  const follows=(x,g)=>['inherited','expired'].includes(standing(x,g))&&!!answerOf(g);
  const inheritText=x=>covering(x).map(g=>{const s=standing(x,g),a=answerOf(g),take=a?'已按共性答复（'+shortOf(g)+'：'+answerText(g,a)+'）':'待共性答复（'+shortOf(g)+'）';
-  return s==='held'?'例外意见冲突（'+shortOf(g)+'）：两份意见不同，重新保存一条前这里不按共性答复':s==='exception'?'此处已设例外，不按 '+shortOf(g)+' 的答复（本处：'+answerText(x,answerOf(x))+'）':
+  return s==='new'?'答复后新增范围，须重新核对；本处未继承旧答复':s==='held'?'例外意见冲突（'+shortOf(g)+'）：两份意见不同，重新保存一条前这里不按共性答复':s==='exception'?'此处已设例外，不按 '+shortOf(g)+' 的答复（本处：'+answerText(x,answerOf(x))+'）':
    s==='expired'?'此处原设的例外已过期，须重新核对；现'+take:take;}).join('；');
  const answered=x=>!!answerOf(x)||covering(x).some(g=>follows(x,g));
  const addedSince=(g,a)=>{const old=a?.common_issue_snapshot?.scope||{};return {issue_ids:g.scope.issue_ids.filter(x=>!(old.issue_ids||[]).includes(x)),item_ids:g.scope.item_ids.filter(x=>!(old.item_ids||[]).includes(x))};};
  function commonState(g){
-  const r=savedOf(g);if(r?.merge_conflict)return '意见冲突';if(r&&(r.applicability_state==='stale'||r.applicability_state==='unmatched'))return '答复已过期，须重答';
+  const r=savedOf(g);if(r?.merge_conflict||r?.applicability_state==='conflict')return '意见冲突，动作暂挂';if(r&&(r.applicability_state==='stale'||r.applicability_state==='unmatched'))return '答复已过期，须重答';
   const a=answerOf(g);if(!a)return '未答复';const n=addedSince(g,a);const added=n.issue_ids.length+n.item_ids.length;
   return '已答复：'+answerText(g,a)+(added?' · 答复后新增 '+added+' 处':'');
  }
@@ -205,7 +207,7 @@ function attach(api){
   return row(i,nameOf(i)+(featOf(i)?' · '+featOf(i):''),subs,evidenceBar(i));
  }
  function auditRow(i){
-  const subs=[];for(const s of segsOf(i))subs.push(el('small',null,srcTitle(s)+(s.missing?'无对应':tp+' '+num(s.quantity)+(s.unit!==i.ours.unit?' '+s.unit:'')+' → 本次 '+num(i.ours.total)+' '+i.ours.unit+' · 差额 '+num(s.difference?.value)+tail(s)+(s.attribution?' · '+ATTRIBUTION[s.attribution]:DEVIATIONS.includes(s.conclusion)?' · 无法归因':''))));
+  const subs=[];for(const s of segsOf(i))subs.push(el('small',null,srcTitle(s)+(s.missing?'无对应':tp+' '+num(s.quantity)+(s.unit!==i.ours.unit?' '+s.unit:'')+' → 本次 '+num(i.ours.total)+' '+i.ours.unit+' · 差额 '+num(s.difference?.value)+tail(s)+(s.attribution?' · '+ATTRIBUTION[s.attribution]:deviation(s)?' · 无法归因':''))));
   const tags=el('small'),s=seg(i);
   if(s?.attribution==='both')tags.append(el('span','badge warn','部分是清单的问题 超出 '+num(s.excess)+' '+i.ours.unit));
   if(excludedText(i))tags.append(el('span','badge','含已定不计 '+excludedText(i)));
@@ -252,7 +254,7 @@ function attach(api){
    for(const [k,{x,list:its}] of weak){for(const i of its)seen.add(i);
     const extra=x?btn('到待解决问题里答复 · '+(kindOf(x)==='common'?commonState(x):answered(x)?'已答复':'未答复'),()=>{setMode('resolve');show(x);route();},'more'):el('div','hint','依据不足的偏差未挂问题：提醒专业补挂');
     section('weak|'+k,'本次依据不足 · '+(x?(kindOf(x)==='common'?shortOf(x)+' '+x.question:x.id+' '+x.title)+'（'+natureLabel(natureOf(x))+'）':'依据不足的偏差未挂问题'),sorted(its),auditRow,extra);}
-   for(const [k,label,f] of [['audit|none','无法归因（单位不同或没有差额）',s=>DEVIATIONS.includes(s.conclusion)&&!s.attribution],['audit|缺图','缺图（在待解决问题里）',s=>s.conclusion==='缺图'],['audit|归入他项',term('归入他项'),s=>s.conclusion==='归入他项'],['audit|一致','一致',s=>s.conclusion==='一致']]){   // groups follow the data conclusion, as attribution does
+   for(const [k,label,f] of [['audit|none','无法归因（单位不同或没有差额）',s=>deviation(s)&&!s.attribution],...['原量未填','原量明确零','不可比','待核可比性','本次量未形成','本期不计'].map(t=>['audit|'+t,t,s=>s.conclusion===t]),['audit|缺图','缺图（在待解决问题里）',s=>s.conclusion==='缺图'],['audit|归入他项',term('归入他项'),s=>s.conclusion==='归入他项'],['audit|一致','一致',s=>s.conclusion==='一致']]){   // groups follow the data conclusion, as attribution does
     const its=third.filter(i=>auditOK(i)&&f(seg(i)));for(const i of its)seen.add(i);if(its.length)section(k,label,sorted(its),auditRow);}
    total=seen.size;
   }else{
@@ -292,7 +294,7 @@ function attach(api){
  function levelsTable(i){const L=i.ours.levels;return table([...LEVELS.map(x=>x.replace('量','')),'合计（不含未决）','单位'],[[...LEVELS.map(x=>num(L[x])),num(i.ours.total),i.ours.unit]]);}
  const evidenceText=i=>{const L=i.ours.levels;return '有依据（确认 + 规则推算） '+num((L['确认量']||0)+(L['规则推算量']||0))+' · 估算 '+num(L['方案暂估量']||0)+' · 待定 '+(L['未决量']!=null?num(L['未决量']):hasPending(i)?'有，未写数':'0')+' '+i.ours.unit;};
  const searchText=s=>{const e=s.search_evidence||{};return [e.drawings!=null?'图纸 '+[].concat(e.drawings).join('、'):'',e.targets!=null?'对象 '+[].concat(e.targets).join('、'):'',e.method?'方法 '+e.method:'',e.hits!=null?'命中 '+e.hits:'',e.unread?'未读 '+e.unread:'',e.uncovered?'未查 '+e.uncovered:'',e.record_ref?'记录 '+e.record_ref:'',e.note?'说明 '+e.note:''].filter(Boolean).join('；');};
- const attributionText=(i,s)=>s.attribution==='list'?'本次依据充分，偏差是清单的问题（'+(s.list_issue_types||[]).join('、')+'）':s.attribution==='ours'?'本次依据不足，差额在本次估算和待定范围内，归到所挂问题':s.attribution==='both'?'本次依据不足，差额超出估算和待定 '+num(s.excess)+' '+i.ours.unit+'，超出部分是清单的问题':DEVIATIONS.includes(s.conclusion)?'无法归因（单位不同或没有差额）':(s.list_issue_types||[]).length?(s.list_issue_types||[]).join('、'):'';
+ const attributionText=(i,s)=>s.attribution==='list'?'本次依据充分，偏差是清单的问题（'+(s.list_issue_types||[]).join('、')+'）':s.attribution==='ours'?'本次依据不足，差额在本次估算和待定范围内，归到所挂问题':s.attribution==='both'?'本次依据不足，差额超出估算和待定 '+num(s.excess)+' '+i.ours.unit+'，超出部分是清单的问题':deviation(s)?'无法归因（单位不同或没有差额）':(s.list_issue_types||[]).length?(s.list_issue_types||[]).join('、'):'';
  function itemDetail(i){
   const box=byId('audit-detail');box.append(el('h2',null,nameOf(i)));
   if(featOf(i))box.append(el('div','minor',featOf(i)));
@@ -303,12 +305,14 @@ function attach(api){
   // Our result first, third party as comparison; the comparison audit mode keeps the third-party table on top.
   const comparisonPart=()=>{if(!i.third_parties.length)return;
    box.append(el('h3',null,(mode==='audit'?'':'对照：')+tp+'数量'));
-   const rows=[];for(const s of i.third_parties){const src=c.sources.find(x=>x.id===s.source_id);for(const [n,r] of s.rows.entries())rows.push([n?'':(src?.title||s.source_id),[r.seq,r.code].filter(Boolean).join(' '),r.name||'',r.features||'',r.unit,num(r.quantity),n?'':num(s.quantity)+' '+s.unit,n?'':num(s.difference?.value),n?'':pct(s.difference?.rate),n?'':conclusionText(s)+(s.third_party_corrected?'；已修正':''),n?'':s.attribution?ATTRIBUTION[s.attribution]:DEVIATIONS.includes(s.conclusion)?'无法归因':''])}
+   const rows=[];for(const s of i.third_parties){const src=c.sources.find(x=>x.id===s.source_id);for(const [n,r] of s.rows.entries())rows.push([n?'':(src?.title||s.source_id),[r.seq,r.code].filter(Boolean).join(' '),r.name||'',r.features||'',r.unit,num(r.quantity),n?'':num(s.quantity)+' '+s.unit,n?'':num(s.difference?.value),n?'':pct(s.difference?.rate),n?'':conclusionText(s)+(s.third_party_corrected?'；已修正':''),n?'':s.attribution?ATTRIBUTION[s.attribution]:deviation(s)?'无法归因':''])}
    box.append(table(['来源','序号/编码','名称','特征','单位','行数量','段数量','差额','差额率','结论','归因'],rows));
    for(const s of i.third_parties){
     const pre=c.sources.length>1?(c.sources.find(x=>x.id===s.source_id)?.title||s.source_id)+' ':'';
     const at=attributionText(i,s);if(at)box.append(para(pre+'归因',at));
-    if(excludedText(i)&&DEVIATIONS.includes(s.conclusion))box.append(para(pre+'含已定不计','本次另有 '+excludedText(i)+' 按口径不计，见明细里的已定不计行'));
+    if(s.comparison_state!=='comparable')box.append(para(pre+'比较边界',s.comparability?.reason||s.conclusion));
+    if(s.scope_basis)box.append(para(pre+'不计依据',s.scope_basis));
+    if(excludedText(i)&&deviation(s))box.append(para(pre+'含已定不计','本次另有 '+excludedText(i)+' 按口径不计，见明细里的已定不计行'));
     for(const [k,label] of [['disposition_note','处置说明'],['correction_note','修正说明'],['missing_drawing_note','缺图说明'],['unit_mismatch_note','单位不同'],['quantity_note','部分行无量']])if(s[k]&&s[k]!==i.ours.note)box.append(para(pre+label,s[k]));
     const ev=searchText(s);if(ev)box.append(para(pre+'检索依据',ev));
     if(s.search_incomplete)box.append(para(pre+'检索记录',term('检索记录不全：成果在检索记录规则生效前交付，未回头补；已有的说明照上显示')));
@@ -441,7 +445,7 @@ function attach(api){
   byId('audit-excluded').textContent=k==='item'?'明细例外：'+((r.excluded_detail_row_ids||[]).join('、')||'无'):'';
   byId('audit-history').textContent=(r.history||[]).map((h,n)=>(n+1)+'. '+(h.updated_at||'')+' '+(h.verdict?labels[h.verdict]||h.verdict:'')+(h.option_id?' '+h.option_id:'')+(h.exception_of?' 例外：'+h.exception_of:'')+'\n'+(h.confirmed_result||'')+'\n原因：'+(h.reason||'')).join('\n\n')||'暂无修改历史';
   byId('audit-entry-status').textContent=own?.merge_conflict?'意见冲突：合并时两份意见不同（'+own.merge_conflict.candidates.map(y=>(labels[y.verdict]||y.verdict||'未选')+(y.option_id?' '+y.option_id:'')+(y.exception_of?' 例外':'')).join(' / ')+'），未采用任何一份；重新保存其中一条才消除。'
-   :(r.applicability_state==='stale'||r.applicability_state==='unmatched')?'历史意见待重新核对：'+r.applicability_reason:f.drafts[key]?'当前有草稿，未保存为意见。':f.annotations[key]?'已有保存意见；所属专业复核后才更新成果。':'尚未保存意见。';
+   :r.applicability_state==='conflict'?'跨入口意见冲突，动作暂挂：'+r.applicability_reason:(r.applicability_state==='stale'||r.applicability_state==='unmatched')?'历史意见待重新核对：'+r.applicability_reason:f.drafts[key]?'当前有草稿，未保存为意见。':f.annotations[key]?'已有保存意见；所属专业复核后才更新成果。':'尚未保存意见。';
  }
  function form(){
   const x=current,k=kindOf(x),key=keyOf(x),old=feedback().annotations[key]||{};

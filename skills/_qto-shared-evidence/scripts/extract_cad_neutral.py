@@ -25,7 +25,7 @@ except ImportError as exc:  # pragma: no cover - exercised by deployment checks
 
 from qto_cad_geometry import GEOMETRY_SCHEMA, entity_geometry as extract_geometry_facts, read_dxf_with_diagnostics, resolve_underlay_dependency
 
-VERSION = "qto-cad-neutral-extractor/1.5.0"
+VERSION = "qto-cad-neutral-extractor/1.5.1"
 # Entity types whose named block is drawn as part of the entity (geometry blocks).
 GEOMETRY_BLOCK_TYPES = {"DIMENSION", "ARC_DIMENSION", "LARGE_RADIAL_DIMENSION", "ACAD_TABLE", "TABLE"}
 CURVE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "CIRCLE", "ELLIPSE", "SPLINE"}
@@ -162,7 +162,9 @@ def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: 
         "closed": bool(getattr(entity, "closed", False) or getattr(entity, "is_closed", False)),
         "text": entity_text(entity),
         "block_name": block_name,
-        "rotation": float(get_dxf(entity, "rotation", 0.0) or 0.0) * math.pi / 180.0,
+        "rotation": (None if "invalid_text_direction" in geometry["geometry_issue_codes"] else
+                     math.radians(entity.get_rotation()) if kind == "MTEXT" else
+                     float(get_dxf(entity, "rotation", 0.0) or 0.0) * math.pi / 180.0),
         "scale_factors": [float(get_dxf(entity, name, 1.0) or 1.0) for name in ("xscale", "yscale", "zscale")] if kind == "INSERT" else None,
         "attributes": attributes,
         "geometry_signature": geometry["signature"],

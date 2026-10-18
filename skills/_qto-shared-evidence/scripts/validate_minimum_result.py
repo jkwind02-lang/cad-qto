@@ -617,6 +617,9 @@ def check_negative_conclusions(data: dict, results: dict[str, Any]) -> list[str]
             continue
         if not nonempty(neg.get("结论")):
             errors.append(f"{identifier}的否定结论缺少结论原文")
+        out_of_period = neg.get("结论") in {"本期不计", "图上有、本期不计"}
+        if out_of_period and not nonempty(neg.get("口径依据")):
+            errors.append(f"{identifier}的本期不计缺少口径依据")
         refs = neg.get("检索记录")
         if not isinstance(refs, list) or not refs:
             errors.append(f"{identifier}的否定结论没有检索记录，只能列为待确认的未决事项")
@@ -630,7 +633,7 @@ def check_negative_conclusions(data: dict, results: dict[str, Any]) -> list[str]
         statuses = {r["status"] for r in found}
         zero = item.get("零值复核")
         confirmed_zero = isinstance(zero, dict) and zero.get("复核结论") == "已确认零值"
-        if "hit" in statuses:
+        if "hit" in statuses and not out_of_period:
             errors.append(f"{identifier}的检索记录有命中，否定结论不成立；命中不属本项时，在检索输入里把相应图纸设为参照或排除图页后重检")
         elif "no_hit_partial" in statuses:
             if confirmed_zero:
@@ -640,7 +643,7 @@ def check_negative_conclusions(data: dict, results: dict[str, Any]) -> list[str]
         bill = neg.get("清单量")
         if bill is not None and not numeric(bill):
             errors.append(f"{identifier}的否定结论清单量必须是数或null")
-        elif numeric(bill) and bill > 0 and not any("表与说明" in (r.get("sheet_kinds_searched") or []) for r in found):
+        elif not out_of_period and numeric(bill) and bill > 0 and not any("表与说明" in (r.get("sheet_kinds_searched") or []) for r in found):
             errors.append(f"{identifier}清单有量而判图上无，检索记录须检索过表与说明类图页（设计说明）")
     return errors
 

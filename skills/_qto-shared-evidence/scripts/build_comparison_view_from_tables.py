@@ -7,7 +7,8 @@ import argparse, copy, csv, hashlib, json, math, os, re
 from collections import Counter, defaultdict
 from pathlib import Path
 from qto_review_contract import normalize_view, VIEW_SCHEMA_COMPARISON
-from qto_review_comparison import ComparisonError, LEVELS, close
+from qto_review_comparison import ComparisonError, LEVELS, close, COMPARABILITY_KEYS
+COMPARISON_FIELDS = tuple('compare_' + k for k in COMPARABILITY_KEYS)
 
 MAPPING_SCHEMA = 'qto-comparison-table-mapping/1.0'
 TRUE, FALSE = {'是', 'true', 'True', 'TRUE', '1', 'Y', 'y'}, {'', '否', 'false', 'False', 'FALSE', '0', 'N', 'n'}
@@ -18,7 +19,8 @@ AGG_KEYS = ('aggregation', 'aggregation_reason', 'member_quantity_name', 'member
 ITEM_KEYS = ('id', 'kind', 'source_id', 'name', 'features', 'unit', 'quantity_name', 'ours_note', *LEVELS, 'total', 'estimate_dominant',
              'row_id', 'seq', 'code', 'row_name', 'row_features', 'row_unit', 'row_quantity', 'tp_quantity', 'tp_unit', 'difference', 'difference_rate',
              'conclusion', 'disposition_note', 'third_party_corrected', 'correction_note', 'unit_mismatch_note', 'quantity_note', 'missing_drawing_note',
-             'search_drawings', 'search_targets', 'search_method', 'search_hits', 'search_unread', 'search_uncovered', 'search_record_ref', 'search_note', 'redirect_to')
+             'search_drawings', 'search_targets', 'search_method', 'search_hits', 'search_unread', 'search_uncovered', 'search_record_ref', 'search_note', 'redirect_to',
+             *COMPARISON_FIELDS, 'comparison_reason', 'scope_basis')
 ITEM_LEVEL_KEYS = ('kind', 'name', 'features', 'unit', 'quantity_name', 'ours_note', *LEVELS, 'total', 'estimate_dominant')
 KEYS = {'items': ITEM_KEYS,
         'source_rows': ('item_id', 'source_id', 'row_id', 'seq', 'code', 'row_name', 'row_features', 'row_unit', 'row_quantity'),
@@ -36,7 +38,7 @@ KEYS = {'items': ITEM_KEYS,
         'member_refs': ('catalog_key', 'detail_id'),
         'detail_aggregation': ('detail_id', *AGG_KEYS)}
 NUMBERS = {*LEVELS, 'total', 'row_quantity', 'tp_quantity', 'difference', 'difference_rate', 'search_hits', 'quantity', 'value'}
-BOOLEANS = {'estimate_dominant', 'third_party_corrected', 'excluded'}
+BOOLEANS = {'estimate_dominant', 'third_party_corrected', 'excluded', *COMPARISON_FIELDS}
 LISTS = {'redirect_to', 'member_keys', 'source_refs', 'item_ids'}
 
 
@@ -102,6 +104,7 @@ def convert(key, value, sep, role):
   try: return float(text[:-1]) / 100 if text.endswith('%') else float(text)
   except ValueError: raise TableError(f'不是数字：{value}') from None
  if key in BOOLEANS:
+  if key in COMPARISON_FIELDS and value == '': return None
   if value in TRUE: return True
   if value in FALSE: return False
   raise TableError(f'是否列只能写 是/否、true/false、1/0、Y/N：{value}')
@@ -158,7 +161,10 @@ def build_view(mapping, base, base_view):
   seg = {'source_id': sid, 'rows': rows, 'unit': unit, 'quantity': qty, '_tp_given': rec.get('tp_quantity') is not None, '_where': rec['_where']}
   value, rate = rec.get('difference'), rec.get('difference_rate')
   seg['difference'] = None if value is None and rate is None else {'value': value, 'rate': rate}
-  for k in ('conclusion', 'disposition_note', 'correction_note', 'unit_mismatch_note', 'quantity_note', 'missing_drawing_note'):
+  if any(rec.get(k) is not None for k in COMPARISON_FIELDS):
+   seg['comparability'] = {k:rec.get('compare_'+k) for k in COMPARABILITY_KEYS}
+   if opt(rec,'comparison_reason') is not None: seg['comparability']['reason'] = rec['comparison_reason']
+  for k in ('conclusion', 'disposition_note', 'correction_note', 'unit_mismatch_note', 'quantity_note', 'missing_drawing_note', 'scope_basis'):
    if opt(rec, k) is not None: seg[k] = rec[k]
   if rec.get('third_party_corrected') is not None: seg['third_party_corrected'] = rec['third_party_corrected']
   ev = {dest: rec[src] for src, dest in (('search_drawings', 'drawings'), ('search_targets', 'targets'), ('search_method', 'method'), ('search_hits', 'hits'),

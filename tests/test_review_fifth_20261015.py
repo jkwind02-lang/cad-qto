@@ -67,16 +67,16 @@ def test_attribution_follows_basis_and_implies_list_groups():
     assert its['I2']['third_parties'][0]['attribution'] == 'list'                 # sufficient basis: the list's problem
     assert its['I2']['third_parties'][0]['list_issue_types'] == ['清单多计', '清单规格写错']
     assert its['I3']['third_parties'][0]['list_issue_types'] == ['清单列了图上没有的']   # linked only to a closed issue
-    assert its['I6']['third_parties'][0]['list_issue_types'] == ['清单漏量']
+    assert its['I6']['third_parties'][0]['list_issue_types'] == []  # 未填原量不能证明清单漏量
     assert its['I4']['third_parties'][0]['attribution'] is None and its['I5']['third_parties'][0]['attribution'] is None
     g = commons_of(n)
     implied = [k for k in g if k.startswith(LIST_PREFIX)]
-    assert implied == [LIST_PREFIX + t for t in ('清单多计', '清单漏量', '清单列了图上没有的', '清单规格写错')]
+    assert implied == [LIST_PREFIX + t for t in ('清单多计', '清单列了图上没有的', '清单规格写错')]
     assert g[LIST_PREFIX + '清单多计']['scope'] == {'issue_ids': [], 'item_ids': ['I2']}
     assert g[LIST_PREFIX + '清单多计']['nature'] == 'list_issue' and g[LIST_PREFIX + '清单多计']['current_option'] == 'O1'
     assert its['I2']['list_issue_ids'] == [LIST_PREFIX + '清单多计', LIST_PREFIX + '清单规格写错']
     counts = n['comparison']['generation_check']['counts']
-    assert counts['attribution'] == {'list': 3, 'ours': 1, 'both': 0, 'none': 0} and counts['implied_common_issues'] == 4
+    assert counts['attribution'] == {'list': 2, 'ours': 1, 'both': 0, 'none': 0} and counts['implied_common_issues'] == 3
 
 
 def test_both_when_deviation_exceeds_estimate_and_excess_is_the_rest():
@@ -353,6 +353,8 @@ def test_added_since_answer_when_scope_grows_without_going_stale():
     v = answered_view(); v['comparison']['common_issues'][0]['item_ids'] = ['E1', 'I6']
     h = handoff(norm(v), {'共性问题|G1': record})
     assert h['common_issue_actions'][0]['added_since_answer'] == {'issue_ids': [], 'item_ids': ['I6']}
+    assert 'I6' not in h['common_issue_actions'][0]['scope']['item_ids']
+    assert all(a['item_id'] != 'I6' for a in h['item_actions'])
 
 
 def test_overlapping_common_answers_that_disagree_are_flagged():
