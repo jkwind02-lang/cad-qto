@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_entries, applies_to, recognition_basis, validate_working_basis
 
@@ -30,6 +31,7 @@ from qto_cad_source_contract import (check_unit_factor, verify_source_file, unit
                                      verify_unit_corroboration, unit_tokens, UNIT_APPLIES_TO)
 
 from qto_pipe_topology import RouteIndex, route_distance, project_route, geometry_parts, scale_route_geometry
+from pipe_callout_stacks import targets as binding_targets, bind_stack
 
 VERSION = "qto-pipe-neutral-adapter/1.9.1"
 PROFILE_SCHEMA = "qto-pipe-recognition-profile/1.1"
@@ -226,6 +228,31 @@ def bind_rule_authority(rule: dict[str, Any], label: str, entries: dict[str, dic
     if owner != "qto-pipe-networks":
         fail(f"{adjudication_id}.professional_owner 必须为 qto-pipe-networks")
     rule["authority"] = dict(entry)
+
+
+def explicit_target_contexts(raw, target_ids, rule, source_sha, space, segments):
+    """A shared label may seed separate systems only with per-target drawing evidence."""
+    if not isinstance(raw, list) or not raw:
+        fail(f"{rule['rule_id']} 跨系统共用标注须逐目标 shared_annotation_targets/segment_contexts")
+    contexts = {}
+    authority_evidence = set(rule.get('authority', {}).get('evidence_ids', []))
+    for item in raw:
+        if not isinstance(item, dict):
+            fail('共用标注目标依据须为对象')
+        sid = text(item.get('segment_id'), 'shared.segment_id')
+        if sid in contexts:
+            fail('共用标注目标依据重复')
+        target = segments.get(sid)
+        eids = item.get('evidence_ids')
+        if (target is None or item.get('system') != target['system'] or item.get('space_id') != space
+                or item.get('source_sha256') != source_sha or not isinstance(eids, list) or not eids
+                or any(not isinstance(e, str) or e not in authority_evidence for e in eids)):
+            fail(f'共用标注逐目标来源/系统/空间/证据不匹配: {sid}')
+        text(item.get('basis'), 'shared.basis')
+        contexts[sid] = dict(item)
+    if set(contexts) != set(target_ids):
+        fail('共用标注逐目标依据必须完整覆盖显式绑定，不得漏列或增列')
+    return contexts
 
 
 def choose_layer_rule(layer: str, rules: list[dict[str, Any]], object_id: str | None = None,
@@ -631,6 +658,7 @@ def main() -> int:
         expected_source_sha = text(profile.get("expected_source_sha256"), "profile.expected_source_sha256").lower()
         if str(source_identity.get("sha256") or "").lower() != expected_source_sha:
             fail("识别配置绑定的来源哈希与当前CAD证据不一致")
+        entity_source_sha = expected_source_sha if cad_manifest else text(profile.get("expected_entity_source_sha256", expected_source_sha), "expected_entity_source_sha256").lower()
         ledger_path = args.adjudication_ledger.resolve()
         ledger_sha = sha256(ledger_path)
         ledger_ref = profile.get("adjudication_ledger")
@@ -641,6 +669,24 @@ def main() -> int:
             fail("识别配置绑定的项目裁决台账哈希与当前文件不一致")
         ledger, ledger_entries = load_adjudication_ledger(ledger_path, expected_source_sha)
         working_basis = recognition_basis(ledger, ledger_path)
+        protected_paths = [profile_path, ledger_path, stream_path]
+        protected_paths += [(ledger_path.parent / e["path"]).resolve() for e in ledger.get("evidence", [])]
+        if args.cad_manifest:
+            protected_paths += [args.cad_manifest.resolve(), block_path]
+            protected_paths += [Path(cad_manifest[k]["path"]).resolve() for k in ("authoritative_source", "exchange_dxf", "exchange_conversion") if cad_manifest.get(k)]
+        if profile.get("prescoped_rows"):
+            protected_paths.append((profile_path.parent / profile["prescoped_rows"]["path"]).resolve())
+        if args.endpoint_handoff:
+            protected_paths.append(args.endpoint_handoff.resolve())
+        planned_outputs = [output / name for name in ("管网对象选择审计输入.json", "管网对象选择审计.json", "管网推算输入.json", "管网中性对象处置清单.jsonl", "管网识别报告.json", "识图待续说明.md")]
+        if args.inference_output:
+            planned_outputs.append(args.inference_output.resolve())
+        def same_path(a, b):
+            return a.resolve() == b.resolve() or (a.exists() and b.exists() and a.samefile(b))
+        if any(same_path(a, b) for a in planned_outputs for b in protected_paths):
+            fail("输出路径与输入/来源文件别名冲突")
+        if any(same_path(a, b) for i, a in enumerate(planned_outputs) for b in planned_outputs[i+1:]):
+            fail("输出文件之间路径别名冲突")
         if text(ledger_ref.get("ledger_id"), "profile.adjudication_ledger.ledger_id") != ledger["ledger_id"]:
             fail("识别配置与项目裁决台账ID不一致")
         if text(ledger_ref.get("ledger_version"), "profile.adjudication_ledger.ledger_version") != ledger["ledger_version"]:
@@ -749,16 +795,36 @@ def main() -> int:
             disposition = str(item.get("disposition", "scenario"))
             if disposition not in {"seed", "scenario"}:
                 fail(f"{item['rule_id']}.disposition 必须是 seed 或 scenario")
-            if disposition == "seed":
+            bindings = item.get("segment_bindings", {})
+            if not isinstance(bindings, dict):
+                fail(f"{item['rule_id']}.segment_bindings 必须为映射")
+            item["segment_bindings"] = {text(oid, "绑定文字ID"): binding_targets(value, item['rule_id']) for oid, value in bindings.items()}
+            shared = item.get('shared_annotation_targets', {})
+            if not isinstance(shared, dict):
+                fail('shared_annotation_targets 须为文字ID到逐目标依据的映射')
+            if set(shared) - set(bindings):
+                fail('shared_annotation_targets 不得含未列 segment_bindings 的文字ID')
+            stacks = item.get("callout_stacks", [])
+            if not isinstance(stacks, list) or any(not isinstance(st, dict) for st in stacks):
+                fail(f"{item['rule_id']}.callout_stacks 必须为数组")
+            if disposition == "seed" or item.get("shared_annotation_targets") or any(st.get("segment_contexts") for st in stacks):
                 bind_rule_authority(item, item["rule_id"], ledger_entries, "include")
-                if item.get("authority", {}).get("decision_origin") == "model":
-                    bindings = item.get("segment_bindings")
-                    if not isinstance(bindings, dict) or not bindings:
-                        fail(f"{item['rule_id']} 模型seed必须提供图面核对后的 segment_bindings，最近距离不能代替")
-                    for text_id, target_id in bindings.items():
-                        if (not isinstance(target_id, str) or not target_id.startswith("SEG-")
-                                or not applies_to(item, text_id) or not applies_to(item, target_id[4:])):
-                            fail(f"{item['rule_id']} 文字与目标管段必须都在本条识别范围内")
+            if disposition == "seed":
+                if not bindings and not stacks:
+                    fail(f"{item['rule_id']} seed必须提供图面核对后的 segment_bindings 或 callout_stacks，最近距离不能代替")
+            for text_id, target_ids in item["segment_bindings"].items():
+                if not applies_to(item, text_id) or any(not applies_to(item, target_id[4:]) for target_id in target_ids):
+                    fail(f"{item['rule_id']} 文字与目标管段必须都在本条识别范围内")
+
+        binding_row_ids = {member for r in text_rules for oid, ts in r["segment_bindings"].items() for member in [oid, *[t[4:] for t in ts]]}
+        for rule in text_rules:
+            for stack in rule.get("callout_stacks", []):
+                if not isinstance(stack, dict):
+                    fail("callout_stacks 项须为对象")
+                binding_row_ids.update(stack.get("text_ids", []))
+                binding_row_ids.update(t[4:] for t in binding_targets(stack.get("segment_ids"), "stack.segment_ids"))
+                binding_row_ids.update(p.get("record_id") for p in stack.get("leader_path", []) if isinstance(p, dict))
+        binding_rows = {}
 
         total_rows = scoped_rows = 0
         ignored_types: Counter[str] = Counter()
@@ -785,6 +851,8 @@ def main() -> int:
             if not bbox_intersects(row, bounds):
                 continue
             scoped_rows += 1
+            if row.get("record_id") in binding_row_ids:
+                binding_rows[row["record_id"]] = row
             entity_type = str(row.get("entity_type") or "").upper()
             source_record_id = text(row.get("record_id"), "record_id")
             if entity_type in LINE_TYPES:
@@ -1028,18 +1096,46 @@ def main() -> int:
                                      layer_rules + block_rules + root_rules + text_rules, args.disposition_detail)
             fail("对象审计后没有可继续计算的管段")
 
+        if cad_manifest is None and profile.get('expected_entity_source_sha256') is None and binding_rows:
+            # Legacy neutral-stream profiles bind the stream hash, not the original drawing hash.
+            # The frozen stream must nevertheless carry one consistent claimed entity source.
+            row_sources = {r.get('source_sha256') for r in binding_rows.values()}
+            if len(row_sources) != 1 or any(not isinstance(h, str) or not re.fullmatch(r'[0-9a-f]{64}', h) for h in row_sources):
+                fail('冻结中性流的显式绑定对象来源哈希缺失或不一致')
+            entity_source_sha = next(iter(row_sources))
         dn_route_index = RouteIndex(segments)
-        dn_candidates: list[dict[str, Any]] = []
+        segment_index = {v["segment_id"]: v for v in segments}
+        stack_evidence = []
+        for rule in text_rules:
+            for stack in rule.get("callout_stacks", []):
+                context = {}
+                if stack.get('segment_contexts') is not None:
+                    context = explicit_target_contexts(stack['segment_contexts'], binding_targets(stack['segment_ids'], 'stack.segment_ids'),
+                        rule, entity_source_sha, rule.get("space_id") or scope.get("space_id") or layout, segment_index)
+                bindings, evidence = bind_stack(stack, binding_rows, segment_index, factor=factor,
+                    output_unit=output_unit, source_sha256=entity_source_sha, system=rule["system"],
+                    space_id=rule.get("space_id") or scope.get("space_id") or layout,
+                    applies=lambda oid, r=rule: applies_to(r, oid), system_by_segment={sid:v['system'] for sid,v in context.items()})
+                for oid, target_ids in bindings.items():
+                    previous = rule["segment_bindings"].get(oid)
+                    if previous is not None and previous != target_ids:
+                        fail(f"{rule['rule_id']} 引线顺序与显式绑定冲突: {oid}")
+                    rule["segment_bindings"][oid] = target_ids
+                    if context:
+                        rule.setdefault('shared_annotation_targets', {})[oid] = [context[sid] for sid in target_ids]
+                stack_evidence.append(evidence)
+        dn_candidates = []
         threshold_sensitive = False
+        consumed_bindings = set()
+        explicit_specs = {}
         for row in text_rows:
-            source_record_id = str(row.get("record_id") or "")
-            layer_name = str(row.get("layer") or "")
+            oid = str(row.get("record_id") or "")
             raw_text = str(row.get("text") or "")
             anchor = row_point(row, factor)
             if not raw_text or not anchor:
                 continue
             for rule in text_rules:
-                if not rule["layer_re"].search(layer_name) or not applies_to(rule, source_record_id):
+                if not rule["layer_re"].search(str(row.get("layer") or "")) or not applies_to(rule, oid):
                     continue
                 match = rule["text_re"].search(raw_text)
                 if not match:
@@ -1048,80 +1144,88 @@ def main() -> int:
                 digits = re.search(r"\d+", str(dn_value))
                 if not digits:
                     continue
+                dn = f"DN{digits.group(0)}"
                 system = text(rule.get("system"), f"{rule['rule_id']}.system")
-                target_space = rule.get("space_id") or scope.get("space_id") or layout
-                ranked = dn_route_index.nearest(anchor, system, target_space, 2)
-                explicit_target = rule.get("segment_bindings", {}).get(source_record_id)
-                if explicit_target:
-                    target = next((item for item in segments if item["segment_id"] == explicit_target), None)
-                    if target is None or target["system"] != system or target.get("space_id") != target_space:
-                        fail(f"{rule['rule_id']} 显式DN绑定目标不可用或跨系统/空间: {explicit_target}")
-                if not ranked and not explicit_target:
-                    recognition_unresolved.append({"object_id": source_record_id, "kind": "dn_target_unavailable", "system": system, "space_id": target_space})
+                space = rule.get("space_id") or scope.get("space_id") or layout
+                explicit = rule["segment_bindings"].get(oid, [])
+                if explicit:
+                    consumed_bindings.add((rule['rule_id'], oid))
+                    if row.get("source_sha256") != entity_source_sha or (row.get("space_id") is not None and row["space_id"] != space):
+                        fail(f"{rule['rule_id']} 显式文字跨来源/空间: {oid}")
+                    context = {}
+                    declared_contexts = rule.get('shared_annotation_targets', {}).get(oid)
+                    if declared_contexts is not None:
+                        context = explicit_target_contexts(declared_contexts, explicit, rule, entity_source_sha, space, segment_index)
+                    elif any(segment_index.get(sid, {}).get('system') != system for sid in explicit):
+                        fail(f"{rule['rule_id']} 跨系统共用标注须逐目标 shared_annotation_targets，不能按近邻推定")
+                    for target_id in explicit:
+                        target = segment_index.get(target_id)
+                        raw_target = binding_rows.get(target_id[4:])
+                        if (target is None or target['system'] != context.get(target_id, {}).get('system', system) or target.get('space_id') != space
+                                or raw_target is None or raw_target.get('source_sha256') != entity_source_sha):
+                            fail(f"{rule['rule_id']} 显式DN绑定目标不可用或跨来源/系统/空间: {target_id}")
+                        if target_id in explicit_specs and explicit_specs[target_id] != dn:
+                            fail(f"显式DN绑定冲突: {target_id}: {explicit_specs[target_id]} / {dn}")
+                        explicit_specs[target_id] = dn
+                ranked = dn_route_index.nearest(anchor, system, space, 2)
+                if not ranked and not explicit:
+                    recognition_unresolved.append(dict(object_id=oid, kind="dn_target_unavailable", system=system, space_id=space))
                     continue
-                max_distance = finite(rule.get("max_distance"), f"{rule['rule_id']}.max_distance")
-                min_margin = finite(rule.get("min_second_candidate_margin", 0.0), f"{rule['rule_id']}.min_second_candidate_margin")
-                first_distance, segment_id = ranked[0]
-                if explicit_target:
-                    segment_id = explicit_target
-                    first_distance = route_distance(anchor, target)
-                second_distance = next((dist for dist, sid in ranked if sid != segment_id), math.inf)
-                margin = second_distance - first_distance
-                sensitive = first_distance > max_distance * 0.8 or margin < min_margin
-                if explicit_target:
-                    disposition = str(rule.get("disposition", "scenario"))
+                maximum = finite(rule.get("max_distance"), f"{rule['rule_id']}.max_distance")
+                minimum_margin = finite(rule.get("min_second_candidate_margin", 0.), f"{rule['rule_id']}.min_second_candidate_margin")
+                if maximum < 0 or minimum_margin < 0:
+                    fail("文字距离/第二候选差值不得为负")
+                selected = explicit or [ranked[0][1]]
+                selected_group = f"DNG-{rule['rule_id']}-{oid}"
+                for target_id in selected:
+                    target = segment_index[target_id]
+                    distance = route_distance(anchor, target)
+                    other = [d for d, sid in ranked if sid != target_id]
+                    margin = min(other, default=math.inf) - distance
+                    sensitive = not explicit and (distance > maximum*.8 or margin < minimum_margin)
+                    disposition = rule.get("disposition", "scenario") if explicit else "scenario"
                     reason = None
-                    sensitive = False
-                elif rule.get("authority", {}).get("decision_origin") == "model" and rule.get("disposition") == "seed":
-                    disposition = "scenario"
-                    reason = "本条文字未列显式管段映射，只作方案"
-                elif first_distance > max_distance:
-                    disposition = "excluded"
-                    reason = "超过冻结最大绑定距离"
-                elif margin < min_margin:
-                    disposition = "excluded"
-                    reason = "最近与次近候选差值不足，只保留敏感性记录"
-                else:
-                    disposition = str(rule.get("disposition", "scenario"))
-                    if disposition not in {"seed", "scenario"}:
-                        fail(f"{rule['rule_id']}.disposition 必须是 seed 或 scenario")
-                    reason = None
-                threshold_sensitive = threshold_sensitive or sensitive
-                candidate = {
-                    "candidate_id": f"DNC-{len(dn_candidates) + 1:05d}",
-                    "segment_id": segment_id,
-                    "dn": f"DN{digits.group(0)}",
-                    "source_id": f"EV-CAD-{row.get('record_id')}",
-                    "disposition": disposition,
-                    "threshold_sensitive": sensitive,
-                    "diagnostics": {"distance": first_distance, "second_candidate_margin": None if math.isinf(margin) else margin, "text": raw_text, "rule_id": rule["rule_id"]},
-                }
-                if disposition != "excluded":
-                    candidate.update({
-                        "evidence_level": str(rule.get("evidence_level", "scenario")),
-                        "method": str(rule.get("method", "frozen_text_binding")),
-                        "assumption_id": str(rule.get("assumption_id", f"A-{rule['rule_id']}")),
-                    })
-                else:
-                    candidate["reason"] = reason
-                target = next(item for item in segments if item["segment_id"] == segment_id)
-                _, part_index, parameter = project_route(anchor, geometry_parts(target))
-                candidate.update(part_index=part_index, parameter=parameter)
-                dn_candidates.append(candidate)
-                group_id = candidate["candidate_id"]
-                for alt_distance, alt_id in dn_route_index.within(anchor, system, max_distance + max(0.0, min_margin), rule.get("space_id") or scope.get("space_id") or layout):
-                    if alt_id == segment_id:
+                    if not explicit and (distance > maximum or margin < minimum_margin):
+                        disposition = "excluded"
+                        reason = "超过冻结距离或第二候选差值不足；保留候选及敏感性方案"
+                    candidate = dict(candidate_id=f"DNC-{len(dn_candidates)+1:05d}", segment_id=target_id, dn=dn,
+                        source_id=f"EV-CAD-{oid}", disposition=disposition, threshold_sensitive=sensitive,
+                        alternative_group=selected_group, diagnostics=dict(distance=distance,
+                            second_candidate_margin=None if math.isinf(margin) else margin, text=raw_text,
+                            rule_id=rule['rule_id'], explicit_binding=bool(explicit), shared_targets=explicit))
+                    relevant_stacks = [e for e in stack_evidence if oid in e['text_order']]
+                    if explicit and target_id in context:
+                        candidate['diagnostics']['shared_annotation_target'] = context[target_id]
+                    if relevant_stacks:
+                        candidate['diagnostics']['callout_stack_evidence'] = relevant_stacks
+                    if disposition == 'excluded':
+                        candidate['reason'] = reason
+                    else:
+                        candidate.update(evidence_level=rule.get('evidence_level', 'scenario') if explicit else 'scenario',
+                            method=rule.get('method', 'explicit_text_binding') if explicit else 'proximity_candidate_only',
+                            assumption_id=rule.get('assumption_id', f"A-{rule['rule_id']}"))
+                    _, pi, parameter = project_route(anchor, geometry_parts(target))
+                    candidate.update(part_index=pi, parameter=parameter)
+                    dn_candidates.append(candidate)
+                    threshold_sensitive |= sensitive
+                # Preserve nearest/second and every candidate inside the frozen search radius.
+                alternatives = dict((sid, d) for d, sid in ranked)
+                alternatives.update((sid, d) for d, sid in dn_route_index.within(anchor, system, maximum+minimum_margin, space))
+                for alt_id, distance in alternatives.items():
+                    if alt_id in selected:
                         continue
-                    dn_candidates.append({"candidate_id": f"DNC-{len(dn_candidates) + 1:05d}", "segment_id": alt_id,
-                        "dn": candidate["dn"], "source_id": candidate["source_id"], "disposition": "excluded",
-                        "reason": "同一标注的其他绑定候选，本轮未采用；并非排除该管段数量", "alternative_group": group_id,
-                        "threshold_sensitive": sensitive, "diagnostics": {"distance": alt_distance, "text": raw_text, "rule_id": rule["rule_id"]}})
-                object_dispositions[source_record_id].update({
-                    "disposition": "adopted" if disposition == "seed" else "candidate",
-                    "basis": "冻结文字规则形成规格种子" if disposition == "seed" else "冻结文字规则形成规格方案候选",
-                    "rule_ids": [rule["rule_id"]],
-                    "adjudication_id": rule.get("adjudication_id"),
-                })
+                    dn_candidates.append(dict(candidate_id=f"DNC-{len(dn_candidates)+1:05d}", segment_id=alt_id, dn=dn,
+                        source_id=f"EV-CAD-{oid}", disposition='excluded', alternative_group=selected_group,
+                        reason='同一标注的其他绑定候选，本轮未采用；不是排除管段数量',
+                        threshold_sensitive=not bool(explicit), diagnostics=dict(distance=distance, text=raw_text, rule_id=rule['rule_id'])))
+                    threshold_sensitive |= not bool(explicit)
+                object_dispositions[oid].update(disposition='adopted' if explicit and rule.get('disposition') == 'seed' else 'candidate',
+                    basis='有来源的显式文字/逐管引线绑定' if explicit else '近邻文字仅形成方案候选',
+                    rule_ids=[rule['rule_id']], adjudication_id=rule.get('adjudication_id'))
+        for rule in text_rules:
+            for oid in rule['segment_bindings']:
+                if (rule['rule_id'], oid) not in consumed_bindings:
+                    fail(f"{rule['rule_id']} 显式文字绑定未被消费（缺失、越界或文字不匹配）: {oid}")
 
         dn_policy = None
         if dn_candidates:
@@ -1330,6 +1434,8 @@ def main() -> int:
         if dn_candidates:
             inference_input["dn_match_candidates"] = dn_candidates
             inference_input["dn_match_policy"] = dn_policy
+        if stack_evidence:
+            inference_input["callout_stack_evidence"] = stack_evidence
         inference_input_path = output / "管网推算输入.json"
         inference_input_path.write_text(json.dumps(inference_input, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

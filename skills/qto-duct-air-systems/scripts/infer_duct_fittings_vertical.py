@@ -12,6 +12,7 @@ destination is unknown is listed as pending, never estimated.
 from __future__ import annotations
 
 import argparse
+import copy
 import heapq
 import json
 import math
@@ -1251,6 +1252,85 @@ def vertical_items(net: Network, elevations: dict[str, dict[str, Any]], result: 
     result["vertical_items"] = items
 
 
+def append_annotation_verticals(net: Network, data: dict[str, Any], result: dict[str, Any]) -> None:
+    """Explicit height is a length fact, never an absolute elevation or leader length.
+
+    Re-read bound source evidence at every calculation. Existing verticals win only
+    as existing quantities: ambiguous physical overlap leaves the new note pending.
+    """
+    config = data.get('vertical_annotation_input')
+    if config is None:
+        return
+    from bind_duct_vertical_annotations import bind_annotations
+    receipt = bind_annotations(data, config)
+    result['vertical_annotation_binding'] = receipt
+    notes = receipt['annotations']
+    existing = list(result['vertical_items']) + list(result['vertical_scenarios'])
+
+    def source_port(note):
+        target = note.get('target')
+        if not target:
+            return None
+        part = target['part']
+        length = math.dist(part['start'], part['end'])
+        fraction = target['fraction']
+        reach = receipt['parameters']['target_tolerance']
+        # Use the actual finite source curve and its endpoint neighbourhoods.
+        # A graph snap tolerance says nothing about separate physical risers.
+        near_start = fraction * length <= reach
+        near_end = (1. - fraction) * length <= reach
+        if near_start == near_end:
+            return None
+        end = 'start' if near_start else 'end'
+        return {'source_sha256': note['source_sha256'], 'source_id': target['source_id'],
+                'part_index': target['part_index'], 'end': end, 'point': list(part[end])}
+
+    for note in notes:
+        note['source_connection_port'] = source_port(note)
+    # Only different source-derived endpoints prove different ports here. Two
+    # arbitrary connection_id strings or separated arrows do not prove identity.
+    for index, note in enumerate(notes):
+        if note['status'] != 'bound':
+            continue
+        collisions = []
+        for other in notes:
+            if other is note or other.get('segment_id') != note.get('segment_id') or not other.get('target'):
+                continue
+            a, b = note['source_connection_port'], other['source_connection_port']
+            distinct = a is not None and b is not None and a['source_sha256'] == b['source_sha256'] and a['source_id'] == b['source_id'] and a['part_index'] == b['part_index'] and a['end'] != b['end']
+            if not distinct:
+                collisions.append(other['annotation_id'])
+        overlap = [item.get('vertical_id') or item.get('scenario_id') for item in existing if note['segment_id'] in item.get('segment_ids', [])]
+        if collisions or overlap:
+            note.update(status='unresolved', evidence_level='未决', length=None)
+            note['reasons'].append('可能与其他引注或既有竖向段为同一实物；缺少不同连接身份，不重复累计')
+            note['duplicate_candidates'] = collisions + overlap
+    for note in notes:
+        if note['status'] != 'bound':
+            result['pending'].append({'kind': 'vertical_annotation_unresolved', 'annotation_id': note['annotation_id'],
+                                      'segment_ids': note['candidate_segment_ids'], 'floor_id': note.get('floor_id'),
+                                      'length': None, 'height_fact': note['height_fact'], 'source_id': note['source_id'],
+                                      'text': note['text'], 'reason': '；'.join(note['reasons'])})
+            continue
+        segment = net.segments[note['segment_id']]
+        result['vertical_items'].append({'vertical_id': f"VERT-{len(result['vertical_items']) + 1:03d}",
+            'kind': 'annotation_explicit_height', 'annotation_id': note['annotation_id'], 'origin': '源引线与明确高度',
+            'floor_id': note['floor_id'], 'system': note['system'], 'segment_ids': [note['segment_id']], 'fitting_ids': [],
+            'spec': spec_of(segment), 'length': note['length'], 'evidence_level': '规则推算',
+            'height_fact': note['height_fact'], 'pointer': note['pointer'], 'source_id': note['source_id'],
+            'source_ids': [note['source_id'], note['target']['source_id']], 'text': note['text'],
+            'source_evidence': receipt['evidence'], 'binding_evidence': note,
+            'surface_calculation_allowed': receipt['evidence']['coordinate_unit'] is not None,
+            'connection_ends': [], 'business_adoption_allowed': False, 'human_reviewed': False,
+            'basis': f"源引注 {note['source_id']} 原文“{note['text']}”，完整引线指向唯一风管 {note['segment_id']}；"
+                     '长度直接取明示上接/下接高度，不是绝对标高，不取引线长或符号外框；规则推算待专业复核'})
+        if note.get('dependency_pending'):
+            result['pending'].append({'kind': 'annotation_surface_unit_unresolved', 'annotation_id': note['annotation_id'],
+                'source_id': note['source_id'], 'length': note['length'], 'surface_area': None,
+                'reason': '同原图坐标的唯一指向与明示高度已形成规则竖向长度；平面坐标单位未核，不能换算截面周长或该竖段面积；'
+                          '既有水平量仍只按冻结输入声明口径计算，本绑定不证明该口径：' + str(note['dependency_pending']['xy_unit'])})
+
+
 def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[str, Any]) -> None:
     f = net.factor
     summary: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
@@ -1355,8 +1435,10 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
         summary[segment["system"]][item["evidence_level"]][spec_of(segment)] += metres
         part_totals["vertical"][item["evidence_level"]] += metres
         per = perimeter_m(segment, f)
-        if per is not None:
+        if item.get('surface_calculation_allowed', True) and per is not None:
             surface[segment["system"]][item["evidence_level"]][spec_of(segment)] += per * metres
+        if item.get('kind') == 'annotation_explicit_height':
+            item['theoretical_surface_area'] = per * metres if item['surface_calculation_allowed'] and per is not None else None
     result["length_summary"] = {system: {level: dict(sorted(specs.items())) for level, specs in levels.items()} for system, levels in summary.items()}
     result["theoretical_surface_summary"] = {system: {level: dict(sorted(specs.items())) for level, specs in levels.items()} for system, levels in surface.items()}
     result["part_totals"] = {part: dict(levels) for part, levels in part_totals.items()}
@@ -1381,6 +1463,71 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
         "host_vertical_links": sum(1 for item in result["vertical_items"] if item["kind"] == "host_declared_link"),
         "measured_length_rule": part_totals["straight"]["确认"] + part_totals["fitting"]["规则推算"] + part_totals["vertical"]["规则推算"] + part_totals["accessory_gap"]["规则推算"],
     }
+    if 'vertical_annotation_binding' in result:
+        missing_surface = sum(i.get('kind') == 'annotation_explicit_height' and i.get('theoretical_surface_area') is None for i in result['vertical_items'])
+        result['metrics'].update(length_totals_complete=length_gaps == 0, surface_unresolved_items=missing_surface,
+                                 surface_totals_complete=missing_surface == 0,
+                                 source_xy_unit_verified=result['vertical_annotation_binding']['evidence']['coordinate_unit'] is not None)
+        if missing_surface:
+            result['metrics']['totals_complete'] = False
+
+
+def apply_annotation_unit_dependencies(net: Network, result: dict[str, Any]) -> None:
+    """Do not let a legacy declared mm scale certify an unknown source XY scale.
+
+    Keep its calculations explicitly as conditional references. Only independent
+    explicit-height verticals remain in the current known quantity subset.
+    """
+    receipt = result.get('vertical_annotation_binding')
+    if receipt is None or receipt['evidence']['coordinate_unit'] is not None:
+        return
+    conditional = {k: copy.deepcopy(result[k]) for k in ('metrics', 'length_summary', 'theoretical_surface_summary', 'part_totals', 'single_end_plane_scenarios')}
+    conditional.update(input_unit=net.unit, output_unit=net.output_unit,
+        status='CONDITIONAL_REFERENCE_ONLY',
+        basis='仅按冻结输入声明的坐标单位计算；当前源XY比例未核或冲突，本次绑定不认证该声明，不是已确认的米数、面积或完整总量')
+    result['conditional_on_input_unit'] = conditional
+    for segment in result['straight_segments']:
+        segment['length_declared_unit_reference'] = segment['length']
+        segment['length'] = None
+        segment['evidence_level'] = '未决'
+    for fitting in result['fittings']:
+        fitting['centerline_length_declared_unit_reference'] = fitting['centerline_length']
+        fitting['centerline_length'] = None
+        for arm in fitting['arms']:
+            arm['length_declared_unit_reference'] = arm['length']
+            arm['length'] = None
+            arm['evidence_level'] = '未决'
+    for pool in ('open_taps', 'accessory_gaps'):
+        for item in result[pool]:
+            item['length_declared_unit_reference'] = item['length']
+            item['length'] = None
+            item['evidence_level'] = '未决'
+    known = []
+    for item in result['vertical_items']:
+        if item.get('kind') == 'annotation_explicit_height':
+            known.append(item)
+        else:
+            item['length_declared_unit_reference'] = item['length']
+            item['length'] = None
+            item['evidence_level'] = '未决'
+    summary = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    for item in known:
+        summary[item['system']]['规则推算'][item['spec']] += item['length']
+    result['length_summary'] = {system: {level: dict(specs) for level,specs in levels.items()} for system,levels in summary.items()}
+    result['theoretical_surface_summary'] = {}
+    subtotal = sum(item['length'] for item in known)
+    result['part_totals'] = {'vertical': {'规则推算': subtotal}}
+    for key in ('geometry_evidence', 'known_geometry_subtotal', 'extension_minus_half_width', 'extension_full', 'difference_full_minus_default'):
+        result['single_end_plane_scenarios'][key] = None
+    result['pending'].append({'kind': 'source_xy_unit_unresolved', 'length': None, 'surface_area': None,
+        'reason': '原图XY比例未核或与冻结输入冲突；平面米数、截面换算、面积及完整总量未决，原单位声明下的数值只保留为conditional_on_input_unit条件参考；独立明示高度另计已知规则子集'})
+    metrics = result['metrics']
+    for key in ('straight_length', 'fitting_length_rule', 'fitting_length_scenario', 'vertical_length_scenario',
+                'accessory_gap_length_excluded', 'single_end_plane_default', 'single_end_plane_full', 'measured_length_rule'):
+        metrics[key] = None
+    metrics.update(vertical_length_rule=subtotal, known_vertical_annotation_length_rule=subtotal,
+                   totals_complete=False, length_totals_complete=False, surface_totals_complete=False,
+                   length_unresolved_items=metrics['length_unresolved_items'] + 1, pending_count=len(result['pending']))
 
 
 def infer(data: dict[str, Any]) -> dict[str, Any]:
@@ -1395,7 +1542,9 @@ def infer(data: dict[str, Any]) -> dict[str, Any]:
     _, adjacency = build_runs(net)
     elevations = propagate_elevation(net, adjacency)
     vertical_items(net, elevations, result)
+    append_annotation_verticals(net, data, result)
     summarize(net, elevations, result)
+    apply_annotation_unit_dependencies(net, result)
     result["parameters"] = {**net.params, "parameter_basis": data["parameters"]["parameter_basis"]}
     result["counts"] = {"segments": len(net.segments), "fittings": len(net.fittings), "duplicate_fittings": len(result["duplicate_fittings"]),
                         "joints": len(result["joints"]), "accessory_gaps": len(result["accessory_gaps"]), "open_taps": len(result["open_taps"]),
@@ -1408,6 +1557,9 @@ def infer(data: dict[str, Any]) -> dict[str, Any]:
                          "单端去向不明和缺标高的部分列待办，不以零或经验比例代替；vertical_scenarios 是被单端几何未决阻断的层间立管方案，"
                          "不计入任何合计。metrics 各合计只含已知部分，"
                          "totals_complete 为 false 时不得当作完整量。参考值须经专业复核后才能进入成果。")
+    if 'conditional_on_input_unit' in result:
+        result['meaning'] += ('当前源XY单位未核或冲突：上述直管等量仅在conditional_on_input_unit中按输入声明作条件参考，'
+                              '主结果依赖XY换算的量与完整总量为null；明示高度形成的独立竖向规则量作为已知子集保留，不证明平面单位。')
     return result
 
 
@@ -1421,10 +1573,14 @@ def main(argv: list[str] | None = None) -> int:
         if not isinstance(data, dict):
             fail("输入顶层必须是对象")
         result = infer(data)
-        if args.output.resolve() == args.input.resolve():
-            fail("输出不能覆盖输入")
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        from bind_duct_vertical_annotations import write_protected_json
+        protected = [args.input]
+        if 'vertical_annotation_binding' in result:
+            ev = result['vertical_annotation_binding']['evidence']
+            refs = [ev[k] for k in ('neutral_manifest', 'source', 'exchange_dxf', 'layout_entities', 'block_definitions')]
+            refs.append(data['vertical_annotation_input']['duct_input'])
+            protected.extend(Path(ref['path']) for ref in refs)
+        write_protected_json(args.output, result, protected, allow_existing=True)
         print(json.dumps({"status": result["status"], **result["metrics"], "output": str(args.output)}, ensure_ascii=False))
         return 0
     except (OSError, InputError, ValueError, json.JSONDecodeError) as exc:

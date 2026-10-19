@@ -227,6 +227,8 @@ def load_mapping(path: Path) -> dict[str, Any]:
             fail(f"{evidence_id}.kind 无效")
         text(item.get("locator"), f"{evidence_id}.locator")
         text(item.get("observation"), f"{evidence_id}.observation")
+        if item.get('source_sha256') is not None and str(item['source_sha256']).lower() != mapping['expected_source_sha256'].lower():
+            fail(f"{evidence_id} 证据声明的来源哈希与当前mapping不一致")
         resolved = dict(item)
         resolved["path"] = str(absolute)
         resolved["source_sha256"] = mapping["expected_source_sha256"].lower()
@@ -279,13 +281,31 @@ def load_mapping(path: Path) -> dict[str, Any]:
             family["block_re"] = adapter.compile_pattern(family.get("block_pattern", ".*"), f"{family_id}.block_pattern")
         if kind == "text":
             family["text_re"] = adapter.compile_pattern(family.get("text_pattern"), f"{family_id}.text_pattern")
-            if family.get("disposition", "scenario") != "scenario":
-                fail(f"{family_id}: 批量入口的文字族只能是 scenario；seed 需要逐条 segment_bindings，请在单图框配置里做")
+            if family.get("disposition", "scenario") not in {"seed", "scenario"}:
+                fail(f"{family_id}.disposition 必须为 seed/scenario")
+            if family.get("disposition") == "seed":
+                if not any(family.get(k) for k in ("segment_bindings", "segment_bindings_by_frame", "callout_stacks", "callout_stacks_by_frame")):
+                    fail(f"{family_id} seed须有显式绑定或逐管引线栈，近邻不能代替")
+                family.setdefault("decision", "include")
+                family.setdefault("evidence_level", "inferred")
+            if family.get("disposition") == "seed" and family.get("decision") != "include":
+                fail(f"{family_id} seed文字族必须 decision=include")
+            if ("segment_bindings" in family and "segment_bindings_by_frame" in family) or ("callout_stacks" in family and "callout_stacks_by_frame" in family):
+                fail(f"{family_id} 全局与按框绑定字段不能同时提供")
+            for key in ("segment_bindings", "segment_bindings_by_frame", "callout_stacks_by_frame", "shared_annotation_targets_by_frame"):
+                if key in family and not isinstance(family[key], dict):
+                    fail(f"{family_id}.{key} 必须为映射")
             finite(family.get("max_distance"), f"{family_id}.max_distance")
+            for key in ("segment_bindings_by_frame", "shared_annotation_targets_by_frame", "callout_stacks_by_frame"):
+                for fid, value in family.get(key, {}).items():
+                    text(fid, f'{family_id}.{key}.frame_id')
+                    expected_type = list if key == 'callout_stacks_by_frame' else dict
+                    if not isinstance(value, expected_type):
+                        fail(f'{family_id}.{key}.{fid} 类型无效')
         decision = str(family.get("decision", "unresolved"))
         if decision not in {"include", "exclude", "unresolved"}:
             fail(f"{family_id}.decision 无效")
-        if kind != "text" and decision in {"include", "exclude"}:
+        if (kind != "text" or family.get("disposition") == "seed") and decision in {"include", "exclude"}:
             for key in ("basis",):
                 text(family.get(key), f"{family_id}.{key}")
             evidence_ids = family.get("evidence_ids")
@@ -550,6 +570,8 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
                     for fam in text_families:
                         if fam["family_id"] in active and fam["layer_re"].search(layer) and fam["text_re"].search(str(row.get("text") or "")):
                             state["text_hits"][fam["family_id"]] += 1
+                            if fam.get("disposition") == "seed":
+                                state["members"][fam["family_id"]].append(record_id)
                     continue
                 if entity_type not in REVIEW_TYPES:
                     continue
@@ -728,7 +750,15 @@ def rule_from_family(family: dict[str, Any], frame_id: str) -> dict[str, Any]:
     if family["kind"] != "text" and rule.get("decision", "unresolved") in {"include", "exclude"}:
         rule["adjudication_id"] = family["family_id"]
     if family["kind"] == "text":
-        rule["disposition"] = "scenario"
+        rule["disposition"] = family.get("disposition", "scenario")
+        if rule["disposition"] == "seed":
+            rule["adjudication_id"] = family["family_id"]
+        if "segment_bindings_by_frame" in rule:
+            rule["segment_bindings"] = rule.pop("segment_bindings_by_frame").get(frame_id, {})
+        if "callout_stacks_by_frame" in rule:
+            rule["callout_stacks"] = rule.pop("callout_stacks_by_frame").get(frame_id, [])
+        if "shared_annotation_targets_by_frame" in rule:
+            rule["shared_annotation_targets"] = rule.pop("shared_annotation_targets_by_frame").get(frame_id, {})
         rule.pop("decision", None)
     rule.setdefault("space_id", frame_id)
     return rule
@@ -745,7 +775,25 @@ def write_frame_inputs(frame: dict[str, Any], state: dict[str, Any], mapping: di
         if not family_applies(family, frame):
             continue
         members = state["members"].get(family["family_id"], [])
-        needs_entry = family["kind"] != "text" and family.get("decision", "unresolved") in {"include", "exclude"}
+        rule = rule_from_family(family, frame_id)
+        needs_entry = (family["kind"] != "text" or family.get("disposition") == "seed") and family.get("decision", "unresolved") in {"include", "exclude"}
+        if family["kind"] == "text" and family.get("disposition") == "seed":
+            bound = rule.get("segment_bindings", {})
+            refs = set(bound)
+            for value in bound.values():
+                refs.update(t[4:] for t in adapter.binding_targets(value, family['family_id']))
+            for stack in rule.get("callout_stacks", []):
+                refs.update(stack.get("text_ids", []))
+                refs.update(t[4:] for t in adapter.binding_targets(stack.get("segment_ids"), 'stack.segment_ids'))
+                refs.update(p['record_id'] for p in stack.get("leader_path", []))
+            if refs - state['written_ids']:
+                fail(f"{family['family_id']} 绑定对象不在当前图框范围: {sorted(refs - state['written_ids'])}")
+            if not refs:
+                # The family can match unbound text in another frame; it stays scenario there.
+                rule['disposition'] = 'scenario'
+                rule.pop('adjudication_id', None)
+                needs_entry = False
+            members = sorted(set(members) | refs)
         if needs_entry and not members:
             skipped_families.append(family["family_id"])
             continue
@@ -760,7 +808,7 @@ def write_frame_inputs(frame: dict[str, Any], state: dict[str, Any], mapping: di
                 "cross_check": str(family.get("cross_check") or "族级图例/系统核对，见证据；逐对象未单独核对"),
                 "uncertainties": list(family.get("uncertainties") or ["族级批量识别，未逐对象核对"]),
             })
-        rules[f"{family['kind']}_rules"].append(rule_from_family(family, frame_id))
+        rules[f"{family['kind']}_rules"].append(rule)
     unit = dict(mapping["unit"])
     declaration = unit.pop("declaration", None)
     if declaration is not None:
