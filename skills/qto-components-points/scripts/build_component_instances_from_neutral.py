@@ -32,6 +32,7 @@ from qto_spatial import BoundsIndex
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import point_geometry_review as geometry_receipt
 import point_name_candidates as name_candidates
+import point_host_attachment
 
 VERSION = "qto-component-neutral-adapter/1.10.1"
 # Only these two codes can be released by a dynamic_state_adjudication on an include or exclude rule (registration
@@ -1325,6 +1326,18 @@ def main() -> int:
         # 0.3.2 carry no serialized flag: every definition was written).
         empty_blocks = {name for name, item in inventory.items()
                         if cad_geometry.is_empty_definition(item) and name not in definitions}
+        attachment = None
+        if profile.get("point_host_attachment") is not None:
+            attachment = point_host_attachment.Attachment(
+                profile["point_host_attachment"], definitions=definitions, origins=origins,
+                layout_rows=load_stream(layout_path), factor=factor, coordinate_unit=coordinate_unit,
+                source_sha256=expected_source, layout=target_layout,
+                space_id=str(scope.get("space_id") or target_layout), profile_path=profile_path,
+                neutral_refs={"manifest": {"path": str(args.cad_manifest.resolve()), "sha256": sha256(args.cad_manifest)},
+                              "layout_entities": {"path": str(layout_path), "sha256": sha256(layout_path)},
+                              "block_definitions": {"path": str(block_path), "sha256": sha256(block_path)}}, max_depth=max_depth,
+                classification_evidence=ledger.get("evidence", []), classification_evidence_base=ledger_path.parent,
+                classification_evidence_ref={"kind": "current_ledger_evidence", "path": str(ledger_path), "sha256": ledger_sha})
         identity = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0)
         name_inventory = name_candidates.NameCandidates(profile, known_evidence, expected_source, factor, coordinate_unit)
         dispositions: list[dict[str, Any]] = []
@@ -1554,6 +1567,16 @@ def main() -> int:
                     "basis": "未命中冻结点位识别规则",
                     "rule_ids": [],
                 }
+                if attachment is not None:
+                    placement = attachment.placement(insert, parent_matrix, path, world_point)
+                    base["placement_evidence"] = placement
+                    base["insertion_point"] = placement["insertion_point"]
+                    base["geometry_point"] = placement["geometry_point"]
+                    if placement["position_status"] == "complete_geometry_extent":
+                        base["point"] = placement["geometry_point"]
+                        base["point_basis"] = "geometry_extent_center_not_verified_connection_port"
+                    else:
+                        base["point_basis"] = "insertion_anchor_fallback_requires_review"
                 if suppressed_by:
                     verb = "承担" if suppressed_by["decision"] == "include" else "排除"
                     base.update(
@@ -1647,6 +1670,8 @@ def main() -> int:
                                 **name_inventory.context,
                                 "name_attribute_evidence": attributes,
                             }
+                            if "placement_evidence" in base:
+                                instance["placement_evidence"] = base["placement_evidence"]
                             if bound:
                                 instance["side_text"] = {key: bound[key] for key in ("text", "text_id", "distance", "rule_id", "via", "leader_handles",
                                                                                      "leader_segment_ids", "leader_terminal_evidence", "leader_t_contacts", "leader_group", "shared_with")
@@ -1671,6 +1696,8 @@ def main() -> int:
                                     if not isinstance(raw_port, dict):
                                         fail(f"{rule['rule_id']}.network_ports[{port_index - 1}] 必须是对象")
                                     port = dict(raw_port)
+                                    if attachment is not None and port.get("network_disposition") == "deliver" and "point" not in port:
+                                        port.update(network_disposition="unresolved", reason="几何外形中心不能自动作为连接端口；须提供已核连接点")
                                     if (rule.get("authority", {}).get("decision_origin") == "model" and port.get("network_disposition") == "deliver"
                                             and "point" not in port and port.get("use_instance_anchor") is not True):
                                         port.update(network_disposition="unresolved", reason="模型尚未确认连接端口坐标，块插入点不能自动当端口")
@@ -1935,18 +1962,27 @@ def main() -> int:
         if sum(disposition_counts.values()) != len(dispositions):
             fail("点位实例处置数量不守恒")
 
-        output = args.output_dir.resolve()
+        output = (point_host_attachment.guard_new_attachment_report(args.output_dir)
+                  if attachment is not None else args.output_dir.resolve())
         output.mkdir(parents=True, exist_ok=True)
         disposition_path = output / "点位中性实例处置清单.jsonl"
-        with disposition_path.open("w", encoding="utf-8") as handle:
-            for item in sorted(dispositions, key=lambda value: value["physical_id"]):
-                handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
         # 模型识别台账列出、块适配器却没有承接的对象（非块图符、范围外等）是来源缺口：
         # 主报告与端点交接用同一个完整性判定，缺口 ID 随交接传给消费方。
         model_object_ids = {oid for entry in entries.values() if entry.get("decision_origin") == "model" for oid in entry["object_ids"]}
         missing_model_objects = sorted(model_object_ids - {item["physical_id"] for item in dispositions})
         source_complete = (bool(rules) and not disposition_counts.get("unresolved", 0) and not failures and not missing_model_objects
                            and not pending_duplicates and not grouping["unresolved_groups"] and not scale_unbound and not pending_number_labels)
+        attachment_report = None
+        point_count_complete = source_complete
+        if attachment is not None:
+            attachment_report = attachment.apply(dispositions, adopted, endpoint_instances)
+            disposition_counts = Counter(item["disposition"] for item in dispositions)
+            # Inline reception blocks the dependent pipeline, while independently owned equipment retains its count scope.
+            point_count_complete = point_count_complete and not attachment_report["point_outlet_pending_count"]
+            source_complete = source_complete and attachment_report["quantity_closure_complete"]
+        with disposition_path.open("w", encoding="utf-8") as handle:
+            for item in sorted(dispositions, key=lambda value: value["physical_id"]):
+                handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
         # 计数输入带几何审查凭据：计数器重算实例集指纹，自造或改过的实例列表对不上（登记 R1）
         count_input = {
             "schema_version": "qto-reconciled-instance-input/1.0",
@@ -1965,7 +2001,7 @@ def main() -> int:
                 "candidate_group_count": duplicate_review["candidate_group_count"],
                 "pending_group_count": duplicate_review["pending_group_count"],
                 "duplicate_excluded_count": duplicate_review["duplicate_excluded_count"],
-                "workpackage_complete": source_complete,
+                "workpackage_complete": point_count_complete,
             },
         }
         count_input_path = output / "点位唯一实例计数输入.json"
@@ -2010,6 +2046,16 @@ def main() -> int:
             "count_input": str(count_input_path),
             **({"endpoint_handoff_input": str(endpoint_input_path), "endpoint_handoff": str(endpoint_output_path)} if not count_only else {}),
         }
+        if attachment_report is not None:
+            attachment_report.update(source_sha256=expected_source, layout=target_layout,
+                                     coordinate_unit=coordinate_unit, coordinate_system="WCS",
+                                     space_id=str(scope.get("space_id") or target_layout),
+                                     profile_ref={"path": str(profile_path), "sha256": sha256(profile_path)},
+                                     independent_count_scope="explicitly_declared_independent_point_instances")
+            attachment_path = output / "点位位置与管段挂接.json"
+            with attachment_path.open("x", encoding="utf-8") as handle:
+                handle.write(json.dumps(attachment_report, ensure_ascii=False, indent=2) + "\n")
+            artifacts.update(host_attachment=str(attachment_path), host_attachment_sha256=sha256(attachment_path))
         if number_audit is not None:
             audit_path = output / "点位编号反查.json"
             audit_path.write_text(json.dumps(number_audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -2099,7 +2145,8 @@ def main() -> int:
         report = {
             "schema_version": "qto-component-recognition-report/1.0",
             "adapter_version": VERSION,
-            "status": "RECOGNITION_REQUIRED" if not rules else ("READY" if source_complete and not handoff_result.get("unresolved_count", 0) else "REVIEW_REQUIRED"),
+            "status": "RECOGNITION_REQUIRED" if not rules else ("READY" if source_complete and not handoff_result.get("unresolved_count", 0)
+                         and not (attachment_report or {}).get("host_pending_count", 0) else "REVIEW_REQUIRED"),
             "profile": {
                 "path": str(profile_path),
                 "sha256": sha256(profile_path),
@@ -2155,6 +2202,9 @@ def main() -> int:
             "duplicate_review": duplicate_review,
             "disposition_closure_complete": sum(disposition_counts.values()) == len(dispositions),
             "point_workpackage_complete": source_complete,
+            **({"point_count_scope_complete": point_count_complete,
+                "host_attachment_summary": {key: value for key, value in attachment_report.items() if key != "rows"}}
+               if attachment_report is not None else {}),
             "unmatched_recognition_object_ids": missing_model_objects,
             "endpoint_handoff_status": "not_requested" if count_only else "generated",
             "endpoint_unresolved_count": None if count_only else handoff_result.get("unresolved_count", 0),

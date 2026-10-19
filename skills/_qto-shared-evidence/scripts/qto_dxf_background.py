@@ -52,7 +52,7 @@ class _Drawing:
   self.msp = self.doc.modelspace()
   self.layers = {l.dxf.name: l for l in self.doc.layers}
   self.ltscale = self.doc.header.get('$LTSCALE', 1.0) or 1.0
-  self._lt, self._size, self._affine = {}, {}, {}
+  self._lt, self._size, self._affine, self._display = {}, {}, {}, {}
 
  def hidden(self, lay):
   """Off, frozen and non-plotting layers (Defpoints never plots) are neither drawn nor counted as not shown (contract 7.1)."""
@@ -136,6 +136,53 @@ class _Drawing:
   self._affine[key] = lost
   return lost
 
+ def definition_display(self, e, parent=None, stack=(), array=False):
+  """Fit-only splines and MTEXT need their definition before a non-similarity transform.
+
+  Explosion re-interpolates transformed fit points and rebuilds MTEXT line spacing.
+  Similarities keep the existing ordinary path. Arrays containing either target use
+  original INSERTs too: transforming an MINSERT first loses its grid spacing.
+  """
+  from ezdxf.math import Matrix44
+  name = e.dxf.name
+  if name in stack or len(stack) >= MAX_DEPTH: return False
+  try:
+   m = e.matrix44() if parent is None else Matrix44.chain(e.matrix44(), parent)
+   array = array or e.mcount > 1
+  except Exception: return True
+  key = (name, tuple(m), array)
+  if key in self._display: return self._display[key]
+  blk = self.doc.blocks.get(name); required = False
+  for child in (blk if blk is not None else ()):
+   t = child.dxftype()
+   if t == 'INSERT': required = self.definition_display(child, m, stack + (name,), array)
+   elif t == 'MTEXT':
+    try:
+     ucs = child.ucs()
+     required = array or not _similarity(m, (ucs.ux, ucs.uy))
+    except Exception: required = True
+   elif t == 'SPLINE' and child.fit_point_count() and not child.control_point_count():
+    # Fit points and optional endpoint tangents are WCS vectors in this definition.
+    # A horizontal curve only depends on XY, so planar uniform controls stay ordinary.
+    fp = list(child.fit_points)
+    planar = all(math.isclose(p[2], fp[0][2], abs_tol=1e-12) for p in fp)
+    planar = planar and all(abs(child.dxf.get(k, (0, 0, 0))[2]) <= 1e-12 for k in ('start_tangent', 'end_tangent'))
+    axes = ((1, 0, 0), (0, 1, 0)) if planar else ((1, 0, 0), (0, 1, 0), (0, 0, 1))
+    required = array or not _similarity(m, axes)
+   if required: break
+  self._display[key] = required
+  return required
+
+
+def _similarity(m, axes):
+ """Whether m preserves lengths up to one common scale and keeps these axes orthogonal."""
+ vs = [m.transform_direction(v) for v in axes]
+ ns = [v.magnitude_square for v in vs]
+ if not all(math.isfinite(n) and n > 0 for n in ns): return False
+ return (all(math.isclose(n, ns[0], rel_tol=1e-12, abs_tol=0) for n in ns[1:])
+         and all(abs(a.dot(b)) <= 1e-12 * math.sqrt(ns[i] * ns[j])
+                 for i, a in enumerate(vs) for j, b in enumerate(vs) if i < j))
+
 
 def hatch_lines(h):
  """Pattern lines of a hatch. ezdxf jiggles the pattern origin with random(); a fixed seed keeps the page the same on every run."""
@@ -195,7 +242,7 @@ class _Walker:
  def run(self, e):
   self.out, self.not_shown, self.dropped = [], [], Counter()
   self.cls = self.classify(e)
-  if e.dxftype() == 'INSERT' and self.dw.affine_loss(e):
+  if e.dxftype() == 'INSERT' and (self.dw.affine_loss(e) or self.dw.definition_display(e)):
    from ezdxf.math import Matrix44
    self._walk_affine(e, Matrix44(), e.dxf.layer, 7, 0)
   else: self._walk(e, e.dxf.layer, 7, 0)
@@ -222,6 +269,21 @@ class _Walker:
   if t in ('INSERT', 'DIMENSION'):
    if depth >= MAX_DEPTH: self._skip_affine('proxy', e, m); return
    if t == 'INSERT':
+    if e.has_extension_dict:
+     from ezdxf.xclip import XClip
+     try: clipped = XClip(e).is_clipping_enabled
+     except Exception:
+      self.not_shown.append(('proxy', None)); return
+     if clipped:
+      # The definition walk cannot apply XCLIP. Do not show unclipped geometry
+      # as the block's actual appearance, including when its anchor is off sheet.
+      self.not_shown.append(('proxy', None)); return
+    if e.mcount > 1:
+     try: instances = list(e.multi_insert())
+     except Exception: self._skip_affine('proxy', e, m); return
+     if len(instances) != e.mcount: self._skip_affine('proxy', e, m); return
+     for instance in instances: self._walk_affine(instance, m, eff_layer, byblock, depth)
+     return
     # Attached attributes already use their INSERT's parent coordinates.
     for a in e.attribs:
      if not a.is_invisible: self._walk_affine(a, m, lay, bb, depth + 1)
@@ -476,7 +538,7 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
  for e in dw.msp:
   # The library bbox follows the same lossy nested explosion. Defer affected blocks
   # to the exact primitive filter below, otherwise a correct endpoint can be discarded.
-  if e.dxftype() == 'INSERT' and dw.affine_loss(e): hit = targets
+  if e.dxftype() == 'INSERT' and (dw.affine_loss(e) or dw.definition_display(e)): hit = targets
   else:
    try: ext = bbox.extents([e], cache=cache, fast=True)
    except Exception: continue

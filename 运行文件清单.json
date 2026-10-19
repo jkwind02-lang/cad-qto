@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 339,
+  "runtime_file_count": 343,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -57,8 +57,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/CAD中性事实提取.md",
-      "sha256": "3ca2c422027feb047e96008b1b19a3976c3065ecf1842ee15aaee5bc689a2275",
-      "bytes": 10744
+      "sha256": "23a3a205e4ee29e7a8b7c4e9181d0d0c233892f6acd8285209458dd9f9a92017",
+      "bytes": 11114
     },
     {
       "path": "_qto-shared-evidence/references/CAD基础读取与天正原生字段.md",
@@ -231,6 +231,11 @@
       "bytes": 17037
     },
     {
+      "path": "_qto-shared-evidence/references/非等比块显示还原边界.md",
+      "sha256": "2c93592e4ca20daffc34f70213a9ea3ef9aa2d0b87a03a3314f41ae2b8987d13",
+      "bytes": 3307
+    },
+    {
       "path": "_qto-shared-evidence/references/项目文档条款提取.md",
       "sha256": "c8fd7ca2fd0487f8a0df7b0d99ec99907159ffb6bef0be3bb7092ab86ba0aaef",
       "bytes": 1764
@@ -357,8 +362,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_dxf_background.py",
-      "sha256": "071848a466679942b5811312419fb2342ecf0b967ce0cd07d8063975e0a43a1c",
-      "bytes": 27859
+      "sha256": "ad4f64f636e0b3e7508ab5690e7f79b70491343f1c8596a6d2a29dc79078d5e8",
+      "bytes": 30985
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_electrical_basis.py",
@@ -546,6 +551,11 @@
       "bytes": 613
     },
     {
+      "path": "qto-components-points/references/源几何定位与所在管段挂接.md",
+      "sha256": "d426b180e0855ccc508c95fd3091547659b6f7b23d1afc9f9eadac757b97487d",
+      "bytes": 10570
+    },
+    {
       "path": "qto-components-points/references/点位覆盖台账.md",
       "sha256": "9a98123f61bae68be81d214e4757319c4f88bed5a29443a99e35d3583dbeeab9",
       "bytes": 19866
@@ -572,8 +582,8 @@
     },
     {
       "path": "qto-components-points/scripts/build_component_instances_from_neutral.py",
-      "sha256": "421b889b14602a46f2022c2fe8575e1fa72c9480cf881dafa6acaeb14dcd4fa2",
-      "bytes": 148535
+      "sha256": "e16c766be3b301d63f891247441fa48bcaddce8eda1aed739a483442648a2373",
+      "bytes": 152879
     },
     {
       "path": "qto-components-points/scripts/build_network_endpoint_handoff.py",
@@ -596,14 +606,24 @@
       "bytes": 3217
     },
     {
+      "path": "qto-components-points/scripts/point_host_attachment.py",
+      "sha256": "5b9043c5297ab3923986e69ae3a1ac585840a3c59f6df6549cd57b7571434656",
+      "bytes": 45847
+    },
+    {
       "path": "qto-components-points/scripts/point_name_candidates.py",
       "sha256": "b6e85b49717c4b8af0cff24882f0051fcb99bdfe40267bc240c9f9cd044d0932",
       "bytes": 16519
     },
     {
+      "path": "qto-components-points/scripts/receive_point_inline_components.py",
+      "sha256": "07c25aabb8851e94ee75a612e90957c0adca0c226604de1f70d5f31c03c74373",
+      "bytes": 11252
+    },
+    {
       "path": "qto-components-points/SKILL.md",
-      "sha256": "0bb92c49847412d6628b666b5930727ab583f6b32acafae11c424076b596ea31",
-      "bytes": 9564
+      "sha256": "bc41a1435b27a6da5e5e6498b868689197aaec7930f4b1a57f2574fbd9f40398",
+      "bytes": 9997
     },
     {
       "path": "qto-concrete-formwork/agents/openai.yaml",
