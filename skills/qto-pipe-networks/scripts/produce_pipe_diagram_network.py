@@ -21,7 +21,7 @@ from measure_pipe_diagram_lengths import (measure, sha, digest, replay_digest, r
 from receive_pipe_diagram_lengths import load_binding
 from qto_cad_geometry import read_dxf_with_diagnostics
 from qto_cad_source_contract import canonical_scale, verify_source_file, unit_tokens
-from pipe_diagram_source_parts import unique_workbench_interval
+from pipe_diagram_source_parts import unique_workbench_interval, coordinate_unit_annotation
 
 REQUEST = 'qto-pipe-physical-network-production/1.0'
 RESULT = 'qto-pipe-physical-network/1.0'
@@ -158,8 +158,17 @@ def workbench_si_span(context, original, original_segment, item, binding, span, 
     proofs = [p for p in proofs if [h.upper() for h in
         [*p['source_ref'].get('insert_handles', []), p['source_ref']['handle']]] == selected]
     require(len(proofs) == 1, '单位来源没有绑定当前公共SI原文实例，任意mm文字不能适配')
-    note = source.annotation(selected, unit_bounds)
+    # The public contract locates SI declarations in its verified source frame;
+    # the actual route remains confined to the unchanged measurement scope.
+    # A unit note need not sit inside a small pipe-only localization window.
+    note = coordinate_unit_annotation(source, selected, context['checked']['frame']['bbox'])
     require(note['text'].strip() == proofs[0]['source_text'].strip(), '公共SI原文实例读取内容不一致')
+    expected_points = proofs[0]['source_context']['placement_points_wcs']
+    actual_points = note.get('placement_points_wcs', [note['location']])
+    require(len(actual_points) == len(expected_points) and all(
+        math.dist(actual, expected) <= max(1e-9, 32*max(math.ulp(v) for v in actual+expected))
+        for actual, expected in zip(actual_points, expected_points)),
+        '坐标单位原文的原生实际放置与已回放公共源上下文不一致')
     evidence = {'method': 'replayed_workbench_source_coordinate_length', 'source_unit_note': note,
         'metres_per_source_coordinate': scale, 'source_input_segment': copy.deepcopy(original_segment),
         'source_resolution': {'workbench_object_id': ids[0], 'index_sha256': context['index']['index_sha256'],
@@ -214,6 +223,7 @@ def replay_legacy(data):
         bounds = [finite(v) for v in bounds]
         require(bounds[0] < bounds[2] and bounds[1] < bounds[3], '原管网定位窗退化')
         span = source.span(binding.get('source_span'), bounds)
+        require('source_parts' not in span, '既有workbench/恢复断口/竖段映射尚未适配有向多part路由；须保留原网及未适配余项')
         parent = item.get('parent_segment_id', item['segment_id']) if workbench else item['segment_id']
         require(parent in raw, '原网络派生边缺少实际生产父路线')
         original_segment = raw[parent]

@@ -1,4 +1,4 @@
-"""Atomic source-parameter partitions for concentric circular outlines."""
+"""Atomic circular outlines; full nested circles require source-pair identity."""
 from __future__ import annotations
 import math
 from collections import defaultdict
@@ -37,6 +37,14 @@ def overlaps(a,b,width,tol):
 def atomic_circular_pairs(items,selected,geometry,digest,entries,used):
     eligible=[p for p in items if circle(p['part']) and len(selected.get(p['entry']['source_key'],[]))==1
               and selected[p['entry']['source_key']][0]['representation']=='outline']
+    explicit=[p for p in eligible if selected[p['entry']['source_key']][0].get('equidistant_midline',{}).get('method')=='euclidean_nested_circles']
+    # A third outline remains a geometric competitor even when its rule name,
+    # description, solver choice, or rule-match count differs.  Source scope
+    # and actual system/plane decide applicability, not dictionary equality.
+    competitors=[p for p in items if circle(p['part']) and any(
+        r.get('representation')=='outline' for r in selected.get(p['entry']['source_key'],[]))]
+    focal_pairs,focal_handled=complete_nested_circle_pairs(explicit,selected,used,competitors)
+    eligible=[p for p in eligible if p['entry']['source_key'] not in focal_handled]
     cuts={p['entry']['source_key']:{0.,1.} for p in eligible};pairs=[]
     for i,a in enumerate(eligible):
         rule=selected[a['entry']['source_key']][0];width=rule['dimensions'].get('diameter',rule['dimensions'].get('width'))
@@ -87,7 +95,7 @@ def atomic_circular_pairs(items,selected,geometry,digest,entries,used):
             bb=hits[0];x,y=aa['entry']['source_key'],bb['entry']['source_key']
             if y not in neighbors[x]:neighbors[x].append(y)
             if x not in neighbors[y]:neighbors[y].append(x)
-    out=[];done=set()
+    out=list(focal_pairs);done=set()
     for key,a in bykey.items():
         if key in done:continue
         options=neighbors[key]
@@ -99,4 +107,121 @@ def atomic_circular_pairs(items,selected,geometry,digest,entries,used):
         mid={**a['part'],'center':[(x+y)/2 for x,y in zip(ca['center'],cb['center'])],
              'u':[v*radius/ca['radius'] for v in a['part']['u']],'v':[v*radius/ca['radius'] for v in a['part']['v']]}
         parent=a['entry'].get('parent_source_part',key);out.append(([a,b],mid,selected[parent][0]))
-    return out,{p['entry']['source_key'] for p in eligible}
+    return out,{p['entry']['source_key'] for p in eligible}|focal_handled
+
+
+def circle_support_competes(a,b):
+    """Only geometric support competition; no solver settings or rule labels.
+
+    Finite arcs retain their actual coverage and are never completed for
+    measurement. Their supporting circles may nevertheless be alternative
+    boundaries of a full ring, so they constrain uniqueness conservatively.
+    """
+    ca,cb=circle(a['part']),circle(b['part'])
+    if ca is None or cb is None or ca['radius']==cb['radius']:return False
+    na,nb=ca['normal'],cb['normal']
+    na=[v/math.sqrt(dot(na,na)) for v in na];nb=[v/math.sqrt(dot(nb,nb)) for v in nb]
+    if dot(na,nb)<0:nb=[-v for v in nb]
+    if math.dist(na,nb)>256*math.ulp(1.):return False
+    delta=[y-x for x,y in zip(ca['center'],cb['center'])];offset=dot(delta,na)
+    size=max(ca['radius'],cb['radius'],*map(abs,ca['center']),*map(abs,cb['center']),1.)
+    if abs(offset)>256*math.ulp(size):return False
+    distance=math.sqrt(sum((v-offset*n)**2 for v,n in zip(delta,na)))
+    return distance+min(ca['radius'],cb['radius'])<max(ca['radius'],cb['radius'])
+
+
+def circle_scope_competes(a,b,selected):
+    """Selectors partition evidence; source space and system partition scope."""
+    if any(a['entry'].get(k)!=b['entry'].get(k) for k in ('source_sha256','layout','space_id','floor_id')):return False
+    systems=lambda p:{r.get('system') for r in selected.get(p['entry']['source_key'],[]) if r.get('representation')=='outline'}
+    return bool(systems(a)&systems(b))
+
+
+def complete_nested_circle_pairs(items,selected,used,competitors=None):
+    """Match geometric candidates BEFORE accepting any declared pair identity.
+
+    A declared pair cannot override a third compatible boundary.  Conversely,
+    geometry alone cannot invent a physical identity.  Both source parts are
+    consumed whole (fraction [0,1]), without replacing their original part or
+    parameter start/sweep.  Partial circles remain unrecognized in this branch.
+    """
+    if not items:return [],set()
+    from duct_equidistant_midline import nested_circle_descriptor,materialize
+    handled={p['entry']['source_key'] for p in items};out=[];groups=[]
+    # Build this graph ONCE over all applicable source outline parts.  Rule
+    # grouping below is retained only for the existing identity/consumer
+    # interface; it must never hide geometric alternatives from that graph.
+    competitors=items if competitors is None else competitors
+    by_source={p['entry']['source_key']:p for p in competitors};neighbors=defaultdict(list)
+    for index,a in enumerate(competitors):
+        ak=a['entry']['source_key']
+        if ak in used:continue
+        for b in competitors[index+1:]:
+            bk=b['entry']['source_key']
+            if bk in used or not circle_scope_competes(a,b,selected) or not circle_support_competes(a,b):continue
+            neighbors[ak].append(bk);neighbors[bk].append(ak)
+    reached=set(handled);pending=list(handled)
+    while pending:
+        for key in neighbors[pending.pop()]:
+            if key not in reached:reached.add(key);pending.append(key)
+    blocked={key for key in reached if len(neighbors[key])>1 or any(len(neighbors[k])>1 for k in neighbors[key])}
+    for key in blocked:
+        by_source[key]['entry'].update(disposition='unrecognized',quantity=None,
+            reason='适用源范围内存在跨规则或多重几何轮廓配对；规则名称/描述及身份声明不能强选',pairing_candidates=neighbors[key])
+    # Prevent a competing old-method outline from bypassing this unresolved
+    # component in the subsequent concentric-circle path.
+    handled.update(blocked)
+    for item in items:
+        rule=selected[item['entry']['source_key']][0]
+        group=next((g for g in groups if g[0]==rule),None)
+        if group is None:group=[rule,[]];groups.append(group)
+        group[1].append(item)
+    for rule,group in groups:
+        if not rule['dimensions']:
+            for p in group:p['entry'].update(reason='物理单位或有源截面未核，完整原part与null数量保留')
+            continue
+        settings=rule['equidistant_midline'];declared=settings.get('source_pairings')
+        identities={};physical=set();known={p['entry']['source_key'] for p in group}
+        if declared is None:declared=[]
+        if not isinstance(declared,list):raise ValueError('完整嵌套圆source_pairings须为逐物理实例配对数组')
+        for claim in declared:
+            if not isinstance(claim,dict):raise ValueError('完整嵌套圆配对身份记录无效')
+            keys=claim.get('source_part_keys');pid=claim.get('physical_id')
+            if (not isinstance(keys,list) or len(keys)!=2
+                or any(not isinstance(k,str) or not k or k not in known for k in keys) or len(set(keys))!=2
+                or not isinstance(pid,str) or not pid.strip() or pid in physical
+                or any(not isinstance(claim.get(k),str) or not claim[k].strip() for k in ('basis','source_locator'))):
+                raise ValueError('完整嵌套圆配对须有唯一物理身份、两条真实源part及依据/定位')
+            if any(k in identities for k in keys):raise ValueError('完整嵌套圆源part被多个物理配对重复占用')
+            physical.add(pid)
+            for key in keys:identities[key]=claim
+        descriptors={}
+        for index,a in enumerate(group):
+            ak=a['entry']['source_key']
+            a['entry'].update(reason='完整嵌套圆未满足唯一几何配对与有源物理身份；保留完整原part',quantity=None)
+            if ak in used:continue
+            for b in group[index+1:]:
+                bk=b['entry']['source_key']
+                if bk in used:continue
+                descriptor=nested_circle_descriptor(a['part'],b['part'],settings)
+                if descriptor is not None:descriptors[frozenset((ak,bk))]=descriptor
+        done=set();bykey={p['entry']['source_key']:p for p in group}
+        for a in group:
+            ak=a['entry']['source_key'];options=neighbors[ak]
+            if ak in done or ak in used:continue
+            if len(options)!=1 or len(neighbors[options[0]])!=1:
+                if options:a['entry'].update(reason='完整嵌套圆存在多重几何轮廓配对；源身份声明不能强选',pairing_candidates=options)
+                continue
+            bk=options[0];claim=identities.get(ak)
+            if claim is None or identities.get(bk)!=claim or set(claim['source_part_keys'])!={ak,bk}:
+                a['entry'].update(reason='几何互唯一但缺对应源part的唯一物理配对身份，未计量',pairing_candidates=options)
+                continue
+            descriptor=descriptors.get(frozenset((ak,bk)))
+            if descriptor is None:
+                a['entry'].update(reason='有限圆弧不能按完整支撑圆计量；端点骨架仍为通用余项')
+                continue
+            b=bykey[bk];done.update((ak,bk))
+            mid,_=materialize(descriptor)
+            for p in (a,b):p['entry'].update(source_fraction_range=[0.,1.],source_fraction_error_bound=0.,pairing_identity=claim)
+            out.append(([a,b],mid,rule))
+    return out,handled

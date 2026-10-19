@@ -138,7 +138,8 @@ def arc_pair_descriptor(pa,pb,settings,low,high):
 def atomic_elliptical_pairs(items,selected,geometry,digest,entries,used):
     eligible=[p for p in items if principal(p['part']) is not None and len(selected.get(p['entry']['source_key'],[]))==1
               and selected[p['entry']['source_key']][0]['representation']=='outline'
-              and selected[p['entry']['source_key']][0].get('equidistant_midline')]
+              and selected[p['entry']['source_key']][0].get('equidistant_midline')
+              and selected[p['entry']['source_key']][0]['equidistant_midline'].get('method')!='euclidean_nested_circles']
     groups=[]
     for item in eligible:
         rule=selected[item['entry']['source_key']][0];sp=support(item['part'])

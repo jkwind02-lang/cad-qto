@@ -91,6 +91,155 @@ def pair_descriptor(pa,pb,settings):
     return {'schema_version':SCHEMA,'source_boundaries':[copy.deepcopy(pa),copy.deepcopy(pb)],
             'settings':copy.deepcopy(settings)}
 
+
+def nested_circle_descriptor(pa,pb,settings):
+    """Full, strictly nested coplanar circles have a focal-ellipse midset.
+
+    In the annulus, d_inner=|P-Ci|-ri and d_outer=ro-|P-Co|.
+    Equality is therefore |P-Ci|+|P-Co|=ri+ro, not an averaged circle.
+    Strict nesting puts the ENTIRE focal ellipse between the two boundaries
+    and away from both centres, so both closest boundary feet are unique.
+    Source-part identity is checked separately by the atomic source matcher.
+    """
+    if settings.get('method')!='euclidean_nested_circles':return None
+    # Reuse finite/non-boolean source validation without classifying a circle
+    # as an ellipse; principal() deliberately returns None for exact circles.
+    principal(pa);principal(pb)
+    from duct_curved_outline import circle, cross
+    ca,cb=circle(pa),circle(pb)
+    if ca is None or cb is None:return None
+    if any(abs(abs(p['sweep_param'])-TAU)>64*math.ulp(TAU) for p in (pa,pb)):return None
+    if ca['radius']==cb['radius']:return None
+    i,o=(ca,cb) if ca['radius']<cb['radius'] else (cb,ca)
+    size=max(o['radius'],*map(abs,i['center']),*map(abs,o['center']),1.)
+    roundoff=256*math.ulp(size)
+    def frame(c):
+        x=c['x'];raw=c['y'];projection=sub(raw,scale(x,dot(x,raw)))
+        y=scale(projection,1/norm(projection));n=cross(x,y);n=scale(n,1/norm(n))
+        # Parameter-basis roundoff is included, never absorbed into section.
+        return n,c['radius']*norm(sub(raw,y))+128*math.ulp(c['radius'])
+    ni,ei=frame(i);no,eo=frame(o)
+    if dot(ni,no)<0:no=scale(no,-1)
+    delta=sub(o['center'],i['center']);offset=dot(delta,ni)
+    normal_difference=norm(sub(ni,no))
+    if abs(offset)>roundoff or normal_difference>256*math.ulp(1.):return None
+    projected=sub(delta,scale(ni,offset));d=norm(projected)
+    boundary_error=ei+eo+abs(offset)+o['radius']*normal_difference+roundoff
+    gap=o['radius']-i['radius']-d
+    if gap<=16*boundary_error:return None
+    if not isinstance(settings.get('basis'),str) or not settings['basis'].strip():raise ValueError('完整嵌套圆中线须有显式欧氏口径依据')
+    if not isinstance(settings.get('source_locator'),str) or not settings['source_locator'].strip():raise ValueError('完整嵌套圆中线须有原源定位')
+    tolerances={k:positive(settings.get(k),k) for k in ('distance_tolerance','chord_tolerance','length_tolerance')}
+    a=math.fsum((i['radius'],o['radius']))/2;c=d/2
+    b=math.sqrt((a-c)*(a+c));condition=a/b
+    position_error=16*boundary_error*condition**2
+    length_geometry_error=TAU*(roundoff+position_error)
+    if tolerances['distance_tolerance']<position_error or tolerances['distance_tolerance']>gap/1000:
+        raise ValueError('完整嵌套圆距离容差须覆盖源/WCS舍入误差且小于可证最小间隔千分之一')
+    if tolerances['chord_tolerance']<=position_error or tolerances['chord_tolerance']>a/100:
+        raise ValueError('完整嵌套圆显示容差不足或过大')
+    if tolerances['length_tolerance']<=4*length_geometry_error or tolerances['length_tolerance']>a/10000:
+        raise ValueError('完整嵌套圆计长容差须覆盖几何舍入界且足够小')
+    e1=scale(projected,1/d) if d else i['x']
+    e2=cross(ni,e1);e2=scale(e2,1/norm(e2))
+    model={'inner_center':i['center'],'outer_center':o['center'],'inner_radius':i['radius'],'outer_radius':o['radius'],
+           'projected_outer_center':add(i['center'],projected),'center':add(i['center'],scale(projected,.5)),
+           'e1':e1,'e2':e2,'a':a,'b':b,'focal_distance':d,'minimum_outline_gap':gap,
+           'source_boundary_roundoff_bound':boundary_error,'position_error_bound':position_error,
+           'length_geometry_roundoff_bound':length_geometry_error}
+    return {'schema_version':SCHEMA,'construction':'full_nested_circle_focal_ellipse',
+            'source_boundaries':[copy.deepcopy(pa),copy.deepcopy(pb)],'settings':copy.deepcopy(settings),'analytic_model':model}
+
+
+def focal_ellipse_length(a,b,tolerance):
+    """Directed Decimal enclosure of the COMPLETE elliptic-integral series.
+
+    C=2*pi*a*(1-sum(t_n)), t_1=m/4,
+    t_(n+1)/t_n=m*(2n-1)*(2n+1)/(4*(n+1)^2) < m < 1.
+    The uncomputed positive tail is <= next_term/(1-m).  Thus this is an
+    enclosure, not an adaptive quadrature estimate or sampled chord sum.
+    DLMF 19.5.2: https://dlmf.nist.gov/19.5.E2
+    """
+    from decimal import Decimal, localcontext, ROUND_FLOOR, ROUND_CEILING
+    with localcontext() as ctx:
+        ctx.prec=64
+        da,db=Decimal.from_float(a),Decimal.from_float(b)
+        pi0=Decimal('3.141592653589793238462643383279502884197169399375105820974944')
+        pi1=pi0+Decimal('1e-60')
+        ctx.rounding=ROUND_FLOOR;rlo=db/da;lo_ratio=rlo*rlo
+        ctx.rounding=ROUND_CEILING;rhi=db/da;hi_ratio=rhi*rhi
+        ctx.rounding=ROUND_FLOOR;mlo=max(Decimal(0),1-hi_ratio)
+        ctx.rounding=ROUND_CEILING;mhi=max(Decimal(0),1-lo_ratio)
+        if mhi>=1:raise ValueError('焦点椭圆计长未能证明级数收敛')
+        ctx.rounding=ROUND_FLOOR;tlo=mlo/4
+        ctx.rounding=ROUND_CEILING;thi=mhi/4
+        slo,shi=Decimal(0),Decimal(0);target=Decimal.from_float(tolerance)
+        for n in range(1,200001):
+            ctx.rounding=ROUND_FLOOR;slo+=tlo
+            ctx.rounding=ROUND_CEILING;shi+=thi
+            numerator=(2*n-1)*(2*n+1);denominator=4*(n+1)**2
+            ctx.rounding=ROUND_FLOOR;tlo=tlo*mlo*numerator/denominator
+            ctx.rounding=ROUND_CEILING;thi=thi*mhi*numerator/denominator;tail=thi/(1-mhi)
+            # Evaluate each factor with outward rounding.  A subtraction
+            # reverses the direction, so compute its bound separately.
+            ctx.rounding=ROUND_FLOOR;lower_factor=1-shi-tail;lower=2*pi0*da*lower_factor
+            ctx.rounding=ROUND_CEILING;upper_factor=1-slo;upper=2*pi1*da*upper_factor
+            if upper-lower<=target:
+                center=float((upper+lower)/2);error=float((upper-lower)/2)+2*math.ulp(center)
+                return center,error,{'lower_bound':math.nextafter(float(lower),-math.inf),
+                    'upper_bound':math.nextafter(float(upper),math.inf),'series_terms':n,
+                    'uncomputed_series_tail_bound':math.nextafter(float(tail),math.inf),'decimal_precision':64}
+        raise ValueError('焦点椭圆计长级数未满足指定尾项界；未截断，也未退回弦长')
+
+
+class CircleMidline:
+    """Analytic ellipse evaluation with bounded display chords and true length."""
+    def __init__(self,descriptor):
+        if not isinstance(descriptor,dict) or descriptor.get('schema_version')!=SCHEMA:raise ValueError('完整嵌套圆中线来源描述无效')
+        expected=nested_circle_descriptor(*descriptor['source_boundaries'],descriptor['settings'])
+        if expected!=descriptor:raise ValueError('完整嵌套圆中线与冻结源参数/唯一性证明不一致')
+        self.descriptor=descriptor;self.model=descriptor['analytic_model'];self.settings=descriptor['settings']
+
+    def point(self,t):
+        m=self.model;cs,sn=math.cos(t),math.sin(t)
+        point=[m['center'][k]+m['a']*cs*m['e1'][k]+m['b']*sn*m['e2'][k] for k in range(3)]
+        tangent=[-m['a']*sn*m['e1'][k]+m['b']*cs*m['e2'][k] for k in range(3)]
+        return {'point':point,'tangent':tangent}
+
+    def materialize(self):
+        import qto_cad_geometry as cg
+        m=self.model;settings=self.settings;pe=m['position_error_bound'];a,b=m['a'],m['b']
+        count=2**math.ceil(math.log2(max(4.,TAU*math.sqrt(a/(8*(settings['chord_tolerance']-pe))))))
+        if count>65536:raise ValueError('焦点椭圆显示容差要求超过65536区间；未截断')
+        points=[self.point(TAU*j/count)['point'] for j in range(count)]
+        points.append(copy.deepcopy(points[0]))
+        geo={'schema':cg.GEOMETRY_SCHEMA,'coordinate_system':'WCS',
+             'parts':[{'kind':'line','start':p,'end':q} for p,q in zip(points,points[1:])],'closed':True}
+        length,error,enclosure=focal_ellipse_length(a,b,settings['length_tolerance']/4)
+        error+=m['length_geometry_roundoff_bound']
+        if error>settings['length_tolerance']:raise ValueError('焦点椭圆计长误差界超过明确容差')
+        chord_bound=a*(TAU/count)**2/8+pe
+        evidence={'uniqueness_case':'strictly_nested_complete_coplanar_circles_focal_ellipse',
+            'midset_equation':'distance_to_inner_center + distance_to_outer_center = inner_radius + outer_radius',
+            'analytic_model':copy.deepcopy(m),'minimum_outline_gap_lower_bound':m['minimum_outline_gap']-2*m['source_boundary_roundoff_bound'],
+            'source_alignment_roundoff_bound':m['source_boundary_roundoff_bound'],'position_error_bound':pe,
+            'display_chord_error_bound':chord_bound,'maximum_equidistance_residual_bound':2*pe+2*m['source_boundary_roundoff_bound'],
+            'maximum_closest_point_error_bound':m['source_boundary_roundoff_bound'],
+            'length_geometry_roundoff_bound':m['length_geometry_roundoff_bound'],'length_enclosure':enclosure,
+            'error_method':'directed_decimal_complete_elliptic_series_positive_tail_plus_geometry_roundoff',
+            'length_is_polyline_chord_sum':False,'sample_interval_count':count,
+            'constant_cross_section_proved':False,'source_outline_gap_range':[m['minimum_outline_gap'],m['outer_radius']-m['inner_radius']+m['focal_distance']]}
+        summary=cg.summarize(geo);summary.update(length=length,length_error_estimate=error,
+            polyline_chord_length=sum(math.dist(p,q) for p,q in zip(points,points[1:])),
+            measurement_method='euclidean_nested_circle_focal_ellipse_complete_integral',
+            endpoint_tangents=[self.point(0.)['tangent'],self.point(TAU)['tangent']],midline_evidence=evidence)
+        # Analytic ellipse extrema, rather than a tessellated extent, protect
+        # crop/coverage and downstream geometry bounds in any WCS plane.
+        axes=[math.hypot(a*m['e1'][k],b*m['e2'][k])+pe for k in range(3)]
+        summary['bbox3d']=[m['center'][k]-axes[k] for k in range(3)]+[m['center'][k]+axes[k] for k in range(3)]
+        box=summary['bbox3d'];summary['bbox']=[box[0],box[1],box[3],box[4]]
+        return geo,summary
+
 def closest_ellipse(x,y,a,b,tol):
     """Global closest point, via the monotone Lagrange-multiplier root.
 
@@ -251,7 +400,9 @@ class Midline:
 
 @lru_cache(maxsize=64)
 def _materialized(key):
-    descriptor=json.loads(key);model=Midline(descriptor);geometry,summary=model.materialize()
+    descriptor=json.loads(key)
+    model=CircleMidline(descriptor) if descriptor.get('construction')=='full_nested_circle_focal_ellipse' else Midline(descriptor)
+    geometry,summary=model.materialize()
     geometry['derived_midline']=descriptor
     return geometry,summary
 

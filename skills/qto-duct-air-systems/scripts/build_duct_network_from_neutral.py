@@ -338,7 +338,7 @@ def build(manifest_path,profile_path,claims_path=None):
         keys=[p['entry']['source_key'] for p in items]
         row={'segment_id':sid,'floor_id':floor,'system':rule['system'],'space_id':space,'source_sha256':source,'source_ids':keys,
              'source_record_id':items[0]['entry']['source_record_id'],'source_instance_path':items[0]['key'],
-             'source_geometry_refs':[{k:p['entry'][k] for k in ('source_key','geometry_sha256','geometry','instance_transform','part_index','parent_source_part','source_fraction_range','source_fraction_error_bound') if k in p['entry']} for p in items],
+             'source_geometry_refs':[{k:p['entry'][k] for k in ('source_key','geometry_sha256','geometry','instance_transform','part_index','parent_source_part','source_fraction_range','source_fraction_error_bound','pairing_identity') if k in p['entry']} for p in items],
              **rule['dimensions'],'section':rule['section'],'size_evidence_level':'规则推算','classification_proofs':[rule['classification_proof']],
              'representation':rule['representation'],'length_evidence_level':'规则推算' if rule['representation']=='outline' else '确认','geometry':geo}
         row['color_material']=classify_sources(items,color_rules)
@@ -350,6 +350,9 @@ def build(manifest_path,profile_path,claims_path=None):
                        geometry_position_error_bound=info['midline_evidence']['display_chord_error_bound'],
                        source_cross_section_consistency='nonuniform_wcs_outline_gap_requires_section_semantics_review',
                        surface_calculation_allowed=False,host_attachment_eligible=False)
+            if geo['derived_midline'].get('construction')=='full_nested_circle_focal_ellipse':
+                row.update(midline_source_pairing=copy.deepcopy(items[0]['entry']['pairing_identity']),
+                           source_cross_section_consistency='geometric_outline_gap_does_not_prove_source_section_semantics')
         if not geo.get('derived_midline') and len(geo['parts'])==1 and geo['parts'][0]['kind']=='line' and abs(info['end'][2]-info['start'][2])<=1e-9: segments.append(row)
         else: curves.append(row)
         for item in items:
@@ -376,6 +379,10 @@ def build(manifest_path,profile_path,claims_path=None):
     elliptical_pairs,handled_elliptical=atomic_elliptical_pairs(parts,selected,geometry,digest,entries,used)
     for source_items,mid,rule in elliptical_pairs:add(source_items,mid,rule)
     def outline_pair(a,b,rule,width,tol):
+        # The source-bound full-circle branch has already handled or refused
+        # every eligible circle; unsupported shapes cannot bypass its identity
+        # or ambiguity gates through the older generic fallback.
+        if rule.get('equidistant_midline',{}).get('method')=='euclidean_nested_circles':return None
         old=paired_geometry(a,b,width,tol)
         if old is not None:return old
         if rule.get('equidistant_midline'):

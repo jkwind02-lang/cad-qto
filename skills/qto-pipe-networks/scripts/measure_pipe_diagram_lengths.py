@@ -22,7 +22,7 @@ from qto_cad_geometry import (IDENTITY, compose_matrix, entity_geometry,
                               read_dxf_with_diagnostics)
 from qto_cad_source_contract import verify_source_file, canonical_scale, unit_tokens
 from qto_elevation_facts import evaluate_elevation_link, weakest, QUANTITY_LEVELS
-from pipe_diagram_source_parts import resolve_instance, source_interval
+from pipe_diagram_source_parts import resolve_instance, source_interval, coverage_overlap, line_fraction
 from qto_pipe_topology import project_part
 
 REQUEST = 'qto-pipe-diagram-length-request/1.0'
@@ -222,6 +222,8 @@ def dimension_chain(drawing, fact, row, view):
     require(isinstance(paths, list) and paths and len({tuple(p) for p in paths}) == len(paths),
             '尺寸链须逐项绑定不重复原生DIMENSION实例')
     span = drawing.span(row['source_span'], view['bounds'])
+    if 'source_parts' in span:
+        return route_dimension_chain(drawing, fact, span, view)
     require('page_curve' not in span, '线性尺寸链不能用曲线端点弦长代表曲线路径')
     start, end = span['page_endpoints']
     vector = [b-a for a, b in zip(start, end)]
@@ -260,6 +262,58 @@ def dimension_chain(drawing, fact, row, view):
         'level': fact['level'], 'source_dimension_chain_segments': chain,
         'binding_verification': 'source_dimension_chain_endpoints_verified',
         'basis': fact['basis'], 'issue': '; '.join(issues) or None}
+
+
+def route_dimension_chain(drawing, fact, span, view):
+    """Bind native dimension values to every directed native source leg.
+
+    Page lengths only locate extension endpoints. Every selected leg must be
+    partitioned exactly once by source DIMENSION intervals; no interpolation.
+    """
+    chain, issues = [], []
+    for path in fact['dimension_paths']:
+        value, annotation, issue = annotation_value(drawing, {**fact, 'annotation_path': path}, view['bounds'])
+        entity, matrix = drawing.resolve(path)
+        if entity.dxftype() != 'DIMENSION' or entity.dxf.dimtype & 7 not in {0, 1}:
+            issues.append('原生路由尺寸链只接线性或对齐DIMENSION，不从TEXT拼接')
+            continue
+        ends = [transform_point(list(entity.dxf.get(k)), matrix) for k in ('defpoint2', 'defpoint3')]
+        drawing.inside(ends, view['bounds'])
+        axis, axis_issue = dimension_axis(entity, matrix)
+        matches = []
+        for index, leg in enumerate(span['source_parts']):
+            tolerance = max(leg['page_coordinate_length']*1e-9,
+                32*max(math.ulp(v) for point in leg['page_endpoints']+ends for v in point), 1e-10)
+            projected = [line_fraction(p, *leg['page_endpoints']) for p in ends]
+            if all(t is not None and -1e-9 <= t <= 1+1e-9 and error <= tolerance for t, error in projected):
+                ts = sorted(t for t, _ in projected)
+                if ts[1]-ts[0] > 1e-12:
+                    matches.append((index, max(0., ts[0]), min(1., ts[1])))
+        if len(matches) != 1:
+            issues.append('原生尺寸端点不能唯一绑定所选有向路由的一腿，不跨腿补弦长或手选消歧')
+            continue
+        index, first, last = matches[0]
+        leg = span['source_parts'][index]
+        if issue or axis_issue or value is None or value <= 0:
+            issues.append(issue or axis_issue or '路由每腿须有正的明确原生物理尺寸')
+        chain.append({'route_leg': index, 'source_path': leg['path'], 'source_part': leg['part'],
+            'source_from_fraction': leg['from_fraction'], 'source_to_fraction': leg['to_fraction'],
+            'source_direction': leg['direction'], 'from_fraction': first, 'to_fraction': last,
+            'value_m': value, 'source_annotation': annotation, 'extension_endpoints': ends,
+            'axis_verification': axis})
+    chain.sort(key=lambda p: (p['route_leg'], p['from_fraction'], p['to_fraction'], p['source_annotation']['path']))
+    for index in range(len(span['source_parts'])):
+        cursor = 0.
+        for piece in (p for p in chain if p['route_leg'] == index):
+            if not math.isclose(piece['from_fraction'], cursor, rel_tol=0, abs_tol=1e-9):
+                issues.append('原生路由尺寸链有缺口或重叠，不能跨腿补齐')
+            cursor = piece['to_fraction']
+        if not math.isclose(cursor, 1., rel_tol=0, abs_tol=1e-9):
+            issues.append('原生路由尺寸链未覆盖每腿完整选定参数区间')
+    return {'method': 'dimension_chain', 'value': None if issues else sum(p['value_m'] for p in chain),
+        'level': fact['level'], 'source_dimension_chain_segments': chain,
+        'binding_verification': 'ordered_native_route_dimension_endpoints_and_axes_verified',
+        'basis': fact['basis'], 'issue': '; '.join(sorted(set(issues))) or None}
 
 
 def native_leader_binding(drawing, fact, row, annotation, bounds):
@@ -471,6 +525,9 @@ def measurement(drawing, fact, row, view, source):
     require(method in {'dimension', 'dimension_chain', 'elevation', 'typed_elevation'},
             '只支持明确尺寸/尺寸链、有源typed或同基准标高差或unresolved')
     require(fact.get('measurement_basis', BASIS) == BASIS, '当前长度只接受管中心线路径口径')
+    if 'route_interval' in row.get('source_span', {}) and method != 'dimension_chain':
+        return {'method': method, 'value': None, 'level': level,
+            'issue': '有向多part原生路由当前仅接逐腿原生尺寸链，其他计长方式保留未决'}
     if method == 'dimension_chain':
         return dimension_chain(drawing, fact, row, view)
     if method == 'typed_elevation':
@@ -639,8 +696,7 @@ def measure(data):
         require(isinstance(row.get('specification'), dict), '须保留完整规格对象，未知规格字段保留null')
         span = drawing.span(row.get('source_span'), view['bounds'])
         for old in spans:
-            require(not (span['path'] == old['path'] and span['part'] == old['part']
-                and min(span['to_fraction'], old['to_fraction']) > max(span['from_fraction'], old['from_fraction']) + 1e-12),
+            require(not coverage_overlap(span, old),
                 '同一源实例part区间重复绑定；不能换实物名重复计量')
         spans.append(span)
         facts = row.get('length_facts', [])

@@ -13,6 +13,7 @@ from produce_pipe_diagram_network import (produce, verify_dependencies, dependen
 from receive_pipe_diagram_lengths import load_binding
 from measure_pipe_diagram_lengths import sha, digest, replay_digest, require, text, write_new, BASIS
 from qto_cad_source_contract import verify_source_file
+from pipe_diagram_source_parts import coverage_overlap, coverage_key
 
 REQUEST = 'qto-pipe-physical-network-consumption/1.0'
 RESULT = 'qto-pipe-physical-network-delivery/1.0'
@@ -20,16 +21,23 @@ RESULT = 'qto-pipe-physical-network-delivery/1.0'
 
 def source_overlap(a, b):
     sa, sb = a['source_span'], b['source_span']
-    if (a['drawing']['sha256'], sa['path'], sa['part']) != (b['drawing']['sha256'], sb['path'], sb['part']):
+    if a['drawing']['sha256'] != b['drawing']['sha256']:
         return False
-    return min(sa['to_fraction'], sb['to_fraction']) > max(sa['from_fraction'], sb['from_fraction']) + 1e-12
+    if coverage_overlap(sa, sb):
+        return True
+    if 'source_parts' in sa or 'source_parts' in sb:
+        # Equal page ports can frame distinct detours. In the same source,
+        # those are conflicting routes rather than equivalent views.
+        tolerance = max(sa['page_coordinate_length'], sb['page_coordinate_length'])*1e-9
+        pa, pb = sa['page_endpoints'], sb['page_endpoints']
+        return any(all(math.dist(x, y) <= tolerance for x, y in zip(pa, option))
+                   for option in (pb, pb[::-1]))
+    return False
 
 
 def same_source_extent(a, b):
-    return (a['drawing']['sha256'], a['source_span']['path'], a['source_span']['part'],
-            a['source_span']['from_fraction'], a['source_span']['to_fraction']) == (
-            b['drawing']['sha256'], b['source_span']['path'], b['source_span']['part'],
-            b['source_span']['from_fraction'], b['source_span']['to_fraction'])
+    return (a['drawing']['sha256'], coverage_key(a['source_span'])) == (
+            b['drawing']['sha256'], coverage_key(b['source_span']))
 
 
 def identity(a, b):
