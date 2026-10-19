@@ -16,6 +16,8 @@ from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any
 from pipe_gap_candidates import candidates as pipe_gap_candidates, gap_limits, protect_outputs, source_paths
+from pipe_overlap_review import (review as review_overlaps, review_source_paths, protect_review_outputs,
+                                 markdown as overlap_markdown, write_csv as write_overlap_csv)
 
 
 INPUT_VERSIONS = {
@@ -152,8 +154,9 @@ def main() -> int:
 
     try:
         data = load(args.input.resolve())
-        protected_sources = source_paths(data, args.input)
-        protect_outputs([args.output], protected_sources)
+        overlap_input = data
+        protected_sources = source_paths(data, args.input) + review_source_paths(data, args.input)
+        protect_review_outputs([args.output], protected_sources)
         data, route_preparation = prepare_network(data)
         uncertain_change_systems = set()
         validate_working_basis(data.get("recognition_basis"))
@@ -1769,24 +1772,29 @@ def main() -> int:
             "decision_queue": decision_queue,
         }
         output = finalize_network(output, route_preparation, segments, snap_stats)
+        output["overlap_review"] = review_overlaps(overlap_input, args.input, bridges, segments)
+        output["overlap_review_source_paths"] = output["overlap_review"].pop("source_paths")
         output_path = args.output.resolve()
         import hashlib
         from pipe_gap_candidates import review_pending_gaps
         summary_view = {**output, "length_summary": independent_length_summary,
                         "restored_omission_length": 0 if inclusive_axis_length else output["restored_omission_length"]}
-        summary = review_markdown(summary_view) + review_pending_gaps(output)
+        summary = review_markdown(summary_view) + review_pending_gaps(output) + overlap_markdown(output["overlap_review"])
         summary_path = output_path.with_name(output_path.stem + "_" + hashlib.sha256(summary.encode()).hexdigest()[:10] + "_复核摘要.md")
-        protect_outputs([output_path, summary_path], protected_sources)
+        overlap_path = output_path.with_name(output_path.stem + "_共线重合.csv")
+        protect_review_outputs([args.output, summary_path, overlap_path], protected_sources)
         if summary_path.exists() and summary_path.read_text(encoding="utf-8") != summary:
             fail("复核摘要文件冲突，请使用新版本输出目录")
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(output, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         summary_path.write_text(summary, encoding="utf-8")
+        write_overlap_csv(overlap_path, output["overlap_review"])
         print(
             json.dumps(
                 {
                     "status": "PASS",
                     "review_summary": str(summary_path),
+                    "overlap_review_csv": str(overlap_path),
                     "network_id": network_id,
                     "segment_count": len(segments),
                     "topology_bridge_count": len(bridges),

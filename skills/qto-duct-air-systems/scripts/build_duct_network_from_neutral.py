@@ -17,6 +17,9 @@ import build_pipe_inference_input as adapter
 import qto_cad_geometry as cg
 from qto_cad_source_contract import unit_known, canonical_scale
 from duct_network_extensions import checked_geometry
+from duct_source_recovery import atomic_outline_pairs, annotation_network_scope, resolve_riser_links
+from duct_curved_outline import atomic_circular_pairs
+from duct_equidistant_midline import pair_descriptor, materialize as materialize_midline
 from bind_duct_vertical_annotations import write_protected_json
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'qto-components-points/scripts'))
 from point_host_attachment import reject_reparse_chain
@@ -185,10 +188,13 @@ def bind_tag(rule,evidence,by_key,unit):
     actual=str(row.get('text',''))
     if actual!=tag.get('expected_text'): raise ValueError('引注内容与冻结识别配置不符')
     relationships=evidence.get('annotation_relationships',[])
-    if not any(r.get('tag_source_key')==key and r.get('selector')==rule.get('selector') and r.get('basis') and r.get('source_locator') for r in relationships):
+    if not tag.get('leader_network') and not any(r.get('tag_source_key')==key and r.get('selector')==rule.get('selector') and r.get('basis') and r.get('source_locator') for r in relationships):
         raise ValueError('引注与管段缺少明确连接/模型判读关系，不能按最近标签定案')
-    rect=re.search(r'(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)',actual)
-    circle=re.search(r'[ΦφØøDd]\s*(\d+(?:\.\d+)?)',actual)
+    rectangles=list(re.finditer(r'(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)',actual))
+    circles=list(re.finditer(r'[ΦφØøDd]\s*(\d+(?:\.\d+)?)',actual))
+    if len(rectangles)+len(circles)!=1:raise ValueError('引注没有唯一可解析截面；多个尺寸须先明确逐支路适用范围')
+    rect=rectangles[0] if rectangles else None
+    circle=circles[0] if circles else None
     if rect: section={'shape':'rectangle','width':float(rect[1]),'height':float(rect[2]),'unit':tag['dimension_unit']}
     elif circle: section={'shape':'circle','diameter':float(circle[1]),'unit':tag['dimension_unit']}
     else: raise ValueError('引注没有唯一可解析截面')
@@ -197,7 +203,7 @@ def bind_tag(rule,evidence,by_key,unit):
         found=list(re.finditer(tag['elevation_regex'],actual))
         if len(found)!=1: raise ValueError('标高引注匹配不唯一')
         val=float(found[0].group('value'))
-        elevation={'value':val*canonical_scale(tag['elevation_unit'])/canonical_scale(unit) if unit_known(unit) else None,
+        elevation={'value':val*canonical_scale(tag['elevation_unit'])/canonical_scale(unit) if unit_known(unit) else None,'unit':unit,
                    'reference':tag['elevation_reference'],'origin':'tag','source_id':key,'text':actual,'evidence_level':'规则推算'}
         if elevation['reference'] not in {'bottom','top','center'}: raise ValueError('标高基准未明')
     return section,elevation
@@ -231,7 +237,7 @@ def paired_geometry(a,b,width,tol):
         # Concentric circular boundaries only. Affine ellipses remain fully present in coverage as unresolved.
         ru=math.sqrt(sum(x*x for x in pa['u']));rv=math.sqrt(sum(x*x for x in pa['v']))
         su=math.sqrt(sum(x*x for x in pb['u']));sv=math.sqrt(sum(x*x for x in pb['v']))
-        if min(ru,rv,su,sv)<=0 or abs(ru-rv)>tol or abs(su-sv)>tol: return None
+        if min(ru,rv,su,sv)<=0 or abs(ru-rv)>64*math.ulp(max(ru,rv)) or abs(su-sv)>64*math.ulp(max(su,sv)): return None
         if abs(sum(x*y for x,y in zip(pa['u'],pa['v'])))>1e-9*ru*rv or abs(sum(x*y for x,y in zip(pb['u'],pb['v'])))>1e-9*su*sv: return None
         if abs(abs(ru-su)-width)>tol: return None
         if max(math.dist([x/ru for x in pa['u']],[x/su for x in pb['u']]),math.dist([x/rv for x in pa['v']],[x/sv for x in pb['v']]))>1e-9: return None
@@ -281,18 +287,21 @@ def build(manifest_path,profile_path,claims_path=None):
                 parts.append({'entry':item,'row':r,'part':part,'key':key})
         if r.get('entity_type')=='INSERT' and any(k.startswith(key+'/'+str(r.get('block_name',''))+'/') for k in by_key):
             entries[-1].update(disposition='excluded',reason='已逐实例展开的容器；容器自身不另计，叶图元分别保留去向')
-    selected={}; rules={}; classification=[]
+    selected={}; rules={}; classification=[]; annotation_scopes=[]
     for rule in profile.get('rules',[]):
         rid=text(rule.get('rule_id'),'rule_id')
         if rid in rules: raise ValueError('rule_id重复')
         evidence,er=read_ref(rule['evidence'],profile_path.parent);protected.append(Path(er['path']))
         expected={'schema_version':'qto-duct-recognition-evidence/1.0','source_sha256':source,'layout':layout,'space_id':space,'rule_id':rid,
                   'selector':rule.get('selector'),'representation':rule.get('representation'),'system':rule.get('system'),'section':rule.get('section'),'crop':crop}
+        if 'equidistant_midline' in rule:expected['equidistant_midline']=rule['equidistant_midline']
         if any(evidence.get(k)!=v for k,v in expected.items()) or not evidence.get('basis') or not evidence.get('source_locator'):
             raise ValueError('识别规则与有源证据的范围/系统/截面/画法不一致:'+rid)
         text(rule.get('system'),'system')
         if rule['system'] in {'未知','未决','unknown'}: raise ValueError('系统未决不能入量')
         section,elevation=bind_tag(rule,evidence,by_key,unit)
+        scope=annotation_network_scope(rule,evidence,by_key,match,source_key) if rule.get('annotation_binding') else None
+        if scope: annotation_scopes.append({**scope,'rule_id':rid})
         values,_=section_values(section,unit) if section else ({},None)
         config={**rule,'section':section,'dimensions':values,'elevation':elevation,'classification_proof':{**er,'record':evidence}}
         rules[rid]=config
@@ -303,19 +312,30 @@ def build(manifest_path,profile_path,claims_path=None):
                     if entry['disposition']=='counted': raise ValueError('排除规则与已计对象冲突')
                     entry.update(disposition='excluded',reason=config.get('exclusion_reason') or evidence['basis'],classification_proof=config['classification_proof'])
         for item in parts:
-            if match(rule.get('selector',{}),item['row'],item['key']): selected.setdefault(item['entry']['source_key'],[]).append(config)
+            if match(rule.get('selector',{}),item['row'],item['key']):
+                chosen=config
+                if scope and item['entry']['source_key'] not in scope['target_part_keys']:
+                    chosen={**config,'section':None,'dimensions':{},'elevation':None,'annotation_scope_status':'unbound'}
+                selected.setdefault(item['entry']['source_key'],[]).append(chosen)
     segments=[];curves=[];risers=[]; used=set()
     def add(items,part,rule):
+        geo=part if part.get('schema')==cg.GEOMETRY_SCHEMA else geometry(part)
         sid='DSEG-'+str(len(segments)+len(curves)+1).zfill(6)
         keys=[p['entry']['source_key'] for p in items]
         row={'segment_id':sid,'floor_id':floor,'system':rule['system'],'space_id':space,'source_sha256':source,'source_ids':keys,
              'source_record_id':items[0]['entry']['source_record_id'],'source_instance_path':items[0]['key'],
              'source_geometry_refs':[{k:p['entry'][k] for k in ('source_key','geometry_sha256','geometry','instance_transform','part_index')} for p in items],
              **rule['dimensions'],'section':rule['section'],'size_evidence_level':'规则推算','classification_proofs':[rule['classification_proof']],
-             'representation':rule['representation'],'length_evidence_level':'规则推算' if rule['representation']=='outline' else '确认','geometry':geometry(part)}
+             'representation':rule['representation'],'length_evidence_level':'规则推算' if rule['representation']=='outline' else '确认','geometry':geo}
         if rule.get('elevation') and rule['elevation']['value'] is not None: row['elevation']=rule['elevation']
-        info=checked_geometry(geometry(part));row.update(start=info['start'],end=info['end'])
-        if part['kind']=='line' and abs(part['end'][2]-part['start'][2])<=1e-9: segments.append(row)
+        if rule.get('annotation_scope_status'):row['annotation_scope_status']=rule['annotation_scope_status']
+        info=checked_geometry(geo);row.update(start=info['start'],end=info['end'])
+        if geo.get('derived_midline'):
+            row.update(midline_evidence=info['midline_evidence'],length_measurement_method=info['measurement_method'],
+                       geometry_position_error_bound=info['midline_evidence']['display_chord_error_bound'],
+                       source_cross_section_consistency='nonuniform_wcs_outline_gap_requires_section_semantics_review',
+                       surface_calculation_allowed=False,host_attachment_eligible=False)
+        if not geo.get('derived_midline') and len(geo['parts'])==1 and geo['parts'][0]['kind']=='line' and abs(info['end'][2]-info['start'][2])<=1e-9: segments.append(row)
         else: curves.append(row)
         for item in items:
             item['entry'].update(disposition='counted',reason='有据工作候选已交实际风管消费；不代表数量完整或正式采用',segment_id=sid,classification_proof=rule['classification_proof'])
@@ -334,8 +354,20 @@ def build(manifest_path,profile_path,claims_path=None):
             item['entry'].update(reason='有据竖井投影候选，缺竖向高度；仍未计量',candidate_id=risers[-1]['candidate_id'])
         elif rep not in {'outline','exclude'}: raise ValueError('不支持的风管画法:'+str(rep))
         elif rep=='exclude': item['entry'].update(disposition='excluded',reason=rule.get('exclusion_reason') or rule['classification_proof']['record']['basis'],classification_proof=rule['classification_proof'])
+    line_pairs,handled_lines=atomic_outline_pairs(parts,selected,paired_geometry,geometry,digest,entries,used)
+    for source_items,mid,rule in line_pairs:add(source_items,mid,rule)
+    circular_pairs,handled_circular=atomic_circular_pairs(parts,selected,geometry,digest,entries,used)
+    for source_items,mid,rule in circular_pairs:add(source_items,mid,rule)
+    def outline_pair(a,b,rule,width,tol):
+        old=paired_geometry(a,b,width,tol)
+        if old is not None:return old
+        if rule.get('equidistant_midline'):
+            descriptor=pair_descriptor(a['part'],b['part'],rule['equidistant_midline'])
+            if descriptor:return {'_equidistant_descriptor':descriptor}
+        return None
     for item in parts:
         sk=item['entry']['source_key'];hits=selected.get(sk,[])
+        if sk in handled_lines or sk in handled_circular:continue
         if len(hits)!=1 or hits[0]['representation']!='outline' or sk in used: continue
         rule=hits[0]
         width=rule['dimensions'].get('diameter',rule['dimensions'].get('width'))
@@ -345,13 +377,17 @@ def build(manifest_path,profile_path,claims_path=None):
         candidates=[]
         for other in parts:
             if other is item or other['entry']['source_key'] in used or selected.get(other['entry']['source_key'])!=[rule]: continue
-            mid=paired_geometry(item,other,width,tol)
+            mid=outline_pair(item,other,rule,width,tol)
             if mid is not None: candidates.append((other,mid))
-        if len(candidates)!=1: item['entry']['reason']='外轮廓无唯一完整配对；部分重叠、异面或多候选均未入量';continue
+        if len(candidates)!=1:
+            item['entry']['reason']=('椭圆双轮廓未满足本实现可证唯一条件或配对不唯一；完整几何保留，不平均半轴补量，也不据此断言数学上无中线'
+                                     if rule.get('equidistant_midline') else '外轮廓无唯一完整配对；未支持的部分重叠、异面或多候选未入量')
+            continue
         other,mid=candidates[0]
-        reverse=[q for q in parts if q is not other and q['entry']['source_key'] not in used and selected.get(q['entry']['source_key'])==[rule] and paired_geometry(other,q,width,tol) is not None]
+        reverse=[q for q in parts if q is not other and q['entry']['source_key'] not in used and selected.get(q['entry']['source_key'])==[rule] and outline_pair(other,q,rule,width,tol) is not None]
         if len(reverse)!=1: item['entry']['reason']='外轮廓反向配对不唯一';continue
         source_items=[item,other]
+        if '_equidistant_descriptor' in mid:mid,_=materialize_midline(mid['_equidistant_descriptor'])
         fractions=mid.pop('_source_fractions',None)
         if fractions:
             source_items=[]
@@ -374,6 +410,12 @@ def build(manifest_path,profile_path,claims_path=None):
                     if abs(low-lo)<1e-12 and abs(high-hi)<1e-12:
                         source_items.append({**parent,'entry':child,'part':trimmed})
         add(source_items,mid,rule)
+    riser_verticals=resolve_riser_links(profile,risers,by_key,read_ref,profile_path.parent,protected,section_values,unit)
+    for item in riser_verticals:
+        for entry in entries:
+            if entry['source_key'] in item['source_ids']:
+                entry.update(disposition='counted',reason='投影源part已绑定唯一物理立管竖高出口；不以投影弧长计量',
+                             vertical_id=item['vertical_id'],quantity_dimension='length',height_evidence=item['height_evidence'])
     if claims_path:
         claims=adapter.load_json(claims_path);protected.append(claims_path)
         if claims.get('schema_version')!='qto-duct-coverage-claims/1.0' or claims.get('source_sha256')!=source: raise ValueError('方法无关覆盖声明来源无效')
@@ -419,6 +461,8 @@ def build(manifest_path,profile_path,claims_path=None):
           'neutral_binding':{'manifest':ref(manifest_path),'profile':ref(profile_path),'authoritative_source':manifest['authoritative_source'],
                             'exchange_dxf':manifest['exchange_dxf'],'layout_entities':ref(stream),'block_definitions':ref(blocks)}}
     if claims_path: data["neutral_binding"]["claims"]=ref(claims_path)
+    if annotation_scopes:data['annotation_scope_candidates']=annotation_scopes
+    if riser_verticals:data['riser_vertical_items']=riser_verticals
     return data,protected
 
 def main():
@@ -443,4 +487,3 @@ def main():
     except (ValueError,OSError,KeyError,TypeError,IndexError,subprocess.TimeoutExpired) as e:
         print(json.dumps({'status':'INPUT_REQUIRED','error':str(e)},ensure_ascii=False),file=sys.stderr);return 2
 if __name__=='__main__': raise SystemExit(main())
-

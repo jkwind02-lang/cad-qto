@@ -29,6 +29,8 @@ def generated_hosts(data,base,*,source,layout,space,coordinate_unit,factor):
         sid=selector.get('segment_id')
         if sid in seen or sid not in all_rows or set(selector)-{'segment_id'}:raise ValueError('生成宿主只允许按唯一生成segment_id选取，不接受手改几何/分类')
         seen.add(sid);row=all_rows[sid];info=checked_geometry(row['geometry'])
+        if row.get('host_attachment_eligible') is False:
+            raise ValueError('数值等距中线为有位置误差界的工作几何；当前点位投影未消费此误差，不能作为无误差附件宿主')
         spec=spec_of(row)
         size_problems=['生成宿主截面未决，不能传递附件规格'] if spec=='未知规格' or '?' in spec else []
         layers=sorted({coverage[k]['layer'] for k in row['source_ids']})

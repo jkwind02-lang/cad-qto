@@ -12,7 +12,8 @@ def duct_producer():
     return Path(__file__).resolve().with_name("infer_duct_fittings_vertical.py")
 
 def duct_dependencies():
-    paths=[duct_producer(),Path(__file__).resolve(),Path(__file__).with_name("build_duct_network_from_neutral.py").resolve(),Path(__file__).with_name("duct_generated_hosts.py").resolve(),Path(__file__).with_name("duct_network_extensions.py").resolve(),
+    paths=[duct_producer(),Path(__file__).resolve(),Path(__file__).with_name("build_duct_network_from_neutral.py").resolve(),Path(__file__).with_name("duct_generated_hosts.py").resolve(),Path(__file__).with_name("duct_network_extensions.py").resolve(),Path(__file__).with_name("duct_source_recovery.py").resolve(),
+           Path(__file__).with_name('duct_curved_outline.py'),Path(__file__).with_name('duct_equidistant_midline.py'),
            Path(__file__).resolve().parents[2]/"qto-components-points/scripts/point_host_attachment.py"]
     return [{"path":str(p),"sha256":digest(p)} for p in paths]
 
@@ -187,4 +188,3 @@ def verify_duct_consumption(receipt, base, *, replay=True, current_outlets=None)
             raise ValueError("接收数量类型/离散单位/层级与原始实例不一致")
         rows.append(item)
     return rows
-

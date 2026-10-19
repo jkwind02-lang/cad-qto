@@ -32,6 +32,8 @@ from qto_cad_source_contract import (check_unit_factor, verify_source_file, unit
 
 from qto_pipe_topology import RouteIndex, route_distance, project_route, geometry_parts, scale_route_geometry
 from pipe_callout_stacks import targets as binding_targets, bind_stack
+from pipe_overlap_review import (review_source_paths, protect_review_outputs,
+                                 imported_inventory, parameters as overlap_parameters)
 
 VERSION = "qto-pipe-neutral-adapter/1.9.1"
 PROFILE_SCHEMA = "qto-pipe-recognition-profile/1.1"
@@ -628,8 +630,9 @@ def main() -> int:
             fail(f"profile.schema_version 必须为 {PROFILE_SCHEMA}")
         profile_id = text(profile.get("profile_id"), "profile_id")
         profile_version = text(profile.get("profile_version"), "profile_version")
-        output = args.output_dir.resolve()
-        output.mkdir(parents=True, exist_ok=True)
+        output = args.output_dir.absolute()
+        # Check the original lexical path before resolve can erase a junction.
+        protect_review_outputs([args.output_dir], [])
         coverage_patterns = [(compile_pattern(rule.get("layer_pattern"), "coverage.layer_pattern"),
                               compile_pattern(rule.get("block_pattern"), "coverage.block_pattern"))
                              for rule in profile.get("block_rules", [])
@@ -696,15 +699,21 @@ def main() -> int:
             protected_paths.append(args.endpoint_handoff.resolve())
         from pipe_gap_candidates import source_paths
         protected_paths += source_paths(profile, profile_path)[1:]
+        protected_paths += review_source_paths(profile, profile_path)
         planned_outputs = [output / name for name in ("管网对象选择审计输入.json", "管网对象选择审计.json", "管网推算输入.json", "管网中性对象处置清单.jsonl", "管网识别报告.json", "识图待续说明.md")]
         if args.inference_output:
-            planned_outputs.append(args.inference_output.resolve())
-        def same_path(a, b):
-            return a.resolve() == b.resolve() or (a.exists() and b.exists() and a.samefile(b))
-        if any(same_path(a, b) for a in planned_outputs for b in protected_paths):
-            fail("输出路径与输入/来源文件别名冲突")
-        if any(same_path(a, b) for i, a in enumerate(planned_outputs) for b in planned_outputs[i+1:]):
-            fail("输出文件之间路径别名冲突")
+            inferred_path = args.inference_output.absolute()
+            planned_outputs += [inferred_path, inferred_path.with_name(inferred_path.stem + "_共线重合.csv")]
+            # Summary names contain a content hash. Existing members of this
+            # output family, including hardlinks, must be checked before writes.
+            summary_pattern = inferred_path.stem + "_*_复核摘要.md"
+            summaries = list(inferred_path.parent.glob(summary_pattern))
+            for source in protected_paths:
+                if source.parent.resolve() == inferred_path.parent.resolve() and source.match(summary_pattern):
+                    if source not in summaries:
+                        summaries.append(source)
+            planned_outputs += summaries
+        protect_review_outputs([args.output_dir, *planned_outputs], protected_paths)
         if text(ledger_ref.get("ledger_id"), "profile.adjudication_ledger.ledger_id") != ledger["ledger_id"]:
             fail("识别配置与项目裁决台账ID不一致")
         if text(ledger_ref.get("ledger_version"), "profile.adjudication_ledger.ledger_version") != ledger["ledger_version"]:
@@ -730,6 +739,11 @@ def main() -> int:
             fail("unit.factor_to_output 必须大于0")
         output_unit = text(unit.get("output_unit"), "unit.output_unit")
         unit_source_id = text(unit.get("source_id"), "unit.source_id")
+        overlap_preflight = {"unit": output_unit, "overlap_review": profile.get("overlap_review", {})}
+        overlap_parameters(overlap_preflight)
+        # Invalid imported evidence must not leave audit/generated files behind.
+        # Missing optional review parameters remain a not-run state, not zero.
+        imported_inventory(overlap_preflight, profile_path)
         source_raw_unit = (cad_manifest.get("drawing_unit") or {}).get("raw_unit") if cad_manifest else unit.get("raw_unit")
         unit_declaration = None
         declared_unit = None
@@ -1060,6 +1074,7 @@ def main() -> int:
             candidates, candidate_meta, explicit_dispositions, derived_roots, factor,
             context_insert_rows)
         if not candidates:
+            output.mkdir(parents=True, exist_ok=True)
             save_pending_recognition(output, object_dispositions, scope, working_basis, "当前识别配置尚未形成可计算管段",
                                      layer_rules + block_rules + root_rules + text_rules, args.disposition_detail)
             fail("冻结范围和识别配置没有产生可审计管段候选")
@@ -1075,6 +1090,7 @@ def main() -> int:
         }
         audit_input_path = output / "管网对象选择审计输入.json"
         audit_path = output / "管网对象选择审计.json"
+        output.mkdir(parents=True, exist_ok=True)
         audit_input_path.write_text(json.dumps(audit_input, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         auditor = Path(__file__).resolve().with_name("audit_pipe_object_selection.py")
         audit_run = subprocess.run([sys.executable, str(auditor), "--input", str(audit_input_path), "--output", str(audit_path)], stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8")
@@ -1468,6 +1484,10 @@ def main() -> int:
         }
         if working_basis:
             inference_input["recognition_basis"] = working_basis
+        if "overlap_review" in profile:
+            inference_input["overlap_review"] = copy.deepcopy(profile["overlap_review"])
+            for imported, path in zip(inference_input["overlap_review"].get("imported_edges", []), review_source_paths(profile, profile_path)):
+                imported["source_path"] = str(path)
         attach_recognition_records(object_dispositions, layer_rules + block_rules + root_rules + text_rules,
                                    args.disposition_detail)
         if dn_candidates:

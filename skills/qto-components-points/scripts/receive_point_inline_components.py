@@ -20,7 +20,8 @@ from point_host_attachment import digest, pipe_producer, reject_reparse_chain, v
 ACTUAL_NAME = "管网实际消费结果.json"
 RECEIPT_NAME = "管网在线附件数量接收.json"
 LOG_NAME = "实际管网消费日志.json"
-FIXED_OUTPUTS = (ACTUAL_NAME, RECEIPT_NAME, LOG_NAME)
+OVERLAP_NAME = Path(ACTUAL_NAME).stem + "_共线重合.csv"
+FIXED_OUTPUTS = (ACTUAL_NAME, RECEIPT_NAME, LOG_NAME, OVERLAP_NAME)
 SUMMARY_PREFIX = Path(ACTUAL_NAME).stem + "_"
 SUMMARY_SUFFIX = "_复核摘要.md"
 
@@ -156,11 +157,16 @@ def consume_staged(report_path, network_input, output, stage, records):
     verify_pipe_consumption(receipt, stage, replay=False)
     receipt["network_result"]["path"] = str(output/ACTUAL_NAME)
     payloads[ACTUAL_NAME] = actual_path.read_bytes()
+    overlap_request = data.get("overlap_review")
+    publish_overlap = isinstance(overlap_request, dict) and overlap_request.get("enabled") is True
     for path in stage.iterdir():
         if path == actual_path:
             continue
-        if not path.is_file() or not (path.name.startswith(SUMMARY_PREFIX) and path.name.endswith(SUMMARY_SUFFIX)):
+        if not path.is_file() or not (path.name == OVERLAP_NAME or
+                                     (path.name.startswith(SUMMARY_PREFIX) and path.name.endswith(SUMMARY_SUFFIX))):
             raise ValueError("实际生产者产生未声明输出，拒绝发布")
+        if path.name == OVERLAP_NAME and not publish_overlap:
+            continue
         payloads[path.name] = path.read_bytes()
     payloads[RECEIPT_NAME] = (json.dumps(receipt, ensure_ascii=False, indent=2)+"\n").encode("utf-8")
     log["published_artifacts"] = [{"path": str(output/name), "sha256": hashlib.sha256(raw).hexdigest()}

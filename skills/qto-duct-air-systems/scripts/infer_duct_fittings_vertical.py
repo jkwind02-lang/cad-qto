@@ -322,6 +322,8 @@ class Network:
                 if origin == "host_propagated" and level == "确认":
                     fail(f"{sid}.elevation：宿主沿管路传播的标高不是本段标注，evidence_level 只能是 规则推算 或 方案暂估")
                 value = finite(raw_elevation.get("value"), f"{sid}.elevation.value")
+                if raw_elevation.get('unit') is not None:
+                    value *= canonical_scale(raw_elevation['unit']) / canonical_scale(self.output_unit)
                 text(raw_elevation.get("source_id"), f"{sid}.elevation.source_id")
                 segment["elevation"] = {"value": value, "reference": reference, "evidence_level": level, "origin": origin,
                                         "source_id": raw_elevation["source_id"], "text": raw_elevation.get("text")}
@@ -481,6 +483,10 @@ def build_connections(net: Network, result: dict[str, Any]) -> None:
             if sa != sb:
                 # never linked, but a coincident end of another system may be a mislabelled system
                 contacts.append({"a": list(a), "b": list(b), "distance": d, "systems": [sa, sb]})
+                continue
+            if frozenset((a,b)) in getattr(net,'curve_blocked_endpoint_pairs',set()):
+                result['pending'].append({'kind':'curve_port_legacy_joint_blocked','a':list(a),'b':list(b),
+                    'reason':'含曲线复杂端口身份未决；禁止仅看剩余两条直线建立同路标高传播'})
                 continue
             joints.append({"a": list(a), "b": list(b), "distance": d})
             end_state[a] = end_state[b] = "joint"
@@ -879,6 +885,7 @@ def build_runs(net: Network) -> tuple[dict[str, str], dict[str, set[str]]]:
     # Endpoints may also meet exactly at a tee. Its explicit main/branch relation must
     # not be bypassed by the generic coincident-end joint created earlier.
     branch_pairs = {frozenset((item["segment_id"], item["main_segment_id"])) for item in net.result["open_taps"]}
+    branch_pairs.update(getattr(net,'curve_branch_pairs',set()))
     for fitting in net.fittings:
         ids = [sid for sid, _ in fitting["ends"]]
         if fitting.get("main_segment_id"):
@@ -1562,11 +1569,18 @@ def infer(data: dict[str, Any], *, input_base: Path | None = None) -> dict[str, 
     net.result = result
     if data.get("drawn_curve_segments"):
         from duct_network_extensions import source_curve_network
-        _, net.curve_endpoint_contacts = source_curve_network(data)
+        curve_graph, net.curve_endpoint_contacts = source_curve_network(data)
+        net.curve_branch_pairs={frozenset(pair) for pair in curve_graph.get('branch_boundary_pairs',[])}
+        net.curve_blocked_endpoint_pairs={frozenset((tuple(pair['a']),tuple(pair['b']))) for pair in curve_graph.get('blocked_legacy_endpoint_pairs',[])}
     build_connections(net, result)
     fitting_arms(net, result)
     _, adjacency = build_runs(net)
     elevations = propagate_elevation(net, adjacency)
+    if data.get('drawn_curve_segments'):
+        from duct_source_recovery import propagate_source_curve_elevations
+        curve_elevations,curve_pending=propagate_source_curve_elevations(data,net,adjacency,elevations)
+        net.curve_elevations=curve_elevations
+        result['pending'].extend(curve_pending)
     vertical_items(net, elevations, result)
     append_annotation_verticals(net, data, result)
     summarize(net, elevations, result)
@@ -1579,6 +1593,7 @@ def infer(data: dict[str, Any], *, input_base: Path | None = None) -> dict[str, 
                         "cross_system_contacts": len(result["cross_system_contacts"]),
                         "fitting_status": dict(sorted(Counter(f["status"] for f in result["fittings"]).items()))}
     result["business_adoption_allowed"] = False
+    if hasattr(net,'curve_elevations'):result['source_curve_elevations']=net.curve_elevations
     result["meaning"] = ("直管为已绘中心线确认量；管件中心线与竖向为按块几何、端口和标高标注的规则推算量，含假定者为方案暂估；"
                          "单端去向不明和缺标高的部分列待办，不以零或经验比例代替；vertical_scenarios 是被单端几何未决阻断的层间立管方案，"
                          "不计入任何合计。metrics 各合计只含已知部分，"
