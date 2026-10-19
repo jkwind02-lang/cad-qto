@@ -91,23 +91,28 @@ def test_reference_geometry_refreshes_without_local_proxy_changes():
 
 
 def test_nested_rotated_scaled_array_positions_use_both_matrix_conventions(tmp_path):
-    doc=ezdxf.new('R2018');inner=doc.blocks.new('内块');e=native_text(inner)
-    outer=doc.blocks.new('外块');outer.add_blockref('内块',(7,8,9),dxfattribs={'rotation':30,'xscale':2,'yscale':3})
-    doc.modelspace().add_blockref('外块',(100,200,30),dxfattribs={'rotation':90,'row_count':2,'column_count':2,'row_spacing':0,'column_spacing':40})
-    path=tmp_path/'nested.dxf';doc.saveas(path)
-    native=read_document(ezdxf.readfile(path));index=build_index(identity(path))
-    active={tuple(re.sub(r'\[row=(\d+),column=(\d+)\]',r'[\1,\2]',p) for p in i['instance_path']):i for i in native['instances']}
-    rows=[r for r in index['objects'] if r.get('native_data')]
-    assert len(rows)==len(active)==4
-    for row in rows:
-        instance=active[tuple(row['source_path'])]
-        expected=instance['native_geometry_wcs']['points']['text_position']
-        assert row['native_geometry_wcs']['points']['text_position']==pytest.approx(expected)
-        assert row['anchor']==pytest.approx(expected)
-        assert expected==pytest.approx(transform_point([10,20,0],row['instance_transform']))
-        assert row['raw_length'] is None and row['bbox'] is None
-        assert row['text']=='示例文字'
-    assert len({r['object_id'] for r in rows})==4
+    # Basic reading retains declared cells; the workbench owns physical instances.
+    for row_spacing, physical_count in ((0, 2), (25, 4)):
+        doc=ezdxf.new('R2018');inner=doc.blocks.new('内块');e=native_text(inner)
+        outer=doc.blocks.new('外块');outer.add_blockref('内块',(7,8,9),dxfattribs={'rotation':30,'xscale':2,'yscale':3})
+        minsert=doc.modelspace().add_blockref('外块',(100,200,30),dxfattribs={'rotation':90,'row_count':2,'column_count':2,'row_spacing':row_spacing,'column_spacing':40})
+        assert minsert.mcount==len(list(minsert.multi_insert()))==physical_count
+        path=tmp_path/('nested_'+str(row_spacing)+'.dxf');doc.saveas(path)
+        native=read_document(ezdxf.readfile(path));index=build_index(identity(path))
+        active={tuple(re.sub(r'\[row=(\d+),column=(\d+)\]',r'[\1,\2]',p) for p in i['instance_path']):i for i in native['instances']}
+        rows=[r for r in index['objects'] if r.get('native_data')]
+        assert len(active)==4
+        assert len(rows)==physical_count
+        assert len({r['object_id'] for r in rows})==physical_count
+        for row in rows:
+            if row_spacing==0:assert row['source_path'][0].endswith('[0,0]')or row['source_path'][0].endswith('[0,1]')
+            instance=active[tuple(row['source_path'])]
+            expected=instance['native_geometry_wcs']['points']['text_position']
+            assert row['native_geometry_wcs']['points']['text_position']==pytest.approx(expected)
+            assert row['anchor']==pytest.approx(expected)
+            assert expected==pytest.approx(transform_point([10,20,0],row['instance_transform']))
+            assert row['raw_length'] is None and row['bbox'] is None
+            assert row['text']=='示例文字'
 
 
 def test_unknown_native_keeps_bytes_and_diagnostic():

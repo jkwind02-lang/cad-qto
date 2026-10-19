@@ -213,24 +213,59 @@ def verify_geometric_unit_source_binding(data, credential, checked):
                     fail("实际源对象流身份缺失、重复或不属于几何单位原图")
                 rows[ident] = row
 
+    array_source_doc = None
+
+    def source_instance_row(token):
+        nonlocal array_source_doc
+        import re
+        match=re.fullmatch(r'(CAD-[0-9A-Fa-f]+)(?:\[(\d+),(\d+)\])?',token)
+        if match is None:
+            fail('实际源实例句柄/阵列单元格式无效')
+        row=rows.get(match[1].upper())
+        if row is None:
+            fail('实际源实例对象不存在')
+        raw=row.get('raw_geometry') or {}
+        nr,nc=raw.get('row_count',1),raw.get('column_count',1)
+        is_array=row.get('entity_type')=='INSERT' and (nr!=1 or nc!=1)
+        if is_array != (match[2] is not None):
+            fail('实际源阵列须有逐单元身份，普通对象不能虚构单元')
+        if is_array:
+            r,c=int(match[2]),int(match[3])
+            if (not all(isinstance(v,int) and not isinstance(v,bool) and v>0 for v in (nr,nc))
+                    or match[2]!=str(r) or match[3]!=str(c) or r>=nr or c>=nc):
+                fail('实际源阵列单元越界或身份不是规范行列整数')
+            if array_source_doc is None:
+                from qto_cad_geometry import read_dxf_with_diagnostics
+                array_source_doc, array_diagnostics = read_dxf_with_diagnostics(checked['source']['exchange_dxf']['path'])
+                if array_diagnostics.get('source_identity_issues'):
+                    fail('实际阵列源DXF身份未闭合')
+            native = array_source_doc.entitydb.get(match[1][4:].upper())
+            if (native is None or native.dxftype() != 'INSERT'
+                    or native.dxf.row_count != nr or native.dxf.column_count != nc):
+                fail('实际源阵列声明与原DXF实例不符')
+            if ((r != 0 and native.dxf.row_spacing == 0)
+                    or (c != 0 and native.dxf.column_spacing == 0)):
+                fail('实际源阵列零间距cell不是独立原生实例，须使用规范0行/0列')
+        return row
+
     def resolve(ident):
-        if ident.startswith("CADINST-"):
-            path = ident[len("CADINST-"):].split("/")
-            if len(path) < 3 or len(path) % 2 != 1:
-                fail("实际源实例路径不是完整的INSERT/块/叶对象链")
-            row = rows.get(path[0])
-            if row is None or row.get("parent_block") is not None or row.get("layout") != "Model":
-                fail("源实例路径没有本图Model真实根对象")
-            for index in range(1, len(path), 2):
-                child = rows.get(path[index+1])
-                if (row.get("entity_type") != "INSERT" or row.get("block_name") != path[index]
-                        or child is None or child.get("parent_block") != path[index]):
-                    fail("实际源实例引用与原图块归属链不一致")
-                row = child
+        if ident.startswith('CADINST-'):
+            path=ident[len('CADINST-'):].split('/')
+            if len(path)<3 or len(path)%2!=1:
+                fail('实际源实例路径不是完整的INSERT/块/叶对象链')
+            row=source_instance_row(path[0])
+            if row.get('parent_block') is not None or row.get('layout')!='Model':
+                fail('源实例路径没有本图Model真实根对象')
+            for index in range(1,len(path),2):
+                child=source_instance_row(path[index+1])
+                if (row.get('entity_type')!='INSERT' or row.get('block_name')!=path[index]
+                        or child.get('parent_block')!=path[index]):
+                    fail('实际源实例引用与原图块归属链不一致')
+                row=child
             return row
-        row = rows.get(ident)
-        if row is None or row.get("parent_block") is not None or row.get("layout") != "Model":
-            fail("几何单位实际管段引用缺少本图真实Model对象或完整实例链")
+        row=source_instance_row(ident)
+        if row.get('parent_block') is not None or row.get('layout')!='Model':
+            fail('几何单位实际管段引用缺少本图真实Model对象或完整实例链')
         return row
 
     matched = []
@@ -253,12 +288,32 @@ def verify_geometric_unit_source_binding(data, credential, checked):
             fail("几何单位实际管段没有可回读的CAD源对象引用")
         for ref in set(refs):
             row = resolve(ref)
-            if row.get("entity_type") not in {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "SPLINE"}:
+            if row.get("entity_type") not in {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "ELLIPSE", "SPLINE"}:
                 fail("实际管段源对象不是本图可量测路线")
             matched.append(ref)
     return {"cad_manifest": manifest_ref, "recognition_ledger": ledger_ref, "source_sha256": source_sha,
             "exchange_dxf_sha256": checked["source"]["exchange_dxf"]["sha256"], "source_artifacts": artifacts,
             "recognition_evidence": evidence_refs, "verified_source_object_refs": sorted(set(matched))}
+
+
+def deterministic_length_summary(assignments, segments):
+    """Stable engineering groups; membership/evidence rules stay with producers.
+
+    Set-derived assignment insertion order must not change floating totals or
+    serialized key order across independent source-replay processes.
+    """
+    terms = defaultdict(list)
+    for sid in sorted(assignments):
+        row = assignments[sid]
+        terms[(segments[sid]['system'], row['quantity_level'], row['dn'] or 'DN待定')].append(segments[sid]['length'])
+    return deterministic_group_totals(terms)
+
+
+def deterministic_group_totals(terms):
+    summary = {}
+    for (system, level, dn), values in sorted(terms.items()):
+        summary.setdefault(system, {}).setdefault(level, {})[dn] = math.fsum(values)
+    return summary
 
 
 def main() -> int:
@@ -1034,10 +1089,11 @@ def main() -> int:
             while queue:
                 current = queue.pop()
                 component.append(current)
-                for neighbor in adjacency[current]:
+                for neighbor in sorted(adjacency[current], reverse=True):
                     if neighbor not in seen_segments:
                         seen_segments.add(neighbor)
                         queue.append(neighbor)
+            component.sort()
             seeds = []
             for member in component:
                 seeds.extend((member, seed) for seed in segments[member]["seeds"])
@@ -1304,9 +1360,11 @@ def main() -> int:
                     }
                 )
 
-        from pipe_gap_dependencies import isolate_gap_dependencies, summarize_assignments
+        from pipe_gap_dependencies import isolate_gap_dependencies
         independent_assignments = isolate_gap_dependencies(
             assignments, segments, terminal_seeds, adjacency, independent_adjacency, bridge_links)
+        assignments = dict(sorted(assignments.items()))
+        independent_assignments = dict(sorted(independent_assignments.items()))
         for sid, assignment in assignments.items():
             if assignment["method"] == "project_role_dn_rule" and roles[sid].get("role_assumption_ids"):
                 deps=roles[sid]["role_assumption_ids"]
@@ -1349,7 +1407,7 @@ def main() -> int:
             )
             if not unresolved_members or len(alternatives) < 2:
                 continue
-            unresolved_length = sum(segments[member]["length"] for member in unresolved_members)
+            unresolved_length = math.fsum(segments[member]["length"] for member in sorted(unresolved_members))
             for option_index, dn in enumerate(alternatives, start=1):
                 dn_scenarios.append(
                     {
@@ -1649,14 +1707,9 @@ def main() -> int:
             summary["dn_assigned_count"] += 1 if item["dn"] else 0
             summary["candidate_types"].update(item["candidate_types"])
 
-        length_summary: dict[str, dict[str, dict[str, float]]] = defaultdict(
-            lambda: defaultdict(lambda: defaultdict(float))
-        )
         segment_records = []
         for segment_id, segment in sorted(segments.items()):
             assignment = assignments[segment_id]
-            dn_key = assignment["dn"] or "DN待定"
-            length_summary[segment["system"]][assignment["quantity_level"]][dn_key] += segment["length"]
             segment_records.append(
                 {
                     "segment_id": segment_id,
@@ -1668,17 +1721,15 @@ def main() -> int:
                 }
             )
 
-        virtual_length = sum(bridge["virtual_length"] for bridge in bridges)
-        raw_length = sum(segment["length"] for segment in segments.values())
-        layered_length = sum(
-            sum(dn_values.values())
-            for system_values in length_summary.values()
-            for dn_values in system_values.values()
-        )
+        length_summary = deterministic_length_summary(assignments, segments)
+        virtual_length = math.fsum(bridge['virtual_length'] for bridge in sorted(bridges, key=lambda b: b['bridge_id']))
+        raw_length = math.fsum(segments[sid]['length'] for sid in sorted(segments))
+        layered_length = math.fsum(value for levels in length_summary.values()
+                                   for dns in levels.values() for value in dns.values())
         if not math.isclose(raw_length, layered_length, rel_tol=0, abs_tol=1e-9):
             fail("分层长度与原始长度不守恒")
-        independent_length_summary = summarize_assignments(independent_assignments, segments)
-        independent_length = sum(v for levels in independent_length_summary.values() for dns in levels.values() for v in dns.values())
+        independent_length_summary = deterministic_length_summary(independent_assignments, segments)
+        independent_length = math.fsum(v for levels in independent_length_summary.values() for dns in levels.values() for v in dns.values())
         if not math.isclose(raw_length, independent_length, rel_tol=0, abs_tol=1e-9):
             fail("不依赖虚拟桥的已绘分层基线与原始长度不守恒")
 
@@ -1686,14 +1737,24 @@ def main() -> int:
         from pipe_gap_quantities import pipe_bridge_quantities
         bridge_items, restored, restoration_issues = pipe_bridge_quantities(
             bridges, assignments, valve_records, node_points, snap, point_segment_distance, restore_omissions)
-        inclusive_axis_length = sum(item["length"] for item in bridge_items
-                                    if item["action"] == "include_occupied_axis" and item["included_in_reconstructed"])
-        route_preparation["issues"].extend(restoration_issues)
-        restored_summary = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
-        for system, levels in length_summary.items():
-            for level, values in levels.items():
-                for dn, value in values.items():restored_summary[system][level][dn] += value
-        for (system, level, dn), value in restored.items():restored_summary[system][level][dn] += value
+        # Keep the exact included item/layer decisions, then aggregate actual
+        # item lengths rather than an order-dependent helper subtotal.
+        restored_terms = defaultdict(list)
+        for item in sorted(bridge_items, key=lambda r: r['bridge_id']):
+            if item['included_in_reconstructed']:
+                restored_terms[(item['system'], item['quantity_level'], item['dn'] or 'DN待定')].append(item['length'])
+        restored = {key: math.fsum(values) for key, values in sorted(restored_terms.items())}
+        restored_length = math.fsum(restored.values())
+        inclusive_axis_length = math.fsum(item['length'] for item in sorted(bridge_items, key=lambda r: r['bridge_id'])
+                                    if item['action'] == 'include_occupied_axis' and item['included_in_reconstructed'])
+        route_preparation['issues'].extend(restoration_issues)
+        reconstructed_terms = defaultdict(list)
+        for sid in sorted(assignments):
+            row = assignments[sid]
+            reconstructed_terms[(segments[sid]['system'], row['quantity_level'], row['dn'] or 'DN待定')].append(segments[sid]['length'])
+        for key, values in sorted(restored_terms.items()):
+            reconstructed_terms[key].extend(values)
+        restored_summary = deterministic_group_totals(reconstructed_terms)
         used_pairs = {frozenset({(b['a']['segment_id'], b['a']['end']), (b['b']['segment_id'], b['b']['end'])}) for b in bridges}
         for pair, classification in gap_classifications.items():
             if pair not in used_pairs or (classification["quantity_action"]=="restore_omission" and not any(
@@ -1702,7 +1763,7 @@ def main() -> int:
                 route_preparation["issues"].append({"type": "断口分类未匹配实际拓扑桥", "endpoints": sorted(pair), "classification": classification})
         base_levels = {a['quantity_level'] for a in assignments.values()}
         base_level = next((v for v in ('未决量','方案暂估量','规则推算量','确认量') if v in base_levels), '未决量')
-        classified_length = sum(bridge["virtual_length"] for bridge in classified_bridges)
+        classified_length = math.fsum(bridge["virtual_length"] for bridge in sorted(classified_bridges, key=lambda b: b["bridge_id"]))
         bridge_scenarios = [
             {
                 "scenario_id": "SC-GAP-BASE",
@@ -1720,7 +1781,7 @@ def main() -> int:
                 "name": "全部唯一虚拟桥补齐上界方案",
                 "bridge_ids": [bridge["bridge_id"] for bridge in bridges],
                 "incremental_length": virtual_length,
-                "scenario_total_length": raw_length + virtual_length,
+                "scenario_total_length": math.fsum((raw_length, virtual_length)),
                 "unit": unit,
                 "quantity_level": "方案暂估量",
                 "selected": False,
@@ -1735,7 +1796,7 @@ def main() -> int:
                     "name": "已分类并允许暂估补齐方案",
                     "bridge_ids": [bridge["bridge_id"] for bridge in classified_bridges],
                     "incremental_length": classified_length,
-                    "scenario_total_length": raw_length + classified_length,
+                    "scenario_total_length": math.fsum((raw_length, classified_length)),
                     "unit": unit,
                     "quantity_level": "方案暂估量",
                     "selected": False,
@@ -1867,8 +1928,8 @@ def main() -> int:
             "bridge_scenarios": bridge_scenarios,
             "bridge_quantity_items": bridge_items,
             "reconstructed_length_summary": restored_summary,
-            "reconstructed_length": raw_length + sum(restored.values()),
-            "restored_omission_length": sum(restored.values()) - inclusive_axis_length,
+            "reconstructed_length": math.fsum((raw_length, restored_length)),
+            "restored_omission_length": restored_length - inclusive_axis_length,
             "project_inclusive_accessory_axis_length": inclusive_axis_length,
             "change_nodes": change_records,
             "scope_boundary_nodes": boundary_records,
@@ -1916,7 +1977,7 @@ def main() -> int:
             },
             "independent_drawn_length_summary": independent_length_summary,
             "independent_dn_assignments": independent_assignments,
-            "conditional_drawn_segment_length": sum(segments[sid]["length"] for sid,a in assignments.items() if a.get("requires_topology_assumption")),
+            "conditional_drawn_segment_length": math.fsum(segments[sid]["length"] for sid,a in sorted(assignments.items()) if a.get("requires_topology_assumption")),
             "conditional_drawn_quantity_meaning": "原已绘几何长度不变；依赖虚拟桥的DN及对应分规格量只属条件方案。独立已绘基线与此分层方案互为替代，不可相加。",
             "decision_queue": decision_queue,
         }

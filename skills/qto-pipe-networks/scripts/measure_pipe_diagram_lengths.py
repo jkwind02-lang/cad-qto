@@ -22,6 +22,8 @@ from qto_cad_geometry import (IDENTITY, compose_matrix, entity_geometry,
                               read_dxf_with_diagnostics)
 from qto_cad_source_contract import verify_source_file, canonical_scale, unit_tokens
 from qto_elevation_facts import evaluate_elevation_link, weakest, QUANTITY_LEVELS
+from pipe_diagram_source_parts import resolve_instance, source_interval
+from qto_pipe_topology import project_part
 
 REQUEST = 'qto-pipe-diagram-length-request/1.0'
 RESULT = 'qto-pipe-diagram-length-candidates/1.0'
@@ -29,7 +31,8 @@ BASIS = 'pipe_centerline_route_length'
 LEVELS = {'confirmed', 'inferred', 'scenario'}
 DEPENDENCIES = ('qto_cad_geometry.py', 'qto_cad_source_contract.py',
                 'qto_elevation_facts.py', 'recompute_qto_dependencies.py',
-                'qto_human_review_evidence.py', 'qto_actor_identity.py')
+                'qto_human_review_evidence.py', 'qto_actor_identity.py',
+                'qto_pipe_topology.py', 'qto_spatial.py')
 NUMBER = r'[+\-±]?(?:\d+(?:\.\d*)?|\.\d+)'
 VALUE = re.compile(r'^\s*(?:(?:L|H|标高|管长|长度)\s*[=:：]?\s*)?(' + NUMBER +
                    r')\s*(mm|cm|m|ft|in|毫米|厘米|米|英尺|英寸)?\s*$', re.I)
@@ -80,6 +83,9 @@ def finite(value):
 def runtime_dependencies():
     return [{'module': 'qto-pipe-networks/scripts/' + Path(__file__).name,
              'path': str(Path(__file__).resolve()), 'sha256': sha(__file__)}] + [
+        {'module': 'qto-pipe-networks/scripts/pipe_diagram_source_parts.py',
+         'path': str(Path(__file__).with_name('pipe_diagram_source_parts.py')),
+         'sha256': sha(Path(__file__).with_name('pipe_diagram_source_parts.py'))}] + [
         {'module': '_qto-shared-evidence/scripts/' + name,
          'path': str(SHARED / name), 'sha256': sha(SHARED / name)} for name in DEPENDENCIES]
 
@@ -100,24 +106,7 @@ class Drawing:
         self.doc = doc
 
     def resolve(self, path):
-        require(isinstance(path, list) and path and all(isinstance(v, str) for v in path),
-                '必须提供从Model到叶实体的完整INSERT实例路径')
-        owner = self.doc.modelspace().block_record_handle
-        matrix = IDENTITY
-        for index, handle in enumerate(path):
-            entity = self.doc.entitydb.get(handle.upper())
-            require(entity is not None and entity.dxf.owner == owner, '源实例路径与父块/Model不符')
-            require(not entity.dxf.get('invisible', 0), '隐藏源实体不能作当前图面证据')
-            layer = self.doc.layers.get(entity.dxf.get('layer', '0'))
-            require(layer is not None and not layer.is_off() and not layer.is_frozen(),
-                    '关闭或冻结图层不属于当前图面证据')
-            if index < len(path)-1:
-                require(entity.dxftype() == 'INSERT', '路径中间节点必须是INSERT')
-                require(entity.dxf.row_count == entity.dxf.column_count == 1,
-                        '阵列INSERT须先形成逐实例身份，不能套乘数')
-                matrix = compose_matrix(matrix, entity_geometry(entity)['insert_matrix_wcs'])
-                owner = self.doc.blocks[entity.dxf.name].block_record_handle
-        return entity, matrix
+        return resolve_instance(self.doc, path)
 
     def annotation(self, path, bounds):
         entity, matrix = self.resolve(path)
@@ -143,28 +132,7 @@ class Drawing:
                     for p in points), '证据或源段越出本次diagram/view范围')
 
     def span(self, spec, bounds):
-        require(isinstance(spec, dict), 'source_span须为源区段对象')
-        entity, matrix = self.resolve(spec.get('path'))
-        require(entity.dxftype() in {'LINE', 'LWPOLYLINE', 'POLYLINE'},
-                '当前物理源段只接原生直线/多段线；代理和专业原生构件须另走取证，不加载未绑定的动态适配器')
-        geometry = entity_geometry(entity).get('geometry')
-        require(geometry is not None, '源实例没有可定位曲线')
-        parts = transform_geometry(geometry, matrix)['parts']
-        index = spec.get('part', 0)
-        require(isinstance(index, int) and not isinstance(index, bool) and 0 <= index < len(parts),
-                '源part索引无效')
-        require('part' in spec or len(parts) == 1, '多part源须明确区段')
-        part = parts[index]
-        require(part['kind'] == 'line', '当前计长入口只绑定直线物理分段；弯曲路径须先分段取证')
-        a, b = finite(spec.get('from_fraction', 0)), finite(spec.get('to_fraction', 1))
-        require(0 <= a < b <= 1, '源区段须为0到1内的正向非零区间')
-        points = [[x + t*(y-x) for x, y in zip(part['start'], part['end'])] for t in (a, b)]
-        self.inside(points, bounds)
-        require(math.dist(*points) > 0, '零长源段不能绑定实物范围')
-        return {'path': [h.upper() for h in spec['path']], 'part': index,
-                'from_fraction': a, 'to_fraction': b, 'page_endpoints': points,
-                'layer': entity.dxf.layer, 'page_coordinate_length': math.dist(*points),
-                'page_coordinate_unit': 'raw_location_only', 'physical_length_from_coordinates': False}
+        return source_interval(self, spec, bounds)
 
 
 def parallel(a, b):
@@ -254,6 +222,7 @@ def dimension_chain(drawing, fact, row, view):
     require(isinstance(paths, list) and paths and len({tuple(p) for p in paths}) == len(paths),
             '尺寸链须逐项绑定不重复原生DIMENSION实例')
     span = drawing.span(row['source_span'], view['bounds'])
+    require('page_curve' not in span, '线性尺寸链不能用曲线端点弦长代表曲线路径')
     start, end = span['page_endpoints']
     vector = [b-a for a, b in zip(start, end)]
     square = sum(v*v for v in vector)
@@ -314,11 +283,16 @@ def native_leader_binding(drawing, fact, row, annotation, bounds):
     drawing.inside(vertices, bounds)
     point = vertices[0]
     a, b = span['page_endpoints']
-    vector = [y-x for x, y in zip(a, b)]
-    square = sum(v*v for v in vector)
-    tolerance = max(math.sqrt(square)*1e-9, 16*max(math.ulp(v) for p in (a, b, point) for v in p))
-    fraction = sum((point[i]-a[i])*vector[i] for i in range(3))/square
-    if not (1e-9 < fraction < 1-1e-9) or math.dist(point, [a[i]+fraction*vector[i] for i in range(3)]) > tolerance:
+    tolerance = max(span['page_coordinate_length']*1e-9,
+        16*max(math.ulp(v) for p in (a, b, point) for v in p))
+    if 'page_curve' in span:
+        error, fraction = project_part(point, span['page_curve'])
+    else:
+        vector = [y-x for x, y in zip(a, b)]
+        square = sum(v*v for v in vector)
+        fraction = sum((point[i]-a[i])*vector[i] for i in range(3))/square
+        error = math.dist(point, [a[i]+fraction*vector[i] for i in range(3)])
+    if not (1e-9 < fraction < 1-1e-9) or error > tolerance:
         return False, '原生LEADER箭头未唯一落在所选完整源part内部'
     hits, unresolved = [], []
 
@@ -386,7 +360,7 @@ def native_leader_binding(drawing, fact, row, annotation, bounds):
     annotation['native_leader_binding'] = {'path': fact['leader_path'],
         'annotation_handle': entity.dxf.annotation_handle, 'arrow_page_point': point,
         'source_part_fraction': fraction, 'unique_target': hits[0],
-        'vertices': vertices, 'semantic_scope': 'complete_source_straight_part'}
+        'vertices': vertices, 'semantic_scope': 'complete_source_curved_part' if 'page_curve' in span else 'complete_source_straight_part'}
     return True, None
 
 
@@ -515,6 +489,10 @@ def measurement(drawing, fact, row, view, source):
             else:
                 ends = [transform_point(list(entity.dxf.get(key)), matrix) for key in ('defpoint2', 'defpoint3')]
                 span = drawing.span(row['source_span'], view['bounds'])
+                if 'page_curve' in span:
+                    return {'method': method, 'value': None, 'level': level, 'source_annotation': annotation,
+                        'binding_verification': 'unresolved_curve_linear_dimension',
+                        'issue': '原生线性尺寸只证明弦线距离，不能代表曲线路径实长', 'basis': fact['basis']}
                 target = span['page_endpoints']
                 tolerance = max(math.dist(*target) * 1e-9,
                     16*max(math.ulp(v) for p in ends+target for v in p))

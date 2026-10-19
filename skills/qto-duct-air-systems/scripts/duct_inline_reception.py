@@ -14,7 +14,7 @@ def duct_producer():
 def duct_dependencies():
     paths=[duct_producer(),Path(__file__).resolve(),Path(__file__).with_name("build_duct_network_from_neutral.py").resolve(),Path(__file__).with_name("duct_generated_hosts.py").resolve(),Path(__file__).with_name("duct_network_extensions.py").resolve(),Path(__file__).with_name("duct_source_recovery.py").resolve(),
            Path(__file__).with_name('duct_callout_groups.py'),Path(__file__).with_name('build_duct_riser_bundle_from_neutral.py'),Path(__file__).with_name('duct_riser_continuity.py'),Path(__file__).with_name('duct_riser_datums.py'),
-           Path(__file__).with_name('duct_curved_outline.py'),Path(__file__).with_name('duct_equidistant_midline.py'),
+           Path(__file__).with_name('duct_curved_outline.py'),Path(__file__).with_name('duct_equidistant_midline.py'),Path(__file__).with_name('duct_elliptical_outline.py'),
            Path(__file__).with_name('duct_color_material.py'),
            Path(__file__).resolve().parents[2]/'_qto-shared-evidence/scripts/qto_cad_color.py',
            Path(__file__).resolve().parents[2]/'_qto-shared-evidence/scripts/qto_elevation_facts.py',

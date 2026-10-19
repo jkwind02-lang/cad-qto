@@ -127,11 +127,20 @@ def closest_ellipse(x,y,a,b,tol):
 class Midline:
     def __init__(self,descriptor):
         if not isinstance(descriptor,dict) or descriptor.get('schema_version')!=SCHEMA:raise ValueError('等距中线来源描述无效')
-        pa,pb=descriptor['source_boundaries'];settings=descriptor['settings']
-        if pair_descriptor(pa,pb,settings)!=descriptor:raise ValueError('等距中线未满足唯一性与误差前置条件')
+        arc_domain=descriptor.get('trimmed_arc_domain')
+        core=copy.deepcopy(descriptor)
+        if arc_domain is not None:
+            from duct_elliptical_outline import arc_pair_descriptor
+            expected=arc_pair_descriptor(*arc_domain['source_arcs'],descriptor['settings'],*arc_domain['radial_interval'])
+            if expected!=descriptor:raise ValueError('有限椭圆源弧区间与最近落足证明不一致')
+            core.pop('trimmed_arc_domain')
+        pa,pb=core['source_boundaries'];settings=core['settings']
+        if pair_descriptor(pa,pb,settings)!=core:raise ValueError('等距中线未满足唯一性与误差前置条件')
         aa,bb=principal(pa),principal(pb);domain=quarter_domain(pa,aa,aa)
         self.inner,self.outer=(aa,bb) if aa['a']<bb['a'] else (bb,aa)
         self.frame=aa;self.start,self.sweep=domain['start'],domain['sweep'];self.settings=settings
+        self.arc_domain=arc_domain
+        if arc_domain is not None:self.start,self.sweep=arc_domain['radial_interval'][0],arc_domain['radial_interval'][1]-arc_domain['radial_interval'][0]
         i,o=self.inner,self.outer
         self.gap=max(o['a']-i['a'],o['b']-i['b']);self.reach=o['b']**2/o['a']
         self.minimum_gap=min(o['a']**2-i['a']**2,o['b']**2-i['b']**2)/(2*o['a'])
@@ -226,7 +235,7 @@ class Midline:
             polyline_chord_length=sum(math.dist(a,b) for a,b in zip(points,points[1:])),
             measurement_method='euclidean_equidistant_implicit_curve_integral',
             endpoint_tangents=[scale(self.point(t)['tangent'],1 if self.sweep>0 else -1) for t in (self.start,self.start+self.sweep)],
-            midline_evidence={'uniqueness_case':'coaxial_nested_ellipse_principal_axis_sectors_with_outer_reach_bound',
+            midline_evidence={'uniqueness_case':('coaxial_nested_ellipse_trimmed_arc_monotone_feet_with_outer_reach_bound' if self.arc_domain else 'coaxial_nested_ellipse_principal_axis_sectors_with_outer_reach_bound'),
                 'maximum_support_gap_bound':self.gap,'outer_reach_lower_bound':self.reach,'radial_gradient_lower_bound':self.radial_gradient_lower,
                 'display_chord_error_bound':chord_bound,'position_error_bound':self.position_error_bound,
                 'source_alignment_roundoff_bound':self.alignment_error,
@@ -234,6 +243,7 @@ class Midline:
                 'length_root_error_bound':self.length_root_error_bound,'adaptive_integral_error_estimate':max(e1,e2),
                 'stricter_integral_difference':refinement,'error_method':'adaptive_quadrature_refinement_plus_bounded_distance_root_error',
                 'length_is_polyline_chord_sum':False,'sample_interval_count':count})
+        if self.arc_domain is not None:summary['midline_evidence']['trimmed_arc_domain']=copy.deepcopy(self.arc_domain)
         axis_error=[chord_bound*math.hypot(self.frame['e1'][k],self.frame['e2'][k]) for k in range(3)]
         summary['bbox3d']=[v-axis_error[k] for k,v in enumerate(summary['bbox3d'][:3])]+[v+axis_error[k] for k,v in enumerate(summary['bbox3d'][3:])]
         b=summary['bbox3d'];summary['bbox']=[b[0],b[1],b[3],b[4]]

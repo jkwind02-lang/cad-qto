@@ -246,7 +246,21 @@ def export_candidate(request_path, *, preview=False):
                                   read_ref=read_ref, ref=ref)
         bindings.extend(mapped)
         networks.append(context)
-    require(set(active) == {b['catalog_key'] for b in bindings}, '当前有效对象缺少显式计算节点或网络目标绑定')
+    producer_specs = request.get('object_producer_evidence', [])
+    require(isinstance(producer_specs, list) and all(isinstance(p, dict) for p in producer_specs),
+            'object_producer_evidence 须为显式具名对象生产证据数组')
+    require(all(text(p.get('producer_id')) for p in producer_specs) and
+            len({p['producer_id'] for p in producer_specs}) == len(producer_specs), '对象生产身份缺失或重复')
+    for spec in producer_specs:
+        from qto_rule_object_adapter import consume as consume_object
+        mapped, context = consume_object(spec, base=base, view=view, decision=decision, active=active,
+                                         read_ref=read_ref, ref=ref)
+        bindings.extend(mapped)
+        networks.append(context)
+    production_identities = [b['quantity_outlet_fingerprint']
+                             for b in bindings if b.get('adapter_schema') == 'qto-rule-object-producer-evidence/1.0']
+    require(len(production_identities) == len(set(production_identities)), '跨生产声明重复映射同一物理目标数量')
+    require(set(active) == {b['catalog_key'] for b in bindings}, '当前有效对象缺少显式计算节点、网络或具名生产目标绑定')
     context_fp = context_fingerprint(fresh, bindings, networks)
     if preview:
         return json_document({'schema': 'qto-rule-context-preview/1.0', 'status': 'NOT_HUMAN_APPROVAL',
@@ -276,6 +290,10 @@ def export_candidate(request_path, *, preview=False):
            'view_revision': view['revision'], 'input_fingerprint': context_fp,
            'calculation_input_fingerprint': fresh['input_fingerprint'] if fresh else None,
            'network_evidence': networks,
+           'producer_authority_sources': [context['physical_authority'] for context in networks if 'physical_authority' in context],
+           'producer_source_files': [r for context in networks
+                                     for r in (context.get('source_dependencies') or [])
+                                     if isinstance(r, dict) and r.get('role') in ('authoritative_source', 'exchange_dxf')],
            'origin': {'annotation_key': key, 'original_question': decision['question'],
                       'original_answer': copy.deepcopy(raw), 'decision': copy.deepcopy(decision),
                       'effective_scope': copy.deepcopy(action['scope']), 'bindings': bindings,
@@ -325,14 +343,14 @@ def review_candidate(request_path):
     if disposition == 'general_candidate':
         require(cases, '单项目认可不能升级通用候选；须独立案例')
         origin_sources = {s['sha256'] for s in
-                          [*candidate['source_files'], *candidate['calculation_source_files']]}
+                          [*candidate['source_files'], *candidate['calculation_source_files'], *candidate.get('producer_source_files', []), *candidate.get('producer_authority_sources', [])]}
         for item in cases:
             path, other = verify_candidate(item, review_path.parent)
             identity = (other['project_id'], other['source_fingerprint'])
             require(identity not in seen and other['project_id'] != candidate['project_id'] and
                     other['source_fingerprint'] != candidate['source_fingerprint'] and
                     origin_sources.isdisjoint({s['sha256'] for s in
-                                               [*other['source_files'], *other['calculation_source_files']]}),
+                                               [*other['source_files'], *other['calculation_source_files'], *other.get('producer_source_files', []), *other.get('producer_authority_sources', [])]}),
                     '独立案例须另项目、另物理源且不重复')
             require(other['rule_fingerprint'] == candidate['rule_fingerprint'],
                     '独立案例规则版本、对象、单位、口径或触发边界不一致')
@@ -374,7 +392,7 @@ def safe_output(maint_dir, name):
 
 def main(argv=None, *, maintenance=False):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('review',) if maintenance else ('inspect', 'export'))
+    parser.add_argument('action', choices=('review',) if maintenance else ('inspect', 'inspect-production', 'export'))
     parser.add_argument('--request', required=True, type=Path)
     parser.add_argument('--maint-dir', required=True, type=Path)
     parser.add_argument('--name', required=True)
@@ -382,7 +400,11 @@ def main(argv=None, *, maintenance=False):
     target = None
     try:
         target = safe_output(args.maint_dir, args.name)
-        out = review_candidate(args.request) if maintenance else export_candidate(args.request, preview=args.action == 'inspect')
+        if args.action == 'inspect-production':
+            from qto_rule_object_adapter import inspect_production
+            out = inspect_production(args.request, read_ref=read_ref, ref=ref)
+        else:
+            out = review_candidate(args.request) if maintenance else export_candidate(args.request, preview=args.action == 'inspect')
         target.write_text(json.dumps(out, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
         print(json.dumps({'status': out['status'], 'output': str(target), 'sha256': sha(target)}, ensure_ascii=False))
         return 0

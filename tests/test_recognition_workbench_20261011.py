@@ -108,11 +108,13 @@ def test_three_dimensional_parent_transform(tmp_path):
         assert row['geometry']['parts'][0][key]==pytest.approx(list(expected))
 
 
-def test_coincident_array_cells_are_separate_identities(tmp_path):
+def test_zero_spacing_minsert_uses_one_native_identity(tmp_path):
     d=ezdxf.new();b=d.blocks.new('A');b.add_line((0,0),(10,0))
     d.modelspace().add_blockref('A',(0,0),dxfattribs={'row_count':2,'column_count':2,'row_spacing':0,'column_spacing':0})
     i=w.build_index(source(d,tmp_path));rows=[r for r in i['objects'] if r['entity_type']=='LINE']
-    assert len(rows)==4 and len({r['object_id'] for r in rows})==4
+    native=next(iter(d.modelspace().query('INSERT')))
+    assert native.mcount==len(list(native.multi_insert()))==1
+    assert len(rows)==1 and len({r['object_id'] for r in rows})==1
     assert len({tuple(r['anchor']) for r in rows})==1
 
 

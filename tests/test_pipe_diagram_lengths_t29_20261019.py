@@ -247,16 +247,17 @@ def test_tampered_candidate_fails_even_with_new_container_hash(tmp_path):
 
 @pytest.mark.parametrize('changed_name', ['measure_pipe_diagram_lengths.py', 'qto_cad_geometry.py',
     'qto_cad_source_contract.py', 'qto_elevation_facts.py', 'recompute_qto_dependencies.py',
-    'qto_human_review_evidence.py', 'qto_actor_identity.py'])
+    'qto_human_review_evidence.py', 'qto_actor_identity.py', 'qto_pipe_topology.py', 'qto_spatial.py', 'pipe_diagram_source_parts.py'])
 def test_source_and_dependency_byte_change_invalidates_real_cli_consumption(tmp_path, changed_name):
     p, _ = candidate_receipt(tmp_path)
     clone = tmp_path / 'clone'
     shared = clone / 'skills/_qto-shared-evidence/scripts'; shared.mkdir(parents=True)
     pipe = clone / 'skills/qto-pipe-networks/scripts'; pipe.mkdir(parents=True)
     for name in ('qto_cad_geometry.py', 'qto_cad_source_contract.py', 'qto_elevation_facts.py',
-                 'recompute_qto_dependencies.py', 'qto_human_review_evidence.py', 'qto_actor_identity.py'):
+                 'recompute_qto_dependencies.py', 'qto_human_review_evidence.py', 'qto_actor_identity.py',
+                 'qto_pipe_topology.py', 'qto_spatial.py'):
         shutil.copyfile(ROOT / 'skills/_qto-shared-evidence/scripts' / name, shared / name)
-    for name in ('measure_pipe_diagram_lengths.py', 'receive_pipe_diagram_lengths.py'):
+    for name in ('measure_pipe_diagram_lengths.py', 'receive_pipe_diagram_lengths.py', 'pipe_diagram_source_parts.py'):
         shutil.copyfile(PIPE / name, pipe / name)
     request = json.loads(Path(p['candidate_result']['path']).read_text(encoding='utf-8'))['source_request']['path']
     produced = tmp_path / 'cli-candidate.json'
@@ -269,7 +270,7 @@ def test_source_and_dependency_byte_change_invalidates_real_cli_consumption(tmp_
     receipt_request = tmp_path / 'receipt-request.json'; write(receipt_request, p)
     result = run('receive_pipe_diagram_lengths.py', receipt_request, tmp_path / 'first-receipt.json')
     assert result.returncode == 0, result.stderr
-    changed = (pipe if changed_name == 'measure_pipe_diagram_lengths.py' else shared) / changed_name
+    changed = (pipe if changed_name in {'measure_pipe_diagram_lengths.py', 'pipe_diagram_source_parts.py'} else shared) / changed_name
     changed.write_text(changed.read_text(encoding='utf-8') + '\n# deliberate byte-change probe\n', encoding='utf-8')
     result = run('receive_pipe_diagram_lengths.py', receipt_request, tmp_path / 'changed-receipt.json')
     assert result.returncode != 0 and not (tmp_path / 'changed-receipt.json').exists()
@@ -434,10 +435,10 @@ def test_elevation_transitive_dependency_drift_and_restore_reject_stale_candidat
     shared = clone / 'skills/_qto-shared-evidence/scripts'; shared.mkdir(parents=True)
     pipe = clone / 'skills/qto-pipe-networks/scripts'; pipe.mkdir(parents=True)
     expected = {'qto_cad_geometry.py', 'qto_cad_source_contract.py', 'qto_elevation_facts.py',
-        'recompute_qto_dependencies.py', 'qto_human_review_evidence.py', 'qto_actor_identity.py'}
+        'recompute_qto_dependencies.py', 'qto_human_review_evidence.py', 'qto_actor_identity.py', 'qto_pipe_topology.py', 'qto_spatial.py'}
     for name in expected:
         shutil.copyfile(ROOT / 'skills/_qto-shared-evidence/scripts' / name, shared / name)
-    for name in ('measure_pipe_diagram_lengths.py', 'receive_pipe_diagram_lengths.py'):
+    for name in ('measure_pipe_diagram_lengths.py', 'receive_pipe_diagram_lengths.py', 'pipe_diagram_source_parts.py'):
         shutil.copyfile(PIPE / name, pipe / name)
     def run(name, input_path, output_path):
         return subprocess.run([sys.executable, '-B', str(pipe/name), '--input', str(input_path), '--output', str(output_path)],
@@ -446,7 +447,7 @@ def test_elevation_transitive_dependency_drift_and_restore_reject_stale_candidat
     assert run('measure_pipe_diagram_lengths.py', request_path, original_candidate).returncode == 0
     result = json.loads(original_candidate.read_text(encoding='utf-8'))
     assert result['segments'][0]['quantity'] == 5.5
-    assert {Path(row['path']).name for row in result['runtime_dependencies']} == expected | {'measure_pipe_diagram_lengths.py'}
+    assert {Path(row['path']).name for row in result['runtime_dependencies']} == expected | {'measure_pipe_diagram_lengths.py', 'pipe_diagram_source_parts.py'}
     p['candidate_result'] = {'path': str(original_candidate), 'sha256': sha(original_candidate)}
     original_receipt_request = tmp_path / 'original-elevation-receipt-request.json'; write(original_receipt_request, p)
     assert run('receive_pipe_diagram_lengths.py', original_receipt_request, tmp_path/'original-receipt.json').returncode == 0

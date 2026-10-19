@@ -21,6 +21,7 @@ from measure_pipe_diagram_lengths import (measure, sha, digest, replay_digest, r
 from receive_pipe_diagram_lengths import load_binding
 from qto_cad_geometry import read_dxf_with_diagnostics
 from qto_cad_source_contract import canonical_scale, verify_source_file, unit_tokens
+from pipe_diagram_source_parts import unique_workbench_interval
 
 REQUEST = 'qto-pipe-physical-network-production/1.0'
 RESULT = 'qto-pipe-physical-network/1.0'
@@ -120,7 +121,7 @@ def workbench_si_context(original):
 
 
 def workbench_si_span(context, original, original_segment, item, binding, span, source, bounds):
-    """Resolve a prepared straight edge to one actual source part interval."""
+    """Resolve a current prepared line/curve edge to one actual source part interval."""
     require(binding['drawing']['sha256'] == context['recipe']['source']['sha256'],
             '工作台适配图纸不是公共SI及实际索引的同一交换源')
     unit_bounds = context['bounds']
@@ -132,7 +133,7 @@ def workbench_si_span(context, original, original_segment, item, binding, span, 
             '工作台原路段须对应唯一实际索引对象')
     obj = context['objects'][ids[0]]
     path = [h.upper() for h in obj['source_path']]
-    require(path and not any('[' in h for h in path) and span['path'] == path,
+    require(path and span['path'] == path,
             '源范围不对应工作台重放的完整实际INSERT实例路径')
     links = [r for r in original['workbench']['bindings']
              if r.get('object_id') == ids[0] and r.get('segment_id') == original_segment['segment_id']]
@@ -140,27 +141,10 @@ def workbench_si_span(context, original, original_segment, item, binding, span, 
             '实际生产赋值台账与原索引实例路径不符')
     parts = (obj.get('geometry') or {}).get('parts', [])
     target = (item.get('geometry') or {}).get('parts', [])
-    require(len(target) == 1 and target[0]['kind'] == 'line',
-            '当前工作台适配只接已回放的直线派生边，弧段不得用弦长替代')
+    require(len(target) == 1 and target[0]['kind'] in {'line', 'ellipse_arc'},
+            '工作台适配只接当前生产的单个直线或参数曲线派生边')
     scale, output_scale = context['scale'], canonical_scale(original['unit'])
-    endpoints = [[finite(v)*output_scale for v in target[0][k]] for k in ('start', 'end')]
-    matches = []
-    for index, part in enumerate(parts):
-        if part['kind'] != 'line':
-            continue
-        a, b = [[finite(v)*scale for v in part[k]] for k in ('start', 'end')]
-        vector = [y-x for x, y in zip(a, b)]; square = sum(v*v for v in vector)
-        if square <= 0:
-            continue
-        fractions = [sum((p[i]-a[i])*vector[i] for i in range(3))/square for p in endpoints]
-        tolerance = max(math.sqrt(square)*1e-9, 1e-8)
-        errors = [math.dist(p, [a[i]+t*vector[i] for i in range(3)]) for p, t in zip(endpoints, fractions)]
-        if (all(-1e-9 <= t <= 1+1e-9 for t in fractions) and fractions[0] < fractions[1]
-                and max(errors) <= tolerance):
-            fractions = [0. if abs(t) <= 1e-9 else 1. if abs(t-1) <= 1e-9 else t for t in fractions]
-            matches.append((index, *fractions))
-    require(len(matches) == 1, '派生边不能唯一对应原索引part区间；不能按近邻/等长手填')
-    part, first, last = matches[0]
+    (part, first, last), endpoints = unique_workbench_interval(parts, target[0], scale, output_scale)
     require(span['part'] == part and math.isclose(span['from_fraction'], first, abs_tol=1e-9, rel_tol=0)
             and math.isclose(span['to_fraction'], last, abs_tol=1e-9, rel_tol=0),
             '所选源part/起终分数与实际生产派生边不符')

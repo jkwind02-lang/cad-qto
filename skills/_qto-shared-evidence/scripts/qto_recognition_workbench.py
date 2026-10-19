@@ -284,9 +284,13 @@ def build_index(source, layout="Model", authoritative_source=None, max_depth=32,
     def expand(entity, parent_path, matrix, inherited_layer, ancestors):
         if entity.dxftype() != "INSERT" or (entity.dxf.row_count == 1 and entity.dxf.column_count == 1):
             return visit(entity, parent_path, matrix, inherited_layer, ancestors)
-        # Keep every declared cell, even coincident cells; they need identity review.
-        for r in range(entity.dxf.row_count):
-            for c in range(entity.dxf.column_count):
+        # Native MINSERT has one physical row/column when its source spacing is
+        # exactly zero. This is local to this INSERT; no world-position merge
+        # and no tolerance folding of small nonzero grid spacings is allowed.
+        rows = range(entity.dxf.row_count) if entity.dxf.row_spacing != 0 else range(1)
+        columns = range(entity.dxf.column_count) if entity.dxf.column_spacing != 0 else range(1)
+        for r in rows:
+            for c in columns:
                 virtual = entity.copy()
                 offset = Vec3(c*entity.dxf.column_spacing, r*entity.dxf.row_spacing)
                 offset = offset.rotate_deg(entity.dxf.rotation)
@@ -511,14 +515,33 @@ def prepare_pipe(index, operations, ledger_path):
         for oid in scope:
             row=objects[oid]
             path=row['source_path']
-            if not path or any('[' in h for h in path):
-                raise ValueError('局部几何单位消费尚不支持阵列实例路径')
+            if not path:
+                raise ValueError('局部工作台原实例链为空')
+            import re
             tokens=[]
+            owner=source_doc.modelspace().block_record_handle
             for handle in path[:-1]:
-                insert=source_doc.entitydb.get(handle)
-                if insert is None or insert.dxftype()!='INSERT':
-                    raise ValueError('局部工作台原实例链不能回读')
-                tokens.extend(['CAD-'+handle,insert.dxf.name])
+                matched=re.fullmatch(r'([0-9A-Fa-f]+)(?:\[(\d+),(\d+)\])?',handle)
+                if matched is None:
+                    raise ValueError('局部工作台原实例链句柄/阵列单元格式无效')
+                insert=source_doc.entitydb.get(matched[1].upper())
+                if insert is None or insert.dxftype()!='INSERT' or insert.dxf.owner!=owner:
+                    raise ValueError('局部工作台原实例链不能回读完整父链')
+                is_array=insert.dxf.row_count!=1 or insert.dxf.column_count!=1
+                if is_array != (matched[2] is not None):
+                    raise ValueError('局部工作台阵列须有逐单元身份，普通块不能虚构单元')
+                if is_array:
+                    r,c=int(matched[2]),int(matched[3])
+                    if (matched[2]!=str(r) or matched[3]!=str(c)
+                            or r>=insert.dxf.row_count or c>=insert.dxf.column_count):
+                        raise ValueError('局部工作台阵列单元越界或身份不是规范行列整数')
+                    if (r != 0 and insert.dxf.row_spacing == 0) or (c != 0 and insert.dxf.column_spacing == 0):
+                        raise ValueError('局部工作台阵列零间距cell不是独立原生实例，须使用规范0行/0列')
+                tokens.extend(['CAD-'+handle.upper(),insert.dxf.name])
+                owner=source_doc.blocks[insert.dxf.name].block_record_handle
+            leaf=source_doc.entitydb.get(path[-1])
+            if leaf is None or leaf.dxf.owner!=owner:
+                raise ValueError('局部工作台原实例叶对象与父链不一致')
             tokens.append('CAD-'+path[-1])
             canonical_source_ids[oid]=('CADINST-' if len(path)>1 else '')+'/'.join(tokens)
         geometry_fields=dict(geometric_unit_evidence=credential,measurement_scope=measurement_scope,

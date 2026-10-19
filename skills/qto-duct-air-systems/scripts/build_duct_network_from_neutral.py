@@ -20,6 +20,7 @@ from duct_network_extensions import checked_geometry
 from duct_source_recovery import atomic_outline_pairs, annotation_network_scope, resolve_riser_links
 from duct_callout_groups import bind_groups
 from duct_curved_outline import atomic_circular_pairs
+from duct_elliptical_outline import atomic_elliptical_pairs
 from duct_equidistant_midline import pair_descriptor, materialize as materialize_midline
 from bind_duct_vertical_annotations import write_protected_json
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'qto-components-points/scripts'))
@@ -337,7 +338,7 @@ def build(manifest_path,profile_path,claims_path=None):
         keys=[p['entry']['source_key'] for p in items]
         row={'segment_id':sid,'floor_id':floor,'system':rule['system'],'space_id':space,'source_sha256':source,'source_ids':keys,
              'source_record_id':items[0]['entry']['source_record_id'],'source_instance_path':items[0]['key'],
-             'source_geometry_refs':[{k:p['entry'][k] for k in ('source_key','geometry_sha256','geometry','instance_transform','part_index')} for p in items],
+             'source_geometry_refs':[{k:p['entry'][k] for k in ('source_key','geometry_sha256','geometry','instance_transform','part_index','parent_source_part','source_fraction_range','source_fraction_error_bound') if k in p['entry']} for p in items],
              **rule['dimensions'],'section':rule['section'],'size_evidence_level':'规则推算','classification_proofs':[rule['classification_proof']],
              'representation':rule['representation'],'length_evidence_level':'规则推算' if rule['representation']=='outline' else '确认','geometry':geo}
         row['color_material']=classify_sources(items,color_rules)
@@ -372,6 +373,8 @@ def build(manifest_path,profile_path,claims_path=None):
     for source_items,mid,rule in line_pairs:add(source_items,mid,rule)
     circular_pairs,handled_circular=atomic_circular_pairs(parts,selected,geometry,digest,entries,used)
     for source_items,mid,rule in circular_pairs:add(source_items,mid,rule)
+    elliptical_pairs,handled_elliptical=atomic_elliptical_pairs(parts,selected,geometry,digest,entries,used)
+    for source_items,mid,rule in elliptical_pairs:add(source_items,mid,rule)
     def outline_pair(a,b,rule,width,tol):
         old=paired_geometry(a,b,width,tol)
         if old is not None:return old
@@ -381,7 +384,7 @@ def build(manifest_path,profile_path,claims_path=None):
         return None
     for item in parts:
         sk=item['entry']['source_key'];hits=selected.get(sk,[])
-        if sk in handled_lines or sk in handled_circular:continue
+        if sk in handled_lines or sk in handled_circular or sk in handled_elliptical:continue
         if len(hits)!=1 or hits[0]['representation']!='outline' or sk in used: continue
         rule=hits[0]
         width=rule['dimensions'].get('diameter',rule['dimensions'].get('width'))

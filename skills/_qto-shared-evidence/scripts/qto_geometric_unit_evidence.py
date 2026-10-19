@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Source-bound, inferred coordinate units; never a drawing-unit declaration.
 
-The physical scale depends on the ISO A-sheet / printed plot-scale hypothesis.
+The physical scale depends on a source paper-size / printed plot-scale hypothesis.
 An independent DIMENSION checks geometric consistency, not an independent SI
 unit definition. No user-entered span, paper size or scale is accepted as proof.
 """
@@ -27,6 +27,9 @@ TEXT_TYPES = {'TEXT', 'MTEXT', 'ATTRIB', 'ATTDEF'}
 TOLERANCE = .01
 OPAQUE_TEXT_CARRIERS = {'ACAD_PROXY_ENTITY', 'OLE2FRAME', 'IMAGE', 'PDFUNDERLAY', 'DWFUNDERLAY',
                        'DGNUNDERLAY', 'ACAD_TABLE', 'TABLE', 'MULTILEADER', 'MLEADER', 'SHAPE'}
+ARRAY_KNOWN_NON_TEXT_ENTITIES = {'LINE', 'ARC', 'CIRCLE', 'ELLIPSE', 'LWPOLYLINE', 'POLYLINE',
+                               'VERTEX', 'SEQEND', 'SOLID', 'TRACE', '3DFACE', 'POINT',
+                               'HATCH', 'SPLINE', 'XLINE', 'RAY', 'LEADER', 'MESH'}
 
 
 class GeometricUnitUnresolved(ValueError):
@@ -176,7 +179,37 @@ def _instance_context_issue(doc, entity):
     return None
 
 
-def _ref(doc, value):
+def _insert_cell_context(entity):
+    rows, columns = int(entity.dxf.get('row_count', 1)), int(entity.dxf.get('column_count', 1))
+    if rows <= 0 or columns <= 0:
+        raise ValueError('INSERT阵列行列数必须为正数，当前实例未核清')
+    if rows*columns > 100000:
+        raise ValueError('INSERT阵列超过完整cell核验上限，不能以局部遍历宣称单位文字已全查')
+    if rows != 1 or columns != 1:
+        if tuple(entity.dxf.get('extrusion', (0, 0, 1))) != (0, 0, 1):
+            raise ValueError('非XY阵列的文字放置上下文尚未恢复')
+        if not _finite([float(entity.dxf.get(k, 0.)) for k in ('row_spacing', 'column_spacing', 'rotation')]):
+            raise ValueError('INSERT阵列间距或旋转不是有限值')
+    return rows, columns
+
+
+def _insert_cell(entity, row, column):
+    """Same default-OCS offsets as the source workbench, without cell deduping."""
+    from ezdxf.math import Vec3
+    rows, columns = _insert_cell_context(entity)
+    if not (0 <= row < rows and 0 <= column < columns):
+        raise ValueError('INSERT阵列cell越界')
+    if rows == columns == 1:
+        return entity, (0., 0., 0.)
+    offset = Vec3(column*entity.dxf.column_spacing, row*entity.dxf.row_spacing)
+    offset = offset.rotate_deg(entity.dxf.rotation)
+    virtual = entity.copy()
+    virtual.dxf.insert += offset
+    virtual.dxf.row_count = virtual.dxf.column_count = 1
+    return virtual, tuple(offset)
+
+
+def _ref(doc, value, allow_array_cells=False):
     """Resolve a real source entity through a checked planar similarity chain."""
     if not isinstance(value, dict) or not isinstance(value.get('handle'), str):
         raise ValueError('源实体引用须为 {handle, insert_handles:[]}，不能用自填两数或 bbox')
@@ -184,7 +217,11 @@ def _ref(doc, value):
     if not isinstance(handles, list) or any(not isinstance(h, str) for h in handles):
         raise ValueError('insert_handles 必须是从 Model 到定义的真实 INSERT 句柄链')
     matrices, owner, seen = [], doc.modelspace().block_record_handle, set()
-    for handle in handles:
+    for token in handles:
+        match = re.fullmatch(r'([0-9A-Fa-f]+)(?:\[(0|[1-9]\d*),(0|[1-9]\d*)\])?', token)
+        if match is None:
+            raise ValueError('INSERT链须为原句柄或规范句柄[行,列]，不能省略/伪造cell身份')
+        handle = match[1].upper()
         item = doc.entitydb.get(handle)
         if item is None or item.dxftype() != 'INSERT' or item.dxf.owner != owner or handle in seen:
             raise ValueError('INSERT 链不是当前 Model 中的唯一有效源实例路径')
@@ -193,18 +230,24 @@ def _ref(doc, value):
         if context_issue:
             raise ValueError(context_issue)
         seen.add(handle)
+        rows, columns = _insert_cell_context(item)
+        is_array = rows != 1 or columns != 1
+        if is_array != (match[2] is not None):
+            raise ValueError('真实阵列须逐cell引用，普通INSERT不能虚构cell身份')
+        if is_array and not allow_array_cells:
+            raise ValueError('几何单位图框/DIM所选证据尚不支持阵列；仅坐标SI原文可逐cell回源')
+        actual, _ = _insert_cell(item, int(match[2]), int(match[3])) if is_array else (item, None)
         sx, sy, sz = [float(item.dxf.get(k, 1.)) for k in ('xscale', 'yscale', 'zscale')]
         rotation = float(item.dxf.get('rotation', 0.))
         if (not _finite((sx, sy, sz, rotation)) or min(abs(sx), abs(sy), sz) <= 0
                 or not math.isclose(abs(sx), abs(sy), rel_tol=1e-10)
-                or tuple(item.dxf.get('extrusion', (0, 0, 1))) != (0, 0, 1)
-                or int(item.dxf.get('row_count', 1)) != 1 or int(item.dxf.get('column_count', 1)) != 1):
+                or tuple(item.dxf.get('extrusion', (0, 0, 1))) != (0, 0, 1)):
             raise ValueError('几何单位尚不支持非等比、非平面、Z镜像或阵列 INSERT')
         block = doc.blocks.get(item.dxf.name)
         if block is None or block.block.is_xref or block.name.upper().startswith('*D'):
             raise ValueError('外参、缺失定义或尺寸渲染块不能作为单位图框/图签源')
         owner = block.block_record_handle
-        matrices.append(item.matrix44())
+        matrices.append(actual.matrix44())
     entity = doc.entitydb.get(value['handle'])
     if entity is None or entity.dxf.get('owner') != owner:
         raise ValueError('源实体句柄不属于指定 Model / INSERT 实例')
@@ -239,17 +282,19 @@ def _text_in_frame(entity, transform, box, offset=(0., 0., 0.)):
 
 
 def _dimension_render_context(doc, entity):
-    """XY DIM.insert translates only the existing picture, never definition points.
+    """Default-OCS DIM.insert translates the picture, never definition points.
 
     DXF group 12 is the OCS insertion of cloned linear-dimension pictures.
-    For the supported default XY OCS this is a finite XY translation before
-    the ordinary parent INSERT chain. No source entity is edited or rendered.
+    For the supported default XY OCS this is a finite XYZ translation before
+    the ordinary parent INSERT chain. The restored picture must be coplanar
+    with the frame; a Z coordinate is not silently projected onto that plane.
+    No source entity is edited or rendered.
     """
     if tuple(entity.dxf.get('extrusion', (0, 0, 1))) != (0, 0, 1):
         raise ValueError('非XY尺寸渲染上下文尚未支持')
     offset = tuple(entity.dxf.get('insert', (0., 0., 0.)))
-    if not _finite(offset) or len(offset) != 3 or abs(offset[2]) > 1e-10:
-        raise ValueError('尺寸渲染平移须为有限XY向量，Z偏移上下文尚未支持')
+    if len(offset) != 3 or not _finite(offset):
+        raise ValueError('尺寸渲染平移须为默认XY OCS中的有限XYZ向量')
     block = doc.blocks.get(entity.dxf.get('geometry', ''))
     if block is None or block.block.is_xref:
         raise ValueError('原尺寸渲染文字所在块缺失或为未读外参')
@@ -273,10 +318,12 @@ def _inside(point, box, strict=False):
     if vertices:
         distances = []
         span = max(math.dist(a, b) for a, b in zip(vertices, vertices[1:] + vertices[:1]))
+        eps = max(span*1e-10, 1e-8)
+        if len(point) > 2 and (not _finite(point) or abs(point[2]-vertices[0][2]) > eps):
+            return False
         for a, b in zip(vertices, vertices[1:] + vertices[:1]):
             length = math.dist(a[:2], b[:2])
             distances.append(((b[0]-a[0])*(y-a[1])-(b[1]-a[1])*(x-a[0])) / length)
-        eps = max(span*1e-10, 1e-8)
         return (all(v > eps for v in distances) or all(v < -eps for v in distances)) if strict else (
             all(v >= -eps for v in distances) or all(v <= eps for v in distances))
     if strict:
@@ -368,6 +415,41 @@ def _scope(scope, box):
         raise ValueError('几何单位只允许 contained 边界；跨框整对象长度不能沿用')
 
 
+def _paper_size_evidence(doc, request, box):
+    """Read paper dimensions from explicit source semantics, never component sizes.
+
+    A paper declaration states the physical sheet only. It is not a drawing
+    coordinate SI declaration and cannot open professional consumption.
+    """
+    refs = request.get('paper_size_text_refs', [])
+    if not isinstance(refs, list):
+        raise ValueError('paper_size_text_refs 须为本框真实纸张幅面源引用数组')
+    rows, used = [], set()
+    for ref in refs:
+        entity, transform = _ref(doc, ref)
+        if entity.dxftype() not in TEXT_TYPES or not _text_in_frame(entity, transform, box):
+            raise ValueError('纸张幅面原文须在当前图框内且与图框共面可见')
+        text = _text(entity).strip()
+        match = re.fullmatch(r'(?:图纸幅面|圖紙幅面|纸张幅面|紙張幅面|纸张尺寸|紙張尺寸)\s*[:：]\s*'
+                             r'(\d+(?:\.\d+)?)\s*[×xX*]\s*(\d+(?:\.\d+)?)\s*(?:mm|毫米)\s*[。.]?', text, re.I)
+        if match is None:
+            raise ValueError('须为明确纸张幅面/纸张尺寸的双边毫米原文；构件宽高、尺寸覆盖和自填幅面不是纸张来源')
+        sides = [float(match[1]), float(match[2])]
+        if not _finite(sides) or min(sides) <= 0:
+            raise ValueError('源纸张幅面双边须为有限正数')
+        identity = '/' + '/'.join([*ref.get('insert_handles', []), ref['handle']])
+        if identity in used:
+            raise ValueError('纸张幅面源实例不能重复')
+        used.add(identity)
+        rows.append(dict(source_ref=ref, source_text=text, instance_path=identity, paper_size_mm=sides,
+                         evidence_class='source_paper_size_declaration',
+                         physical_unit_proven_independently=False,
+                         semantics='physical_paper_size_only_not_coordinate_unit'))
+    if rows and any(sorted(r['paper_size_mm']) != sorted(rows[0]['paper_size_mm']) for r in rows[1:]):
+        raise ValueError('同框纸张幅面原文互相冲突，不能选择有利的一条')
+    return rows
+
+
 def _search_unit_texts(doc, frame_box):
     """Search every encoded namespace, then judge applicability through active instances.
 
@@ -392,6 +474,7 @@ def _search_unit_texts(doc, frame_box):
                 if _unit_text_candidate(text):
                     all_hits.append({'handle': entity.dxf.handle, 'block': block.name, 'text': text})
     hits, uninspected, excluded, noncoordinate, active_text_count = [], [], [], [], 0
+    checked_array_cells = []
 
     def transform(point, matrices):
         for matrix in reversed(matrices):
@@ -413,8 +496,8 @@ def _search_unit_texts(doc, frame_box):
         return box is not None and (box[2] < frame_box[0] or box[0] > frame_box[2]
                                     or box[3] < frame_box[1] or box[1] > frame_box[3])
 
-    def unknown(entity, matrices, path, reason):
-        box = extent(entity, matrices)
+    def unknown(entity, matrices, path, reason, geometry=None):
+        box = extent(geometry if geometry is not None else entity, matrices)
         row = {'handle': entity.dxf.handle, 'entity_type': entity.dxftype(), 'instance_path': path, 'bbox': box, 'reason': reason}
         if outside(box):
             excluded.append({**row, 'disposition': 'proven_outside_frame'})
@@ -443,24 +526,48 @@ def _search_unit_texts(doc, frame_box):
                 hits.append(row)
         if kind in OPAQUE_TEXT_CARRIERS:
             unknown(entity, matrices, path, '可能承载适用单位文字，内容尚未读清')
+        elif '[' in path and kind not in TEXT_TYPES | ARRAY_KNOWN_NON_TEXT_ENTITIES | {'INSERT', 'DIMENSION'}:
+            unknown(entity, matrices, path, '数组cell内未知实际载体尚未证明不承载适用单位文字')
         if kind == 'INSERT':
-            for attrib in entity.attribs:
-                visit(attrib, matrices, path, stack)
             name = entity.dxf.name
             block = doc.blocks.get(name)
             context_issue = _instance_context_issue(doc, entity)
-            if context_issue:
-                unknown(entity, matrices, path, context_issue + '，不能证明已完整读取适用单位文字')
-            if (block is None or block.block.is_xref or name in stack or len(stack) >= 32
-                    or int(entity.dxf.get('row_count', 1)) != 1 or int(entity.dxf.get('column_count', 1)) != 1):
-                unknown(entity, matrices, path, '未读取外参、缺块、循环或阵列实例文字')
-            else:
-                try:
-                    child_matrices = (*matrices, entity.matrix44())
-                    for child in block:
-                        visit(child, child_matrices, path, (*stack, name))
-                except (ValueError, ArithmeticError):
-                    unknown(entity, matrices, path, '块实例变换不能核验文字适用范围')
+            try:
+                rows, columns = _insert_cell_context(entity)
+            except (ValueError, ArithmeticError) as exc:
+                # The array itself has not been bounded cell by cell. Its
+                # surrogate bbox must not turn an incomplete scan into absence.
+                uninspected.append(dict(handle=entity.dxf.handle, entity_type=kind,
+                    instance_path=path, bbox=None, reason=str(exc)))
+                return
+            is_array = rows != 1 or columns != 1
+            for row in range(rows):
+                for column in range(columns):
+                    cell_path = path + (f'[{row},{column}]' if is_array else '')
+                    try:
+                        virtual, offset = _insert_cell(entity, row, column)
+                        if is_array:
+                            checked_array_cells.append(dict(handle=entity.dxf.handle,
+                                instance_path=cell_path, row=row, column=column,
+                                parent_instance_path=path.rsplit('/', 1)[0],
+                                offset_in_parent_coordinates=list(offset)))
+                        from ezdxf.math import Matrix44
+                        # ATTRIB positions are already in the INSERT's parent
+                        # coordinate system. Apply the cell offset once, then
+                        # only the ancestors, never this INSERT matrix again.
+                        attribute_matrices = (*matrices, Matrix44.translate(*offset))
+                        for attrib in entity.attribs:
+                            visit(attrib, attribute_matrices, cell_path, stack)
+                        if context_issue:
+                            unknown(entity, matrices, cell_path, context_issue + '，不能证明已完整读取适用单位文字', virtual)
+                        if block is None or block.block.is_xref or name in stack or len(stack) >= 32:
+                            unknown(entity, matrices, cell_path, '未读取cell内外参、缺块、循环或完整父链文字', virtual)
+                        else:
+                            child_matrices = (*matrices, virtual.matrix44())
+                            for child in block:
+                                visit(child, child_matrices, cell_path, (*stack, name))
+                    except (ValueError, ArithmeticError):
+                        unknown(entity, matrices, cell_path, '阵列cell或块实例变换不能核验文字适用范围')
         elif kind == 'DIMENSION':
             try:
                 block, offset = _dimension_render_context(doc, entity)
@@ -477,6 +584,7 @@ def _search_unit_texts(doc, frame_box):
             'text_count': sum(counts.values()), 'by_block_count': counts, 'whole_document_unit_text_hits': all_hits,
             'active_text_count': active_text_count, 'unit_text_matches': hits, 'uninspected_active_text_carriers': uninspected,
             'non_coordinate_unit_texts': noncoordinate,
+            'checked_array_cells': checked_array_cells,
             'excluded_outside_frame': excluded, 'status': 'CONFLICT' if hits else 'UNRESOLVED' if uninspected else 'COMPLETE',
             'absence_scope': 'current_frame_active_Model_instances',
             'limitations': ['未使用块定义和其他图页不作本框单位声明；当前框可能承载文字但未读清的对象必须未决']}
@@ -516,12 +624,15 @@ def verify_geometric_unit_evidence(request, manifest, scope):
     denominator = float(match[1])
     if not math.isfinite(denominator) or denominator <= 0:
         raise ValueError('图签比例分母须为正数')
+    paper_sources = _paper_size_evidence(doc, request, box)
+    papers = ({'SOURCE_DECLARED': paper_sources[0]['paper_size_mm']} if paper_sources else ISO_A_MM)
     options = []
-    for name, sides in ISO_A_MM.items():
-        for paper in (sides, sides[::-1]):
+    for name, sides in papers.items():
+        for paper in dict.fromkeys((tuple(sides), tuple(sides[::-1]))):
             ratios = [p * denominator / 1000. / span for p, span in zip(paper, (width, height))]
             if all(abs(v / metres - 1.) <= TOLERANCE + 1e-12 for v in ratios) and abs(ratios[0]/ratios[1]-1.) <= TOLERANCE + 1e-12:
-                options.append({'standard': 'ISO 216 A-series', 'paper': name, 'paper_size_mm': list(paper),
+                options.append({'standard': 'source_explicit_paper_size' if paper_sources else 'ISO 216 A-series',
+                                'paper': name, 'paper_size_mm': list(paper),
                                 'implied_metres_per_unit_by_axis': ratios})
     if len(options) != 1:
         raise ValueError('标准幅面两轴×源图签比例与候选单位不唯一或误差超过1%（不能凭一边吻合）')
@@ -552,8 +663,11 @@ def verify_geometric_unit_evidence(request, manifest, scope):
         if entity.has_xdata('AcadAnnotative'):
             raise ValueError('注释性尺寸的当前可见比例尚未核清，不能作本页尺度证据')
         facts = dimension_measurement_facts(entity)
-        if not facts['linear_measurement_usable'] or facts['text_mode'] != 'automatic' or facts['linear_factor'] != 1.:
-            raise ValueError('尺寸须为无覆盖的线性尺寸，DIMLFAC=1且定义点、缓存/样式无冲突')
+        if not facts['linear_measurement_usable'] or facts['text_mode'] != 'automatic':
+            raise ValueError('尺寸须为无覆盖的线性尺寸，正DIMLFAC且定义点、缓存/样式无冲突')
+        lfac = facts['linear_factor']
+        if not isinstance(lfac, (float, int)) or not math.isfinite(lfac) or lfac <= 0:
+            raise ValueError('DIMLFAC须为有限正数；负倍率涉及纸空间适用上下文，尚未支持')
         source_points = {k: facts['definition_points_wcs'][k] for k in ('defpoint2', 'defpoint3')}
         a, b = [transform(source_points[k]) for k in ('defpoint2', 'defpoint3')]
         if not all(_inside(p, box, strict=True) for p in (a, b)):
@@ -568,13 +682,17 @@ def verify_geometric_unit_evidence(request, manifest, scope):
         if not all(_inside(p, box) for p in rendered_points):
             raise ValueError('原尺寸渲染文字不在当前图框内，不能作本页独立尺寸证据')
         number, source_measured = float(rendered[0]['text']), facts['raw_measurement']
-        if number <= 0 or abs(number / source_measured - 1.) > TOLERANCE:
-            raise ValueError('原尺寸渲染数值与独立定义点实测不一致（容差1%）')
+        expected_display = source_measured * lfac
+        if not math.isfinite(expected_display) or expected_display <= 0 or number <= 0 or abs(number / expected_display - 1.) > TOLERANCE:
+            raise ValueError('原尺寸渲染数值与独立定义点实测×源DIMLFAC不一致（容差1%）')
         origin, axis = transform((0., 0., 0.)), transform((1., 0., 0.))
         instance_scale = math.dist(origin, axis)
         measured = source_measured * instance_scale
         # Displayed values remain the actual source string. INSERT transforms
         # geometry, not the represented physical dimension or its numeric text.
+        # A positive source DIMLFAC is accepted only where the unmodified
+        # display also agrees with actual world geometry. It is never applied
+        # again to world endpoints, the drawing-unit factor or any quantity.
         if not math.isfinite(measured) or measured <= 0 or abs(number / measured - 1.) > TOLERANCE:
             raise ValueError('块内尺寸源显示数值与 INSERT 世界几何尺度不自洽，单位保持未知；不能随实例倍率缩放标注物理值')
         dims = float(entity.override().get('dimscale', doc.header.get('$DIMSCALE', 1.)))
@@ -582,14 +700,26 @@ def verify_geometric_unit_evidence(request, manifest, scope):
             raise ValueError('注释比例/自适应 DIMSCALE 尚不支持')
         dimensions.append({'source_ref': ref, 'definition_points_wcs': {'defpoint2': a, 'defpoint3': b},
                            'source_definition_points': source_points, 'source_measurement': source_measured,
-                           'source_display_number': number, 'insert_world_scale': instance_scale,
+                           'source_display_number': number, 'source_expected_display_number': expected_display,
+                           'insert_world_scale': instance_scale,
                            'rendered_text_point_wcs': rendered_point,
                            'dimension_render_offset_ocs': render_offset,
-                           'dimension_render_offset_role': 'translate_existing_XY_picture_only_not_definition_or_display_number',
-                           'measurement': measured, 'rendered_source': rendered[0], 'dimlfac': 1., 'dimscale': dims,
+                           'dimension_render_offset_role': 'translate_existing_default_OCS_picture_only_not_definition_or_display_number',
+                           'measurement': measured, 'rendered_source': rendered[0], 'dimlfac': lfac, 'dimscale': dims,
+                           'dimlfac_role': 'source_display_multiplier_checked_against_world_geometry_not_unit_or_quantity_factor',
                            'dimscale_role': 'annotation_display_only_not_a_length_multiplier',
                            'evidence_class': 'independent_dimension_geometric_consistency', 'physical_unit_proven_independently': False})
     search = _search_unit_texts(doc, box)
+    if paper_sources:
+        paper_ids = {r['instance_path'] for r in paper_sources}
+        matches = search['unit_text_matches']
+        if not paper_ids <= {r['instance_path'] for r in matches}:
+            raise ValueError('纸张幅面引用未在当前活动源实例搜索中闭合')
+        search['checked_paper_size_matches'] = [dict(r, disposition='source_paper_size_only_not_coordinate_SI')
+                                               for r in matches if r['instance_path'] in paper_ids]
+        search['unit_text_matches'] = [r for r in matches if r['instance_path'] not in paper_ids]
+        search['status'] = ('CONFLICT' if search['unit_text_matches'] else
+                            'UNRESOLVED' if search['uninspected_active_text_carriers'] else 'COMPLETE')
     # A printed numeric DIM is not an SI definition. Optional coordinate-unit
     # clauses must be real, visible, active source instances inside this frame.
     coordinate_units, cited_instances = [], set()
@@ -597,7 +727,7 @@ def verify_geometric_unit_evidence(request, manifest, scope):
     if not isinstance(refs, list):
         raise ValueError('coordinate_unit_refs 须为实际坐标单位源引用数组')
     for ref in refs:
-        entity, transform = _ref(doc, ref)
+        entity, transform = _ref(doc, ref, allow_array_cells=True)
         if entity.dxftype() not in TEXT_TYPES or not _text_in_frame(entity, transform, box):
             raise ValueError('坐标单位原文须在当前图框内且可见')
         value = _text(entity).strip()
@@ -626,6 +756,7 @@ def verify_geometric_unit_evidence(request, manifest, scope):
             'formal_adoption': False, 'scope': scope, 'request': request,
             'source': {k: manifest[k] for k in ('authoritative_source', 'exchange_dxf')},
             'frame': {**options[0], 'bbox': box, 'polygon_wcs': box.vertices,
+                      'paper_size_source_evidence': paper_sources,
                       'axis_span_basis': 'source_rectangle_edges_in_world_coordinates',
                       'actual_axis_spans': [width, height], 'checked_axes': 2,
                       'scale_text': scale_text, 'scale_denominator': denominator, 'tolerance': TOLERANCE},
