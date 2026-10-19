@@ -9,6 +9,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import qto_cad_geometry as geo
+from qto_cad_color import resolve_manifest_color
 
 SCHEMA = "qto-symbol-census/1.0"
 REQUEST_SCHEMA = "qto-symbol-census-request/1.0"
@@ -18,6 +19,13 @@ CURVE_TYPES = {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "CIRCLE", "ELLIPSE", "SP
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def producer_dependencies():
+    """Independent census reports bind the code that constructs their full rows."""
+    folder = Path(__file__).resolve().parent
+    return [{"module": "_qto-shared-evidence/scripts/" + name, "sha256": digest(folder / name)}
+            for name in ("qto_symbol_geometry.py", "qto_cad_geometry.py", "qto_cad_color.py")]
 
 
 def snapshot(value):
@@ -209,8 +217,12 @@ def expand_source(source, max_depth=16):
     definitions, inventory = source["definitions"], source["inventory"]
     placed = Counter()
 
-    def emit(row, matrix, path, owner, stack, inherited_layer, inherited_issues, references):
+    def emit(row, matrix, path, owner, stack, inherited_layer, inherited_issues, references, parent_color=None):
         local = copy.deepcopy(row) if not path else geo.transform_row(row, matrix, path, row_layout[0])
+        # Match the pipe adapter's canonical source-row decoration before the
+        # full snapshot. Colour facts are compared too, never stripped or ignored.
+        local["color_evidence"] = resolve_manifest_color(row, source["manifest"], parent_color,
+            source_path=f"{path}/{row.get('record_id')}" if path else None)
         if local.get("layer") in {"", "0"} and owner:
             local["source_layer"] = local.get("layer")
             local["layer"] = inherited_layer
@@ -256,7 +268,7 @@ def expand_source(source, max_depth=16):
         reference = (row.get("raw_geometry") or {}).get("block_reference") or {}
         chain = references + ([{"insert_id": oid, **reference}] if reference.get("xref") else [])
         for child in definitions.get(name, []):
-            emit(child, child_matrix, child_path, oid, (*stack, name), local.get("layer"), obj["issues"], chain)
+            emit(child, child_matrix, child_path, oid, (*stack, name), local.get("layer"), obj["issues"], chain, local["color_evidence"])
         obj["issues"] = sorted(set(obj["issues"] + [issue for child in children[oid] for issue in emitted[child]["issues"]]))
 
     row_layout = [""]
@@ -485,7 +497,8 @@ def build_census(request_path):
     for obj in objects:
         if obj["entity_type"] == "INSERT":
             block_groups[(obj["source_id"], obj["layout"], str(obj["block_name"] or ""))].append(obj)
-    return {"schema_version": SCHEMA, "request": {"path": str(request_path), "sha256": digest(request_path)},
+    return {"schema_version": SCHEMA, "producer_dependencies": producer_dependencies(),
+            "request": {"path": str(request_path), "sha256": digest(request_path)},
             "sources": source_refs, "objects": objects, "shapes": shapes, "definition_inventory": definitions,
             "source_definition_records": definition_records, "out_of_scope_input_objects": out_of_scope_records,
             "block_instance_groups": [{"source_id": key[0], "layout": key[1], "block_name": key[2],

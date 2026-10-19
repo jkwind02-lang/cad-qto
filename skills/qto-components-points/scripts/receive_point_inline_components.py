@@ -14,7 +14,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence/scripts"))
-from point_host_attachment import digest, pipe_producer, reject_reparse_chain, validate_pipe_request, verify_pipe_consumption
+from point_host_attachment import digest, pipe_producer, pipe_dependencies, reject_reparse_chain, validate_pipe_request, verify_pipe_consumption
 
 
 ACTUAL_NAME = "管网实际消费结果.json"
@@ -116,6 +116,7 @@ def consume_staged(report_path, network_input, output, stage, records):
     requested = validate_pipe_request(report, data, network_input.parent, report_path.parent)
     actual_path, receipt_path = stage/ACTUAL_NAME, output/RECEIPT_NAME
     producer = pipe_producer()
+    producer_dependencies = pipe_dependencies(data)
     run = subprocess.run([sys.executable, "-B", str(producer), "--input", str(network_input), "--output", str(actual_path)],
                          stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", timeout=180)
     log = {"command": run.args, "returncode": run.returncode, "stdout": run.stdout, "stderr": run.stderr,
@@ -154,6 +155,10 @@ def consume_staged(report_path, network_input, output, stage, records):
                                                                        - {row["physical_id"] for row in report["rows"]})},
                "business_adoption_allowed": False,
                "meaning": "实际管网消费明细对账；数量工作接收不代表人工复核、真实DWG或正式采用"}
+    if producer_dependencies:
+        if producer_dependencies != pipe_dependencies(data):
+            raise ValueError("实际管网消费期间几何单位代码依赖已变化，拒绝发布接收凭据")
+        receipt["producer_dependencies"] = producer_dependencies
     verify_pipe_consumption(receipt, stage, replay=False)
     receipt["network_result"]["path"] = str(output/ACTUAL_NAME)
     payloads[ACTUAL_NAME] = actual_path.read_bytes()

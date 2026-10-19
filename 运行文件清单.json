@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 371,
+  "runtime_file_count": 379,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -91,6 +91,11 @@
       "bytes": 3071
     },
     {
+      "path": "_qto-shared-evidence/references/几何单位推定凭据.md",
+      "sha256": "876bce9a39edac98df74da843afb7e8398d79d59e8b769e1d327bca771c1b157",
+      "bytes": 6978
+    },
+    {
       "path": "_qto-shared-evidence/references/原图独立算量实测.md",
       "sha256": "e1c590e41105c64233b89b75c7791655f8575d3c2ad4e07bef0ef1905219ab02",
       "bytes": 4286
@@ -122,8 +127,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/局部识图与对象操作.md",
-      "sha256": "451fff657ff0bc05153033578d399a702eba1e2cf456ba0e511ab36188a92b0a",
-      "bytes": 9801
+      "sha256": "fbed2a43871b2899b8f84b5b4080d95e170c3a9e6f2d0b031dc63809f51df3b7",
+      "bytes": 10214
     },
     {
       "path": "_qto-shared-evidence/references/工程量成果最小字段.schema.json",
@@ -332,8 +337,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/extract_cad_neutral.py",
-      "sha256": "8a7e87d7e71ce2ad8af93e3798a15819d2d09d69df409556e4ab58a3ac0e460a",
-      "bytes": 29421
+      "sha256": "a04858efc24273169f91130cece10e1791437189c0269b64e9ec3f71958db377",
+      "bytes": 29667
     },
     {
       "path": "_qto-shared-evidence/scripts/migrate_cad_review_view.py",
@@ -349,6 +354,11 @@
       "path": "_qto-shared-evidence/scripts/qto_actor_identity.py",
       "sha256": "18b6805167e0070e73a1d479d056e2dbf0f74e24ed8005e4a0e19048ff5632ac",
       "bytes": 1209
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_cad_color.py",
+      "sha256": "30407775c51cd46977da924521dccdbfb834d23eefe45600b7efb0ae6456f805",
+      "bytes": 7568
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_cad_geometry.py",
@@ -384,6 +394,11 @@
       "path": "_qto-shared-evidence/scripts/qto_elevation_facts.py",
       "sha256": "783a955729e4f63408de0d2bce4e3158ef135e0c1ec9e4490ecc0a92175803a8",
       "bytes": 26117
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_geometric_unit_evidence.py",
+      "sha256": "dd717fed8c97b890d5679028e6b88f5bf5fecdf8af6f9eaa37edcb0cb5a1e295",
+      "bytes": 29039
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_human_review_evidence.py",
@@ -482,8 +497,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_symbol_geometry.py",
-      "sha256": "3306ccb281578d62f86b2b80f8256e4d711e921dacae7f09b4762d120c9da243",
-      "bytes": 34820
+      "sha256": "318cc098c6af56d5f879626c53c0f11c1c1fb3f80c62486293ff5574728e33e4",
+      "bytes": 35659
     },
     {
       "path": "_qto-shared-evidence/scripts/read_cad_basic.py",
@@ -627,8 +642,8 @@
     },
     {
       "path": "qto-components-points/scripts/point_host_attachment.py",
-      "sha256": "d7f301c8c757b3f80d5724e3d58ab66944718985d6a543079ee0bbac94fb656d",
-      "bytes": 47790
+      "sha256": "92fc7dc6fc6f1009d8cf41fbd6b6c8b02d25781628809986570456045f4c1fdc",
+      "bytes": 49604
     },
     {
       "path": "qto-components-points/scripts/point_name_candidates.py",
@@ -637,8 +652,8 @@
     },
     {
       "path": "qto-components-points/scripts/receive_point_inline_components.py",
-      "sha256": "e998629f86c8713e4e9652bac9a26fcabc604baef498040314b23aed3f170927",
-      "bytes": 11631
+      "sha256": "55aaae4ff9912d31e02ebf2b2597b778b4ade1999cb8c203ab2b7de4ceebbca5",
+      "bytes": 11980
     },
     {
       "path": "qto-components-points/SKILL.md",
@@ -796,6 +811,11 @@
       "bytes": 7429
     },
     {
+      "path": "qto-duct-air-systems/references/多引注规格组与跨清单立管.md",
+      "sha256": "dd0904f394e757c1c32f320bba366334262e2c43b9638ef3942b827734d33634",
+      "bytes": 4668
+    },
+    {
       "path": "qto-duct-air-systems/references/多行引注候选.md",
       "sha256": "aa2fe5ba2900fe36bc77817c99a194e0fd748d7d1003d1182446319bad3f61d4",
       "bytes": 3255
@@ -807,8 +827,8 @@
     },
     {
       "path": "qto-duct-air-systems/references/有源批量建网与覆盖差集.md",
-      "sha256": "20e08673ccfae3d26608eae410c038589f50fdf2dfd466a7b4a7b122a0a2bcf7",
-      "bytes": 16437
+      "sha256": "daa5a5f7eda7e9c3946a345d7cd5cb2baac29612634f05ae2b721cca4b048072",
+      "bytes": 17045
     },
     {
       "path": "qto-duct-air-systems/references/案例与接入清单.md",
@@ -841,6 +861,11 @@
       "bytes": 872
     },
     {
+      "path": "qto-duct-air-systems/references/颜色事实与有源材质分档.md",
+      "sha256": "3d5b7bd926426927870623844fb8a5f49f6d78f03f39a101ccfe2d7f473cbfea",
+      "bytes": 5876
+    },
+    {
       "path": "qto-duct-air-systems/scripts/bind_duct_vertical_annotations.py",
       "sha256": "ae05b40b315af377673031f457c873d8e4205d9b29b32116fe4fb376dea0b9a3",
       "bytes": 27512
@@ -852,8 +877,13 @@
     },
     {
       "path": "qto-duct-air-systems/scripts/build_duct_network_from_neutral.py",
-      "sha256": "69993e91cfed750940995fe365aecae1e19d77e32d903135494cf9764e04a711",
-      "bytes": 39875
+      "sha256": "832ad1912d35be424b9e05b7eb03e9cec3fbbe402576415779bd3117fa8ba9ec",
+      "bytes": 41044
+    },
+    {
+      "path": "qto-duct-air-systems/scripts/build_duct_riser_bundle_from_neutral.py",
+      "sha256": "aa9ada6211a15c4f66da9fa0b9976ad489cd98c630d8f5bcf85304887fe46ff1",
+      "bytes": 18870
     },
     {
       "path": "qto-duct-air-systems/scripts/build_duct_vertical_annotation_review.py",
@@ -864,6 +894,16 @@
       "path": "qto-duct-air-systems/scripts/calculate_straight_duct_reference.py",
       "sha256": "98c362844c7c435cd3b8687e4e4659decca8723caed86e1f8fdea9802a5f9886",
       "bytes": 1877
+    },
+    {
+      "path": "qto-duct-air-systems/scripts/duct_callout_groups.py",
+      "sha256": "11bd32ad195584382cedd90513a6a07eb9394b58e56b0298bc6e8db51f414a22",
+      "bytes": 2756
+    },
+    {
+      "path": "qto-duct-air-systems/scripts/duct_color_material.py",
+      "sha256": "ee4040200fb97ac52b26679d241acaa4af795c2b5af0741181a6fbfe9a0c3c91",
+      "bytes": 12490
     },
     {
       "path": "qto-duct-air-systems/scripts/duct_curved_outline.py",
@@ -882,23 +922,23 @@
     },
     {
       "path": "qto-duct-air-systems/scripts/duct_inline_reception.py",
-      "sha256": "da35fa4c1a47c2ee04e04da8c9f538b031b136b83791de683deb15731d35acaf",
-      "bytes": 14626
+      "sha256": "25ad1ce581a20f0c4e639b28d7b360033958ca4548299054400f42b88efed129",
+      "bytes": 14916
     },
     {
       "path": "qto-duct-air-systems/scripts/duct_network_extensions.py",
-      "sha256": "61e9ae4141a03001412ea84a43dd1ff84602d8a4d6474e74366f827860edc04f",
-      "bytes": 22674
+      "sha256": "f1839fc84230968f2acb7abdfeb2da6203ae67fa9475fd8cf4c45c66faafffc3",
+      "bytes": 23825
     },
     {
       "path": "qto-duct-air-systems/scripts/duct_source_recovery.py",
-      "sha256": "a1d14fa8961e55a557af784a57b4d280b834dfd32d3b3282d8d62dfaa207e82f",
-      "bytes": 24515
+      "sha256": "3c4a0e6eca9d5cf219dd634af6b0b78a886904713a63869ffccf3c76c9ada742",
+      "bytes": 25806
     },
     {
       "path": "qto-duct-air-systems/scripts/infer_duct_fittings_vertical.py",
-      "sha256": "4dd980a6ede161cf3fd27506e73aff1ee98ae34d5911a9d6c741c05affa2e8a3",
-      "bytes": 105379
+      "sha256": "166a3d36cd377e69137108349da5aaf92754c0c4c17f0fda22224853a93fabea",
+      "bytes": 105487
     },
     {
       "path": "qto-duct-air-systems/scripts/receive_duct_inline_components.py",
@@ -907,8 +947,8 @@
     },
     {
       "path": "qto-duct-air-systems/SKILL.md",
-      "sha256": "54266ac25013bc4500e7e68f38ae9c234e68c88c950f3c52f45d34ea31dc5d53",
-      "bytes": 9970
+      "sha256": "b2d9858d0f2d773d0aa1505958c2157f3c7bad14f52e2ab297dc0b2148c35557",
+      "bytes": 10913
     },
     {
       "path": "qto-earthwork-terrain/agents/openai.yaml",
@@ -1412,8 +1452,8 @@
     },
     {
       "path": "qto-pipe-networks/references/管网推算输入格式.md",
-      "sha256": "494c108bc806cd6e2e9e123fa5059241b5a517ec3a36a99e625711bcb8b396c1",
-      "bytes": 22439
+      "sha256": "ca3e3ea6c86916c563f31ab993e9292d6fb05aa80c2eb79ce20c2907d6fa20b8",
+      "bytes": 23270
     },
     {
       "path": "qto-pipe-networks/references/结果检查与输出.md",
@@ -1467,18 +1507,18 @@
     },
     {
       "path": "qto-pipe-networks/scripts/build_pipe_inference_input.py",
-      "sha256": "156255e8f625d007e6b54cfb2d6c5e7a03289c67c939a5b4a847e471e9c82141",
-      "bytes": 103191
+      "sha256": "73c2fc3f24bfa26f887ab906269b4b5512a7fbf17a2a8a6ffdd1499f11a91a21",
+      "bytes": 105740
     },
     {
       "path": "qto-pipe-networks/scripts/build_pipe_inference_inputs_batch.py",
-      "sha256": "c60ec978e89efd9c3d0f73a8f4ac58104d17ddae0339618f12c57f94c3ab1cc1",
-      "bytes": 72394
+      "sha256": "4b0d3081528157517e23ed617e88c6bfc9bf5965b59eb9a4a82c55c95fabf7be",
+      "bytes": 74424
     },
     {
       "path": "qto-pipe-networks/scripts/infer_pipe_network.py",
-      "sha256": "3cdff7821dcfd0970cb8506544294be43289e394abee722a5fad429f43786783",
-      "bytes": 97414
+      "sha256": "c731af74345c46f1de5cde12ac7dfa72fed97de4e5194afb16bdfce0615b1e9b",
+      "bytes": 107094
     },
     {
       "path": "qto-pipe-networks/scripts/measure_pipe_centerlines.py",
@@ -1547,8 +1587,8 @@
     },
     {
       "path": "qto-pipe-networks/SKILL.md",
-      "sha256": "ab7be3b8bc4f4c4d6b1cf98b5fdc2028673da87a155f3e079573452294b00e47",
-      "bytes": 18306
+      "sha256": "29a9cc4dc60514096da4d16759caad0afa7a7c083c49b22f8b9028ba5fed4bcd",
+      "bytes": 18808
     },
     {
       "path": "qto-rebar/agents/openai.yaml",

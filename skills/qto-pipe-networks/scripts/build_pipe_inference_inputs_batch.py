@@ -240,6 +240,13 @@ def load_mapping(path: Path) -> dict[str, Any]:
     finite(unit.get("factor_to_output"), "unit.factor_to_output")
     text(unit.get("output_unit"), "unit.output_unit")
     text(unit.get("source_id"), "unit.source_id")
+    geometric_by_frame = unit.get("geometry_evidence_by_frame")
+    if geometric_by_frame is not None:
+        if (not isinstance(geometric_by_frame, dict) or not geometric_by_frame
+                or any(not isinstance(v, dict) for v in geometric_by_frame.values())):
+            fail("unit.geometry_evidence_by_frame 必须按 frame_id 逐框给出原源几何证据请求")
+        if unit.get("geometry_evidence") is not None or unit.get("declaration") is not None:
+            fail("逐框几何单位请求不得与共享几何凭据或单位文字声明混填")
     declaration = unit.get("declaration")
     if declaration is not None:
         if not isinstance(declaration, dict):
@@ -769,7 +776,8 @@ def rule_from_family(family: dict[str, Any], frame_id: str) -> dict[str, Any]:
 
 
 def write_frame_inputs(frame: dict[str, Any], state: dict[str, Any], mapping: dict[str, Any], manifest_sha: str,
-                       frame_dir: Path, prescoped_path: Path | None = None) -> tuple[Path, Path, list[str]]:
+                       frame_dir: Path, prescoped_path: Path | None = None,
+                       cad_manifest_ref: dict[str, Any] | None = None) -> tuple[Path, Path, list[str]]:
     frame_id = frame["frame_id"]
     frame_dir.mkdir(parents=True, exist_ok=True)
     entries = []
@@ -814,6 +822,11 @@ def write_frame_inputs(frame: dict[str, Any], state: dict[str, Any], mapping: di
             })
         rules[f"{family['kind']}_rules"].append(rule)
     unit = dict(mapping["unit"])
+    geometric_by_frame = unit.pop("geometry_evidence_by_frame", None)
+    if geometric_by_frame is not None:
+        if frame_id not in geometric_by_frame:
+            fail(f"图框 {frame_id} 缺少本框 geometry_evidence；不得沿用相邻图框比例")
+        unit["geometry_evidence"] = geometric_by_frame[frame_id]
     declaration = unit.pop("declaration", None)
     if declaration is not None:
         corroboration_ids = [oid for item in declaration.get("geometric_corroboration") or [] for oid in item.get("object_ids") or []]
@@ -833,10 +846,22 @@ def write_frame_inputs(frame: dict[str, Any], state: dict[str, Any], mapping: di
             unit["declaration"]["source_excerpt"] = declaration["source_excerpt"]
         unit["declaration"]["adjudication_id"] = "UNIT"
         unit.setdefault("raw_unit", declaration["raw_unit"])
+    ledger_evidence = list(mapping["evidence"])
+    if unit.get("geometry_evidence") is not None:
+        if cad_manifest_ref is None:
+            fail("几何单位批量识别缺少实际读取CAD清单的固定版本来源")
+        source_evidence_id = "UNIT-CAD-MANIFEST-" + cad_manifest_ref["sha256"][:12]
+        if any(e.get("evidence_id") == source_evidence_id for e in ledger_evidence):
+            fail("几何单位源版本证据ID与输入冲突，不能覆盖已有证据")
+        ledger_evidence.append({"evidence_id": source_evidence_id, **cad_manifest_ref,
+            "source_sha256": manifest_sha, "kind": "cad_property", "locator": "当前实际读取的CAD清单及其交换DXF/布局/块流",
+            "observation": "批量入口以本轮真实CAD清单固定几何单位与路线识别共同来源版本，不以同原DWG哈希替代"})
+        for entry in entries:
+            entry["evidence_ids"].append(source_evidence_id)
     ledger = {
         "schema_version": adapter.MODEL_LEDGER_SCHEMA, "ledger_id": f"{mapping['mapping_id']}-{frame_id}", "ledger_version": str(mapping["mapping_version"]),
         "source_sha256": manifest_sha, "adoption_scope": "working", "review_status": "unreviewed",
-        "evidence": mapping["evidence"], "entries": entries,
+        "evidence": ledger_evidence, "entries": entries,
         "batch": {"generator": VERSION, "mapping_id": mapping["mapping_id"], "mapping_version": mapping["mapping_version"], "frame": {k: v for k, v in frame.items()}},
     }
     ledger_path = frame_dir / "模型工作识别记录.json"
@@ -1086,7 +1111,8 @@ def main(argv: list[str] | None = None) -> int:
                     continue
                 try:
                     prescoped = finalize_prescoped(frame, state, scan, mapping, manifest_path, cad_manifest, frame_dir)
-                    profile_path, ledger_path, skipped = write_frame_inputs(frame, state, mapping, manifest_sha, frame_dir, prescoped)
+                    profile_path, ledger_path, skipped = write_frame_inputs(frame, state, mapping, manifest_sha, frame_dir, prescoped,
+                        {"path": str(manifest_path), "sha256": sha256(manifest_path)})
                 except (OSError, BatchInputError, ValueError) as exc:
                     record.update(status="FAILED", failed_step=STEP_WRITE, error=str(exc))
                     diagnostics.append({"frame_id": frame_id, "step": STEP_WRITE, "object_class": "识别配置/识别记录", "error": str(exc)})

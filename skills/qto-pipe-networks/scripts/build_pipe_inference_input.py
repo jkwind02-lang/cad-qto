@@ -25,10 +25,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-eviden
 from model_recognition_basis import SCHEMA as MODEL_LEDGER_SCHEMA, load_working_entries, applies_to, recognition_basis, validate_working_basis
 
 import qto_cad_geometry as cad_geometry
+from qto_cad_color import resolve_manifest_color
 import qto_symbol_geometry as symbol_geometry
 from qto_actor_identity import is_model_identity
 from qto_cad_source_contract import (check_unit_factor, verify_source_file, unit_known, verify_unit_declaration_texts,
                                      verify_unit_corroboration, unit_tokens, UNIT_APPLIES_TO)
+from qto_geometric_unit_evidence import verify_geometric_unit_evidence
 
 from qto_pipe_topology import RouteIndex, route_distance, project_route, geometry_parts, scale_route_geometry
 from pipe_callout_stacks import targets as binding_targets, bind_stack
@@ -496,7 +498,7 @@ def expanded_manifest_rows(layout_path: Path, block_path: Path, manifest: dict[s
                 target["scope_extent_notes"] = cad_geometry.extent_note_labels(notes)
         return target
 
-    def expand(insert, parent_matrix, path, stack, layout, inherited_layer):
+    def expand(insert, parent_matrix, path, stack, layout, inherited_layer, parent_color):
         name = str(insert.get("block_name") or "")
         if name in empty:
             return   # draws nothing; the INSERT row itself carries empty_block_definition
@@ -522,6 +524,8 @@ def expanded_manifest_rows(layout_path: Path, block_path: Path, manifest: dict[s
         for row in definitions[name]:
             child_path = f"{path}/{name}"
             expanded = transform_row(row, matrix, child_path, layout)
+            expanded["color_evidence"] = resolve_manifest_color(row, manifest, parent_color,
+                source_path=f"{child_path}/{row.get('record_id')}")
             if expanded.get("layer") in {"", "0"}:
                 expanded["source_layer"] = expanded.get("layer")
                 expanded["layer"] = effective_layer
@@ -529,16 +533,17 @@ def expanded_manifest_rows(layout_path: Path, block_path: Path, manifest: dict[s
                 mark_extent(expanded, row, matrix)
             yield expanded
             if expanded.get("entity_type") == "INSERT":
-                yield from expand(row, matrix, f"{child_path}/{row.get('record_id')}", (*stack, name), layout, effective_layer)
+                yield from expand(row, matrix, f"{child_path}/{row.get('record_id')}", (*stack, name), layout, effective_layer, expanded["color_evidence"])
     for row in load_stream(layout_path):
         layout = str(row.get("layout") or "Model")
         if target_layout is not None and layout != target_layout:
             continue
+        row["color_evidence"] = resolve_manifest_color(row, manifest)
         if row.get("entity_type") == "INSERT":
             mark_extent(row, row, cad_geometry.IDENTITY)
         yield row
         if row.get("entity_type") == "INSERT":
-            yield from expand(row, cad_geometry.IDENTITY, str(row.get("record_id") or "LAYOUT-INSERT"), (), layout, str(row.get("layer") or ""))
+            yield from expand(row, cad_geometry.IDENTITY, str(row.get("record_id") or "LAYOUT-INSERT"), (), layout, str(row.get("layer") or ""), row["color_evidence"])
 
 
 PRESCOPED_SCHEMA = "qto-pipe-prescoped-rows/1.0"
@@ -700,7 +705,7 @@ def main() -> int:
         from pipe_gap_candidates import source_paths
         protected_paths += source_paths(profile, profile_path)[1:]
         protected_paths += review_source_paths(profile, profile_path)
-        planned_outputs = [output / name for name in ("管网对象选择审计输入.json", "管网对象选择审计.json", "管网推算输入.json", "管网中性对象处置清单.jsonl", "管网识别报告.json", "识图待续说明.md")]
+        planned_outputs = [output / name for name in ("管网对象选择审计输入.json", "管网对象选择审计.json", "管网推算输入.json", "管网中性对象处置清单.jsonl", "管网识别报告.json", "识图待续说明.md", "单位未决.json")]
         if args.inference_output:
             inferred_path = args.inference_output.absolute()
             planned_outputs += [inferred_path, inferred_path.with_name(inferred_path.stem + "_共线重合.csv")]
@@ -749,7 +754,27 @@ def main() -> int:
         declared_unit = None
         pending_unit_texts: dict[str, dict[str, Any] | None] | None = None
         pending_corroboration: dict[str, dict[str, Any] | None] = {}
-        if source_raw_unit is not None and not unit_known(source_raw_unit):
+        checked_geometry_unit = None
+        geometry_request = unit.get("geometry_evidence")
+        if geometry_request is not None:
+            if unit.get("declaration") is not None:
+                fail("declaration 与 geometry_evidence 是不同依据路径，不得混填或伪造单位声明")
+            if cad_manifest is None:
+                fail("geometry_evidence 必须绑定可重开原 DXF 的 --cad-manifest")
+            try:
+                checked_geometry_unit = verify_geometric_unit_evidence(geometry_request, cad_manifest, scope)
+                declared_unit = checked_geometry_unit["raw_unit"]
+                check_unit_factor(declared_unit, output_unit, factor, unit.get("raw_unit"))
+                checked_geometry_unit["cad_manifest"] = {"path": str(args.cad_manifest.resolve()), "sha256": sha256(args.cad_manifest)}
+            except (ValueError, OSError, KeyError, TypeError) as exc:
+                output.mkdir(parents=True, exist_ok=True)
+                (output / "单位未决.json").write_text(json.dumps({"status": "UNIT_UNRESOLVED", "raw_unit": None,
+                    "factor_to_output": None, "length": None, "quantity_level": "未决量", "scope": scope,
+                    "reason": str(exc), "formal_adoption": False,
+                    "geometric_diagnostic": getattr(exc, "partial_evidence", None)}, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
+                raise
+            source_raw_unit = declared_unit
+        elif source_raw_unit is not None and not unit_known(source_raw_unit):
             # INSUNITS 0 drawings carry no unit; only a model-reviewed unit statement
             # written on this drawing may supply it, never a layer or drafting habit.
             unit_declaration = unit.get("declaration")
@@ -1482,6 +1507,13 @@ def main() -> int:
             "valves": valves,
             "protected_source_paths": [str(p.resolve()) for p in protected_paths],
         }
+        if checked_geometry_unit is not None:
+            inference_input["geometric_unit_evidence"] = checked_geometry_unit
+            inference_input["geometric_unit_source_binding"] = {
+                "cad_manifest": checked_geometry_unit["cad_manifest"],
+                "recognition_ledger": {"path": str(ledger_path), "sha256": ledger_sha}}
+            inference_input["measurement_scope"] = scope
+            inference_input["unit_evidence_level"] = "inferred"
         if working_basis:
             inference_input["recognition_basis"] = working_basis
         if "overlap_review" in profile:
@@ -1538,7 +1570,8 @@ def main() -> int:
             "scope": scope,
             "unit": {"raw_unit": source_raw_unit, "factor_to_output": factor, "output_unit": output_unit, "source_id": unit_source_id,
                      "source_declared_unit": (cad_manifest.get("drawing_unit") or {}).get("raw_unit") if cad_manifest else unit.get("raw_unit"),
-                     "declaration": unit_declaration},
+                     "declaration": unit_declaration, "geometric_evidence": checked_geometry_unit,
+                     "evidence_level": "inferred" if checked_geometry_unit else None},
             "scope_boundary_objects": boundary_objects,
             "symbol_census_report": profile.get("symbol_census_report"),
             "counts": {

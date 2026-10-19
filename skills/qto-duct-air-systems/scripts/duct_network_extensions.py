@@ -48,15 +48,24 @@ def append_drawn_and_inline(data, result, spec_of):
     if 'neutral_binding' in data:
         from build_duct_network_from_neutral import build, read_ref
         binding=data['neutral_binding']; base=Path(data.get('_input_base','.'))
-        for name in ('manifest','profile','claims'):
-            if name in binding: read_ref(binding[name],base)
         def path(name):
             p=Path(binding[name]['path']);return p if p.is_absolute() else base/p
-        rebuilt,_=build(path('manifest'),path('profile'),path('claims') if 'claims' in binding else None)
+        if binding.get('kind')=='qto-duct-riser-source-bundle-binding/1.0':
+            from build_duct_riser_bundle_from_neutral import build as build_bundle
+            read_ref(binding['bundle'],base)
+            rebuilt,_=build_bundle(path('bundle'))
+        else:
+            for name in ('manifest','profile','claims'):
+                if name in binding: read_ref(binding[name],base)
+            rebuilt,_=build(path('manifest'),path('profile'),path('claims') if 'claims' in binding else None)
         if any(data.get(k)!=v for k,v in rebuilt.items()):
             raise ValueError('中性来源/识别配置重建结果与实际风管输入不同，拒绝被改写的源几何或系统规格')
     curves=data.get('drawn_curve_segments',[])
     if not isinstance(curves,list): raise ValueError('drawn_curve_segments必须是数组')
+    if data.get('quantity_scope')=='vertical_risers_only':
+        result['quantity_scope']='vertical_risers_only'
+        result['source_coordinate_units']={v['source_id']:v['coordinate_unit'] for v in data['neutral_binding']['sources']}
+        result['source_xy_unit_verified']=all(v!='raw_DU' for v in result['source_coordinate_units'].values())
     known_unit=data.get('unit')!='raw_DU'
     factor=canonical_scale(data['unit'])/canonical_scale(data.get('output_unit','m')) if known_unit else None
     ids={s['segment_id'] for s in data.get('segments',[])}
@@ -125,6 +134,8 @@ def append_drawn_and_inline(data, result, spec_of):
     for item in data.get('riser_projection_candidates',[]):
         if item.get('resolved_vertical_id'):continue
         result['pending'].append({'kind':'vertical_projection_height_unresolved',**item,'length':None,'reason':'竖井平面弧投影不是立管竖长；未提供高度或上下端标高依据'})
+    for pending in data.get('cross_source_identity_pending',[]):
+        result['pending'].append({'kind':'cross_source_riser_identity_unresolved',**copy.deepcopy(pending),'length':None})
     for scope in data.get('annotation_scope_candidates',[]):
         if scope['status']=='unresolved':result['pending'].append({'kind':'annotation_scope_unresolved',**scope,'length':None})
     coverage=data.get('coverage',{})

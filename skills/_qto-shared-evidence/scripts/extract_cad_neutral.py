@@ -25,6 +25,8 @@ except ImportError as exc:  # pragma: no cover - exercised by deployment checks
 
 from qto_cad_geometry import GEOMETRY_SCHEMA, LOCATION_SCHEMA, entity_geometry as extract_geometry_facts, read_dxf_with_diagnostics, resolve_underlay_dependency
 
+from qto_cad_color import SCHEMA as COLOR_SCHEMA, raw_color, layer_colors
+
 VERSION = "qto-cad-neutral-extractor/1.6.0"
 # Entity types whose named block is drawn as part of the entity (geometry blocks).
 GEOMETRY_BLOCK_TYPES = {"DIMENSION", "ARC_DIMENSION", "LARGE_RADIAL_DIMENSION", "ACAD_TABLE", "TABLE"}
@@ -138,6 +140,7 @@ def convert(entity: Any, *, layout: str, parent_block: str | None, source_hash: 
         }
     record = {
         "row_type": "entity",
+        "raw_color": raw_color(entity),
         "layout": layout,
         "parent_block": parent_block,
         "record_id": f"CAD-{handle}",
@@ -197,7 +200,7 @@ def failed_record(entity, layout, parent_block, source_hash, raw_unit, sequence,
     """Retain a locatable identity even when entity conversion/serialization fails."""
     handle = str(get_dxf(entity, "handle") or f"NOHANDLE-{sequence}")
     kind = entity.dxftype()
-    record = dict(row_type="entity", layout=layout, parent_block=parent_block,
+    record = dict(row_type="entity", raw_color=raw_color(entity), layout=layout, parent_block=parent_block,
                   record_id=f"CAD-{handle}", entity_handle=handle,
                   candidate_physical_id=f"CAD-{handle}", entity_type=kind,
                   object_name=kind, layer=str(get_dxf(entity, "layer", "")),
@@ -451,6 +454,8 @@ def main(argv=None) -> int:
             "extractor_version": VERSION,
             "geometry_schema_version": GEOMETRY_SCHEMA,
             "location_schema_version": LOCATION_SCHEMA,
+            "color_schema_version": COLOR_SCHEMA,
+            "layer_colors": layer_colors(document),
             "status": coverage["status"],
             "neutral_extraction_status": "PASS" if not failures else "PARTIAL",
             "read_coverage": {key: coverage[key] for key in ("entity_count", "capability_counts", "status_counts", "read_failed_count", "pending_object_count", "external_reference_count", "source_identity_issue_count", "source_identity_advisory_count", "source_read_warning_count", "quantity_coverage_proven")},

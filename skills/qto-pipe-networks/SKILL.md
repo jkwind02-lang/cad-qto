@@ -24,6 +24,8 @@ description: 管道管网算量与明细复核，覆盖给排水、消防水、�
 
 ## 执行顺序
 
+INSUNITS=0 且没有适用坐标单位声明时，可另按[几何单位推定凭据](../_qto-shared-evidence/references/几何单位推定凭据.md)的严格原源双类证据路径，通过单框 `unit.geometry_evidence` 或批量逐框请求进入最高规则推算；不伪造下文 `unit.declaration`。原源文字/不透明载体未核清、仅一类几何证据或范围未证明时仍未知，不出长度。此公共路径目前未接入局部工作台的 `unit_declaration` 操作入口。
+
 ### 1. 锁定任务范围
 
 直接读取 [图纸与资料范围筛选](../_qto-shared-evidence/references/图纸与资料范围筛选.md)。至少锁定业务专业、主要管道对象、系统、楼栋/楼层/区域、图纸类型与版本、输出维度和所需补充资料。

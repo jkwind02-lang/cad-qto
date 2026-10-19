@@ -1604,6 +1604,8 @@ def infer(data: dict[str, Any], *, input_base: Path | None = None) -> dict[str, 
     if any(key in data for key in ("drawn_curve_segments", "coverage", "valves", "riser_projection_candidates")) or net.unit == "raw_DU":
         from duct_network_extensions import append_drawn_and_inline
         append_drawn_and_inline({**data, "_input_base": str(input_base or Path.cwd())}, result, spec_of)
+    from duct_color_material import append_material_quantities
+    append_material_quantities(data, result)
     return result
 
 

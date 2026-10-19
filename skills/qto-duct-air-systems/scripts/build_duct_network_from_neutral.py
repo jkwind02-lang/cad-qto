@@ -18,11 +18,15 @@ import qto_cad_geometry as cg
 from qto_cad_source_contract import unit_known, canonical_scale
 from duct_network_extensions import checked_geometry
 from duct_source_recovery import atomic_outline_pairs, annotation_network_scope, resolve_riser_links
+from duct_callout_groups import bind_groups
 from duct_curved_outline import atomic_circular_pairs
 from duct_equidistant_midline import pair_descriptor, materialize as materialize_midline
 from bind_duct_vertical_annotations import write_protected_json
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'qto-components-points/scripts'))
 from point_host_attachment import reject_reparse_chain
+
+from qto_cad_color import verify_exchange_colors
+from duct_color_material import SCHEMA as COLOR_MATERIAL_SCHEMA, bind_rules as bind_color_rules, classify_sources
 
 SCHEMA='qto-duct-network-profile/1.0'
 
@@ -259,6 +263,8 @@ def build(manifest_path,profile_path,claims_path=None):
     rows=list(adapter.expanded_manifest_rows(stream,blocks,manifest,int(profile.get('max_block_depth',32)),failures,target_layout=layout))
     by_key={source_key(r):r for r in rows}
     if len(by_key)!=len(rows): raise ValueError('展开源实例身份重复')
+    original_color_texts=verify_exchange_colors(manifest, rows)
+    color_rules=bind_color_rules(profile,by_key,original_color_texts,source,layout,space,crop)
     target=profile.get('target_layer_pattern'); text(target,'target_layer_pattern'); re.compile(target)
     protected=[manifest_path,profile_path,stream,blocks,Path(manifest['authoritative_source']['path']),Path(manifest['exchange_dxf']['path'])]
     entries=[]; parts=[]
@@ -267,7 +273,8 @@ def build(manifest_path,profile_path,claims_path=None):
         key=source_key(r); geo=r.get('geometry'); notes=r.get('geometry_issues',[])
         base={'source_record_id':r.get('source_definition_record_id',r['record_id']),'source_instance_path':key,
               'source_sha256':source,'layout':layout,'space_id':space,'layer':r.get('layer'),'entity_type':r.get('entity_type'),
-              'instance_transform':r.get('instance_transform'),'geometry_issues':notes}
+              'instance_transform':r.get('instance_transform'),'geometry_issues':notes,
+              'color_evidence':copy.deepcopy(r.get('color_evidence'))}
         raw_parts=geo.get('parts',[]) if isinstance(geo,dict) and not notes else []
         for i,part in enumerate(raw_parts or [None]):
             item={**base,'source_key':key+'#'+str(i) if raw_parts else key+'#unrecovered','part_index':i if raw_parts else None,
@@ -299,6 +306,10 @@ def build(manifest_path,profile_path,claims_path=None):
             raise ValueError('识别规则与有源证据的范围/系统/截面/画法不一致:'+rid)
         text(rule.get('system'),'system')
         if rule['system'] in {'未知','未决','unknown'}: raise ValueError('系统未决不能入量')
+        group_values={};group_scopes=[]
+        if rule.get('annotation_bindings') is not None:
+            group_values,group_scopes=bind_groups(rule,evidence,by_key,unit,bind_tag,section_values,annotation_network_scope,match,source_key)
+        annotation_scopes.extend({**v,'rule_id':rid} for v in group_scopes)
         section,elevation=bind_tag(rule,evidence,by_key,unit)
         scope=annotation_network_scope(rule,evidence,by_key,match,source_key) if rule.get('annotation_binding') else None
         if scope: annotation_scopes.append({**scope,'rule_id':rid})
@@ -314,6 +325,8 @@ def build(manifest_path,profile_path,claims_path=None):
         for item in parts:
             if match(rule.get('selector',{}),item['row'],item['key']):
                 chosen=config
+                if rule.get('annotation_bindings') is not None:
+                    chosen={**config,**(group_values.get(item['entry']['source_key']) or {'section':None,'dimensions':{},'elevation':None,'annotation_scope_status':'unbound'})}
                 if scope and item['entry']['source_key'] not in scope['target_part_keys']:
                     chosen={**config,'section':None,'dimensions':{},'elevation':None,'annotation_scope_status':'unbound'}
                 selected.setdefault(item['entry']['source_key'],[]).append(chosen)
@@ -327,6 +340,7 @@ def build(manifest_path,profile_path,claims_path=None):
              'source_geometry_refs':[{k:p['entry'][k] for k in ('source_key','geometry_sha256','geometry','instance_transform','part_index')} for p in items],
              **rule['dimensions'],'section':rule['section'],'size_evidence_level':'规则推算','classification_proofs':[rule['classification_proof']],
              'representation':rule['representation'],'length_evidence_level':'规则推算' if rule['representation']=='outline' else '确认','geometry':geo}
+        row['color_material']=classify_sources(items,color_rules)
         if rule.get('elevation') and rule['elevation']['value'] is not None: row['elevation']=rule['elevation']
         if rule.get('annotation_scope_status'):row['annotation_scope_status']=rule['annotation_scope_status']
         info=checked_geometry(geo);row.update(start=info['start'],end=info['end'])
@@ -460,6 +474,8 @@ def build(manifest_path,profile_path,claims_path=None):
           'riser_projection_candidates':risers,'coverage':coverage,'fittings':[],
           'neutral_binding':{'manifest':ref(manifest_path),'profile':ref(profile_path),'authoritative_source':manifest['authoritative_source'],
                             'exchange_dxf':manifest['exchange_dxf'],'layout_entities':ref(stream),'block_definitions':ref(blocks)}}
+    data['color_material_schema_version']=COLOR_MATERIAL_SCHEMA
+    data['color_material_rules']=color_rules
     if claims_path: data["neutral_binding"]["claims"]=ref(claims_path)
     if annotation_scopes:data['annotation_scope_candidates']=annotation_scopes
     if riser_verticals:data['riser_vertical_items']=riser_verticals

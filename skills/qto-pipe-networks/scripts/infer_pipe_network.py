@@ -27,6 +27,8 @@ INPUT_VERSIONS = {
 }
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_qto-shared-evidence" / "scripts"))
 from model_recognition_basis import validate_working_basis
+from qto_geometric_unit_evidence import verify_geometric_unit_credential
+from qto_cad_source_contract import canonical_scale, verify_source_file
 from qto_pipe_scope_quantity import boundary_context, restore_omissions
 from qto_pipe_topology import (prepare_network, make_endpoint_nodes, gap_pairs, add_interfaces,
     NodeLocator, RouteIndex, ambiguous_role_nodes, finalize_network, review_markdown)
@@ -146,6 +148,119 @@ def weaker_level(levels: list[str]) -> str:
     return min(levels, key=lambda item: LEVEL_RANK[item])
 
 
+def verify_geometric_unit_source_binding(data, credential, checked):
+    """Require the real recognition ledger, versioned CAD evidence and source object chain."""
+    binding = data.get("geometric_unit_source_binding") or {}
+    basis = data.get("recognition_basis")
+    if basis is not None:
+        validate_working_basis(basis)
+        ledger_ref = {"path": basis["ledger_path"], "sha256": basis["ledger_sha256"]}
+    else:
+        ledger_ref = binding.get("recognition_ledger")
+    if not isinstance(ledger_ref, dict):
+        fail("几何单位推算缺少实际识别台账来源，不能仅凭同范围或自填原图名称出量")
+    verify_source_file(ledger_ref, "几何单位实际识别台账")
+    ledger_path = Path(ledger_ref["path"])
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8-sig"))
+    source_sha = checked["source"]["authoritative_source"]["sha256"]
+    if (ledger.get("schema_version") not in {"qto-model-recognition-ledger/1.0", "qto-project-adjudication-ledger/1.0"}
+            or ledger.get("source_sha256") != source_sha):
+        fail("几何单位凭据原图与实际识别台账原图身份不一致，不能套另一DXF尺度")
+    if binding.get("recognition_ledger") is not None:
+        verify_source_file(binding["recognition_ledger"], "已绑定识别台账")
+        if binding["recognition_ledger"]["sha256"] != ledger_ref["sha256"]:
+            fail("几何单位来源绑定与实际recognition_basis台账不同")
+    manifest_ref = binding.get("cad_manifest") or credential["cad_manifest"]
+    verify_source_file(manifest_ref, "实际数量来源CAD清单")
+    if manifest_ref["sha256"] != credential["cad_manifest"]["sha256"]:
+        fail("实际管网CAD清单与几何单位凭据清单身份不一致")
+    manifest = json.loads(Path(manifest_ref["path"]).read_text(encoding="utf-8-sig"))
+    if any(manifest.get(k, {}).get("sha256") != checked["source"][k]["sha256"] for k in ("authoritative_source", "exchange_dxf")):
+        fail("实际CAD清单的原图/交换DXF与几何单位凭据源不一致")
+    artifacts = [(manifest.get("artifacts") or {}).get(k) for k in ("layout_entities", "block_definitions")]
+    for ref in artifacts:
+        verify_source_file(ref, "实际源对象流")
+    # A drawing hash alone cannot distinguish two exchange/re-extraction versions.
+    # Only evidence actually used by an active recognition entry may establish it.
+    used_evidence = {i for entry in ledger.get("entries", []) if entry.get("status") == "active"
+                     for i in entry.get("evidence_ids", [])}
+    evidence_shas = set()
+    evidence_refs = []
+    for evidence in ledger.get("evidence", []):
+        if evidence.get("evidence_id") not in used_evidence:
+            continue
+        ref = {"path": str((ledger_path.parent / evidence["path"]).resolve()), "sha256": evidence.get("sha256")}
+        verify_source_file(ref, "实际识别来源证据")
+        evidence_shas.add(ref["sha256"])
+        evidence_refs.append(ref)
+    version_proven = (manifest_ref["sha256"] in evidence_shas
+                      or checked["source"]["exchange_dxf"]["sha256"] in evidence_shas)
+    if not version_proven:
+        fail("实际识别台账没有绑定当前CAD清单/交换DXF版本；仅同原DWG哈希或自列中性流不足以套用单位")
+    if data.get("source_sha256") is not None and data["source_sha256"] != source_sha:
+        fail("实际管网输入原图与几何单位凭据原图身份不一致")
+    rows = {}
+    for ref in artifacts:
+        with Path(ref["path"]).open(encoding="utf-8-sig") as stream:
+            for line in stream:
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if row.get("row_type") != "entity":
+                    continue
+                ident = row.get("record_id")
+                if not isinstance(ident, str) or ident in rows or row.get("source_sha256") != source_sha:
+                    fail("实际源对象流身份缺失、重复或不属于几何单位原图")
+                rows[ident] = row
+
+    def resolve(ident):
+        if ident.startswith("CADINST-"):
+            path = ident[len("CADINST-"):].split("/")
+            if len(path) < 3 or len(path) % 2 != 1:
+                fail("实际源实例路径不是完整的INSERT/块/叶对象链")
+            row = rows.get(path[0])
+            if row is None or row.get("parent_block") is not None or row.get("layout") != "Model":
+                fail("源实例路径没有本图Model真实根对象")
+            for index in range(1, len(path), 2):
+                child = rows.get(path[index+1])
+                if (row.get("entity_type") != "INSERT" or row.get("block_name") != path[index]
+                        or child is None or child.get("parent_block") != path[index]):
+                    fail("实际源实例引用与原图块归属链不一致")
+                row = child
+            return row
+        row = rows.get(ident)
+        if row is None or row.get("parent_block") is not None or row.get("layout") != "Model":
+            fail("几何单位实际管段引用缺少本图真实Model对象或完整实例链")
+        return row
+
+    matched = []
+    for segment in data.get("segments", []):
+        if segment.get("source_sha256") is not None and segment["source_sha256"] != source_sha:
+            fail("实际管段源身份与几何单位凭据不一致")
+        refs = []
+        explicit = segment.get("source_record_id")
+        if isinstance(explicit, str):
+            instance = segment.get("source_instance_path")
+            if rows.get(explicit, {}).get("parent_block") is not None and isinstance(instance, str):
+                explicit = instance if instance.startswith("CADINST-") else "CADINST-" + instance
+            refs.append(explicit)
+        for ref in segment.get("source_ids", []):
+            if isinstance(ref, str) and ref.startswith("EV-CAD-"):
+                refs.append(ref[len("EV-CAD-"):])
+            elif isinstance(ref, str) and ref.startswith(("CAD-", "CADINST-")):
+                refs.append(ref)
+        if not refs:
+            fail("几何单位实际管段没有可回读的CAD源对象引用")
+        for ref in set(refs):
+            row = resolve(ref)
+            if row.get("entity_type") not in {"LINE", "LWPOLYLINE", "POLYLINE", "ARC", "SPLINE"}:
+                fail("实际管段源对象不是本图可量测路线")
+            matched.append(ref)
+    return {"cad_manifest": manifest_ref, "recognition_ledger": ledger_ref, "source_sha256": source_sha,
+            "exchange_dxf_sha256": checked["source"]["exchange_dxf"]["sha256"], "source_artifacts": artifacts,
+            "recognition_evidence": evidence_refs, "verified_source_object_refs": sorted(set(matched))}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="建立管网虚拟拓扑并形成分层 DN/阀门候选")
     parser.add_argument("--input", required=True, type=Path)
@@ -156,6 +271,27 @@ def main() -> int:
         data = load(args.input.resolve())
         overlap_input = data
         protected_sources = source_paths(data, args.input) + review_source_paths(data, args.input)
+        geometry_unit = data.get("geometric_unit_evidence")
+        if geometry_unit is not None:
+            if not isinstance(data.get("measurement_scope"), dict):
+                fail("几何单位推算必须保留 measurement_scope，不能仅复制比例或PASS标记")
+            checked_geometry = verify_geometric_unit_credential(geometry_unit, data["measurement_scope"])
+            checked_geometry["cad_manifest"] = geometry_unit["cad_manifest"]
+            geometry_unit = checked_geometry
+            geometry_source_binding = verify_geometric_unit_source_binding(data, geometry_unit, checked_geometry)
+            protected_sources += [Path(geometry_source_binding[k]["path"]) for k in ("cad_manifest", "recognition_ledger")]
+            protected_sources += [Path(ref["path"]) for ref in geometry_source_binding["source_artifacts"] + geometry_source_binding["recognition_evidence"]]
+            protected_sources += [Path(geometry_unit["cad_manifest"]["path"])]
+            protected_sources += [Path(ref["path"]) for ref in checked_geometry["source"].values()]
+            from qto_cad_geometry import summarize
+            from qto_pipe_topology import geometry_parts, route_geometry
+            factor = checked_geometry["metres_per_drawing_unit"] / canonical_scale(data.get("unit"))
+            bounds = data["measurement_scope"]["bounds"]
+            for segment in data.get("segments", []):
+                extent = summarize(route_geometry(geometry_parts(segment)))["bbox"]
+                if (extent is None or not bounds['xmin'] * factor <= extent[0] <= extent[2] < bounds['xmax_exclusive'] * factor
+                        or not bounds['ymin'] * factor <= extent[1] <= extent[3] < bounds['ymax_exclusive'] * factor):
+                    fail("几何单位推算管段越出凭据 scope；跨框对象不能套用本框尺度")
         protect_review_outputs([args.output], protected_sources)
         data, route_preparation = prepare_network(data)
         uncertain_change_systems = set()
@@ -1172,6 +1308,12 @@ def main() -> int:
                 independent_assignments[sid].update(dn=None,evidence_level=None,quantity_level="未决量",method="no_independent_dn_path",
                     source_ids=[],assumption_ids=[],alternatives=[])
 
+        if geometry_unit is not None:
+            for group in (assignments, independent_assignments):
+                for assignment in group.values():
+                    if assignment.get("evidence_level") == "confirmed":
+                        assignment.update(evidence_level="inferred", quantity_level="规则推算量")
+                    assignment["coordinate_unit_evidence_level"] = "inferred"
         for run in runs:
             assigned = [assignments[segment_id]["dn"] for segment_id in run["segments"]]
             if run["status"] == "unresolved" and any(assigned):
@@ -1772,6 +1914,11 @@ def main() -> int:
             "decision_queue": decision_queue,
         }
         output = finalize_network(output, route_preparation, segments, snap_stats)
+        if geometry_unit is not None:
+            output["geometric_unit_evidence"] = geometry_unit
+            output["geometric_unit_source_binding"] = geometry_source_binding
+            output["unit_evidence_level"] = "inferred"
+            output["measurement_scope"] = data["measurement_scope"]
         output["overlap_review"] = review_overlaps(overlap_input, args.input, bridges, segments)
         output["overlap_review_source_paths"] = output["overlap_review"].pop("source_paths")
         output_path = args.output.resolve()
@@ -1780,6 +1927,8 @@ def main() -> int:
         summary_view = {**output, "length_summary": independent_length_summary,
                         "restored_omission_length": 0 if inclusive_axis_length else output["restored_omission_length"]}
         summary = review_markdown(summary_view) + review_pending_gaps(output) + overlap_markdown(output["overlap_review"])
+        if geometry_unit is not None:
+            summary += "\n单位依据：" + geometry_unit["basis"] + "；相关长度最高为规则推算量。\n"
         summary_path = output_path.with_name(output_path.stem + "_" + hashlib.sha256(summary.encode()).hexdigest()[:10] + "_复核摘要.md")
         overlap_path = output_path.with_name(output_path.stem + "_共线重合.csv")
         protect_review_outputs([args.output, summary_path, overlap_path], protected_sources)

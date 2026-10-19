@@ -92,6 +92,23 @@ def pipe_producer():
     return Path(__file__).resolve().parents[2] / "qto-pipe-networks/scripts/infer_pipe_network.py"
 
 
+def pipe_dependencies(network_input):
+    """Geometric unit mode always binds its actual verifier code, independently of replay."""
+    credential = network_input.get("geometric_unit_evidence")
+    if credential is None:
+        return []
+    from qto_geometric_unit_evidence import (geometric_unit_runtime_dependencies,
+                                           verify_geometric_unit_runtime_identity)
+    verify_geometric_unit_runtime_identity(credential)
+    source_sha = (credential.get("source") or {}).get("authoritative_source", {}).get("sha256")
+    if network_input.get("source_sha256") is not None and network_input["source_sha256"] != source_sha:
+        raise ValueError("实际管网来源与几何单位凭据来源不一致")
+    binding = network_input.get("geometric_unit_source_binding")
+    if isinstance(binding, dict) and binding.get("source_sha256") is not None and binding["source_sha256"] != source_sha:
+        raise ValueError("实际消费识别来源绑定与几何单位原源不同")
+    return geometric_unit_runtime_dependencies()
+
+
 def validate_pipe_request(report, data, network_base, report_base, *, allow_generated_duct_hosts=False):
     """The single preflight used by both the consumer and receipt replay.
 
@@ -176,7 +193,7 @@ outside this request's uniqueness guarantee, and must be explicitly scoped later
 
 
 def verify_pipe_consumption(receipt, base, *, replay=True, current_outlets=None):
-    """Recheck actual producer output and its quantity rows. A profile cannot assert receipt."""
+    """Always replay actual output. ``replay`` remains a compatibility-only argument."""
     inp, inp_ref = frozen_file(receipt.get("network_input"), base, "network_input")
     result, result_ref = frozen_file(receipt.get("network_result"), base, "network_result")
     request, _ = frozen_file(receipt.get("attachment_request"), base, "attachment_request")
@@ -193,18 +210,27 @@ def verify_pipe_consumption(receipt, base, *, replay=True, current_outlets=None)
     producer = pipe_producer()
     if receipt.get("producer_sha256") != digest(producer):
         raise ValueError("接收结果生产者版本已变化，必须重跑实际管网消费")
-    if replay:
-        with tempfile.TemporaryDirectory(prefix="point-reception-") as directory:
-            output = Path(directory) / "replay.json"
-            try:
-                run = subprocess.run([sys.executable, "-B", str(producer), "--input", inp_ref["path"], "--output", str(output)],
-                                     stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", timeout=180)
-            except subprocess.TimeoutExpired as exc:
-                raise ValueError("实际管网消费重放超时，数量接收未核验") from exc
-            if run.returncode != 0 or not output.is_file():
-                raise ValueError("接收结果实际管网消费重放失败:" + run.stderr[-500:])
-            if json.loads(output.read_text(encoding="utf-8-sig")) != result:
-                raise ValueError("接收结果与相同版本实际管网消费输出不一致")
+    if (inp.get("geometric_unit_evidence") is not None or result.get("geometric_unit_evidence") is not None
+            or receipt.get("producer_dependencies") is not None):
+        if inp.get("geometric_unit_evidence") is None or result.get("geometric_unit_evidence") is None:
+            raise ValueError("几何单位输入与实际消费结果的依赖路径不一致，不得删除标识回避校验")
+        pipe_dependencies(inp)
+        pipe_dependencies(result)
+        from qto_geometric_unit_evidence import verify_geometric_unit_runtime_dependencies
+        verify_geometric_unit_runtime_dependencies(receipt.get("producer_dependencies"))
+    # A caller-controlled flag or removable provenance fields cannot select a
+    # weaker acceptance path, including the receiver's private prepublication stage.
+    with tempfile.TemporaryDirectory(prefix="point-reception-") as directory:
+        output = Path(directory) / "replay.json"
+        try:
+            run = subprocess.run([sys.executable, "-B", str(producer), "--input", inp_ref["path"], "--output", str(output)],
+                                 stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", timeout=180)
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError("实际管网消费重放超时，数量接收未核验") from exc
+        if run.returncode != 0 or not output.is_file():
+            raise ValueError("接收结果实际管网消费重放失败:" + run.stderr[-500:])
+        if json.loads(output.read_text(encoding="utf-8-sig")) != result:
+            raise ValueError("接收结果与相同版本实际管网消费输出不一致")
     valves = result.get("valves")
     if not isinstance(valves, list) or result.get("metrics", {}).get("valve_count") != len(valves):
         raise ValueError("管网实际valves明细和数量不一致")

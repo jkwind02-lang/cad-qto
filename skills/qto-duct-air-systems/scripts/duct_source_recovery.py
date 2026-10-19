@@ -209,9 +209,22 @@ def annotation_network_scope(rule, evidence, by_key, match, source_key):
         if key in keys or not match(rule.get('selector',{}),row,key):continue
         for i,p in enumerate((row.get('geometry') or {}).get('parts',[])):
             if p['kind']=='line' and not row.get('geometry_issues'):targets.append((key+'#'+str(i),p))
+    if cfg.get('target_contact')=='source_curve_endpoint':
+        import qto_cad_geometry as cg
+        targets=[]
+        for row in by_key.values():
+            key=source_key(row)
+            if key in keys or row.get('geometry_issues') or not match(rule.get('selector',{}),row,key):continue
+            for i,p in enumerate((row.get('geometry') or {}).get('parts',[])):
+                if p['kind']=='line':ends=[p['start'],p['end']]
+                elif p['kind']=='ellipse_arc':ends=[cg.conic_point(p,p['start_param']),cg.conic_point(p,p['start_param']+p['sweep_param'])]
+                else:continue
+                targets.append((key+'#'+str(i),ends))
+    elif cfg.get('target_contact') not in (None,'line_body'):
+        raise ValueError('不支持的引线接触语义')
     matches=[]
     for tip in tips:
-        hits=[key for key,p in targets if distance_to_line(nodes[tip],p)<=target_tol]
+        hits=[key for key,p in targets if (min(math.dist(nodes[tip],end) for end in p)<=target_tol if cfg.get('target_contact')=='source_curve_endpoint' else distance_to_line(nodes[tip],p)<=target_tol)]
         if len(hits)!=1:
             return {**status,'status':'unresolved','reason':'引线末端没有唯一实际管段；多支路中任一歧义阻断本标注适用范围',
                     'tip_point':nodes[tip],'candidate_part_keys':hits}
