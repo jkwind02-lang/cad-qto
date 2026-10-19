@@ -122,10 +122,22 @@ def append_drawn_and_inline(data, result, spec_of):
             result['vertical_items'].append(copy.deepcopy(item));length=item['length'];riser_total+=length
             result['source_riser_summary'].append({'vertical_id':vid,'system':item['system'],'section':item['section'],'length':length,'unit':'m'})
             if known_unit:
-                spec=spec_of(item);group=result['length_summary'].setdefault(item['system'],{}).setdefault('规则推算',{})
-                group[spec]=group.get(spec,0)+length
-                areas=result['theoretical_surface_summary'].setdefault(item['system'],{}).setdefault('规则推算',{})
-                areas[spec]=areas.get(spec,0)+item['theoretical_surface_area']
+                details=item.get('intervals') or [item]
+                if not math.isclose(sum(v['length'] for v in details),length,rel_tol=1e-12,abs_tol=1e-9):
+                    raise ValueError('立管分区间明细与唯一出口中心线长度不守恒')
+                for detail in details:
+                    spec=detail.get('specification') or spec_of(detail)
+                    group=result['length_summary'].setdefault(item['system'],{}).setdefault('规则推算',{})
+                    group[spec]=group.get(spec,0)+detail['length']
+                    areas=result['theoretical_surface_summary'].setdefault(item['system'],{}).setdefault('规则推算',{})
+                    area=detail['theoretical_surface_area']
+                    areas[spec]=None if area is None or (spec in areas and areas[spec] is None) else areas.get(spec,0)+area
+                    if area is None:
+                        result['pending'].append({'kind':'source_riser_transition_surface_unresolved','vertical_id':vid,
+                            'interval_id':detail.get('interval_id'),'length':detail['length'],'unit':'m','surface_area':None,
+                            'from_source_part':detail.get('from_source_part'),'to_source_part':detail.get('to_source_part'),
+                            'from_section':detail.get('from_section'),'to_section':detail.get('to_section'),
+                            'reason':detail.get('surface_pending_reason','变径实体与加工形状未证，面积保持null')})
         result['metrics']['known_source_riser_length_rule']=riser_total
         result['metrics']['vertical_length_rule']+=riser_total
         result['metrics']['measured_length_rule']+=riser_total

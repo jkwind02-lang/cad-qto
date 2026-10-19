@@ -74,6 +74,10 @@ description: 电气回路、导管、线槽、桥架、电线电缆、母线及�
 
 发现插件本身的问题按[插件问题登记](../_qto-shared-evidence/references/插件问题登记.md)处理，不修改插件文件。
 
+## 公共几何单位接入
+
+需要从公共几何凭据继续本框物理量测时，按[计算与证据流程](references/计算与证据流程.md#公共几何单位的专业实际消费第十三批)将原凭据、同一measurement_scope和实际换算倍率传入Evidence、trace和partition；消费时重放原源及字节依赖。仅图框与DIM几何自洽不能独立证明SI，当前无适用声明仍保留单位及长度未决；候选识别不构成正式采用。
+
 ## 与墙和楼板的穿越位置
 
 桥架物理路径采用 `electrical_request` 固定接口；电缆条数不能代替桥架物理路径条数。 需要穿越位置时，按[水风桥架公共穿越位置](../_qto-shared-evidence/references/水风桥架公共穿越位置.md)调用共享的 `calculate_penetrations.py`，绑定同版原图、中性清单、源几何、单位、空间和物理身份。

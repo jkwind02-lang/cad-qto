@@ -12,7 +12,7 @@ import math
 from pathlib import Path
 import sys
 
-from measure_pipe_diagram_lengths import (measure, sha, digest, require, text,
+from measure_pipe_diagram_lengths import (measure, sha, digest, replay_digest, require, text,
     verify_runtime_dependencies, runtime_dependencies, write_new, RESULT, BASIS,
     weakest, QUANTITY_LEVELS)
 from qto_cad_source_contract import verify_source_file, canonical_scale
@@ -43,7 +43,7 @@ def receive(data):
     source_request = load_binding(request_binding, '系统图原请求')
     rebuilt = measure(source_request)
     rebuilt['source_request'] = copy.deepcopy(request_binding)
-    require(digest(rebuilt) == digest(saved), '系统图候选与固定producer原源重放不符')
+    require(replay_digest(rebuilt) == replay_digest(saved), '系统图候选与固定producer原源重放不符')
     network_binding = data.get('network_result')
     network = load_binding(network_binding, '既有管网只读参考')
     require(network.get('evidence_version') == 'qto-pipe-network-inference-evidence/1.2',

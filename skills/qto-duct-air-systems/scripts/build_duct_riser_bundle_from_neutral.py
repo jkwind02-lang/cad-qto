@@ -21,9 +21,21 @@ from duct_source_recovery import annotation_network_scope
 from bind_duct_vertical_annotations import ensure_output_safe, write_protected_json
 from point_host_attachment import reject_reparse_chain
 from qto_cad_source_contract import canonical_scale
+from duct_riser_continuity import build_continuity
+from duct_riser_datums import read_transforms, normalize
 
 SCHEMA = 'qto-duct-riser-source-bundle/1.0'
 BINDING = 'qto-duct-riser-source-bundle-binding/1.0'
+
+
+def section_perimeter(section):
+    return (2 * (section['width'] + section['height']) if section['shape'] == 'rectangle'
+            else math.pi * section['diameter']) * canonical_scale(section['unit'])
+
+
+def section_name(section):
+    return ((f"{section['width']:g}x{section['height']:g}" if section['shape'] == 'rectangle'
+             else f"D{section['diameter']:g}") + section['unit'])
 
 
 def frozen_path(value, base, protected):
@@ -182,41 +194,77 @@ def build(bundle_path):
                     identity=tuple(hit.group(k) for k in ('scope_id','system','physical_id'))
                     blocked_identities.add(identity)
                     pending.append({'source_context':source_id,'source_key':key,'physical_identity':list(identity),'reason':'同源存在未纳入对应的相同身份文字，不能裁掉重复/分支身份','length':None})
+    continuity, continuity_pending, continuity_bindings, continuity_blocked = build_continuity(config, bundle_path.parent, groups, protected, duct)
+    pending.extend(continuity_pending)
+    datum_transforms, datum_facts, datum_bindings = read_transforms(config, bundle_path.parent, protected, duct)
     verticals = []
     for identity, observations in sorted(groups.items()):
         reason = None
+        chain = continuity.get(identity)
+        if chain: observations, continuity_evidence = chain
+        observations, datum_reason, datum_conversion = normalize(observations, datum_transforms, datum_facts, duct)
         if identity in blocked_identities:
             reason = '同源身份文字尚有未纳入对应的实例，物理唯一性未闭合'
-        elif len(observations) != 2 or len({v['source_context'] for v in observations}) != 2:
-            reason = '跨清单物理身份尚无恰好两个独立端点，不默认补齐楼层或端点'
-        elif len({v['floor_id'] for v in observations}) != 2:
+        elif identity in continuity_blocked:
+            reason = '已提供的有源系统图路径/端口证据未闭合，不能退回两端直连旁路'
+        elif len(observations) < 2 or len({v['source_context'] for v in observations}) != len(observations):
+            reason = '跨清单物理身份缺独立端口来源，不默认补齐楼层或端点'
+        elif len(observations) > 2 and not chain:
+            reason = '多于两个端口缺完整有源系统图路径及逐层端口对应，中间层连续性未证'
+        elif len({v['floor_id'] for v in observations}) != len(observations):
             reason = '同楼层重复投影尚无上下端身份，未按重复标签合并计长'
-        elif len({v['datum_id'] for v in observations}) != 1:
-            reason = '上下端源标高缺共同datum，不相减各层相对标高'
-        elif len({v['datum_kind'] for v in observations}) != 1:
-            reason = '上下端datum类型不同，源ID同名不证明共同基准；缺有源转换关系不相减'
-        elif observations[0]['section'] != observations[1]['section']:
+        elif datum_reason:
+            reason = datum_reason
+        elif not chain and any(v['section'] != observations[0]['section'] for v in observations[1:]):
             reason = '跨层截面不同；变径或物理管段边界未证，不能生成恒定截面立管'
+        elif chain:
+            differences = [b['center_elevation_m'] - a['center_elevation_m'] for a,b in zip(observations,observations[1:])]
+            if not (all(v > 0 for v in differences) or all(v < 0 for v in differences)):
+                reason = '实际路径顺序的端标高非严格单调，竖向连续链与源高度冲突；未用最大最小值掩盖折返'
         height = abs(observations[-1]['center_elevation_m'] - observations[0]['center_elevation_m'])
         if not reason and (not math.isfinite(height) or height <= 0):
             reason = '实际上下端标高未形成正竖高'
         if reason:
             pending.append({'physical_identity': list(identity), 'reason': reason, 'length': None})
             continue
-        section = observations[0]['section']; dims, _ = duct.section_values(section, 'm')
-        perimeter = (2 * (section['width'] + section['height']) if section['shape'] == 'rectangle'
-                     else math.pi * section['diameter']) * canonical_scale(section['unit'])
+        varying = any(v['section'] != observations[0]['section'] for v in observations[1:])
+        section = ({'shape': 'variable', 'port_sections': [v['section'] for v in observations]} if varying else observations[0]['section'])
+        dims = {} if varying else duct.section_values(section, 'm')[0]
         vid = 'RISER-' + duct.digest(list(identity))
         keys = [v['source_part_key'] for v in observations]
         facts = [{k: v[k] for k in ('source_context', 'source_key', 'source_part_key', 'source_text',
                  'scope_id', 'physical_id', 'system', 'floor_id', 'datum_id', 'datum_kind', 'value',
-                 'unit', 'reference', 'center_elevation_m', 'basis', 'source_locator', 'leader_scope')} for v in observations]
+                 'unit', 'reference', 'center_elevation_m', 'source_center_elevation_m', 'normalized_datum',
+                 'basis', 'source_locator', 'leader_scope')} for v in observations]
         item = {'vertical_id': vid, 'kind': 'source_riser_link', 'system': identity[1], 'section': section, **dims,
                 'source_ids': keys, 'length': height, 'unit': 'm', 'height_method': 'cross_source_labelled_endpoint_difference',
-                'height_facts': facts, 'theoretical_surface_area': perimeter * height,
+                'height_facts': facts, 'theoretical_surface_area': None if varying else section_perimeter(section) * height,
                 'quantity_outlet': 'one_physical_riser', 'evidence_level': '规则推算',
                 'identity_method': 'actual_source_labels_and_unique_source_leaders',
                 'business_adoption_allowed': False}
+        if datum_conversion: item['datum_conversion'] = datum_conversion
+        if chain:
+            item['height_method'] = 'source_path_ordered_labelled_port_differences'
+            item['continuity_evidence'] = continuity_evidence
+            item['intervals'] = []
+            for index, (a,b) in enumerate(zip(observations, observations[1:])):
+                constant = a['section'] == b['section']
+                interval_length = abs(b['center_elevation_m'] - a['center_elevation_m'])
+                interval = {'interval_id': vid + '-INTERVAL-' + str(index + 1),
+                    'from_source_part': a['source_part_key'], 'to_source_part': b['source_part_key'],
+                    'from_floor_id': a['floor_id'], 'to_floor_id': b['floor_id'],
+                    'from_center_elevation_m': a['center_elevation_m'], 'to_center_elevation_m': b['center_elevation_m'],
+                    'length': interval_length, 'unit': 'm', 'section': a['section'] if constant else None,
+                    'from_section': a['section'], 'to_section': b['section'],
+                    'theoretical_surface_area': section_perimeter(a['section']) * interval_length if constant else None,
+                    'evidence_level': '规则推算', 'quantity_outlet': 'detail_of_one_physical_riser'}
+                if constant: interval.update(duct.section_values(a['section'], 'm')[0])
+                else:
+                    interval.update(specification='变径(' + section_name(a['section']) + '→' + section_name(b['section']) + ')',
+                         transition_geometry_status='section_change_location_and_fabrication_shape_unresolved',
+                         surface_pending_reason='两端截面与竖向连续链已证；变径起终边界、偏心/同心和加工形状未证，不能以恒定周长计面积')
+                item['intervals'].append(interval)
+            item['known_theoretical_surface_area_subtotal'] = sum(v['theoretical_surface_area'] or 0 for v in item['intervals'])
         verticals.append(item)
         for value in observations:
             value['candidate'].update(resolved_vertical_id=vid, floor_id=value['floor_id'], length=height, height=height,
@@ -241,7 +289,8 @@ def build(bundle_path):
                          'summary': [{'source_context': k[0], 'layer': k[1], 'disposition': k[2], 'count': count}
                                      for k, count in sorted(summary.items())],
                          'meaning': '只核本立管组投影part去向；源水平风管另由各清单完整建网消费，不重复计入。'},
-            'neutral_binding': {'kind': BINDING, 'bundle': duct.ref(bundle_path), 'sources': source_bindings},
+            'neutral_binding': {'kind': BINDING, 'bundle': duct.ref(bundle_path), 'sources': source_bindings,
+                                'continuity_diagrams': continuity_bindings, 'datum_transform_sources': datum_bindings},
             'business_adoption_allowed': False}
     return data, protected
 

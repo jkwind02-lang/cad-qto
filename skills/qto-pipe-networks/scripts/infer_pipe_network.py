@@ -276,6 +276,13 @@ def main() -> int:
             if not isinstance(data.get("measurement_scope"), dict):
                 fail("几何单位推算必须保留 measurement_scope，不能仅复制比例或PASS标记")
             checked_geometry = verify_geometric_unit_credential(geometry_unit, data["measurement_scope"])
+            # This policy comes from replayed source facts, never an optional
+            # producer tag. The physical-SI inlet must carry its complete actual
+            # production contract; stripping workbench/receipt cannot downgrade
+            # those source objects into trusted caller-entered geometry.
+            if checked_geometry.get('physical_unit_basis') == 'source_coordinate_declaration':
+                from qto_recognition_workbench import verify_workbench_unit_consumption
+                verify_workbench_unit_consumption(data, required=True)
             checked_geometry["cad_manifest"] = geometry_unit["cad_manifest"]
             geometry_unit = checked_geometry
             geometry_source_binding = verify_geometric_unit_source_binding(data, geometry_unit, checked_geometry)

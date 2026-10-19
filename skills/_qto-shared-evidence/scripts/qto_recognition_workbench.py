@@ -472,7 +472,58 @@ def prepare_pipe(index, operations, ledger_path):
     unit=_text(operations.get("unit"),"unit")
     raw_unit=index["raw_unit"]
     unit_declaration=None
-    if raw_unit in {"Unitless","Unknown"}:
+    geometry_fields={}
+    canonical_source_ids={}
+    workbench_producer_dependencies=None
+    if operations.get('geometric_unit_evidence') is not None:
+        from qto_geometric_unit_evidence import verify_geometric_unit_consumption, runtime_python_dependencies
+        workbench_producer_dependencies=runtime_python_dependencies([Path(__file__)],[Path(__file__).parent])
+        credential=operations['geometric_unit_evidence']
+        if operations.get('unit_declaration'):
+            raise ValueError('局部工作台不能混用几何单位与声明路径')
+        manifest=_json(credential['cad_manifest']['path'])
+        measurement_scope=operations.get('measurement_scope')
+        # The selected objects must belong to the exact source and local index,
+        # not merely carry equal-looking handles or a matching authority hash.
+        for actual,expected_ref in ((index['source'],manifest.get('exchange_dxf')),
+                                    (index['authoritative_source'],manifest.get('authoritative_source'))):
+            verify_source_file(actual,'局部工作台实际源位置')
+            verify_source_file(expected_ref,'局部工作台单位凭据源位置')
+            if actual.get('sha256')!=expected_ref.get('sha256'):
+                raise ValueError('局部工作台索引与单位凭据实际交换来源内容不一致')
+        b=(measurement_scope or {}).get('bounds',{})
+        expected=[b.get(k) for k in ('xmin','ymin','xmax_exclusive','ymax_exclusive')]
+        if index['layout']!=(measurement_scope or {}).get('layout') or index['index_scope']['bounds']!=expected:
+            raise ValueError('局部工作台须从同一 measurement_scope 重建局部索引')
+        replay=build_index(index['source'],layout=index['layout'],authoritative_source=index['authoritative_source'],
+                           scope_bounds=expected)
+        if replay['index_sha256']!=index['index_sha256']:
+            raise ValueError('局部工作台索引与当前原图实际重放不一致')
+        factor=operations.get('factor_to_output')
+        consumption=verify_geometric_unit_consumption(credential,manifest,measurement_scope,factor,unit)
+        raw_unit=consumption['checked_evidence']['raw_unit']
+        for oid in scope:
+            box=objects[oid].get('bbox')
+            if (not isinstance(box,list) or len(box)!=4 or box[0]<expected[0] or box[1]<expected[1]
+                    or box[2]>expected[2] or box[3]>expected[3]):
+                raise ValueError('局部工作台实际消费对象超出单位凭据 scope 或空间未明')
+        source_doc,_=read_dxf_with_diagnostics(index['source']['path'])
+        for oid in scope:
+            row=objects[oid]
+            path=row['source_path']
+            if not path or any('[' in h for h in path):
+                raise ValueError('局部几何单位消费尚不支持阵列实例路径')
+            tokens=[]
+            for handle in path[:-1]:
+                insert=source_doc.entitydb.get(handle)
+                if insert is None or insert.dxftype()!='INSERT':
+                    raise ValueError('局部工作台原实例链不能回读')
+                tokens.extend(['CAD-'+handle,insert.dxf.name])
+            tokens.append('CAD-'+path[-1])
+            canonical_source_ids[oid]=('CADINST-' if len(path)>1 else '')+'/'.join(tokens)
+        geometry_fields=dict(geometric_unit_evidence=credential,measurement_scope=measurement_scope,
+                             unit_evidence_level='inferred',geometric_unit_consumption=consumption)
+    elif raw_unit in {"Unitless","Unknown"}:
         unit_declaration=operations.get("unit_declaration")
         if not isinstance(unit_declaration,dict):raise ValueError("图纸单位未设，必须由当前原图单位说明形成 unit_declaration")
         unit_entry=entries.get(unit_declaration.get("adjudication_id"))
@@ -552,6 +603,11 @@ def prepare_pipe(index, operations, ledger_path):
                 length=summary["length"],geometry=geometry,source_ids=[oid,*entry["evidence_ids"]],
                 physical_id=index["authoritative_source"]["sha256"]+":"+oid,
                 space_id=_text(operation.get("space_id",index["layout"]),"space_id"),dn_seeds=[])
+            if geometry_fields:
+                segment['source_ids']=[canonical_source_ids[oid],*entry['evidence_ids']]
+                segment['source_record_id']='CAD-'+row['source_handle']
+                segment['source_instance_path']=canonical_source_ids[oid]
+                segment['workbench_object_ids']=[oid]
             segments.append(segment);by_object[oid]=segment;used.add(oid)
             bindings.append(dict(object_id=oid,segment_id=sid,adjudication_id=entry["adjudication_id"],
                 source_path=row["source_path"],observation=operation["observation"]))
@@ -668,7 +724,8 @@ def prepare_pipe(index, operations, ledger_path):
     if complete and (unknown_ports or unresolved):raise ValueError("存在未处置对象或末端时，不能声明工作包完整")
     issues=[dict(object_id=i,reason=r) for i,r in sorted(unresolved.items())]
     status="REVIEW_REQUIRED" if issues or index["conversion_warnings"] else "READY"
-    return dict(schema_version="qto-pipe-network-inference-input/1.2",network_id=network_id,unit=unit,
+    result=dict(schema_version="qto-pipe-network-inference-input/1.2",network_id=network_id,unit=unit,
+        **geometry_fields,
         parameters=params,recognition_basis=basis,segments=segments,roots=roots,terminals=terminals,
         junctions=junctions,scope_boundary_nodes=boundaries,valves=valves,gap_classifications=gaps,change_nodes=changes,
         object_selection=dict(audit_id="WORKBENCH-"+network_id,status=status,
@@ -687,6 +744,44 @@ def prepare_pipe(index, operations, ledger_path):
             total_index_objects=len(objects),outside_selected_scope_count=len(objects)-len(scope),
             conversion_warnings=index["conversion_warnings"],formal_adoption_allowed=False,
             adoption_scope="working",review_status="unreviewed"))
+    if geometry_fields:
+        if workbench_producer_dependencies!=runtime_python_dependencies([Path(__file__)],[Path(__file__).parent]):
+            raise ValueError('局部工作台计算期间源码字节变化，须重新实际生产')
+        current=verify_geometric_unit_consumption(operations['geometric_unit_evidence'],manifest,
+                                                measurement_scope,factor,unit)
+        if current['dependency_fingerprints']!=consumption['dependency_fingerprints']:
+            raise ValueError('局部工作台计算期间单位或原源依赖变化')
+        result['geometric_unit_consumption']['workbench_production']=dict(
+            operations=copy.deepcopy(operations),source=index['source'],authoritative_source=index['authoritative_source'],
+            layout=index['layout'],scope_bounds=expected,index_sha256=index['index_sha256'],
+            recognition_ledger=dict(path=str(ledger_path),sha256=hashlib.sha256(ledger_path.read_bytes()).hexdigest()),
+            producer_dependencies=workbench_producer_dependencies)
+    return result
+
+
+def verify_workbench_unit_consumption(data, *, required=False):
+    """Rebuild the actual local index and production operations at the infer inlet."""
+    if not required and (not data.get('workbench') or data.get('geometric_unit_evidence') is None):
+        return None
+    from qto_geometric_unit_evidence import runtime_python_dependencies,verify_runtime_python_dependencies
+    receipt=data.get('geometric_unit_consumption')
+    recipe=receipt.get('workbench_production') if isinstance(receipt,dict) else None
+    if not isinstance(recipe,dict):
+        raise ValueError('局部工作台缺实际几何单位生产凭据，须重新生产')
+    current=runtime_python_dependencies([Path(__file__)],[Path(__file__).parent])
+    verify_runtime_python_dependencies(recipe.get('producer_dependencies'),current)
+    ledger=recipe.get('recognition_ledger')
+    verify_source_file(ledger,'局部工作台实际生产识别台账')
+    index=build_index(recipe['source'],layout=recipe['layout'],authoritative_source=recipe['authoritative_source'],
+                      scope_bounds=recipe['scope_bounds'])
+    if index['index_sha256']!=recipe['index_sha256']:
+        raise ValueError('局部工作台原源索引已变化，须重新生产')
+    replay=prepare_pipe(index,recipe['operations'],ledger['path'])
+    replay['geometric_unit_consumption']['workbench_production']['producer_dependencies']=recipe['producer_dependencies']
+    normalized=lambda value:json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False)
+    if normalized(replay)!=normalized(data):
+        raise ValueError('局部工作台实际生产结果与完整回源重放不一致')
+    return dict(producer_dependencies=current,recognition_ledger=ledger,index_sha256=index['index_sha256'])
 
 
 def main():

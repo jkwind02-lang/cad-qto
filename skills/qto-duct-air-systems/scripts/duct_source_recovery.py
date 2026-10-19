@@ -103,6 +103,66 @@ def distance_to_line(point, part):
     return math.dist(point,closest)
 
 
+def source_curve_point(part, fraction):
+    if part['kind']=='line':return [a+fraction*(b-a) for a,b in zip(part['start'],part['end'])]
+    import qto_cad_geometry as cg
+    return cg.conic_point(part,part['start_param']+fraction*part['sweep_param'])
+
+
+def source_curve_incidence(point, part):
+    """A source parameter witness and actual residual, never a display chord.
+
+    For an off-curve ellipse point this is a conservative incidence witness,
+    not a nearest-distance measurement or physical length estimator.
+    """
+    if part['kind']=='line':
+        d=[b-a for a,b in zip(part['start'],part['end'])];ll=sum(v*v for v in d)
+        if ll<=0:raise ValueError('零长引线part')
+        t=max(0.,min(1.,sum((x-a)*v for x,a,v in zip(point,part['start'],d))/ll))
+        return t,math.dist(point,source_curve_point(part,t))
+    if part['kind']!='ellipse_arc':raise ValueError('不支持的引线源曲线类型')
+    u,v=part['u'],part['v'];w=[p-c for p,c in zip(point,part['center'])]
+    uu=sum(x*x for x in u);vv=sum(x*x for x in v);uv=sum(x*y for x,y in zip(u,v));det=uu*vv-uv*uv
+    if det<=0:raise ValueError('引线圆锥曲线退化')
+    wu=sum(x*y for x,y in zip(w,u));wv=sum(x*y for x,y in zip(w,v))
+    angle=math.atan2((wv*uu-wu*uv)/det,(wu*vv-wv*uv)/det)
+    start,sweep=part['start_param'],part['sweep_param']
+    if not math.isfinite(sweep) or sweep==0 or abs(sweep)>math.tau+1e-9:raise ValueError('引线曲线扫角无效')
+    middle=round((start-angle)/math.tau);fractions=[0.,1.]
+    for shift in range(middle-2,middle+3):
+        fraction=(angle+shift*math.tau-start)/sweep
+        if 0<=fraction<=1:fractions.append(fraction)
+    return min(((f,math.dist(point,source_curve_point(part,f))) for f in fractions),key=lambda value:value[1])
+
+
+def distance_to_source_curve(point, part):
+    return source_curve_incidence(point,part)[1]
+
+
+def source_curve_contact_possible(point, part, tolerance):
+    """Do not prove an omitted edge disconnected with an upper distance bound.
+
+    Ellipse parameter projection gives a point on the curve, so its residual
+    is an upper bound only. A full-ellipse singular-value lower bound can
+    rule out contact; uncertainty blocks closure and never creates a join.
+    """
+    if part['kind']=='line':return distance_to_line(point,part)<=tolerance
+    if part['kind']!='ellipse_arc':return True
+    u,v=part['u'],part['v'];w=[p-c for p,c in zip(point,part['center'])]
+    uu=sum(x*x for x in u);vv=sum(x*x for x in v);uv=sum(x*y for x,y in zip(u,v));det=uu*vv-uv*uv
+    if det<=0:return True
+    wu=sum(x*y for x,y in zip(w,u));wv=sum(x*y for x,y in zip(w,v))
+    cosine=(wu*vv-wv*uv)/det;sine=(wv*uu-wu*uv)/det
+    normal=[q-cosine*a-sine*b for q,a,b in zip(w,u,v)]
+    largest=(uu+vv+math.hypot(uu-vv,2*uv))/2
+    smallest_scale=math.sqrt(det/largest)
+    lower_bound=math.hypot(math.sqrt(sum(x*x for x in normal)),smallest_scale*abs(math.hypot(cosine,sine)-1))
+    # Roundoff only widens the unresolved band; it never supplies positive
+    # incidence evidence to the source graph.
+    rounding=128*math.ulp(max(1.,math.sqrt(uu),math.sqrt(vv),math.sqrt(sum(x*x for x in w))))
+    return lower_bound<=tolerance+rounding
+
+
 def annotation_network_scope(rule, evidence, by_key, match, source_key):
     """Read a complete, source-selected leader tree and its multiple target tips.
 
@@ -123,32 +183,31 @@ def annotation_network_scope(rule, evidence, by_key, match, source_key):
     parts=[]
     for key in keys:
         row=by_key.get(key);geo=(row or {}).get('geometry') or {}
-        if row is None or row.get('geometry_issues') or not geo.get('parts') or any(p['kind']!='line' for p in geo['parts']):
-            raise ValueError('引线网络须使用已完整恢复的直线/多段线源几何')
+        if row is None or row.get('geometry_issues') or not geo.get('parts') or any(p['kind'] not in {'line','ellipse_arc'} for p in geo['parts']):
+            raise ValueError('引线网络须使用已完整恢复的直线/圆锥曲线/多段线源几何')
         parts.extend((key,i,p) for i,p in enumerate(geo['parts']))
     originals=list(parts)
     # T-junctions can end inside a longer trunk entity. Node actual endpoint
     # incidences without extending or snapping a gap into a new leader segment.
-    ends=[p[end] for _,_,p in originals for end in ('start','end')]
+    ends=[source_curve_point(p,f) for _,_,p in originals for f in (0.,1.)]
     parts=[]
     for key,i,p in originals:
-        d=[b-a for a,b in zip(p['start'],p['end'])];ll=sum(v*v for v in d)
-        if ll<=0:raise ValueError('引线网络含零长part')
         cuts={0.,1.}
         for end in ends:
-            t=sum((x-a)*v for x,a,v in zip(end,p['start'],d))/ll
-            if 0<t<1 and distance_to_line(end,p)<=tol:cuts.add(t)
+            t,residual=source_curve_incidence(end,p)
+            if 0<t<1 and residual<=tol and min(math.dist(end,source_curve_point(p,f)) for f in (0.,1.))>tol:cuts.add(t)
         ordered=sorted(cuts)
         for lo,hi in zip(ordered,ordered[1:]):
-            parts.append((key,i,{'kind':'line','start':[a+lo*v for a,v in zip(p['start'],d)],
-                                'end':[a+hi*v for a,v in zip(p['start'],d)]}))
+            if p['kind']=='line':piece={'kind':'line','start':source_curve_point(p,lo),'end':source_curve_point(p,hi)}
+            else:piece={**p,'start_param':p['start_param']+lo*p['sweep_param'],'sweep_param':(hi-lo)*p['sweep_param']}
+            parts.append((key,i,piece))
     nodes=[];edges=[]
     def node(point):
         near=[i for i,p in enumerate(nodes) if math.dist(p,point)<=tol]
         if len(near)>1:raise ValueError('引线端点容差导致多个节点合并候选')
         if near:return near[0]
         nodes.append(list(point));return len(nodes)-1
-    for key,i,p in parts:edges.append((node(p['start']),node(p['end']),key,i,p))
+    for key,i,p in parts:edges.append((node(source_curve_point(p,0.)),node(source_curve_point(p,1.)),key,i,p))
     adj=defaultdict(set)
     for a,b,*_ in edges:
         if a==b:raise ValueError('引线端点容差吞掉非零线段')
@@ -167,7 +226,7 @@ def annotation_network_scope(rule, evidence, by_key, match, source_key):
     for key,row in by_key.items():
         if key in keys or row.get('layer') not in layers:continue
         for p in (row.get('geometry') or {}).get('parts',[]):
-            if p['kind']=='line' and any(distance_to_line(end,q)<=tol or any(distance_to_line(qend,p)<=tol for qend in (q['start'],q['end'])) for end in (p['start'],p['end']) for _,_,q in originals):
+            if p['kind'] in {'line','ellipse_arc'} and any(source_curve_contact_possible(end,q,tol) or any(source_curve_contact_possible(qend,p,tol) for qend in (source_curve_point(q,0.),source_curve_point(q,1.))) for end in (source_curve_point(p,0.),source_curve_point(p,1.)) for _,_,q in originals):
                 omitted.append(key);break
     if omitted:
         return {**status,'status':'unresolved','reason':'同源引线图层存在连接到当前链但未纳入的支路，不能裁链缩小规格适用范围','omitted_connected_source_keys':sorted(omitted)}
@@ -181,6 +240,8 @@ def annotation_network_scope(rule, evidence, by_key, match, source_key):
     chosen=[p for key,i,p in originals if key==shoulder and i==shoulder_part]
     if len(chosen)!=1:raise ValueError('须唯一声明实际文字肩线源part')
     part=chosen[0]
+    if part['kind']!='line':
+        return {**status,'status':'unresolved','reason':'实际文字肩线须为直线，弧形肩线/文字沿曲线排版尚无基线对应证明'}
     if distance_to_line(anchor,part)>text_tol:
         return {**status,'status':'unresolved','reason':'文字未贴合所声明源肩线，不能强绑规格'}
     terminals=[i for i in adj if len(adj[i])==1]
@@ -209,7 +270,7 @@ def annotation_network_scope(rule, evidence, by_key, match, source_key):
         if key in keys or not match(rule.get('selector',{}),row,key):continue
         for i,p in enumerate((row.get('geometry') or {}).get('parts',[])):
             if p['kind']=='line' and not row.get('geometry_issues'):targets.append((key+'#'+str(i),p))
-    if cfg.get('target_contact')=='source_curve_endpoint':
+    if cfg.get('target_contact') in {'source_curve_endpoint','source_curve_node'}:
         import qto_cad_geometry as cg
         targets=[]
         for row in by_key.values():
@@ -222,18 +283,58 @@ def annotation_network_scope(rule, evidence, by_key, match, source_key):
                 targets.append((key+'#'+str(i),ends))
     elif cfg.get('target_contact') not in (None,'line_body'):
         raise ValueError('不支持的引线接触语义')
-    matches=[]
+    if cfg.get('target_contact')=='source_curve_node':
+        # A system-diagram port can be the common endpoint of two actual
+        # route parts. Group endpoint incidence, never nearest line bodies.
+        endpoint_nodes=[]
+        for key,ends in targets:
+            for end in ends:
+                hits=[n for n in endpoint_nodes if math.dist(end,n['point'])<=tol]
+                if len(hits)>1:
+                    return {**status,'status':'unresolved','reason':'源路径端点容差造成多个节点候选'}
+                if hits:
+                    if any(math.dist(end,p)>tol for p in hits[0]['all_points']):
+                        return {**status,'status':'unresolved','reason':'源路径端点存在传递吸附歧义'}
+                    hits[0]['source_part_keys'].add(key);hits[0]['all_points'].append(end)
+                else:endpoint_nodes.append({'point':list(end),'source_part_keys':{key},'all_points':[end]})
+        bindings=[]
+        for tip in tips:
+            hits=[n for n in endpoint_nodes if math.dist(nodes[tip],n['point'])<=target_tol]
+            if len(hits)!=1:
+                return {**status,'status':'unresolved','reason':'引线末端没有唯一实际路径端点节点'}
+            bindings.append({'point':hits[0]['point'],'source_part_keys':sorted(hits[0]['source_part_keys'])})
+        if len({tuple(v['point']) for v in bindings})!=len(bindings):
+            return {**status,'status':'unresolved','reason':'多条指向支路重复指向同一实际路径节点'}
+        return {**status,'status':'unique_source_leader_tree','reason':'完整实际肩线与全部支路唯一对应路径节点',
+                'target_part_keys':sorted({k for v in bindings for k in v['source_part_keys']}),
+                'target_node_bindings':bindings,'text_anchor':anchor,'root_point':nodes[root],
+                'tip_points':[nodes[i] for i in tips]}
+    matches=[];branch_paths=[]
+    parents={root:None};parent_edges={};todo=[root]
+    while todo:
+        current=todo.pop()
+        for edge_index,edge in enumerate(edges):
+            a,b=edge[:2]
+            neighbour=b if a==current else a if b==current else None
+            if neighbour is not None and neighbour not in parents:
+                parents[neighbour]=current;parent_edges[neighbour]=edge_index;todo.append(neighbour)
     for tip in tips:
         hits=[key for key,p in targets if (min(math.dist(nodes[tip],end) for end in p)<=target_tol if cfg.get('target_contact')=='source_curve_endpoint' else distance_to_line(nodes[tip],p)<=target_tol)]
         if len(hits)!=1:
             return {**status,'status':'unresolved','reason':'引线末端没有唯一实际管段；多支路中任一歧义阻断本标注适用范围',
                     'tip_point':nodes[tip],'candidate_part_keys':hits}
         matches.append(hits[0])
+        cursor=tip;path=[]
+        while cursor!=root:
+            edge=edges[parent_edges[cursor]]
+            path.append({'source_key':edge[2],'part_index':edge[3],'geometry':edge[4]})
+            cursor=parents[cursor]
+        branch_paths.append({'target_part_key':hits[0],'tip_point':nodes[tip],'leader_path':list(reversed(path))})
     if len(matches)!=len(set(matches)):
         return {**status,'status':'unresolved','reason':'多个指向末端指向同一part，适用范围需复核'}
     return {**status,'status':'unique_source_leader_tree','reason':'完整肩线及全部指向支路逐一唯一对应',
             'target_part_keys':sorted(matches),'text_anchor':anchor,'root_point':nodes[root],
-            'tip_points':[nodes[i] for i in tips]}
+            'tip_points':[nodes[i] for i in tips],'target_branch_paths':branch_paths}
 
 
 def propagate_source_curve_elevations(data, net, adjacency, resolved):

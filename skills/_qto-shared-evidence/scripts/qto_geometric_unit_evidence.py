@@ -8,6 +8,7 @@ unit definition. No user-entered span, paper size or scale is accepted as proof.
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import math
@@ -15,7 +16,7 @@ import re
 import sys
 from pathlib import Path
 
-from qto_cad_source_contract import canonical_scale, unit_known, unit_tokens, verify_source_file
+from qto_cad_source_contract import canonical_scale, unit_known, unit_tokens, verify_source_file, verify_unit_declaration_texts
 from qto_cad_geometry import block_reference_facts, dimension_measurement_facts, read_dxf_with_diagnostics
 
 REQUEST_SCHEMA = 'qto-geometric-unit-request/1.0'
@@ -36,6 +37,60 @@ class GeometricUnitUnresolved(ValueError):
 
 def _sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def runtime_python_dependencies(entry_paths, search_paths):
+    """Deterministic local Python import closure, including function-scope imports."""
+    roots=[Path(p).resolve() for p in search_paths]
+    pending=[Path(p).resolve() for p in entry_paths]
+    seen={}
+    while pending:
+        path=pending.pop()
+        if str(path) in seen:
+            continue
+        seen[str(path)]=_sha(path)
+        tree=ast.parse(path.read_text(encoding='utf-8-sig'),filename=str(path))
+        for node in ast.walk(tree):
+            names=([alias.name for alias in node.names] if isinstance(node,ast.Import) else
+                   [node.module] if isinstance(node,ast.ImportFrom) and node.module else [])
+            if isinstance(node,ast.ImportFrom):
+                names += [(node.module+'.' if node.module else '')+a.name for a in node.names if a.name!='*']
+            for name in names:
+                local=path.parent
+                if isinstance(node,ast.ImportFrom):
+                    for _ in range(max(0,node.level-1)):
+                        local=local.parent
+                for root in [local,*roots]:
+                    stem=root.joinpath(*name.split('.'))
+                    candidates=[stem.with_suffix('.py'),stem/'__init__.py']
+                    found=next((p for p in candidates if p.is_file()),None)
+                    if found:
+                        pending.append(found.resolve())
+                        for i in range(1,len(name.split('.'))):
+                            init=root.joinpath(*name.split('.')[:i],'__init__.py')
+                            if init.is_file():pending.append(init.resolve())
+                        break
+    return dict(sorted(seen.items()))
+
+
+def verify_runtime_python_dependencies(frozen, current):
+    """Compare complete module identities by bytes across identical checkouts."""
+    def identities(values):
+        if not isinstance(values,dict) or not values:
+            raise ValueError('缺完整生产代码依赖')
+        result={}
+        for path,digest in values.items():
+            verify_source_file(dict(path=path,sha256=digest),'专业生产代码依赖')
+            normalized=Path(path).as_posix()
+            if '/skills/' not in normalized:
+                raise ValueError('生产代码依赖不属于插件源码')
+            key='skills/'+normalized.split('/skills/',1)[1]
+            if key in result:raise ValueError('生产代码依赖存在重复模块')
+            result[key]=digest
+        return result
+    if identities(frozen)!=identities(current):
+        raise ValueError('专业生产代码或依赖字节变化，旧凭据不可消费')
+    return frozen
 
 
 def geometric_unit_runtime_dependencies():
@@ -535,6 +590,36 @@ def verify_geometric_unit_evidence(request, manifest, scope):
                            'dimscale_role': 'annotation_display_only_not_a_length_multiplier',
                            'evidence_class': 'independent_dimension_geometric_consistency', 'physical_unit_proven_independently': False})
     search = _search_unit_texts(doc, box)
+    # A printed numeric DIM is not an SI definition. Optional coordinate-unit
+    # clauses must be real, visible, active source instances inside this frame.
+    coordinate_units, cited_instances = [], set()
+    refs = request.get('coordinate_unit_refs', [])
+    if not isinstance(refs, list):
+        raise ValueError('coordinate_unit_refs 须为实际坐标单位源引用数组')
+    for ref in refs:
+        entity, transform = _ref(doc, ref)
+        if entity.dxftype() not in TEXT_TYPES or not _text_in_frame(entity, transform, box):
+            raise ValueError('坐标单位原文须在当前图框内且可见')
+        value = _text(entity).strip()
+        # Do not interpret dimensions, material quantities or conditional/mixed
+        # notes as coordinate declarations. This narrow grammar is intentional.
+        if re.fullmatch(r'(?:本图|本圖)?\s*(?:坐标|座標|绘图|繪圖)\s*单位\s*[:：为為]?\s*(?:mm|cm|m|ft|in|毫米|厘米|米|英尺|英寸)\s*[。.]?', value, re.I) is None:
+            raise ValueError('须为明确单一坐标/绘图单位原文；尺寸、标高或材料单位不证明坐标 SI')
+        verify_unit_declaration_texts([value], raw_unit)
+        identity = '/' + '/'.join([*ref.get('insert_handles', []), ref['handle']])
+        if identity in cited_instances:
+            raise ValueError('坐标单位源实例重复')
+        cited_instances.add(identity)
+        coordinate_units.append(dict(source_ref=ref, source_text=value, instance_path=identity,
+                                     physical_unit_proven_independently=True))
+    if coordinate_units:
+        matches = search['unit_text_matches']
+        if not cited_instances <= {r['instance_path'] for r in matches}:
+            raise ValueError('坐标单位引用未在当前活动源实例搜索中闭合')
+        search['checked_coordinate_unit_matches'] = [r for r in matches if r['instance_path'] in cited_instances]
+        search['unit_text_matches'] = [r for r in matches if r['instance_path'] not in cited_instances]
+        search['status'] = ('CONFLICT' if search['unit_text_matches'] else
+                            'UNRESOLVED' if search['uninspected_active_text_carriers'] else 'COMPLETE')
     result = {'schema_version': EVIDENCE_SCHEMA, 'status': 'INFERRED', 'raw_unit': raw_unit,
             'runtime_dependencies': geometric_unit_runtime_dependencies(),
             'metres_per_drawing_unit': metres, 'evidence_level': 'inferred', 'quantity_level': '规则推算量',
@@ -545,7 +630,11 @@ def verify_geometric_unit_evidence(request, manifest, scope):
                       'actual_axis_spans': [width, height], 'checked_axes': 2,
                       'scale_text': scale_text, 'scale_denominator': denominator, 'tolerance': TOLERANCE},
             'dimensions': dimensions, 'unit_text_search': search, 'view_texts': title_texts,
-            'basis': ('图上无坐标单位声明；局部数值/材料/标高单位未作坐标单位依据；' if search['non_coordinate_unit_texts'] else '图上无单位文字；')
+            'coordinate_unit_evidence': coordinate_units,
+            'physical_unit_basis': 'source_coordinate_declaration' if coordinate_units else None,
+            'allows_length_measurement': bool(coordinate_units),
+            'basis': ('已回源核对本框明确坐标SI声明；' if coordinate_units else
+                       '图上无坐标单位声明；局部数值/材料/标高单位未作坐标单位依据；' if search['non_coordinate_unit_texts'] else '图上无单位文字；')
                 + '在标准幅面及图签比例假设下由双轴几何推定单位，原尺寸只作独立几何自洽；规则推算，未经人工采用'}
     if search['status'] != 'COMPLETE':
         partial = {**result, 'schema_version': 'qto-geometric-scale-corroboration/1.0', 'status': 'UNIT_UNRESOLVED',
@@ -557,6 +646,46 @@ def verify_geometric_unit_evidence(request, manifest, scope):
                   if search['status'] == 'CONFLICT' else '本框可能承载单位文字的 OLE/代理/外参等内容尚未核清，单位保持未知')
         raise GeometricUnitUnresolved(reason, partial)
     return result
+
+
+def verify_geometric_unit_consumption(credential, manifest, scope, factor, output_unit='m'):
+    """Actual professional consumption: replay source, scope, units and code bytes.
+
+    A geometry-only hypothesis remains useful corroboration but cannot open this
+    physical measurement interface. Existing explicit-unit paths are untouched.
+    """
+    if not isinstance(scope, dict) or not isinstance(credential, dict) or scope != credential.get('scope'):
+        raise ValueError('专业实际消费必须显式绑定同一 measurement_scope')
+    checked = verify_geometric_unit_credential(credential, scope)
+    if checked.get('physical_unit_basis') != 'source_coordinate_declaration' or not checked.get('allows_length_measurement'):
+        partial=dict(checked,schema_version='qto-geometric-scale-corroboration/1.0',status='UNIT_UNRESOLVED',
+                     candidate_raw_unit=checked.get('raw_unit'),raw_unit=None,metres_per_drawing_unit=None,
+                     factor_to_output=None,length=None,quantity_level='未决量',evidence_level=None,
+                     allows_length_measurement=False)
+        raise GeometricUnitUnresolved('仅图框与 DIM 几何自洽没有独立坐标 SI 依据，单位保持未决',partial)
+    ref = credential['cad_manifest']
+    original = json.loads(Path(ref['path']).read_text(encoding='utf-8-sig'))
+    if original != manifest:
+        raise ValueError('几何单位凭据与专业实际读取 CAD 清单版本不一致')
+    expected = checked['metres_per_drawing_unit'] / canonical_scale(output_unit)
+    if isinstance(factor, bool) or not isinstance(factor, (int, float)) or not math.isfinite(factor) or not math.isclose(factor, expected, rel_tol=1e-12, abs_tol=0.):
+        raise ValueError('专业单位倍率与回源凭据不一致，不能混入根数或长度系数')
+    dependencies = [*checked['runtime_dependencies'], ref,
+                    *[v for k, v in manifest.items() if k in ('authoritative_source', 'exchange_dxf', 'exchange_conversion') and isinstance(v, dict)],
+                    *[v for v in manifest.get('artifacts', {}).values() if isinstance(v, dict) and 'path' in v]]
+    fingerprints = {}
+    for value in dependencies:
+        row = dict(value)
+        path = Path(row['path'])
+        if not path.is_absolute():
+            path = Path(ref['path']).parent / path
+        row['path'] = str(path.resolve())
+        verify_source_file(row, '几何单位实际消费依赖')
+        fingerprints[row['path']] = row['sha256']
+    return dict(schema_version='qto-geometric-unit-consumption/1.0',
+                credential=credential, checked_evidence=checked, scope=scope,
+                factor_to_output=expected, output_unit=output_unit,
+                dependency_fingerprints=fingerprints, formal_adoption=False)
 
 
 def verify_geometric_unit_credential(credential, expected_scope=None):

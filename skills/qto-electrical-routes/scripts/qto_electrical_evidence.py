@@ -12,6 +12,7 @@ import sys
 
 import trace_drawn_routes as routes
 import qto_cad_source_contract as source_contract
+from qto_geometric_unit_evidence import verify_geometric_unit_consumption
 
 geometry = routes.cad_geometry
 graph = routes.segment_graph
@@ -160,9 +161,21 @@ class Evidence:
             raise ValueError('展开后源实体身份冲突')
         raw_unit=self.manifest.get('drawing_unit',{}).get('raw_unit')
         self.checked_unit_declaration=None
+        self.geometric_unit_consumption=None
         if not self.coordinate_only:
             declaration=unit.get('declaration',{})
-            if source_contract.unit_known(raw_unit):
+            credential=unit.get('geometric_unit_evidence')
+            if credential is not None:
+                if declaration:
+                    raise ValueError('几何单位凭据不能与 unit.declaration 混用')
+                self.geometric_unit_consumption=verify_geometric_unit_consumption(
+                    credential,self.manifest,request.get('measurement_scope'),self.factor)
+                if self.layout != self.geometric_unit_consumption['scope']['layout']:
+                    raise ValueError('几何单位实际消费 layout 不一致')
+                self.dependencies.update(self.geometric_unit_consumption['dependency_fingerprints'])
+                # Bind actual producer/consumer code, not only the public verifier.
+                self.dependencies.update(routes.electrical_unit_runtime_dependencies())
+            elif source_contract.unit_known(raw_unit):
                 source_contract.check_unit_factor(raw_unit,'m',self.factor)
             else:
                 raw_unit=required(declaration.get('raw_unit'),'unit.declaration.raw_unit')
@@ -188,7 +201,23 @@ class Evidence:
             raise ValueError(label + ' 必须包含本中性流源身份')
         if any(not isinstance(x, str) or x not in self.byid for x in ids):
             raise ValueError(label + ' 存在无法回读的源身份')
+        if self.geometric_unit_consumption:
+            for sid in ids:
+                self.check_measurement_scope(self.byid[sid])
         return ids
+
+    def check_measurement_scope(self,row):
+        if not self.geometric_unit_consumption:
+            return
+        box=row.get('bbox')
+        if not isinstance(box,list) or len(box)!=4:
+            point=[row.get('x'),row.get('y')]
+            if not all(isinstance(v,(float,int)) and not isinstance(v,bool) and math.isfinite(v) for v in point):
+                raise ValueError('单位凭据消费对象缺可验证空间范围')
+            box=[*point,*point]
+        b=self.geometric_unit_consumption['scope']['bounds']
+        if (box[0]<b['xmin'] or box[1]<b['ymin'] or box[2]>b['xmax_exclusive'] or box[3]>b['ymax_exclusive']):
+            raise ValueError('专业实际消费对象超出单位凭据 scope')
 
     def lines(self, pattern):
         result = []
@@ -197,6 +226,7 @@ class Evidence:
                 continue
             if row.get('entity_type') not in graph.CURVE_TYPES | graph.LEADER_TYPES:
                 continue
+            self.check_measurement_scope(row)
             parts, problem = graph.row_parts(row)
             if problem:
                 self.todo.append(dict(problem=problem, source_id=row['source_id']))
@@ -256,7 +286,8 @@ class Evidence:
                     dependency_fingerprints_before=self.dependencies, dependency_fingerprints_after=dependency_after,
                     stable=True, source=self.manifest.get('authoritative_source') or self.manifest.get('source'), unit_factor_to_m=None if self.coordinate_only else self.factor,
                     unit_basis=self.unit_basis, coordinate_unit='cad_unitless'if self.coordinate_only else'm',
-                    measured_length_allowed=not self.coordinate_only,checked_unit_declaration=self.checked_unit_declaration)
+                    measured_length_allowed=not self.coordinate_only,checked_unit_declaration=self.checked_unit_declaration,
+                    geometric_unit_consumption=self.geometric_unit_consumption)
 
     def port(self, raw, tolerance):
         """A source-bound connection point, never an insert anchor or outline center by itself."""

@@ -102,7 +102,9 @@ def partition_network(manifest_path, request, base_path=None):
     factor = trace.finite(raw_trace.get('unit', {}).get('factor_to_output'), 'unit.factor_to_output')
     e_req = dict(schema=REQUEST_SCHEMA, layout=raw_trace.get('layout', 'Model'),
                  unit=dict(factor_to_m=factor, basis=trace.text(raw_trace.get('unit', {}).get('source_id'), 'unit.source_id'),
+                 geometric_unit_evidence=copy.deepcopy(raw_trace.get('unit', {}).get('geometric_unit_evidence')),
                  declaration=copy.deepcopy(raw_trace.get('unit', {}).get('declaration', {}))),
+                 measurement_scope=copy.deepcopy(raw_trace.get('measurement_scope')),
                  expand_blocks=raw_trace.get('expand_blocks', []), opaque_blocks=request.get('opaque_blocks', []),
                  max_depth=raw_trace.get('max_depth', 16))
     evidence = binding.Evidence(manifest_path, e_req)

@@ -200,6 +200,9 @@ def parse_common(request: dict[str, Any], schema: str) -> dict[str, Any]:
         "drawing_id": str(request.get("drawing_id") or "").strip(),
         "label_re": None, "label_layer_re": None, "label_radius": None,
         "overlaps": parse_overlaps(request, snap),
+        "geometric_unit_evidence": unit.get("geometric_unit_evidence"),
+        "measurement_scope": request.get("measurement_scope"),
+        "unit_declaration": unit.get("declaration"),
     }
 
 
@@ -378,6 +381,26 @@ class Drawing:
     def __init__(self, manifest_path: Path, req: dict[str, Any]):
         self.req = req
         layout_path, block_path, self.manifest = source_from_manifest(manifest_path)
+        self.geometric_unit_consumption = None
+        if req.get('geometric_unit_evidence') is not None:
+            from qto_geometric_unit_evidence import verify_geometric_unit_consumption
+            self.geometric_unit_consumption = verify_geometric_unit_consumption(
+                req['geometric_unit_evidence'], self.manifest, req.get('measurement_scope'), req['factor'])
+            scope = self.geometric_unit_consumption['scope']
+            if req['layout'] != scope['layout'] or req['bounds'] != scope['bounds']:
+                fail('走线实际 layout/bounds 必须与几何单位 measurement_scope 一致')
+            self.geometric_code_dependencies = electrical_unit_runtime_dependencies()
+        elif 'drawing_unit' in self.manifest:
+            import qto_cad_source_contract as unit_contract
+            raw_unit = self.manifest['drawing_unit'].get('raw_unit')
+            if unit_contract.unit_known(raw_unit):
+                unit_contract.check_unit_factor(raw_unit, 'm', req['factor'])
+            else:
+                from qto_electrical_evidence import Evidence
+                Evidence(manifest_path, dict(layout=req['layout'],
+                    unit=dict(factor_to_m=req['factor'],basis=req['unit_source_id'],
+                              declaration=req.get('unit_declaration') or {}),
+                    expand_blocks=sorted(req['expand'])))
         self.definitions: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for row in load_stream(block_path):
             if row.get("row_type") == "entity":
@@ -1766,6 +1789,8 @@ def write_layer_outputs(args: argparse.Namespace, drawing: Drawing, req: dict[st
         "meaning": "按图层量出的平面线长（只计画出的线，桥接缺口另列；共线重合只扣项目处置为 drop_overlap 的区间）；分量两端按项目给的半径和类别映射归类，"
                    "不按长度分摊，未决、未连单列；归箱只按画出的连线，与系统图回路对账另做",
     }
+    if drawing.geometric_unit_consumption:
+        result['geometric_unit_consumption'] = geometric_trace_receipt(drawing)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / "按图层量长结果.json").write_text(json.dumps(result, ensure_ascii=False, indent=1, allow_nan=False) + "\n", encoding="utf-8")
     write_csv(args.output_dir / "按图层量长汇总.csv", ["sheet_id", "sheet_kind", "region_id", "layer", "length_m", "segment_count"],
@@ -1821,6 +1846,54 @@ def write_csv(path: Path, header: list[str], rows: list[list[Any]]) -> None:
         writer.writerows(rows)
 
 
+def electrical_unit_runtime_dependencies():
+    from qto_geometric_unit_evidence import runtime_python_dependencies
+    paths = [*Path(__file__).parent.glob('*.py'), Path(segment_graph.__file__),
+             Path(cad_geometry.__file__), Path(sheet_tables.__file__),
+             Path(sys.modules[BoundsIndex.__module__].__file__)]
+    return runtime_python_dependencies(paths,[Path(__file__).parent,Path(cad_geometry.__file__).parent])
+
+
+def geometric_trace_receipt(drawing):
+    from qto_geometric_unit_evidence import verify_geometric_unit_consumption
+    req = drawing.req
+    checked = verify_geometric_unit_consumption(req['geometric_unit_evidence'], drawing.manifest,
+                                               req['measurement_scope'], req['factor'])
+    if electrical_unit_runtime_dependencies() != drawing.geometric_code_dependencies:
+        fail('走线计算期间专业代码字节变化，须重新实际消费')
+    return dict(checked, producer_dependencies=drawing.geometric_code_dependencies)
+
+
+def verify_trace_geometric_consumption(result, manifest_path):
+    """Import a physical trace only after replaying its actual producer request."""
+    info = result.get('inputs', {})
+    path = Path(text(info.get('request'), 'trace.inputs.request'))
+    if sha256(path) != info.get('request_sha256'):
+        fail('走线实际生产请求已改变，须重新追踪')
+    raw = load_json(path)
+    receipt = result.get('geometric_unit_consumption')
+    if raw.get('unit', {}).get('geometric_unit_evidence') is None:
+        if receipt:
+            fail('走线实际请求与几何单位凭据不一致')
+        return {}
+    if not isinstance(receipt, dict):
+        fail('走线缺完整专业代码依赖或字节变化，须重新实际消费')
+    from qto_geometric_unit_evidence import verify_runtime_python_dependencies
+    verify_runtime_python_dependencies(receipt.get('producer_dependencies'),electrical_unit_runtime_dependencies())
+    req = parse_request(raw, path.parent)
+    drawing = Drawing(Path(manifest_path), req)
+    checked = geometric_trace_receipt(drawing)
+    checked['producer_dependencies']=receipt['producer_dependencies']
+    normalize = lambda value: json.loads(json.dumps(value, allow_nan=False))
+    if normalize(receipt) != normalize(checked):
+        fail('走线单位消费凭据与回源重放不一致')
+    traced = trace_routes(drawing, req)
+    replay = [{k:v for k,v in r.items() if k != '_pieces'} for r in traced['routes']]
+    if normalize(result.get('routes')) != normalize(replay) or normalize(result.get('shared_segments')) != normalize(traced['shared']) or normalize(result.get('overlaps')) != normalize(traced['overlaps']):
+        fail('走线实际生产结果与完整重放不一致')
+    return {**checked['dependency_fingerprints'], **checked['producer_dependencies'], str(path):sha256(path)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="沿已画走线追踪箱到设备的路径（逐段句柄与长度）")
     parser.add_argument("--cad-manifest", type=Path, required=True)
@@ -1869,6 +1942,8 @@ def main() -> int:
             "meaning": "沿已画走线逐段量出的水平长度（含桥接缺口）；回路归属、系统图与平面名称对应由模型判定并列依据；待办不按直角距离补",
         }
         lines, todo_rows = [], []
+        if drawing.geometric_unit_consumption:
+            result['geometric_unit_consumption'] = geometric_trace_receipt(drawing)
         for r in traced["routes"]:
             for p in r.get("_pieces", ()):
                 if p["kind"] == "t":

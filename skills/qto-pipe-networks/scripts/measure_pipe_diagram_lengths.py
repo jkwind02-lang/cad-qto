@@ -54,6 +54,23 @@ def digest(value):
         separators=(',', ':'), allow_nan=False).encode('utf-8')).hexdigest()
 
 
+def replay_digest(value):
+    """Code locations are diagnostic; relative module identity and bytes bind.
+
+    Only executable dependency locations are removed. Original drawing, source
+    requests and other evidence paths remain part of the replayed semantics.
+    """
+    def canonical(row):
+        if isinstance(row, dict):
+            return {key: ([{k: canonical(v) for k, v in item.items() if k != 'path'} for item in child]
+                    if key == 'runtime_dependencies' and isinstance(child, list) else canonical(child))
+                    for key, child in row.items()}
+        if isinstance(row, list):
+            return [canonical(child) for child in row]
+        return row
+    return digest(canonical(value))
+
+
 def finite(value):
     require(isinstance(value, (int, float)) and not isinstance(value, bool)
             and math.isfinite(value), '坐标及区段参数须为有限数值')
@@ -74,8 +91,8 @@ def verify_runtime_dependencies(rows):
             '系统图运行依赖格式不完整')
     require(len(rows) == len(expected) and {r['module']: r.get('sha256') for r in rows} == expected,
             '系统图计长代码或固定生产依赖闭包字节变化，必须重建并重新消费')
-    for row in rows:
-        verify_source_file(row, '原系统图生产代码')
+    # Verify current code by its fixed relative module identity and SHA above;
+    # a historical absolute installation path is not an executable dependency.
 
 
 class Drawing:
@@ -107,7 +124,12 @@ class Drawing:
         require(entity.dxftype() in {'TEXT', 'MTEXT', 'DIMENSION'},
                 '当前系统图入口只读取TEXT/MTEXT及明确原生DIMENSION；属性须另走有源取证入口')
         raw = entity.plain_text() if entity.dxftype() == 'MTEXT' else entity.dxf.get('text', '')
-        p = entity.dxf.defpoint if entity.dxftype() == 'DIMENSION' else entity.dxf.insert
+        if entity.dxftype() == 'DIMENSION':
+            p = entity.dxf.defpoint
+        elif entity.dxftype() == 'TEXT':
+            p = entity.ocs().to_wcs(entity.dxf.insert)
+        else:
+            p = entity.dxf.insert  # MTEXT insertion is already owner WCS.
         location = [sum(matrix[row*4 + col] * p[col] for col in range(3)) + matrix[row*4+3]
                     for row in range(3)]
         # qto-cad matrices are row-major affine matrices (same contract as transform_geometry).
@@ -226,6 +248,243 @@ def annotation_value(drawing, spec, bounds):
     return source['value_m'], source, None
 
 
+def dimension_chain(drawing, fact, row, view):
+    """A native dimension chain must partition one straight physical extent."""
+    paths = fact.get('dimension_paths')
+    require(isinstance(paths, list) and paths and len({tuple(p) for p in paths}) == len(paths),
+            '尺寸链须逐项绑定不重复原生DIMENSION实例')
+    span = drawing.span(row['source_span'], view['bounds'])
+    start, end = span['page_endpoints']
+    vector = [b-a for a, b in zip(start, end)]
+    square = sum(v*v for v in vector)
+    tolerance = max(math.sqrt(square)*1e-9, 16*max(math.ulp(v) for p in (start, end) for v in p))
+    chain, issues = [], []
+    for path in paths:
+        value, annotation, issue = annotation_value(drawing, {**fact, 'annotation_path': path}, view['bounds'])
+        entity, matrix = drawing.resolve(path)
+        if entity.dxftype() != 'DIMENSION' or entity.dxf.dimtype & 7 not in {0, 1}:
+            issues.append('尺寸链只接受原生线性或对齐DIMENSION，不从TEXT拼接')
+            continue
+        ends = [transform_point(list(entity.dxf.get(k)), matrix) for k in ('defpoint2', 'defpoint3')]
+        drawing.inside(ends, view['bounds'])
+        fractions = [sum((p[i]-start[i])*vector[i] for i in range(3))/square for p in ends]
+        errors = [math.dist(p, [start[i]+t*vector[i] for i in range(3)]) for p, t in zip(ends, fractions)]
+        axis, axis_issue = dimension_axis(entity, matrix)
+        if any(e > tolerance for e in errors) or not all(-1e-9 <= t <= 1+1e-9 for t in fractions):
+            issues.append('尺寸链延伸端点不属于所选同一直线实物范围')
+        if abs(fractions[0]-fractions[1]) <= 1e-12:
+            issues.append('尺寸链含零区间')
+        if issue or axis_issue or value is None or (value is not None and value <= 0):
+            issues.append(issue or axis_issue or '尺寸链须有正的明确物理尺寸')
+        chain.append({'from_fraction': min(fractions), 'to_fraction': max(fractions),
+            'value_m': value, 'source_annotation': annotation, 'extension_endpoints': ends,
+            'axis_verification': axis})
+    chain.sort(key=lambda s: s['from_fraction'])
+    cursor = 0.
+    for piece in chain:
+        if not math.isclose(piece['from_fraction'], cursor, rel_tol=0, abs_tol=1e-9):
+            issues.append('尺寸链有缺口或重叠，不能把分段值直接当完整长度')
+        cursor = piece['to_fraction']
+    if not math.isclose(cursor, 1., rel_tol=0, abs_tol=1e-9):
+        issues.append('尺寸链未闭合到实际区段终点')
+    return {'method': 'dimension_chain', 'value': None if issues else sum(p['value_m'] for p in chain),
+        'level': fact['level'], 'source_dimension_chain_segments': chain,
+        'binding_verification': 'source_dimension_chain_endpoints_verified',
+        'basis': fact['basis'], 'issue': '; '.join(issues) or None}
+
+
+def native_leader_binding(drawing, fact, row, annotation, bounds):
+    """Only native attached L= text with an unambiguous interior arrow target."""
+    if not fact.get('leader_path'):
+        return False, None
+    if not re.match(r'^\s*(?:L|管长|长度)\s*[=:：]', annotation['text'], re.I):
+        return False, '原生引线文字未明确为L=/管长=/长度=，不能推定长度语义'
+    entity, matrix = drawing.resolve(fact['leader_path'])
+    if entity.dxftype() != 'LEADER' or not entity.dxf.get('has_arrowhead', 1):
+        return False, '当前TEXT语义只接受有箭头的原生LEADER'
+    if (fact['leader_path'][:-1] != fact['annotation_path'][:-1]
+            or entity.dxf.get('annotation_handle', '').upper() != fact['annotation_path'][-1].upper()):
+        return False, '原生LEADER未通过annotation_handle绑定同一实际文字实例'
+    span = drawing.span(row['source_span'], bounds)
+    if (span['from_fraction'], span['to_fraction']) != (0., 1.):
+        return False, '引线长度须对应完整源part，部分区间缺少原生端点界定'
+    vertices = [transform_point(list(p), matrix) for p in entity.vertices]
+    if len(vertices) < 2:
+        return False, '原生LEADER缺箭头路线'
+    drawing.inside(vertices, bounds)
+    point = vertices[0]
+    a, b = span['page_endpoints']
+    vector = [y-x for x, y in zip(a, b)]
+    square = sum(v*v for v in vector)
+    tolerance = max(math.sqrt(square)*1e-9, 16*max(math.ulp(v) for p in (a, b, point) for v in p))
+    fraction = sum((point[i]-a[i])*vector[i] for i in range(3))/square
+    if not (1e-9 < fraction < 1-1e-9) or math.dist(point, [a[i]+fraction*vector[i] for i in range(3)]) > tolerance:
+        return False, '原生LEADER箭头未唯一落在所选完整源part内部'
+    hits, unresolved = [], []
+
+    def parts(entities, prefix, active):
+        # All actual visible INSERT instances participate. Restricting the
+        # search to the target's owner would miss a crossing sibling block.
+        for other in entities:
+            other_path = prefix + [other.dxf.handle]
+            try:
+                _, matrix = drawing.resolve(other_path)
+            except ValueError:
+                continue
+            if other.dxftype() == 'INSERT':
+                name = other.dxf.name
+                if (other.dxf.row_count != 1 or other.dxf.column_count != 1
+                        or name in active or len(prefix) >= 64):
+                    unresolved.append('有阵列或循环块尚不能逐实例排除箭头歧义')
+                    continue
+                yield from parts(drawing.doc.blocks[name], other_path, active | {name})
+            elif other.dxftype() in {'LINE', 'LWPOLYLINE', 'POLYLINE', 'ARC', 'CIRCLE', 'ELLIPSE', 'SPLINE'}:
+                geometry = entity_geometry(other).get('geometry')
+                if geometry:
+                    yield other_path, transform_geometry(geometry, matrix)['parts']
+                else:
+                    unresolved.append('可见原生曲线尚不能排除箭头歧义')
+
+    for other_path, source_parts in parts(drawing.doc.modelspace(), [], set()):
+        for index, part in enumerate(source_parts):
+            if part['kind'] == 'ellipse_arc':
+                u, v = part['u'], part['v']
+                delta = [p-c for p, c in zip(point, part['center'])]
+                uu, uv, vv = sum(x*x for x in u), sum(x*y for x, y in zip(u, v)), sum(x*x for x in v)
+                determinant = uu*vv-uv*uv
+                if determinant <= 1e-14*uu*vv or not uu or not vv:
+                    unresolved.append('退化原生曲线不能排除箭头歧义')
+                    continue
+                du, dv = sum(x*y for x, y in zip(delta, u)), sum(x*y for x, y in zip(delta, v))
+                cosine, sine = (du*vv-dv*uv)/determinant, (dv*uu-du*uv)/determinant
+                theta = math.atan2(sine, cosine)
+                def point_at(t):
+                    return [c+a*math.cos(t)+b*math.sin(t) for c, a, b in zip(part['center'], u, v)]
+                start, sweep = part['start_param'], part['sweep_param']
+                angle_tolerance = tolerance/max(min(math.sqrt(uu), math.sqrt(vv)), tolerance)
+                angular = ((theta-start) if sweep >= 0 else (start-theta)) % (2*math.pi)
+                on_curve = math.dist(point, point_at(theta)) <= tolerance
+                on_sweep = (abs(sweep) >= 2*math.pi-angle_tolerance or angular <= abs(sweep)+angle_tolerance
+                    or min(math.dist(point, point_at(start)), math.dist(point, point_at(start+sweep))) <= tolerance)
+                if on_curve and on_sweep:
+                    hits.append((tuple(h.upper() for h in other_path), index))
+                continue
+            if part['kind'] != 'line':
+                unresolved.append('原生曲线类型尚不能排除箭头歧义')
+                continue
+            x, y = part['start'], part['end']
+            v = [q-p for p, q in zip(x, y)]; length2 = sum(q*q for q in v)
+            if not length2:
+                continue
+            t = sum((point[i]-x[i])*v[i] for i in range(3))/length2
+            if -1e-9 <= t <= 1+1e-9 and math.dist(point, [x[i]+t*v[i] for i in range(3)]) <= tolerance:
+                hits.append((tuple(h.upper() for h in other_path), index))
+    if unresolved:
+        return False, '; '.join(sorted(set(unresolved)))
+    if hits != [(tuple(span['path']), span['part'])]:
+        return False, '原生LEADER箭头命中交叉/重合源段，不能用近邻选择物理范围'
+    annotation['native_leader_binding'] = {'path': fact['leader_path'],
+        'annotation_handle': entity.dxf.annotation_handle, 'arrow_page_point': point,
+        'source_part_fraction': fraction, 'unique_target': hits[0],
+        'vertices': vertices, 'semantic_scope': 'complete_source_straight_part'}
+    return True, None
+
+
+def typed_source_elevation(drawing, fact, row, view, source):
+    """Source-read operands, delegated to the existing typed elevation engine.
+
+    Only an explicit directed datum equation has automatic relation semantics.
+    Measurement kind, actual ports and vertical route remain disclosed model
+    interpretation. No input values, approvals or caller graphs are reused.
+    """
+    require(fact.get('route_kind') == 'vertical', 'typed系统图分支只接有据纯竖直范围')
+    sid, source_facts, observations, datum_sources = 'diagram-source', [], [], {}
+    spec = {'schema': 'qto-elevation-link/1.0', 'system': row['system'],
+        'calculation_id': 'diagram:' + row['record_id'], 'datum_transforms': [],
+        'sources': [{**source, 'id': sid, 'locator': 'diagram/view '+view['view_id'], 'facts': source_facts}]}
+
+    def numeric(input_row, fid, kind, semantics=None):
+        require(not ({'value', 'quantity', 'dn'} & set(input_row)), 'typed源操作数不接手填数值或DN替代外径')
+        value, annotation, issue = annotation_value(drawing, input_row, view['bounds'])
+        observations.append({'fact_id': fid, 'source_annotation': annotation})
+        require(issue is None and value is not None, issue or 'typed操作数缺少明确源数值/单位')
+        output = {'fact_id': fid, 'measurement_kind': kind, 'value': value, 'unit': 'm',
+            'source_ids': [sid], 'level': fact['level'], 'basis': fact['basis'], **(semantics or {})}
+        source_facts.append({**output, 'id': fid})
+        return output
+
+    kind_words = {'pipe_center': '管中心', 'equipment_port_center': '接口中心',
+        'pipe_outer_bottom': '管外底', 'pipe_outer_top': '管外顶', 'finished_floor': '完成面',
+        'structural_floor': '结构面', 'other_reference': '参照点'}
+    for name, port in (('from', row['from_port_id']), ('to', row['to_port_id'])):
+        end = fact.get(name)
+        require(isinstance(end, dict), 'typed标高须给出两端原源事实')
+        kind = end.get('measurement_kind'); require(kind in kind_words, 'typed测点类型无效')
+        datum = text(end.get('datum_id'), 'typed基准身份')
+        note = drawing.annotation(end.get('datum_annotation_path'), view['bounds'])
+        datum_sources[name] = note
+        require(datum in note['text'] and any(t in note['text'].lower() for t in ('基准', 'datum')),
+                'typed基准声明须明确包含本端datum_id')
+        semantics = drawing.annotation(end.get('measurement_semantics_annotation_path'), view['bounds'])
+        require(kind_words[kind] in semantics['text'], 'typed测点定义源文与所报测点类型不符')
+        observations += [{'side': name, 'datum_source': note, 'measurement_semantics_source': semantics}]
+        is_center = kind in {'pipe_center', 'equipment_port_center'}
+        reference = port if is_center else text(end.get('measurement_reference_id'), '非中心原测点身份')
+        require(is_center or reference != port, '非中心原测点不能冒充实际中心端口')
+        point = numeric(end, name, kind, {'datum_id': datum, 'reference_id': reference, 'system': row['system']})
+        conversion = end.get('centerline_conversion')
+        if is_center:
+            require(conversion is None, '已是中心测点不得再次换算')
+        else:
+            require(isinstance(conversion, dict), '非中心测点须给出有源中心换算')
+            method = 'outer_radius' if kind in {'pipe_outer_bottom', 'pipe_outer_top'} else 'signed_offset'
+            require(conversion.get('method') == method, '测点换算方法与实际类型不符')
+            operand_kind = 'outer_diameter' if method == 'outer_radius' else 'vertical_offset'
+            word = '外径' if method == 'outer_radius' else '中心高差'
+            definition = drawing.annotation(conversion.get('operand_semantics_annotation_path'), view['bounds'])
+            require(word in definition['text'], '中心换算操作数须有实际外径/带符号中心高差定义，DN不能代外径')
+            operand = numeric(conversion.get('operand', {}), name+':operand', operand_kind)
+            cid = name+':centerline'
+            converted = {'conversion_id': cid, 'method': method, 'target_reference_id': port,
+                'source_ids': [sid], 'level': fact['level'], 'basis': fact['basis'],
+                'outer_diameter' if method == 'outer_radius' else 'offset': operand}
+            point['centerline_conversion'] = converted
+            source_facts.append({'id': cid, 'measurement_kind': 'centerline_conversion', 'method': method,
+                'from_fact_id': name, 'from_reference_id': reference, 'target_reference_id': port,
+                'datum_id': datum, 'system': row['system'], 'operand_fact_id': name+':operand', 'level': fact['level']})
+            observations.append({'side': name, 'conversion_operand_semantics_source': definition})
+        spec[name] = point
+    if (spec['from']['datum_id'] == spec['to']['datum_id']
+            and datum_sources['from']['path'] != datum_sources['to']['path']):
+        return {'method': 'typed_elevation', 'value': None, 'level': weakest([fact['level'], 'inferred']),
+            'binding_verification': 'unresolved_distinct_source_datum_declarations', 'basis': fact['basis'],
+            'source_observations': observations, 'elevation_calculation': None,
+            'issue': '两端同名datum_id引用不同原源基准声明；不能把建筑/设备等独立基准按同名认同。须用原文可区分的基准身份及明确换算关系'}
+    paths = fact.get('datum_transform_annotation_paths', [])
+    require(isinstance(paths, list) and len({tuple(p) for p in paths}) == len(paths), '基准关系源路径重复或无效')
+    equation = re.compile(r'^\s*[zZ]\(([^()=\s]+)\)\s*=\s*[zZ]\(([^()=\s]+)\)\s*([+\-](?:\d+(?:\.\d*)?|\.\d+))\s*(mm|cm|m|ft|in|毫米|厘米|米|英尺|英寸)\s*$', re.I)
+    for index, path in enumerate(paths):
+        annotation = drawing.annotation(path, view['bounds']); match = equation.fullmatch(annotation['text'])
+        require(match is not None, '基准关系须为明确原源z(目标)=z(来源)+有单位高差，不能从相同名称推定')
+        transform = {'transform_id': 'datum:'+str(index), 'measurement_kind': 'datum_offset',
+            'from_datum': match[2], 'to_datum': match[1], 'value': float(match[3])*canonical_scale(match[4]),
+            'unit': 'm', 'source_ids': [sid], 'level': fact['level'], 'basis': fact['basis']}
+        source_facts.append({**transform, 'id': transform['transform_id']})
+        spec['datum_transforms'].append(transform)
+        observations.append({'transform_id': transform['transform_id'], 'source_annotation': annotation})
+    route = {'kind': 'vertical', 'route_id': 'route', 'source_ids': [sid], 'level': fact['level'], 'basis': fact['basis']}
+    spec['route'] = route
+    source_facts.append({'id': 'route', 'measurement_kind': 'route_shape', 'route_kind': 'vertical',
+        'from_reference_id': row['from_port_id'], 'to_reference_id': row['to_port_id'],
+        'system': row['system'], 'level': fact['level']})
+    calculation = evaluate_elevation_link(spec, 'm', expected_system=row['system'], previous_calculation=None)
+    return {'method': 'typed_elevation', 'value': calculation['value'],
+        'level': weakest([fact['level'], calculation['evidence_level'], 'inferred']),
+        'binding_verification': 'source_read_typed_operands_model_port_and_route_interpretation',
+        'basis': fact['basis'], 'source_observations': observations, 'elevation_calculation': calculation,
+        'issue': None if calculation['value'] is not None else 'typed高程/测点/基准换算未闭合'}
+
+
 def measurement(drawing, fact, row, view, source):
     require(isinstance(fact, dict), 'length_facts须逐项声明事实')
     level = fact.get('level')
@@ -235,8 +494,13 @@ def measurement(drawing, fact, row, view, source):
     if method == 'unresolved':
         return {'method': method, 'value': None, 'level': level,
                 'issue': text(fact.get('issue'), '缺证原因'), 'input_fact': copy.deepcopy(fact)}
-    require(method in {'dimension', 'elevation'}, '只支持明确尺寸、同基准标高差或unresolved')
+    require(method in {'dimension', 'dimension_chain', 'elevation', 'typed_elevation'},
+            '只支持明确尺寸/尺寸链、有源typed或同基准标高差或unresolved')
     require(fact.get('measurement_basis', BASIS) == BASIS, '当前长度只接受管中心线路径口径')
+    if method == 'dimension_chain':
+        return dimension_chain(drawing, fact, row, view)
+    if method == 'typed_elevation':
+        return typed_source_elevation(drawing, fact, row, view, source)
     if method == 'dimension':
         value, annotation, issue = annotation_value(drawing, fact, view['bounds'])
         if value is not None:
@@ -267,6 +531,13 @@ def measurement(drawing, fact, row, view, source):
                     value = None
                 else:
                     binding = 'source_dimension_endpoints_verified'
+        elif value is not None and fact.get('leader_path'):
+            verified, leader_issue = native_leader_binding(drawing, fact, row, annotation, view['bounds'])
+            if verified:
+                binding = 'source_native_leader_complete_part_verified'
+            else:
+                issue = leader_issue
+                value = None
         return {'method': method, 'value': value, 'level': level, 'source_annotation': annotation,
                 'binding_verification': binding, 'issue': issue, 'basis': fact['basis']}
     ends = []

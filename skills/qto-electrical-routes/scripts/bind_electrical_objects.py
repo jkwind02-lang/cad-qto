@@ -291,6 +291,10 @@ def calculate(e, request):
             raise ValueError('trace_result须为同版已画走线输出，network_model不能冒充实画')
         if mode != 'plan' or trace.get('parameters', {}).get('factor_to_output') != e.factor:
             raise ValueError('trace导入须使用相同单位的plan模式')
+        if e.geometric_unit_consumption:
+            if not trace.get('geometric_unit_consumption'):
+                raise ValueError('几何单位对象导入缺走线实际消费凭据')
+            e.dependencies.update(routes.verify_trace_geometric_consumption(trace,e.path))
         e.dependencies[str(path)] = raw['sha256']
     route_pattern = re.compile(required(request.get('route_layers'), 'route_layers'))
     objects = identity_rows(request.get('objects'), 'objects')
