@@ -92,7 +92,7 @@ def pipe_producer():
     return Path(__file__).resolve().parents[2] / "qto-pipe-networks/scripts/infer_pipe_network.py"
 
 
-def validate_pipe_request(report, data, network_base, report_base):
+def validate_pipe_request(report, data, network_base, report_base, *, allow_generated_duct_hosts=False):
     """The single preflight used by both the consumer and receipt replay.
 
 An actual pipe result may contain other packages. Their stable identities remain
@@ -144,6 +144,8 @@ outside this request's uniqueness guarantee, and must be explicitly scoped later
         if row.get("host_status") != "unique_spatial_candidate" or row.get("request_sha256") != request_digest(row) or len(row.get("candidate_segments", [])) != 1:
             raise ValueError("inline挂接仍未决或请求指纹已变化，不能生成数量接收")
         host, identity = row["candidate_segments"][0], row["instance_identity"]
+        if host.get("generated_duct_host") and not allow_generated_duct_hosts:
+            raise ValueError("生成风管宿主只能由真实风管消费者接收，不能套用管网schema")
         if identity.get("unit") not in {"个", "只", "台", "套"}:
             raise ValueError("inline实际消费只支持离散实例计数单位")
         for key, expected in (("source_sha256", report["source_sha256"]), ("source_instance_path", identity["instance_path"]),
@@ -371,50 +373,58 @@ class Attachment:
                         raise ValueError("冻结分类来源记录缺少evidence_id")
                     self.classification_records.setdefault(row["evidence_id"], []).append(
                         (row, Path(bundle_ref["path"]).parent, bundle_ref))
-            wanted = {r.get("instance_path") for r in values if isinstance(r, dict)}
-            source_rows = {}
-            for row in layout_rows:
-                if row.get("layout") != self.layout:
-                    continue
-                for path, leaf, matrix, inherited_layer in self.walk(row, str(row.get("record_id") or "NO-ID"), IDENTITY):
-                    if path in wanted:
-                        if path in source_rows:
-                            raise ValueError("管段完整实例路径重复，来源身份不唯一")
-                        source_rows[path] = (leaf, matrix, inherited_layer)
-            ids = set()
-            for raw in values:
-                if not isinstance(raw, dict) or not nonempty(raw.get("segment_id")) or raw["segment_id"] in ids:
-                    raise ValueError("segment_id 缺失或重复")
-                ids.add(raw["segment_id"])
-                leaf_data = source_rows.get(raw.get("instance_path"))
-                if leaf_data is None:
-                    raise ValueError("管段instance_path未在当前中性来源的完整实例路径中找到")
-                leaf, matrix, layer = leaf_data
-                if leaf.get("record_id") != raw.get("source_record_id") or leaf.get("geometry_issues"):
-                    raise ValueError("管段源实体ID不符或几何不完备")
-                geometry = leaf.get("geometry")
-                if not isinstance(geometry, dict):
-                    raise ValueError("管段缺少可核验源几何")
-                part_index = raw.get("part_index", 0)
-                if isinstance(part_index, bool) or not isinstance(part_index, int) or part_index < 0:
-                    raise ValueError("管段part_index必须是非负整数")
-                transformed = cg.transform_geometry(geometry, matrix)
-                cg.summarize(transformed)  # validate schema, WCS and finite source geometry, not just endpoints
-                parts = transformed.get("parts", [])
-                if part_index >= len(parts) or parts[part_index].get("kind") != "line":
-                    raise ValueError("当前挂接仅支持源几何的直线段，曲线须另建有依据的适配")
-                part = parts[part_index]
-                start, end = ([v*self.factor for v in part[k]] for k in ("start", "end"))
-                if math.dist(start, end) <= 0:
-                    raise ValueError("管段源几何长度必须大于0")
-                # Coordinates are computed from source leaves; supplied coordinates cannot replace them.
-                for key, actual in (("start", start), ("end", end)):
-                    if key in raw and (not isinstance(raw[key], list) or raw[key] != actual):
-                        raise ValueError(f"管段{key}与完整路径变换的源几何不一致")
-                segment = {**raw, "start": start, "end": end, "source_layer": layer,
-                           "source_sha256": self.source, "coordinate_system": "WCS", "coordinate_unit": self.unit}
-                segment["classification_proofs"], segment["classification_problems"] = self.classification_for(segment)
-                self.segments.append(segment)
+            if data.get("generated_duct_input") is not None:
+                import importlib.util
+                module_path = Path(__file__).resolve().parents[2]/"qto-duct-air-systems/scripts/duct_generated_hosts.py"
+                spec = importlib.util.spec_from_file_location("qto_duct_generated_hosts",module_path)
+                module = importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+                self.segments.extend(module.generated_hosts(data,Path(self.segment_ref["path"]).parent,source=self.source,
+                    layout=self.layout,space=self.space,coordinate_unit=self.unit,factor=self.factor))
+            else:
+                wanted = {r.get("instance_path") for r in values if isinstance(r, dict)}
+                source_rows = {}
+                for row in layout_rows:
+                    if row.get("layout") != self.layout:
+                        continue
+                    for path, leaf, matrix, inherited_layer in self.walk(row, str(row.get("record_id") or "NO-ID"), IDENTITY):
+                        if path in wanted:
+                            if path in source_rows:
+                                raise ValueError("管段完整实例路径重复，来源身份不唯一")
+                            source_rows[path] = (leaf, matrix, inherited_layer)
+                ids = set()
+                for raw in values:
+                    if not isinstance(raw, dict) or not nonempty(raw.get("segment_id")) or raw["segment_id"] in ids:
+                        raise ValueError("segment_id 缺失或重复")
+                    ids.add(raw["segment_id"])
+                    leaf_data = source_rows.get(raw.get("instance_path"))
+                    if leaf_data is None:
+                        raise ValueError("管段instance_path未在当前中性来源的完整实例路径中找到")
+                    leaf, matrix, layer = leaf_data
+                    if leaf.get("record_id") != raw.get("source_record_id") or leaf.get("geometry_issues"):
+                        raise ValueError("管段源实体ID不符或几何不完备")
+                    geometry = leaf.get("geometry")
+                    if not isinstance(geometry, dict):
+                        raise ValueError("管段缺少可核验源几何")
+                    part_index = raw.get("part_index", 0)
+                    if isinstance(part_index, bool) or not isinstance(part_index, int) or part_index < 0:
+                        raise ValueError("管段part_index必须是非负整数")
+                    transformed = cg.transform_geometry(geometry, matrix)
+                    cg.summarize(transformed)  # validate schema, WCS and finite source geometry, not just endpoints
+                    parts = transformed.get("parts", [])
+                    if part_index >= len(parts) or parts[part_index].get("kind") != "line":
+                        raise ValueError("当前挂接仅支持源几何的直线段，曲线须另建有依据的适配")
+                    part = parts[part_index]
+                    start, end = ([v*self.factor for v in part[k]] for k in ("start", "end"))
+                    if math.dist(start, end) <= 0:
+                        raise ValueError("管段源几何长度必须大于0")
+                    # Coordinates are computed from source leaves; supplied coordinates cannot replace them.
+                    for key, actual in (("start", start), ("end", end)):
+                        if key in raw and (not isinstance(raw[key], list) or raw[key] != actual):
+                            raise ValueError(f"管段{key}与完整路径变换的源几何不一致")
+                    segment = {**raw, "start": start, "end": end, "source_layer": layer,
+                               "source_sha256": self.source, "coordinate_system": "WCS", "coordinate_unit": self.unit}
+                    segment["classification_proofs"], segment["classification_problems"] = self.classification_for(segment)
+                    self.segments.append(segment)
         refs = config.get("receptions", [])
         if not isinstance(refs, list):
             raise ValueError("receptions 必须是冻结管网数量结果文件数组")
@@ -423,8 +433,8 @@ class Attachment:
             if result.get("schema_version") != "qto-network-component-reception/1.0":
                 raise ValueError("管网接收结果不支持当前数量接收契约；旧valves候选不等于数量接收")
             owner = result.get("professional_owner")
-            if owner != "qto-pipe-networks":
-                raise ValueError("当前实际数量消费适配仅支持管网infer_pipe_network，风管仍待独立接收凭据")
+            if owner not in {"qto-pipe-networks", "qto-duct-air-systems"}:
+                raise ValueError("数量接收专业不受支持")
             for key, expected in (("source_sha256", self.source), ("coordinate_system", "WCS"),
                                   ("coordinate_unit", self.unit), ("layout", self.layout), ("space_id", self.space)):
                 if result.get(key) != expected:
@@ -432,7 +442,16 @@ class Attachment:
             if not nonempty(result.get("workpackage_id")) or not isinstance(result.get("quantity_items"), list):
                 raise ValueError("管网接收结果缺少workpackage_id/quantity_items")
             self.reception_refs.append(receipt_ref)
-            verified_rows = verify_pipe_consumption(result, Path(receipt_ref["path"]).parent, current_outlets=self.outlet_map)
+            if owner == "qto-duct-air-systems":
+                import importlib.util
+                module_path = Path(__file__).resolve().parents[2] / "qto-duct-air-systems/scripts/duct_inline_reception.py"
+                spec = importlib.util.spec_from_file_location("qto_duct_inline_reception", module_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                verifier = module.verify_duct_consumption
+            else:
+                verifier = verify_pipe_consumption
+            verified_rows = verifier(result, Path(receipt_ref["path"]).parent, current_outlets=self.outlet_map)
             self.reception_scopes.append({"result_ref": receipt_ref, "quantity_scope": result.get("quantity_scope"),
                                           "guarantee": "only_current_report_instances_not_global_network_uniqueness"})
             for index, item in enumerate(verified_rows):
@@ -545,18 +564,23 @@ class Attachment:
         if not isinstance(allowed_layers, list) or not allowed_layers or any(not nonempty(x) for x in allowed_layers):
             problems.append("未声明允许的管段源图层，跨层近邻不自动挂接")
         for segment in self.segments:
-            a, b = segment["start"], segment["end"]
-            ab = [b[i]-a[i] for i in range(3)]
-            t = max(0., min(1., sum((point[i]-a[i])*ab[i] for i in range(3))/sum(v*v for v in ab)))
-            projection = [a[i]+t*ab[i] for i in range(3)]
-            distance = math.dist(point, projection)
+            if segment.get("generated_duct_host"):
+                from qto_pipe_topology import project_route,part_point
+                distance,index,t=project_route(point,segment["geometry"]["parts"])
+                projection=part_point(segment["geometry"]["parts"][index],t)
+            else:
+                a, b = segment["start"], segment["end"]
+                ab = [b[i]-a[i] for i in range(3)]
+                t = max(0., min(1., sum((point[i]-a[i])*ab[i] for i in range(3))/sum(v*v for v in ab)))
+                projection = [a[i]+t*ab[i] for i in range(3)]
+                distance = math.dist(point, projection)
             # Preserve all nearby segments, including different systems/spaces/layers: never pre-filter ambiguity away.
             if distance > self.tolerance:
                 continue
             issues = []
             if segment.get("space_id") != self.space:
                 issues.append("管段空间与点位范围不一致")
-            if not allowed_layers or segment["source_layer"] not in allowed_layers:
+            if not allowed_layers or any(layer not in allowed_layers for layer in segment.get("source_layers",[segment["source_layer"]])):
                 issues.append("管段源图层未在本实例允许范围")
             evidence = segment.get("classification_evidence_ids")
             if (not known_classification(segment.get("system")) or not known_classification(segment.get("spec"))

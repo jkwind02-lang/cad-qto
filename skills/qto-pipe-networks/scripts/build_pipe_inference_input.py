@@ -460,13 +460,15 @@ def drop_zero_length_parts(geometry: Any) -> tuple[Any, list[int]]:
 
 def expanded_manifest_rows(layout_path: Path, block_path: Path, manifest: dict[str, Any],
                            max_depth: int, failures: list[dict[str, Any]],
-                           target_layout: str | None = None, scope_bounds: dict[str, float] | None = None) -> Iterable[dict[str, Any]]:
+                           target_layout: str | None = None, scope_bounds: dict[str, float] | None = None,
+                           coverage_filter=None) -> Iterable[dict[str, Any]]:
     definitions: dict[str, list[dict[str, Any]]] = {}
     for row in load_stream(block_path):
         definitions.setdefault(str(row.get("parent_block") or ""), []).append(row)
     origins = {str(item["block_name"]): item.get("origin", [0., 0., 0.]) for item in manifest.get("blocks", []) if isinstance(item, dict) and item.get("block_name")}
     empty = empty_block_names(manifest, definitions)
     extent_cache = {}
+    accessory_shape_cache = {}
 
     def mark_extent(target, insert, parent_matrix):
         """scope_extent_bbox: the INSERT's transformed definition extent (2D), the scope test the point adapter's
@@ -479,9 +481,15 @@ def expanded_manifest_rows(layout_path: Path, block_path: Path, manifest: dict[s
         if insert.get("geometry_issues") or name not in definitions:
             return target
         local_box, notes = cad_geometry.definition_extent(name, definitions, origins, max_depth, extent_cache, (), empty)
-        box = cad_geometry.transform_bounds(local_box, compose_matrix(parent_matrix, matrix_for_insert(insert, origins.get(name, [0., 0., 0.]))))
+        instance_matrix = compose_matrix(parent_matrix, matrix_for_insert(insert, origins.get(name, [0., 0., 0.])))
+        box = cad_geometry.transform_bounds(local_box, instance_matrix)
         if box is not None:
             target["scope_extent_bbox"] = [box[0], box[1], box[3], box[4]]
+            target["accessory_extent_wcs"] = list(box)
+            if coverage_filter is not None and coverage_filter(target):
+                from pipe_accessory_geometry import instance_shapes
+                target["accessory_source_geometry"] = instance_shapes(name, definitions, origins, max_depth,
+                    instance_matrix, cad_geometry, accessory_shape_cache)
             if notes:
                 target["scope_extent_notes"] = cad_geometry.extent_note_labels(notes)
         return target
@@ -622,6 +630,13 @@ def main() -> int:
         profile_version = text(profile.get("profile_version"), "profile_version")
         output = args.output_dir.resolve()
         output.mkdir(parents=True, exist_ok=True)
+        coverage_patterns = [(compile_pattern(rule.get("layer_pattern"), "coverage.layer_pattern"),
+                              compile_pattern(rule.get("block_pattern"), "coverage.block_pattern"))
+                             for rule in profile.get("block_rules", [])
+                             if isinstance(rule, dict) and rule.get("decision") == "include"]
+        def coverage_filter(row):
+            return any(layer.search(str(row.get("layer") or "")) and block.search(str(row.get("block_name") or ""))
+                       for layer,block in coverage_patterns)
         block_expansion_failures: list[dict[str, Any]] = []
         empty_block_hits: Counter = Counter()
         degenerate_segments: list[dict[str, Any]] = []
@@ -647,6 +662,7 @@ def main() -> int:
                     block_expansion_failures,
                     target_layout=str((profile.get("scope") or {}).get("layout", "Model")),
                     scope_bounds=(profile.get("scope") or {}).get("bounds"),
+                    coverage_filter=coverage_filter,
                 )
         else:
             stream_path = args.neutral_stream.resolve()
@@ -678,6 +694,8 @@ def main() -> int:
             protected_paths.append((profile_path.parent / profile["prescoped_rows"]["path"]).resolve())
         if args.endpoint_handoff:
             protected_paths.append(args.endpoint_handoff.resolve())
+        from pipe_gap_candidates import source_paths
+        protected_paths += source_paths(profile, profile_path)[1:]
         planned_outputs = [output / name for name in ("管网对象选择审计输入.json", "管网对象选择审计.json", "管网推算输入.json", "管网中性对象处置清单.jsonl", "管网识别报告.json", "识图待续说明.md")]
         if args.inference_output:
             planned_outputs.append(args.inference_output.resolve())
@@ -1059,7 +1077,7 @@ def main() -> int:
         audit_path = output / "管网对象选择审计.json"
         audit_input_path.write_text(json.dumps(audit_input, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         auditor = Path(__file__).resolve().with_name("audit_pipe_object_selection.py")
-        audit_run = subprocess.run([sys.executable, str(auditor), "--input", str(audit_input_path), "--output", str(audit_path)], capture_output=True, text=True, encoding="utf-8")
+        audit_run = subprocess.run([sys.executable, str(auditor), "--input", str(audit_input_path), "--output", str(audit_path)], stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8")
         if audit_run.returncode != 0 or not audit_path.is_file():
             fail(f"对象选择审计失败: {audit_run.stderr.strip() or audit_run.stdout.strip()}")
         audit = load_json(audit_path)
@@ -1280,6 +1298,7 @@ def main() -> int:
                 "valve_id": f"VALVE-{row.get('record_id')}",
                 "system": text(rule.get("system"), f"{rule['rule_id']}.system"),
                 "point": anchor,
+                "space_id": str(scope.get("space_id") or "single-view"),
                 "instance_level": str(rule.get("instance_level", "scenario")),
                 "valve_type": rule.get("valve_type"),
                 "type_source_ids": list(rule.get("type_source_ids", [])),
@@ -1289,6 +1308,25 @@ def main() -> int:
                 "source_id": f"EV-CAD-{row.get('record_id')}",
                 "source_object_id": text(row.get("record_id"), "valve source_object_id"),
             })
+            # Use transformed instance geometry; a point or block name cannot
+            # prove coverage of a long serial gap.
+            extent = row.get("accessory_extent_wcs")
+            unsupported_extent_notes = set(row.get("scope_extent_notes") or []) - {"注记按插入点计"}
+            if extent is None and row.get("scope_extent_bbox") is not None and not unsupported_extent_notes:
+                box2 = row["scope_extent_bbox"]
+                if len(box2) == 4:
+                    z = anchor[2]/factor if len(anchor) == 3 else 0.
+                    extent = [box2[0], box2[1], z, box2[2], box2[3], z]
+            if extent is not None and not unsupported_extent_notes:
+                valves[-1].update(coverage_bounds=[float(v)*factor for v in extent],
+                                  coverage_basis="transformed_instance_definition_extent",
+                                  coverage_extent_notes=row.get("scope_extent_notes", []))
+            source_geometry = row.get("accessory_source_geometry")
+            if isinstance(source_geometry, dict):
+                valves[-1]["coverage_geometry"] = {"shapes": [{**s, "vertices": [[v*factor for v in p] for p in s["vertices"]]}
+                    for s in source_geometry.get("shapes", [])],
+                    "point_candidates": [[v*factor for v in p] for p in source_geometry.get("point_candidates", [])],
+                    "complete_source_outline": source_geometry.get("complete_source_outline", False)}
             object_dispositions[source_record_id].update({
                 "disposition": "adopted",
                 "basis": str(rule.get("basis") or f"冻结识别规则 {rule['rule_id']}"),
@@ -1426,6 +1464,7 @@ def main() -> int:
             "change_nodes": profile.get("change_nodes", []),
             "scope_boundary_nodes": profile.get("scope_boundary_nodes", []),
             "valves": valves,
+            "protected_source_paths": [str(p.resolve()) for p in protected_paths],
         }
         if working_basis:
             inference_input["recognition_basis"] = working_basis
@@ -1520,7 +1559,7 @@ def main() -> int:
             inference_output = args.inference_output.resolve()
             inference_output.parent.mkdir(parents=True, exist_ok=True)
             engine = Path(__file__).resolve().with_name("infer_pipe_network.py")
-            inference_run = subprocess.run([sys.executable, str(engine), "--input", str(inference_input_path), "--output", str(inference_output)], capture_output=True, text=True, encoding="utf-8")
+            inference_run = subprocess.run([sys.executable, str(engine), "--input", str(inference_input_path), "--output", str(inference_output)], stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8")
             if inference_run.returncode != 0:
                 fail(f"管网推算失败: {inference_run.stderr.strip() or inference_run.stdout.strip()}")
             report["artifacts"]["inference_output"] = str(inference_output)

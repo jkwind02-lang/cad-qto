@@ -15,6 +15,7 @@ import sys
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any
+from pipe_gap_candidates import candidates as pipe_gap_candidates, gap_limits, protect_outputs, source_paths
 
 
 INPUT_VERSIONS = {
@@ -151,6 +152,8 @@ def main() -> int:
 
     try:
         data = load(args.input.resolve())
+        protected_sources = source_paths(data, args.input)
+        protect_outputs([args.output], protected_sources)
         data, route_preparation = prepare_network(data)
         uncertain_change_systems = set()
         validate_working_basis(data.get("recognition_basis"))
@@ -444,11 +447,13 @@ def main() -> int:
             if not isinstance(scenario_include, bool):
                 fail(f"gap_classifications[{index}].scenario_include 必须是布尔值")
             action = raw.get("quantity_action", "scenario")
-            if action not in {"scenario", "exclude", "restore_omission"}:
+            if action not in {"scenario", "exclude", "restore_omission", "include_occupied_axis"}:
                 fail("quantity_action无效")
-            if action == "restore_omission":
+            if action in {"restore_omission", "include_occupied_axis"}:
                 text(raw.get("source_id"), "omission source_id")
                 seed_level(raw.get("quantity_evidence_level"), "omission evidence_level")
+            if action == "include_occupied_axis":
+                text(raw.get("quantity_basis"), "include_occupied_axis.quantity_basis")
             gap_classifications[pair] = {
                 "classification": text(raw.get("classification", "未分类断口候选"), "classification"),
                 "quantity_decision": text(raw.get("quantity_decision", "待确认"), "quantity_decision"),
@@ -456,6 +461,7 @@ def main() -> int:
                 "source_id": raw.get("source_id"),
                 "quantity_action": action,
                 "quantity_evidence_level": raw.get("quantity_evidence_level"),
+                "quantity_basis": raw.get("quantity_basis"),
             }
 
         open_endpoints = [
@@ -463,41 +469,23 @@ def main() -> int:
             for index, endpoint in enumerate(endpoints)
             if len(node_segments[endpoint_node[index]]) == 1
         ]
-        spatial_gap_options = gap_pairs(endpoints, open_endpoints, segments, gap_max)
+        gap_options, rejected_gaps = pipe_gap_candidates(
+            endpoints, open_endpoints, segments, parameters, unit, snap, gap_max,
+            direction_tolerance, exclusions, gap_pairs, data.get("valves", []), node_segments, node_points,
+            data.get("change_nodes", []) + data.get("scope_boundary_nodes", []),
+            {pair for pair,row in gap_classifications.items() if row["quantity_action"]=="restore_omission"})
         candidates: dict[int, list[tuple[float, int]]] = defaultdict(list)
-        for left_pos, left in enumerate(open_endpoints):
-            a = endpoints[left]
-            a_segment = segments[a["segment_id"]]
-            a_other = a_segment["end"] if a["end_name"] == "start" else a_segment["start"]
-            outward_a = tuple(-x for x in a_segment["tangent_start"]) if a["end_name"] == "start" else tuple(a_segment["tangent_end"])
-            for right in spatial_gap_options.get(left, []):
-                b = endpoints[right]
-                if a["segment_id"] == b["segment_id"] or a["system"] != b["system"]:
-                    continue
-                pair = frozenset(
-                    {(a["segment_id"], a["end_name"]), (b["segment_id"], b["end_name"])}
-                )
-                if pair in exclusions:
-                    continue
-                gap = distance(a["point"], b["point"])
-                if not snap < gap <= gap_max:
-                    continue
-                b_segment = segments[b["segment_id"]]
-                b_other = b_segment["end"] if b["end_name"] == "start" else b_segment["start"]
-                outward_b = tuple(-x for x in b_segment["tangent_start"]) if b["end_name"] == "start" else tuple(b_segment["tangent_end"])
-                if angle_deg(outward_a, vector(a["point"], b["point"])) > direction_tolerance:
-                    continue
-                if angle_deg(outward_b, vector(b["point"], a["point"])) > direction_tolerance:
-                    continue
-                candidates[left].append((gap, right))
-                candidates[right].append((gap, left))
+        for (left, right), option in gap_options.items():
+            candidates[left].append((option["distance"], right))
+            candidates[right].append((option["distance"], left))
 
         best: dict[int, tuple[float, int]] = {}
-        ambiguous: set[int] = set()
+        ambiguous: set[int] = {endpoint_lookup[tuple(e)] for item in rejected_gaps
+                               if item["reason"] == "multiple_target_endpoints" for e in item["endpoints"]}
         for endpoint_index, options in candidates.items():
             options.sort()
             best[endpoint_index] = options[0]
-            if len(options) > 1 and options[1][0] <= options[0][0] * 1.05 + snap:
+            if len(options) > 1:
                 ambiguous.add(endpoint_index)
 
         bridges: list[dict[str, Any]] = []
@@ -514,6 +502,8 @@ def main() -> int:
             )
             gap_classification = gap_classifications.get(pair, {})
             supplied_classification = bool(gap_classification)
+            option = gap_options[(left, right)]
+            serial = option["kind"] == "serial_accessory"
             bridges.append(
                 {
                     "bridge_id": bridge_id,
@@ -527,28 +517,39 @@ def main() -> int:
                     "quantity_included": False,
                     "quantity_action": gap_classification.get("quantity_action", "scenario"),
                     "quantity_evidence_level": gap_classification.get("quantity_evidence_level"),
+                    "quantity_basis": gap_classification.get("quantity_basis"),
                     "quantity_decision": gap_classification.get(
-                        "quantity_decision", "自动几何候选暂估补长"
+                        "quantity_decision", "只补拓扑，不补管长" if serial else "共线断口方案暂估补长"
                     ),
                     "classification": gap_classification.get(
-                        "classification", "唯一同向短断口候选"
+                        "classification", "串联在线附件占位候选" if serial else "共线断口候选"
                     ),
                     "classification_method": (
-                        "project_classification" if supplied_classification else "automatic_geometry_candidate"
+                        "project_classification" if supplied_classification else "automatic_serial_accessory_coverage_candidate" if serial else "automatic_geometry_candidate"
                     ),
-                    "scenario_include": gap_classification.get("scenario_include", True),
+                    "scenario_include": gap_classification.get("scenario_include", not serial),
                     "source_id": gap_classification.get("source_id", "AUTO-GAP-GEOMETRY"),
-                    "evidence_level": "inferred",
+                    "evidence_level": option["coverage"]["evidence_level"] if serial else "scenario",
                     "assumption_id": f"A-GAP-{bridge_id[3:]}",
+                    "candidate_kind": option["kind"],
+                    "coverage_evidence": option["coverage"],
+                    "connectivity_included": option["connectivity_included"],
+                    "omission_within_gap_max": option["omission_within_gap_max"],
+                    "topology_status": "CANDIDATE_CONNECTED" if option["connectivity_included"] else "DN_CONFLICT_UNRESOLVED",
+                    "occupying_source_object_ids": option["coverage"]["source_object_ids"] if serial else [],
+                    "occupying_valve_ids": [r["valve_id"] for r in option["coverage"]["instances"]] if serial else [],
                 }
             )
-            bridged_endpoints.update({left, right})
+            if option["connectivity_included"]:
+                bridged_endpoints.update({left, right})
 
         graph: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
         for segment_id, (start_node, end_node) in segment_nodes.items():
             graph[start_node].append((end_node, "segment", segment_id))
             graph[end_node].append((start_node, "segment", segment_id))
         for bridge in bridges:
+            if not bridge["connectivity_included"]:
+                continue
             graph[bridge["node_a"]].append((bridge["node_b"], "bridge", bridge["bridge_id"]))
             graph[bridge["node_b"]].append((bridge["node_a"], "bridge", bridge["bridge_id"]))
 
@@ -825,7 +826,11 @@ def main() -> int:
                 left, right = sorted(incident)
                 adjacency[left].add(right)
                 adjacency[right].add(left)
+        independent_adjacency = {sid: set(adjacency[sid]) for sid in segments}
+        bridge_links = defaultdict(list)
         for bridge in bridges:
+            if not bridge["connectivity_included"]:
+                continue
             if bridge["node_a"] in change_nodes or bridge["node_b"] in change_nodes or bridge["system"] in uncertain_change_systems:
                 continue
             left_segments = node_segments[bridge["node_a"]]
@@ -834,6 +839,7 @@ def main() -> int:
                 left, right = next(iter(left_segments)), next(iter(right_segments))
                 adjacency[left].add(right)
                 adjacency[right].add(left)
+                bridge_links[frozenset((left,right))].append(bridge)
 
         for link in interface_edges:
             if link.get("dn_continuity") is not True or link["system"] in uncertain_change_systems:
@@ -844,6 +850,7 @@ def main() -> int:
             if len(left_set) == len(right_set) == 1:
                 left, right = next(iter(left_set)), next(iter(right_set))
                 adjacency[left].add(right); adjacency[right].add(left)
+                independent_adjacency[left].add(right); independent_adjacency[right].add(left)
 
         terminal_seeds: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for node, records in terminal_nodes.items():
@@ -869,7 +876,9 @@ def main() -> int:
         assignments: dict[str, dict[str, Any]] = {}
         runs: list[dict[str, Any]] = []
         seen_segments: set[str] = set()
-        decision_queue: list[dict[str, Any]] = []
+        decision_queue: list[dict[str, Any]] = [
+            {"type": "串联附件连接待核" if item.get("candidate_classification") else "断口候选被安全约束阻断",
+             **item} for item in rejected_gaps]
         for segment_id in sorted(segments):
             if segment_id in seen_segments:
                 continue
@@ -1052,6 +1061,26 @@ def main() -> int:
                 roles[sid] = {"role": "环网", "downstream_terminal_count": 0, "role_basis": "环路或多源不套用树状下游数量"}
         if ambiguous_nodes:
             route_preparation["issues"].append({"type": "环网或多水源需按系统图复核主支管", "node_count": len(ambiguous_nodes)})
+        role_seen = set()
+        for first in graph:
+            if first in role_seen:
+                continue
+            todo, members, used_gaps = [first], set(), set()
+            while todo:
+                current = todo.pop()
+                if current in members:
+                    continue
+                members.add(current)
+                for other, kind, edge_id in graph[current]:
+                    if kind == "bridge":
+                        used_gaps.add(next(b["assumption_id"] for b in bridges if b["bridge_id"] == edge_id))
+                    if other not in members:
+                        todo.append(other)
+            role_seen.update(members)
+            if used_gaps:
+                for sid,(a,b) in segment_nodes.items():
+                    if a in members:
+                        roles[sid].update(role_evidence_level="scenario", role_assumption_ids=sorted(used_gaps))
 
         role_dn_rules = []
         for index, raw in enumerate(data.get("role_dn_rules", [])):
@@ -1129,6 +1158,17 @@ def main() -> int:
                     }
                 )
 
+        from pipe_gap_dependencies import isolate_gap_dependencies, summarize_assignments
+        independent_assignments = isolate_gap_dependencies(
+            assignments, segments, terminal_seeds, adjacency, independent_adjacency, bridge_links)
+        for sid, assignment in assignments.items():
+            if assignment["method"] == "project_role_dn_rule" and roles[sid].get("role_assumption_ids"):
+                deps=roles[sid]["role_assumption_ids"]
+                assignment.update(evidence_level="scenario",quantity_level="方案暂估量",requires_topology_assumption=True,
+                    gap_assumption_ids=deps,assumption_ids=sorted(set(assignment["assumption_ids"])|set(deps)))
+                independent_assignments[sid].update(dn=None,evidence_level=None,quantity_level="未决量",method="no_independent_dn_path",
+                    source_ids=[],assumption_ids=[],alternatives=[])
+
         for run in runs:
             assigned = [assignments[segment_id]["dn"] for segment_id in run["segments"]]
             if run["status"] == "unresolved" and any(assigned):
@@ -1138,7 +1178,7 @@ def main() -> int:
                 continue
             assigned = [assignments[segment_id]["dn"] for segment_id in decision["segments"]]
             if any(assigned):
-                decision["type"] = "按项目主支管规则形成方案暂估"
+                decision["type"] = "虚拟桥条件DN方案" if any(assignments[sid].get("requires_topology_assumption") for sid in decision["segments"]) else "按项目主支管规则形成方案暂估"
                 decision["alternatives"] = sorted({value for value in assigned if value})
                 decision["recommendation"] = "保留方案暂估并由设计或用户确认项目规则"
 
@@ -1267,6 +1307,7 @@ def main() -> int:
                     "external_port_ids": [p["port_id"] for p in context.get("external_ports", [])],
                     "quantity_owner": context.get("fitting_quantity_owner", "in_scope"),
                     "boundary_ids": [r["boundary_id"] for r in boundary_records if r["node_id"] == node_id],
+                    "assumption_ids": sorted({a for sid in incident for a in assignments[sid].get("assumption_ids", [])}),
                 }
             )
             if is_boundary and not resolved_context:
@@ -1316,6 +1357,8 @@ def main() -> int:
                 else:
                     bridge_pairs = []
                     for bridge in bridges:
+                        if not bridge["connectivity_included"]:
+                            continue
                         if bridge["system"] != system or bridge.get("space_id") != valve_space:
                             continue
                         pa, pb = node_points[bridge["node_a"]], node_points[bridge["node_b"]]
@@ -1328,6 +1371,9 @@ def main() -> int:
                         attached_segments = list(next(iter(distinct_pairs)))
                         connection_method = "unique_topology_bridge"
             attached = attached_segments[0] if attached_segments else None
+            connection_gap_ids = sorted({bridge["assumption_id"] for bridge in bridges
+                if connection_method == "unique_topology_bridge"
+                and {bridge["a"]["segment_id"], bridge["b"]["segment_id"]} == set(attached_segments)})
             direct_dn = raw.get("direct_dn")
             if direct_dn is not None:
                 dn = text(direct_dn, f"{valve_id}.direct_dn")
@@ -1363,6 +1409,10 @@ def main() -> int:
                 dn = None
                 dn_level = None
                 dn_method = "unresolved"
+            dn_assumptions = sorted({a for sid in attached_segments for a in assignments[sid].get("assumption_ids", [])}
+                                    | set(connection_gap_ids)) if direct_dn is None else []
+            if direct_dn is None and dn is not None and connection_gap_ids:
+                dn_level = "scenario"
             valve_type = raw.get("valve_type")
             candidate_types = raw.get("candidate_types", [])
             if not isinstance(candidate_types, list) or any(
@@ -1391,6 +1441,8 @@ def main() -> int:
                     "dn_evidence_level": dn_level,
                     "dn_quantity_level": LEVEL_ZH[dn_level] if dn_level else "未决量",
                     "dn_method": dn_method,
+                    "dn_assumption_ids": dn_assumptions,
+                    "connection_assumption_ids": connection_gap_ids,
                     "assumption_id": raw.get("assumption_id"),
                     "source_id": text(raw.get("source_id"), f"{valve_id}.source_id"),
                     "source_object_id": (text(raw["source_object_id"], f"{valve_id}.source_object_id")
@@ -1473,9 +1525,17 @@ def main() -> int:
         )
         if not math.isclose(raw_length, layered_length, rel_tol=0, abs_tol=1e-9):
             fail("分层长度与原始长度不守恒")
+        independent_length_summary = summarize_assignments(independent_assignments, segments)
+        independent_length = sum(v for levels in independent_length_summary.values() for dns in levels.values() for v in dns.values())
+        if not math.isclose(raw_length, independent_length, rel_tol=0, abs_tol=1e-9):
+            fail("不依赖虚拟桥的已绘分层基线与原始长度不守恒")
 
         classified_bridges = [bridge for bridge in bridges if bridge["scenario_include"]]
-        bridge_items, restored, restoration_issues = restore_omissions(bridges, assignments, valve_records, node_points, snap, point_segment_distance)
+        from pipe_gap_quantities import pipe_bridge_quantities
+        bridge_items, restored, restoration_issues = pipe_bridge_quantities(
+            bridges, assignments, valve_records, node_points, snap, point_segment_distance, restore_omissions)
+        inclusive_axis_length = sum(item["length"] for item in bridge_items
+                                    if item["action"] == "include_occupied_axis" and item["included_in_reconstructed"])
         route_preparation["issues"].extend(restoration_issues)
         restored_summary = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
         for system, levels in length_summary.items():
@@ -1484,7 +1544,9 @@ def main() -> int:
         for (system, level, dn), value in restored.items():restored_summary[system][level][dn] += value
         used_pairs = {frozenset({(b['a']['segment_id'], b['a']['end']), (b['b']['segment_id'], b['b']['end'])}) for b in bridges}
         for pair, classification in gap_classifications.items():
-            if pair not in used_pairs:
+            if pair not in used_pairs or (classification["quantity_action"]=="restore_omission" and not any(
+                frozenset({(b['a']['segment_id'],b['a']['end']),(b['b']['segment_id'],b['b']['end'])})==pair
+                and b["omission_within_gap_max"] for b in bridges)):
                 route_preparation["issues"].append({"type": "断口分类未匹配实际拓扑桥", "endpoints": sorted(pair), "classification": classification})
         base_levels = {a['quantity_level'] for a in assignments.values()}
         base_level = next((v for v in ('未决量','方案暂估量','规则推算量','确认量') if v in base_levels), '未决量')
@@ -1543,6 +1605,7 @@ def main() -> int:
             "gap_candidates_classified": all(
                 bridge["classification"] != "未分类断口候选" for bridge in bridges
             ),
+            "extended_gap_candidates_resolved": not rejected_gaps,
             "dn_match_candidates_accounted": (
                 not dn_match_candidates
                 or (
@@ -1586,6 +1649,8 @@ def main() -> int:
                 "valve_attach_max": valve_max,
                 "fitting_angle_tolerance_deg": fitting_angle_tolerance,
                 "main_min_downstream_terminals": main_min,
+                **dict(zip(("collinear_gap_max", "serial_accessory_gap_max", "accessory_coverage_tolerance"),
+                           gap_limits(parameters, unit, gap_max, snap))),
             },
             "object_selection": object_selection,
             "endpoint_handoff": endpoint_handoff,
@@ -1602,8 +1667,11 @@ def main() -> int:
                 "raw_length": raw_length,
                 "layered_length": layered_length,
                 "length_conservation_delta": layered_length - raw_length,
+                "independent_drawn_length": independent_length,
+                "independent_length_conservation_delta": independent_length-raw_length,
                 "node_count": len(node_points),
                 "topology_bridge_count": len(bridges),
+                "topology_connected_bridge_count": sum(1 for bridge in bridges if bridge["connectivity_included"]),
                 "virtual_bridge_length": virtual_length,
                 "virtual_bridge_quantity_included": 0,
                 "classified_bridge_scenario_length": classified_length,
@@ -1630,6 +1698,8 @@ def main() -> int:
                 ),
                 "run_count": len(runs),
                 "dn_assigned_segment_count": sum(1 for item in assignments.values() if item["dn"]),
+                "dn_conditionally_assigned_segment_count": sum(1 for item in assignments.values() if item["dn"] and item.get("requires_topology_assumption")),
+                "dn_independently_assigned_segment_count": sum(1 for item in independent_assignments.values() if item["dn"]),
                 "dn_unresolved_segment_count": sum(1 for item in assignments.values() if not item["dn"]),
                 "role_rule_assignment_count": role_rule_assignment_count,
                 "dn_scenario_count": len(dn_scenarios),
@@ -1641,11 +1711,13 @@ def main() -> int:
                 "decision_count": len(decision_queue),
             },
             "topology_bridges": bridges,
+            "rejected_gap_candidates": rejected_gaps,
             "bridge_scenarios": bridge_scenarios,
             "bridge_quantity_items": bridge_items,
             "reconstructed_length_summary": restored_summary,
             "reconstructed_length": raw_length + sum(restored.values()),
-            "restored_omission_length": sum(restored.values()),
+            "restored_omission_length": sum(restored.values()) - inclusive_axis_length,
+            "project_inclusive_accessory_axis_length": inclusive_axis_length,
             "change_nodes": change_records,
             "scope_boundary_nodes": boundary_records,
             "roots": root_records,
@@ -1690,19 +1762,25 @@ def main() -> int:
                 }
                 for system, levels in sorted(length_summary.items())
             },
+            "independent_drawn_length_summary": independent_length_summary,
+            "independent_dn_assignments": independent_assignments,
+            "conditional_drawn_segment_length": sum(segments[sid]["length"] for sid,a in assignments.items() if a.get("requires_topology_assumption")),
+            "conditional_drawn_quantity_meaning": "原已绘几何长度不变；依赖虚拟桥的DN及对应分规格量只属条件方案。独立已绘基线与此分层方案互为替代，不可相加。",
             "decision_queue": decision_queue,
         }
         output = finalize_network(output, route_preparation, segments, snap_stats)
         output_path = args.output.resolve()
-        if output_path == args.input.resolve():
-            fail("输出路径不得覆盖输入")
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(output, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         import hashlib
-        summary = review_markdown(output)
+        from pipe_gap_candidates import review_pending_gaps
+        summary_view = {**output, "length_summary": independent_length_summary,
+                        "restored_omission_length": 0 if inclusive_axis_length else output["restored_omission_length"]}
+        summary = review_markdown(summary_view) + review_pending_gaps(output)
         summary_path = output_path.with_name(output_path.stem + "_" + hashlib.sha256(summary.encode()).hexdigest()[:10] + "_复核摘要.md")
+        protect_outputs([output_path, summary_path], protected_sources)
         if summary_path.exists() and summary_path.read_text(encoding="utf-8") != summary:
             fail("复核摘要文件冲突，请使用新版本输出目录")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(output, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         summary_path.write_text(summary, encoding="utf-8")
         print(
             json.dumps(

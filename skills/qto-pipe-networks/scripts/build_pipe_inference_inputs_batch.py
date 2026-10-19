@@ -502,7 +502,11 @@ def scan_frames(stream_path: Path, block_path: Path, cad_manifest: dict[str, Any
     context_rows: dict[str, str] = {}
     insert_index: dict[str, str] = {}   # path key -> serialized INSERT row (strings keep the index small)
     rows = adapter.expanded_manifest_rows(stream_path, block_path, cad_manifest, mapping["block_expansion"]["max_depth"],
-                                          expansion_failures, target_layout=layout, scope_bounds=union)
+                                          expansion_failures, target_layout=layout, scope_bounds=union,
+                                          coverage_filter=lambda row:any(fam.get("decision")=="include"
+                                              and fam["layer_re"].search(str(row.get("layer") or ""))
+                                              and fam["block_re"].search(str(row.get("block_name") or ""))
+                                              for fam in by_kind["block"]))
     total_rows = 0
     drawing_pending: list[dict[str, Any]] = []
     try:
@@ -851,6 +855,9 @@ def write_frame_inputs(frame: dict[str, Any], state: dict[str, Any], mapping: di
         "use_conventional_valve_type_candidates": bool(mapping.get("use_conventional_valve_type_candidates", True)),
         "object_audit_parameters": mapping.get("object_audit_parameters", {"connection_tolerance": 0.01, "repeat_min_count": 3, "signature_precision": 6}),
         "inference_parameters": mapping.get("inference_parameters", {}),
+        "gap_classifications": mapping.get("gap_classifications_by_frame", {}).get(frame_id, []),
+        "gap_exclusions": mapping.get("gap_exclusions_by_frame", {}).get(frame_id, []),
+        "protected_source_paths": mapping.get("_protected_source_paths", []),
         "roots": [], "terminals": [],
         "endpoint_not_required_reason": str(mapping.get("endpoint_not_required_reason") or "批量入口未接入点位工作包；末端按后续交接补充，未以零代替未知端点"),
         "batch": {"generator": VERSION, "frame": frame, "skipped_families_without_objects": skipped_families,
@@ -933,7 +940,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     output = args.output_dir.resolve()
+    from pipe_gap_candidates import protect_tree
+    try:
+        protect_tree(output, [args.cad_manifest, args.frames, args.mapping])
+    except (OSError, ValueError) as exc:
+        print(json.dumps({"status": "INPUT_REQUIRED", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        return 2
     output.mkdir(parents=True, exist_ok=True)
+    output_safe = True
     diagnostics: list[dict[str, Any]] = []
     summary: dict[str, Any] = {"schema_version": SUMMARY_SCHEMA, "generator": VERSION, "status": "FAILED", "frames": [],
                                "disposition_detail": args.disposition_detail,
@@ -945,6 +959,8 @@ def main(argv: list[str] | None = None) -> int:
 
     def finish(status: str, code: int) -> int:
         summary["status"] = status
+        if not output_safe:
+            return code
         summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({"status": status, "frames": len(summary["frames"]),
                           "frame_status": dict(Counter(f["status"] for f in summary["frames"])),
@@ -963,6 +979,15 @@ def main(argv: list[str] | None = None) -> int:
         mapping = load_mapping(mapping_path)
         manifest_path = args.cad_manifest.resolve()
         stream_path, block_path, cad_manifest = adapter.source_from_manifest(manifest_path)
+        protected = [manifest_path, args.frames.resolve(), mapping_path, stream_path, block_path]
+        protected += [Path(cad_manifest[k]["path"]).resolve() for k in ("authoritative_source", "exchange_dxf", "exchange_conversion") if cad_manifest.get(k)]
+        protected += [Path(e["path"]).resolve() for e in mapping["evidence"]]
+        try:
+            protect_tree(output, protected)
+        except (OSError, ValueError):
+            output_safe = False
+            raise
+        mapping["_protected_source_paths"] = [str(p) for p in protected]
         if mapping.get("symbol_census_report") is not None:
             mapping["_symbol_context"] = adapter.symbol_geometry.pipe_context(mapping["symbol_census_report"], manifest_path, mapping["layout"])
         manifest_sha = str(cad_manifest.get("authoritative_source", {}).get("sha256") or "").lower()

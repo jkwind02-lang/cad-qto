@@ -253,7 +253,7 @@ class Network:
         text(raw_params.get("parameter_basis"), "parameters.parameter_basis")
         self.unit = text(data.get("unit"), "unit")
         self.output_unit = str(data.get("output_unit") or "m")
-        self.factor = canonical_scale(self.unit) / canonical_scale(self.output_unit)
+        self.factor = (1.0 if self.unit == "raw_DU" else canonical_scale(self.unit) / canonical_scale(self.output_unit))
         self.floors = {}
         for index, item in enumerate(data.get("floors", [])):
             if not isinstance(item, dict):
@@ -273,7 +273,7 @@ class Network:
             }
         self.segments: dict[str, dict[str, Any]] = {}
         raw_segments = data.get("segments")
-        if not isinstance(raw_segments, list) or not raw_segments:
+        if not isinstance(raw_segments, list) or (not raw_segments and not data.get("drawn_curve_segments") and not data.get("riser_projection_candidates") and "coverage" not in data):
             fail("segments 必须是非空数组")
         for index, raw in enumerate(raw_segments):
             if not isinstance(raw, dict):
@@ -296,9 +296,14 @@ class Network:
                 "height": finite(raw["height"], f"{sid}.height", 0.0) if raw.get("height") is not None else None,
                 "diameter": finite(raw["diameter"], f"{sid}.diameter", 0.0) if raw.get("diameter") is not None else None,
                 "size_evidence_level": str(raw.get("size_evidence_level") or "未决"),
+                "length_evidence_level": str(raw.get("length_evidence_level") or "确认"),
                 "source_ids": list(raw.get("source_ids") or []),
+                "space_id": raw.get("space_id"),
+                "source_plane_z": raw["start"][2] if raw.get("source_geometry_refs") and len(raw["start"])==3 else None,
                 "elevation": None,
             }
+            if segment["length_evidence_level"] not in LEVELS[:3]:
+                fail(f"{sid}.length_evidence_level 无效")
             if segment["size_evidence_level"] not in LEVELS:
                 fail(f"{sid}.size_evidence_level 必须是 {LEVELS} 之一")
             raw_elevation = raw.get("elevation")
@@ -415,6 +420,13 @@ class Network:
             self.vertical_links.append(link)
 
     # ------------------------------------------------------------ geometry helpers
+    def same_source_plane(self, a, b):
+        if a.get("space_id") != b.get("space_id"):
+            return False
+        za,zb=a.get("source_plane_z"),b.get("source_plane_z")
+        if za is None or zb is None:return za is None and zb is None
+        return abs(za-zb)<=self.params["end_snap_tolerance"]
+
     def end_point(self, sid: str, which: str) -> list[float]:
         return self.segments[sid]["start"] if which == "start" else self.segments[sid]["end"]
 
@@ -459,6 +471,8 @@ def build_connections(net: Network, result: dict[str, Any]) -> None:
         for j in range(i + 1, len(ends)):
             a, b = ends[i], ends[j]
             if a[0] == b[0] or net.segments[a[0]]["floor_id"] != net.segments[b[0]]["floor_id"]:
+                continue
+            if not net.same_source_plane(net.segments[a[0]],net.segments[b[0]]):
                 continue
             d = dist(net.end_point(*a), net.end_point(*b))
             if d > p["end_snap_tolerance"]:
@@ -634,6 +648,10 @@ def build_connections(net: Network, result: dict[str, Any]) -> None:
     result["duplicate_fittings"] = [{"fitting_id": f["fitting_id"], "duplicate_of": f["duplicate_of"], "kind": f["kind"],
                                     **({"explicit_ends": f["explicit_ends"]} if f["explicit_ends"] is not None else {}),
                                     **({"physical_identity": f["physical_identity"]} if f["physical_identity"] else {})} for f in duplicates]
+    # Source curve ends are occupied candidates, even when their continuation is unresolved.
+    # They must never be bridged a second time by the straight-only gap/tap heuristics.
+    for endpoint in getattr(net, "curve_endpoint_contacts", set()):
+        end_state.setdefault(endpoint, "source_curve_candidate")
     # 3. accessory gaps between free collinear facing ends
     gaps = []
     free = [e for e in ends if e not in end_state]
@@ -642,6 +660,8 @@ def build_connections(net: Network, result: dict[str, Any]) -> None:
             a, b = free[i], free[j]
             sa, sb = net.segments[a[0]], net.segments[b[0]]
             if a[0] == b[0] or sa["floor_id"] != sb["floor_id"] or sa['system'] != sb['system']:
+                continue
+            if not net.same_source_plane(sa,sb):
                 continue
             pa, pb = net.end_point(*a), net.end_point(*b)
             d = dist(pa, pb)
@@ -809,6 +829,8 @@ def fitting_arms(net: Network, result: dict[str, Any]) -> None:
         best = None
         for other in net.segments.values():
             if other["segment_id"] == sid or other["floor_id"] != segment["floor_id"] or other['system'] != segment['system']:
+                continue
+            if not net.same_source_plane(segment,other):
                 continue
             if abs(segment["u"][0] * other["u"][0] + segment["u"][1] * other["u"][1]) > 0.05:
                 continue
@@ -1348,9 +1370,9 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
 
     straight = []
     for segment in net.segments.values():
-        add("straight", segment, "确认", segment["length"])
+        add("straight", segment, segment["length_evidence_level"], segment["length"])
         straight.append({"segment_id": segment["segment_id"], "floor_id": segment["floor_id"], "system": segment["system"], "spec": spec_of(segment),
-                         "length": segment["length"] * f, "evidence_level": "确认", "size_evidence_level": segment["size_evidence_level"],
+                         "length": segment["length"] * f, "evidence_level": segment["length_evidence_level"], "size_evidence_level": segment["size_evidence_level"],
                          "center_elevation": elevations[segment["segment_id"]]["value"], "elevation_evidence_level": elevations[segment["segment_id"]]["evidence_level"],
                          "elevation_basis": elevations[segment["segment_id"]]["basis"], "source_ids": segment["source_ids"]})
     result["straight_segments"] = straight
@@ -1449,6 +1471,7 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
         "totals_complete": length_gaps == 0,
         "length_unresolved_items": length_gaps,
         "straight_length": part_totals["straight"]["确认"],
+        **({"straight_length_rule": part_totals["straight"]["规则推算"]} if part_totals["straight"].get("规则推算") else {}),
         "fitting_length_rule": part_totals["fitting"]["规则推算"],
         "fitting_length_scenario": part_totals["fitting"]["方案暂估"],
         "vertical_length_rule": part_totals["vertical"]["规则推算"],
@@ -1461,7 +1484,7 @@ def summarize(net: Network, elevations: dict[str, dict[str, Any]], result: dict[
         'legacy_single_end_policy_diagnostic_only': True,
         "single_end_plane_full": result["single_end_plane_scenarios"]["extension_full"],
         "host_vertical_links": sum(1 for item in result["vertical_items"] if item["kind"] == "host_declared_link"),
-        "measured_length_rule": part_totals["straight"]["确认"] + part_totals["fitting"]["规则推算"] + part_totals["vertical"]["规则推算"] + part_totals["accessory_gap"]["规则推算"],
+        "measured_length_rule": part_totals["straight"]["确认"] + part_totals["straight"].get("规则推算",0) + part_totals["fitting"]["规则推算"] + part_totals["vertical"]["规则推算"] + part_totals["accessory_gap"]["规则推算"],
     }
     if 'vertical_annotation_binding' in result:
         missing_surface = sum(i.get('kind') == 'annotation_explicit_height' and i.get('theoretical_surface_area') is None for i in result['vertical_items'])
@@ -1530,13 +1553,16 @@ def apply_annotation_unit_dependencies(net: Network, result: dict[str, Any]) -> 
                    length_unresolved_items=metrics['length_unresolved_items'] + 1, pending_count=len(result['pending']))
 
 
-def infer(data: dict[str, Any]) -> dict[str, Any]:
+def infer(data: dict[str, Any], *, input_base: Path | None = None) -> dict[str, Any]:
     if data.get("schema_version") != INPUT_SCHEMA:
         fail(f"schema_version 必须为 {INPUT_SCHEMA}")
     net = Network(data)
     result: dict[str, Any] = {"schema_version": RESULT_SCHEMA, "engine_version": VERSION, "status": "REFERENCE_ONLY",
                               "package_id": data.get("package_id"), "unit": net.output_unit, "pending": []}
     net.result = result
+    if data.get("drawn_curve_segments"):
+        from duct_network_extensions import source_curve_network
+        _, net.curve_endpoint_contacts = source_curve_network(data)
     build_connections(net, result)
     fitting_arms(net, result)
     _, adjacency = build_runs(net)
@@ -1560,6 +1586,9 @@ def infer(data: dict[str, Any]) -> dict[str, Any]:
     if 'conditional_on_input_unit' in result:
         result['meaning'] += ('当前源XY单位未核或冲突：上述直管等量仅在conditional_on_input_unit中按输入声明作条件参考，'
                               '主结果依赖XY换算的量与完整总量为null；明示高度形成的独立竖向规则量作为已知子集保留，不证明平面单位。')
+    if any(key in data for key in ("drawn_curve_segments", "coverage", "valves", "riser_projection_candidates")) or net.unit == "raw_DU":
+        from duct_network_extensions import append_drawn_and_inline
+        append_drawn_and_inline({**data, "_input_base": str(input_base or Path.cwd())}, result, spec_of)
     return result
 
 
@@ -1572,7 +1601,7 @@ def main(argv: list[str] | None = None) -> int:
         data = json.loads(args.input.read_text(encoding="utf-8-sig"))
         if not isinstance(data, dict):
             fail("输入顶层必须是对象")
-        result = infer(data)
+        result = infer(data, input_base=args.input.resolve().parent)
         from bind_duct_vertical_annotations import write_protected_json
         protected = [args.input]
         if 'vertical_annotation_binding' in result:
@@ -1580,6 +1609,10 @@ def main(argv: list[str] | None = None) -> int:
             refs = [ev[k] for k in ('neutral_manifest', 'source', 'exchange_dxf', 'layout_entities', 'block_definitions')]
             refs.append(data['vertical_annotation_input']['duct_input'])
             protected.extend(Path(ref['path']) for ref in refs)
+        if any(key in data for key in ("neutral_binding", "valves")):
+            from receive_duct_inline_components import protected_sources
+            records = protected_sources(args.input.resolve(), args.input.resolve(), Path(__file__).resolve())
+            protected.extend(Path(row["path"]) for row in records.values())
         write_protected_json(args.output, result, protected, allow_existing=True)
         print(json.dumps({"status": result["status"], **result["metrics"], "output": str(args.output)}, ensure_ascii=False))
         return 0
