@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 from qto_cad_source_contract import canonical_scale, unit_known, unit_tokens, verify_source_file
-from qto_cad_geometry import dimension_measurement_facts, read_dxf_with_diagnostics
+from qto_cad_geometry import block_reference_facts, dimension_measurement_facts, read_dxf_with_diagnostics
 
 REQUEST_SCHEMA = 'qto-geometric-unit-request/1.0'
 EVIDENCE_SCHEMA = 'qto-geometric-unit-evidence/1.0'
@@ -82,15 +82,47 @@ def _finite(values):
     return all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in values)
 
 
+def _owner_context_issue(owner):
+    if owner.has_xdata('AcadAnnotative'):
+        return '注释可见性上下文尚未恢复'
+    xdata = getattr(owner, 'xdata', None)
+    if xdata is not None and any('BLOCKREP' in k.upper() for k in xdata.data):
+        return '动态块可见性上下文尚未恢复'
+    if owner.has_extension_dict:
+        keys = [str(k).upper() for k in owner.get_extension_dict().keys()]
+        if any(any(marker in k for marker in ('ACAD_FILTER', 'SPATIAL', 'CONTEXT_DATA', 'ENHANCEDBLOCK', 'BLOCKREP')) for k in keys):
+            return '动态/裁剪或注释上下文尚未恢复'
+    return None
+
+
 def _visible(doc, entity):
     layer = doc.layers.get(entity.dxf.get('layer', '0'))
     if (layer is None or layer.is_off() or layer.is_frozen() or bool(entity.dxf.get('invisible', 0))
             or entity.dxftype() in {'ATTRIB', 'ATTDEF'} and int(entity.dxf.get('flags', 0)) & 1):
         raise ValueError('所选尺度证据及其 INSERT 链须在当前 Model 可见；关闭/冻结图层或隐藏源实体不能作本页尺度证据')
+    context_issue = _owner_context_issue(entity)
+    if context_issue:
+        raise ValueError('所选尺度证据的' + context_issue + '，不能仅凭图层开启判定可见')
+
+
+def _instance_context_issue(doc, entity):
+    """Do not infer native clipping/dynamic visibility from cached definition bounds."""
+    try:
+        facts = block_reference_facts(entity)
+        if facts['dynamic_evidence'] or facts['anonymous_dynamic_candidate']:
+            return '动态块可见性状态尚未原生核验'
+        block = doc.blocks.get(entity.dxf.name)
+        for owner in (entity, block.block_record if block is not None else None):
+            issue = _owner_context_issue(owner) if owner is not None else None
+            if issue:
+                return '块实例或定义的' + issue + '，包围盒及图层状态不能证明可见'
+    except Exception:
+        return '块实例可见性上下文无法读取'
+    return None
 
 
 def _ref(doc, value):
-    """Resolve a real source entity through a checked, uniform, unrotated INSERT chain."""
+    """Resolve a real source entity through a checked planar similarity chain."""
     if not isinstance(value, dict) or not isinstance(value.get('handle'), str):
         raise ValueError('源实体引用须为 {handle, insert_handles:[]}，不能用自填两数或 bbox')
     handles = value.get('insert_handles', [])
@@ -102,13 +134,17 @@ def _ref(doc, value):
         if item is None or item.dxftype() != 'INSERT' or item.dxf.owner != owner or handle in seen:
             raise ValueError('INSERT 链不是当前 Model 中的唯一有效源实例路径')
         _visible(doc, item)
+        context_issue = _instance_context_issue(doc, item)
+        if context_issue:
+            raise ValueError(context_issue)
         seen.add(handle)
         sx, sy, sz = [float(item.dxf.get(k, 1.)) for k in ('xscale', 'yscale', 'zscale')]
-        if (not _finite((sx, sy, sz)) or min(sx, sy, sz) <= 0 or not math.isclose(sx, sy, rel_tol=1e-10)
-                or abs(float(item.dxf.get('rotation', 0.))) > 1e-10
+        rotation = float(item.dxf.get('rotation', 0.))
+        if (not _finite((sx, sy, sz, rotation)) or min(abs(sx), abs(sy), sz) <= 0
+                or not math.isclose(abs(sx), abs(sy), rel_tol=1e-10)
                 or tuple(item.dxf.get('extrusion', (0, 0, 1))) != (0, 0, 1)
                 or int(item.dxf.get('row_count', 1)) != 1 or int(item.dxf.get('column_count', 1)) != 1):
-            raise ValueError('几何单位尚不支持非等比、旋转、镜像、非平面或阵列 INSERT')
+            raise ValueError('几何单位尚不支持非等比、非平面、Z镜像或阵列 INSERT')
         block = doc.blocks.get(item.dxf.name)
         if block is None or block.block.is_xref or block.name.upper().startswith('*D'):
             raise ValueError('外参、缺失定义或尺寸渲染块不能作为单位图框/图签源')
@@ -128,12 +164,66 @@ def _ref(doc, value):
     return entity, transform
 
 
+def _text_points(entity, transform, offset=(0., 0., 0.)):
+    if entity.dxftype() in {'TEXT', 'ATTRIB', 'ATTDEF'}:
+        if tuple(entity.dxf.get('extrusion', (0, 0, 1))) != (0, 0, 1):
+            raise ValueError('源 TEXT 非XY位置上下文尚未核清')
+        _, first, second = entity.get_placement()
+        points = (first,) if second is None else (first, second)
+    else:
+        points = (entity.dxf.insert,)
+    return [transform(tuple(p[i]+offset[i] for i in range(3))) for p in points]
+
+
 def _point(entity, transform):
-    return transform(entity.dxf.insert)
+    return _text_points(entity, transform)[0]
+
+
+def _text_in_frame(entity, transform, box, offset=(0., 0., 0.)):
+    return all(_inside(p, box) for p in _text_points(entity, transform, offset))
+
+
+def _dimension_render_context(doc, entity):
+    """XY DIM.insert translates only the existing picture, never definition points.
+
+    DXF group 12 is the OCS insertion of cloned linear-dimension pictures.
+    For the supported default XY OCS this is a finite XY translation before
+    the ordinary parent INSERT chain. No source entity is edited or rendered.
+    """
+    if tuple(entity.dxf.get('extrusion', (0, 0, 1))) != (0, 0, 1):
+        raise ValueError('非XY尺寸渲染上下文尚未支持')
+    offset = tuple(entity.dxf.get('insert', (0., 0., 0.)))
+    if not _finite(offset) or len(offset) != 3 or abs(offset[2]) > 1e-10:
+        raise ValueError('尺寸渲染平移须为有限XY向量，Z偏移上下文尚未支持')
+    block = doc.blocks.get(entity.dxf.get('geometry', ''))
+    if block is None or block.block.is_xref:
+        raise ValueError('原尺寸渲染文字所在块缺失或为未读外参')
+    for owner in (block.block_record, block.block):
+        issue = _owner_context_issue(owner)
+        if issue:
+            raise ValueError('尺寸渲染块定义的' + issue)
+    return block, offset
+
+
+class _FrameBounds(list):
+    """Legacy AABB sequence plus the checked source rectangle, never its surrogate."""
+    def __init__(self, bounds, vertices):
+        super().__init__(bounds)
+        self.vertices = vertices
 
 
 def _inside(point, box, strict=False):
     x, y = point[:2]
+    vertices = getattr(box, 'vertices', None)
+    if vertices:
+        distances = []
+        span = max(math.dist(a, b) for a, b in zip(vertices, vertices[1:] + vertices[:1]))
+        for a, b in zip(vertices, vertices[1:] + vertices[:1]):
+            length = math.dist(a[:2], b[:2])
+            distances.append(((b[0]-a[0])*(y-a[1])-(b[1]-a[1])*(x-a[0])) / length)
+        eps = max(span*1e-10, 1e-8)
+        return (all(v > eps for v in distances) or all(v < -eps for v in distances)) if strict else (
+            all(v >= -eps for v in distances) or all(v <= eps for v in distances))
     if strict:
         return box[0] < x < box[2] and box[1] < y < box[3]
     return box[0] <= x <= box[2] and box[1] <= y <= box[3]
@@ -167,23 +257,45 @@ def _frame(doc, frame):
         raise ValueError('图框边不能重复引用同一源对象')
     points = [p for edge in edges for p in edge]
     box = [min(p[0] for p in points), min(p[1] for p in points), max(p[0] for p in points), max(p[1] for p in points)]
-    width, height = box[2] - box[0], box[3] - box[1]
-    if min(width, height) <= 0:
+    span = max(box[2] - box[0], box[3] - box[1])
+    if span <= 0:
         raise ValueError('图框退化')
-    eps = max(width, height) * 1e-9
+    eps = max(span * 1e-9, 1e-8)
     if max(p[2] for p in points) - min(p[2] for p in points) > eps:
         raise ValueError('图框各边必须同处一个 XY 平面')
-    corners = [(box[0], box[1]), (box[2], box[1]), (box[2], box[3]), (box[0], box[3])]
+    corners = []
+    for p in points:
+        if not any(math.dist(p, c) <= eps for c in corners):
+            corners.append(p)
+    if len(corners) != 4:
+        raise ValueError('图框须由四个相连且不同的真实角点组成')
     found = []
     for a, b in edges:
-        ia = next((i for i, c in enumerate(corners) if math.dist(a[:2], c) <= eps), None)
-        ib = next((i for i, c in enumerate(corners) if math.dist(b[:2], c) <= eps), None)
-        if ia is None or ib is None or (ia-ib) % 4 not in (1, 3) or abs(a[2]-b[2]) > eps:
-            raise ValueError('四边必须闭合成轴对齐、等比例矩形；旋转框暂不支持')
+        ia = next((i for i, c in enumerate(corners) if math.dist(a, c) <= eps), None)
+        ib = next((i for i, c in enumerate(corners) if math.dist(b, c) <= eps), None)
+        if ia is None or ib is None or ia == ib or abs(a[2]-b[2]) > eps:
+            raise ValueError('四边必须闭合成同一 XY 平面内的真实矩形')
         found.append(frozenset((ia, ib)))
     if len(set(found)) != 4:
         raise ValueError('图框缺边或重复边')
-    return box, width, height
+    neighbors = {i: [next(iter(edge-{i})) for edge in found if i in edge] for i in range(4)}
+    if any(len(v) != 2 for v in neighbors.values()):
+        raise ValueError('图框四边未形成唯一闭合矩形')
+    order = [0, neighbors[0][0]]
+    while len(order) < 4:
+        candidates = [i for i in neighbors[order[-1]] if i not in order]
+        if len(candidates) != 1:
+            raise ValueError('图框四边不是唯一闭合矩形')
+        order.append(candidates[0])
+    if order[0] not in neighbors[order[-1]]:
+        raise ValueError('图框缺少闭合边')
+    polygon = [corners[i] for i in order]
+    vectors = [(b[0]-a[0], b[1]-a[1]) for a, b in zip(polygon, polygon[1:]+polygon[:1])]
+    lengths = [math.hypot(*v) for v in vectors]
+    if (min(lengths) <= eps or any(abs(a[0]*b[0]+a[1]*b[1]) > la*lb*1e-9
+            for a, b, la, lb in zip(vectors, vectors[1:]+vectors[:1], lengths, lengths[1:]+lengths[:1]))):
+        raise ValueError('图框四边必须互相垂直，不能把非矩形 bbox 当标准幅面')
+    return _FrameBounds(box, polygon), lengths[0], lengths[1]
 
 
 def _scope(scope, box):
@@ -194,9 +306,9 @@ def _scope(scope, box):
     if not isinstance(b, dict) or not all(k in b for k in keys) or not _finite([b[k] for k in keys]):
         raise ValueError('几何单位必须绑定有限的当前图框 scope.bounds')
     values = [b[k] for k in keys]
-    if (values[0] >= values[2] or values[1] >= values[3]
-            or not _inside(values[:2], box) or not _inside(values[2:], box)):
-        raise ValueError('几何单位凭据只适用于所引图框内，不能扩展到其他图框或整图')
+    scope_corners = ((values[0], values[1]), (values[2], values[1]), (values[2], values[3]), (values[0], values[3]))
+    if (values[0] >= values[2] or values[1] >= values[3] or not all(_inside(p, box) for p in scope_corners)):
+        raise ValueError('几何单位凭据只适用于所引图框真实内部（含旋转/镜像框），不能扩展到其他图框或整图')
     if scope.get('boundary_policy', 'contained') != 'contained':
         raise ValueError('几何单位只允许 contained 边界；跨框整对象长度不能沿用')
 
@@ -281,6 +393,9 @@ def _search_unit_texts(doc, frame_box):
                 visit(attrib, matrices, path, stack)
             name = entity.dxf.name
             block = doc.blocks.get(name)
+            context_issue = _instance_context_issue(doc, entity)
+            if context_issue:
+                unknown(entity, matrices, path, context_issue + '，不能证明已完整读取适用单位文字')
             if (block is None or block.block.is_xref or name in stack or len(stack) >= 32
                     or int(entity.dxf.get('row_count', 1)) != 1 or int(entity.dxf.get('column_count', 1)) != 1):
                 unknown(entity, matrices, path, '未读取外参、缺块、循环或阵列实例文字')
@@ -292,12 +407,14 @@ def _search_unit_texts(doc, frame_box):
                 except (ValueError, ArithmeticError):
                     unknown(entity, matrices, path, '块实例变换不能核验文字适用范围')
         elif kind == 'DIMENSION':
-            block = doc.blocks.get(entity.dxf.get('geometry', ''))
-            if block is None:
-                unknown(entity, matrices, path, '尺寸渲染块缺失，不能完成单位文字搜索')
-            else:
+            try:
+                block, offset = _dimension_render_context(doc, entity)
+                from ezdxf.math import Matrix44
+                render_matrices = (*matrices, Matrix44.translate(*offset))
                 for child in block:
-                    visit(child, matrices, path, stack)
+                    visit(child, render_matrices, path, stack)
+            except (ValueError, ArithmeticError):
+                unknown(entity, matrices, path, '尺寸渲染块或其平移/注释上下文尚未核清，不能完成单位文字搜索')
 
     for entity in doc.modelspace():
         visit(entity)
@@ -335,7 +452,7 @@ def verify_geometric_unit_evidence(request, manifest, scope):
     box, width, height = _frame(doc, request.get('frame'))
     _scope(scope, box)
     scale_entity, scale_transform = _ref(doc, request.get('scale_text'))
-    if scale_entity.dxftype() not in TEXT_TYPES or not _inside(_point(scale_entity, scale_transform), box):
+    if scale_entity.dxftype() not in TEXT_TYPES or not _text_in_frame(scale_entity, scale_transform, box):
         raise ValueError('图签比例须引用当前图框内的真实源文字')
     scale_text = _text(scale_entity).strip()
     match = re.fullmatch(r'(?:比例\s*[:：]?\s*)?1\s*[:：]\s*(\d+(?:\.\d+)?)', scale_text)
@@ -359,7 +476,7 @@ def verify_geometric_unit_evidence(request, manifest, scope):
     title_texts = []
     for ref in titles:
         entity, transform = _ref(doc, ref)
-        if entity.dxftype() not in TEXT_TYPES or not _inside(_point(entity, transform), box):
+        if entity.dxftype() not in TEXT_TYPES or not _text_in_frame(entity, transform, box):
             raise ValueError('图名来源不在当前图框内')
         title_texts.append(_text(entity))
     if not any('平面' in t for t in title_texts) or any(re.search(r'系统图|系統圖|原理|示意|不按比例', t) for t in title_texts):
@@ -371,21 +488,19 @@ def verify_geometric_unit_evidence(request, manifest, scope):
     for ref in refs:
         if not isinstance(ref, dict):
             raise ValueError('dimension_refs 须逐项给出真实源句柄对象')
-        if ref.get('insert_handles'):
-            raise ValueError('块内 DIMENSION 的变换/比例尚不支持，单位保持未知')
         entity, transform = _ref(doc, ref)
-        if entity.dxftype() != 'DIMENSION' or entity.dxf.handle in used:
+        identity = (entity.dxf.handle, tuple(ref.get('insert_handles', [])))
+        if entity.dxftype() != 'DIMENSION' or identity in used:
             raise ValueError('第二类证据须为不重复的原 DIMENSION，不能重用图框或图签数值')
-        used.add(entity.dxf.handle)
-        if (tuple(entity.dxf.get('extrusion', (0, 0, 1))) != (0, 0, 1)
-                or any(abs(float(v)) > 1e-10 for v in entity.dxf.get('insert', (0, 0, 0)))):
-            raise ValueError('非XY或另有块插入位移的尺寸渲染上下文尚未支持')
+        used.add(identity)
+        _, render_offset = _dimension_render_context(doc, entity)
         if entity.has_xdata('AcadAnnotative'):
             raise ValueError('注释性尺寸的当前可见比例尚未核清，不能作本页尺度证据')
         facts = dimension_measurement_facts(entity)
         if not facts['linear_measurement_usable'] or facts['text_mode'] != 'automatic' or facts['linear_factor'] != 1.:
             raise ValueError('尺寸须为无覆盖的线性尺寸，DIMLFAC=1且定义点、缓存/样式无冲突')
-        a, b = [facts['definition_points_wcs'][k] for k in ('defpoint2', 'defpoint3')]
+        source_points = {k: facts['definition_points_wcs'][k] for k in ('defpoint2', 'defpoint3')}
+        a, b = [transform(source_points[k]) for k in ('defpoint2', 'defpoint3')]
         if not all(_inside(p, box, strict=True) for p in (a, b)):
             raise ValueError('独立尺寸定义点须在同一图框内部，不能拿图框边本身循环佐证')
         rendered = facts['rendered_text_candidates']
@@ -393,15 +508,29 @@ def verify_geometric_unit_evidence(request, manifest, scope):
             raise ValueError('须有源文件中已有的唯一纯数值尺寸渲染文字，不能现场生成或自填尺寸数值')
         rendered_entity = doc.entitydb[rendered[0]['entity_handle']]
         _visible(doc, rendered_entity)
-        if not _inside(tuple(rendered_entity.dxf.insert), box):
+        rendered_points = _text_points(rendered_entity, transform, render_offset)
+        rendered_point = rendered_points[0]
+        if not all(_inside(p, box) for p in rendered_points):
             raise ValueError('原尺寸渲染文字不在当前图框内，不能作本页独立尺寸证据')
-        number, measured = float(rendered[0]['text']), facts['raw_measurement']
-        if number <= 0 or abs(number / measured - 1.) > TOLERANCE:
+        number, source_measured = float(rendered[0]['text']), facts['raw_measurement']
+        if number <= 0 or abs(number / source_measured - 1.) > TOLERANCE:
             raise ValueError('原尺寸渲染数值与独立定义点实测不一致（容差1%）')
+        origin, axis = transform((0., 0., 0.)), transform((1., 0., 0.))
+        instance_scale = math.dist(origin, axis)
+        measured = source_measured * instance_scale
+        # Displayed values remain the actual source string. INSERT transforms
+        # geometry, not the represented physical dimension or its numeric text.
+        if not math.isfinite(measured) or measured <= 0 or abs(number / measured - 1.) > TOLERANCE:
+            raise ValueError('块内尺寸源显示数值与 INSERT 世界几何尺度不自洽，单位保持未知；不能随实例倍率缩放标注物理值')
         dims = float(entity.override().get('dimscale', doc.header.get('$DIMSCALE', 1.)))
         if not math.isfinite(dims) or dims <= 0:
             raise ValueError('注释比例/自适应 DIMSCALE 尚不支持')
         dimensions.append({'source_ref': ref, 'definition_points_wcs': {'defpoint2': a, 'defpoint3': b},
+                           'source_definition_points': source_points, 'source_measurement': source_measured,
+                           'source_display_number': number, 'insert_world_scale': instance_scale,
+                           'rendered_text_point_wcs': rendered_point,
+                           'dimension_render_offset_ocs': render_offset,
+                           'dimension_render_offset_role': 'translate_existing_XY_picture_only_not_definition_or_display_number',
                            'measurement': measured, 'rendered_source': rendered[0], 'dimlfac': 1., 'dimscale': dims,
                            'dimscale_role': 'annotation_display_only_not_a_length_multiplier',
                            'evidence_class': 'independent_dimension_geometric_consistency', 'physical_unit_proven_independently': False})
@@ -411,7 +540,9 @@ def verify_geometric_unit_evidence(request, manifest, scope):
             'metres_per_drawing_unit': metres, 'evidence_level': 'inferred', 'quantity_level': '规则推算量',
             'formal_adoption': False, 'scope': scope, 'request': request,
             'source': {k: manifest[k] for k in ('authoritative_source', 'exchange_dxf')},
-            'frame': {**options[0], 'bbox': box, 'actual_axis_spans': [width, height], 'checked_axes': 2,
+            'frame': {**options[0], 'bbox': box, 'polygon_wcs': box.vertices,
+                      'axis_span_basis': 'source_rectangle_edges_in_world_coordinates',
+                      'actual_axis_spans': [width, height], 'checked_axes': 2,
                       'scale_text': scale_text, 'scale_denominator': denominator, 'tolerance': TOLERANCE},
             'dimensions': dimensions, 'unit_text_search': search, 'view_texts': title_texts,
             'basis': ('图上无坐标单位声明；局部数值/材料/标高单位未作坐标单位依据；' if search['non_coordinate_unit_texts'] else '图上无单位文字；')
