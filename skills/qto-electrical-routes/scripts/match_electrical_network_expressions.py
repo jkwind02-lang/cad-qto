@@ -63,13 +63,70 @@ def source_sheet(result, context, edge_ids):
     return copy.deepcopy(sheet)
 
 
+def expression_circuits(expression):
+    """A shared geometric atom is not a logical circuit or connection identity."""
+    selected = [c for c in expression['_result']['connections']
+                if c['id'] in expression['connection_ids']
+                and all(c['context'].get(k) == expression.get(k) for k in roles.CONTEXT)
+                and c.get('system') == expression['system']
+                and c.get('circuit_id') == expression['circuit_id']]
+    selected_edges = {p for c in selected for p in c['path_ids']}
+    specs = net.rows(expression['_result']['generated_network_request'].get('circuit_specs', []),
+                     'expression circuit_specs', 'circuit_id')
+    extras = net.rows(specs.get(expression['circuit_id'], {}).get('extras') or [], 'expression extras')
+    rows = []
+    for raw in expression['_result']['network_result']['ledger']['circuits']:
+        if (raw.get('circuit_id') != expression['circuit_id']
+                or raw.get('system') != expression['system']
+                or raw.get('scope_id') != expression['scope_id']
+                or not raw.get('path_ids') or not set(raw['path_ids']).issubset(selected_edges)):
+            continue
+        row = copy.deepcopy(raw)
+        # T35 aggregates a circuit's extras onto geometric atoms. Recover each
+        # extra's original logical connection instead of selecting it by atom.
+        if any(x.get('id') not in extras for x in row.get('extras', [])):
+            raise ValueError('表达附属量缺原始逻辑连接归属')
+        row['extras'] = [x for x in row.get('extras', [])
+                         if extras[x['id']].get('connection_id') in expression['connection_ids']]
+        rows.append(row)
+    return rows
+
+
 def atom_parameters(expression, atom_id):
     if any(a['id'] == atom_id and a.get('code_status') == 'CONFLICT'
            for a in expression['_result']['edges']):
         return []
-    rows = expression['_result']['network_result']['ledger']['circuits']
+    rows = expression_circuits(expression)
     return sorted({tuple(r.get(k) for k in ('kind', 'system', 'spec', 'parallel_count'))
                    for r in rows if atom_id in r['path_ids']}, key=repr)
+
+
+def bind_t16_endpoint(t16, pairing, endpoint, result, context):
+    """Resolve the pairing side's source_key before comparing full identity.
+
+    The sources catalogue merely describes available views. A current-source SHA
+    elsewhere in it cannot authorize an unrelated side of the selected pairing.
+    Exchange DXF identity is not a substitute for the authoritative source.
+    """
+    sources = net.rows(t16.get('sources', []), 'T16.sources', 'source_key')
+    refs = pairing.get('source_refs', [])
+    if (not isinstance(refs, list) or len(refs) != 2
+            or any(not isinstance(ref, dict) or ref.get('source_key') not in sources for ref in refs)):
+        raise ValueError('T16配对须分别绑定两侧source_key对应来源')
+    for ref in refs:
+        source = sources.get(ref.get('source_key'))
+        authority = source.get('verified_source_files', {}).get('authoritative_source') or {}
+        if (ref.get('instance_path') == endpoint['instance_path']
+                and ref.get('source_id') == endpoint['source_physical_id']
+                and authority.get('sha256') == result['source_sha256']
+                and source.get('manifest_sha256') == result['cad_manifest_sha256']
+                and source.get('version') == context['revision']
+                and source.get('version') == endpoint.get('instance_provenance', {}).get('version')
+                and source.get('floor') == context['floor']
+                and source.get('scope_id') == context['scope_id']
+                and source.get('layout', 'Model') == result['generated_network_request']['trace_request'].get('layout', 'Model')):
+            return copy.deepcopy(pairing)
+    raise ValueError('T16配对未绑定当前权威源SHA/中性清单/版本及完整端点实例')
 
 
 def match_expressions(request):
@@ -120,9 +177,7 @@ def match_expressions(request):
                 pair = [p for p in t16.get('pairings', []) if p.get('interpretation_id', p.get('pairing_id')) == identity.get('pairing_id')]
                 if len(pair) != 1:
                     raise ValueError('T16配对未唯一找到')
-                if not any(r.get('instance_path') == ep['instance_path'] for r in pair[0].get('source_refs', [])):
-                    raise ValueError('T16配对未包含当前完整端点实例')
-                item['t16_pairing'] = pair[0]
+                item['t16_pairing'] = bind_t16_endpoint(t16, pair[0], ep, result, ctx)
             identities.append(item)
         identity_complete = set(identity_rows) == used_objects and len({i['identity_key'] for i in identities}) == len(identities)
         applicability = raw.get('applicability')
@@ -255,7 +310,7 @@ def match_expressions(request):
             return v
         consumed = set()
         code_conflict_edges = {a['id'] for a in expression['original_edges'] if a.get('code_status') == 'CONFLICT'}
-        for item in original['circuits']:
+        for item in expression_circuits(expression):
             if not set(item['path_ids']).issubset(active_edges):
                 continue
             if set(item['path_ids']) & code_conflict_edges:

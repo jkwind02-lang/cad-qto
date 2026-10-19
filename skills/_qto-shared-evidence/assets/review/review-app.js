@@ -149,7 +149,7 @@ try{
  }
  function changeScene(id,fitPage=true){if(!scenes.has(id))return;const swap=scene!==scenes.get(id);scene=scenes.get(id);$('scene').value=id;if(swap){syncUnlocated(null);marks=[];mpts=[];renderSymbols();if(measuring)status(measureText());}if(fitPage)fit();draw();}
  // What this page cannot show is counted per scene; the reviewer must go back to the original for those (scene mapping contract 7.4).
- const NOT_SHOWN={other_layers:'大块里未画的图层',pattern_hatch:'填充图案',image:'图片',ole:'OLE 对象',proxy:'代理对象',xref_missing:'缺外部参照'};
+ const NOT_SHOWN={other_layers:'大块里未画的图层',pattern_hatch:'填充图案',image:'图片',ole:'OLE 对象',proxy:'未还原对象（代理、超深或裁剪等）',xref_missing:'缺块定义或外部参照'};
  function restorationText(s){const r=s?.restoration;if(!r)return '';if(r.source==='neutral')return ' · '+(r.note||'底图只有模型空间顶层图元');if(!r.not_shown_total)return ' · 底图已按原图还原';const top=(r.other_layers_top||[]).slice(0,3).map(e=>e[0]).join('、');return ' · 本页看不出 '+r.not_shown_total+' 处，须回原图（'+Object.entries(r.not_shown||{}).filter(e=>e[1]).map(e=>(NOT_SHOWN[e[0]]||e[0])+' '+e[1]+(e[0]==='other_layers'&&top?'，多为 '+top:'')).join('；')+'）';}
  // Symbol reconciliation (contract 7.5): one row per block; "未计" and "同位置" ring the points on the map. Never changes quantities.
  // The panel folds away so it does not cover the rings; the toolbar button opens it again (closing it there clears the rings).

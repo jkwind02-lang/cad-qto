@@ -20,7 +20,21 @@ function harness(html,extra={}){
  class Image{constructor(){this.complete=false;this.naturalWidth=0;}set src(v){this._src=v;this.complete=true;this.naturalWidth=64;this.onload?.();}}
  class TestURL extends URL{static createObjectURL(b){const k='blob-test-'+blobs.size;blobs.set(k,b);return k;}static revokeObjectURL(){}}
  const ctx=vm.createContext({document,console,Blob,FormData,Response,DecompressionStream,Uint8Array,TextEncoder,crypto,AbortSignal,atob,Image,devicePixelRatio:1,ResizeObserver:class{observe(){}},setTimeout:()=>0,URL:TestURL,fetch:()=>{throw Error('Unexpected network call');},localStorage:{getItem:k=>cache.get(k)||null,setItem:(k,v)=>cache.set(k,v)},...extra});
- return {ctx,ids,cache,downloads,canvasCalls,async start(){vm.runInContext(fs.readFileSync(path.join(A,'review-core.js'),'utf8'),ctx);if(ids['problem-config'])vm.runInContext(fs.readFileSync(path.join(A,'problem-feedback.js'),'utf8'),ctx);if(html.includes('id="audit"'))vm.runInContext(fs.readFileSync(path.join(A,'review-audit.js'),'utf8'),ctx);await vm.runInContext(fs.readFileSync(path.join(A,'review-app.js'),'utf8'),ctx);assert.equal(ids.loading.removed,true,ids.loading.textContent);}};
+ return {ctx,ids,cache,downloads,canvasCalls,async start(){if(extra.inlineRecovery){let executed=0;for(const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g)){await vm.runInContext(m[1],ctx);executed++;}assert.equal(executed,5);assert.equal(ids.loading.removed,true,ids.loading.textContent);return;}vm.runInContext(fs.readFileSync(path.join(A,'review-core.js'),'utf8'),ctx);if(ids['problem-config'])vm.runInContext(fs.readFileSync(path.join(A,'problem-feedback.js'),'utf8'),ctx);if(html.includes('id="audit"'))vm.runInContext(fs.readFileSync(path.join(A,'review-audit.js'),'utf8'),ctx);await vm.runInContext(fs.readFileSync(path.join(A,'review-app.js'),'utf8'),ctx);assert.equal(ids.loading.removed,true,ids.loading.textContent);}};
+}
+if(args.includes('--recovery-only')){
+ const h=harness(sourceHTML,{inlineRecovery:true});await h.start();const results=[];
+ for(const scene of data.scenes){
+  h.ids.scene.value=scene.id;h.ids.scene.onchange();const text=h.ids.mapstatus.textContent,r=scene.restoration;
+  if(r?.not_shown_total){
+   assert(text.includes('本页看不出 '+r.not_shown_total+' 处，须回原图'),text);
+   if(r.not_shown?.proxy)assert(text.includes('未还原对象（代理、超深或裁剪等） '+r.not_shown.proxy),text);
+   if(r.not_shown?.xref_missing)assert(text.includes('缺块定义或外部参照 '+r.not_shown.xref_missing),text);
+  }else assert(!text.includes('须回原图'),text);
+  results.push({scene_id:scene.id,restoration:r,mapstatus:text});
+ }
+ const result={status:'PASS',scope:'实际scene/HTML载荷及五段内嵌脚本的页面状态DOM模拟；非原生浏览器视觉验收',scenes:results};
+ fs.writeFileSync(arg('--recovery-output'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));process.exit(0);
 }
 const checks=[],h=harness(sourceHTML);await h.start();const e=h.ids;assert.equal(e.professional.options.length,14);assert.equal(e.list.children.length,13);assert.equal(e['member-list'].children.length,3);assert.equal(e['review-result'].value,'');checks.push('13专业筛选与分组初始化；建议不预填为确认');
 assert.equal(e['action-message'].hidden,true);assert.match(e['review-status'].textContent,/^\d+条已保存 · \d+条草稿$/);
@@ -270,6 +284,9 @@ if(art.comparison_html){
  const other=d.scenes.find(s=>s.id!==s0.id);se.scene.value=other.id;se.scene.onchange();assert.equal(se.symbols.hidden,true);assert.equal(se['symbols-panel'].hidden,true);
  const nd=structuredClone(data);nd.scenes[0].restoration={source:'neutral',note:'底图只有模型空间顶层图元，块内内容、字高、填充都没有'};const nh=harness(withData(sourceHTML,nd));await nh.start();nh.ids.scene.value=nd.scenes[0].id;nh.ids.scene.onchange();
  assert.match(nh.ids.mapstatus.textContent,/底图只有模型空间顶层图元/);assert.equal(nh.ids.symbols.hidden,true);
+ const rd=structuredClone(data);rd.scenes[0].restoration={source:'dxf',not_shown_total:2,not_shown:{other_layers:0,pattern_hatch:0,image:0,ole:0,proxy:1,xref_missing:1}};
+ const rh=harness(withData(sourceHTML,rd));await rh.start();rh.ids.scene.value=rd.scenes[0].id;rh.ids.scene.onchange();
+ assert.match(rh.ids.mapstatus.textContent,/本页看不出 2 处，须回原图（未还原对象（代理、超深或裁剪等） 1；缺块定义或外部参照 1）/);
  // Symbol notes (contract 7.5.1): explained symbols get their own columns with the note in the hint.
  const xd=structuredClone(d),xs=xd.scenes.find(s=>s.id===s0.id);Object.assign(xs.symbol_reconciliation[0],{on_sheet:5,removed_overlap:1,removed_overlap_points:[p],counted_elsewhere:1,counted_elsewhere_points:[p],same_item_elsewhere:0,same_item_elsewhere_points:[],notes:{counted_elsewhere:['电力平面计入']},hidden:1,hidden_points:[p],hidden_counted:1});
  const xh=harness(withData(sourceHTML,xd));await xh.start();xh.ids.scene.value=s0.id;xh.ids.scene.onchange();xh.ids.symbols.click();

@@ -113,6 +113,13 @@ class Sources:
             if entity.dxftype() != 'INSERT':
                 return
             name = str(entity.dxf.name)
+            counts = {key: entity.dxf.get(key, 1) for key in ('row_count', 'column_count')}
+            if any(value != 1 for value in counts.values()):
+                # matrix_for_insert is one placement, not a MINSERT expansion.
+                # No child path is complete without an actual array-member key.
+                self.todo.append(dict(problem='MINSERT阵列成员完整身份及展开尚未支持，不能只取第一放置',
+                                      source_id=path, block=name, array_counts=counts, source_row=row))
+                return
             if name in stack or len(stack) >= self.max_depth or name not in self.document.blocks:
                 self.todo.append(dict(problem='块循环、超深或缺定义', source_id=path, block=name))
                 return
@@ -271,6 +278,7 @@ class Sources:
             segment = segments[text(raw.get('segment_id'), 'duct.segment_id')]
             if context and any(segment[k]!=context[k]for k in ('space_id','floor_id')):
                 raise ValueError('风管上游与公共请求楼层/空间不一致')
+            source_claims = []
             for ref in segment['source_geometry_refs']:
                 coverage_row = next((r for r in data['coverage']['rows'] if r['source_key'] == ref['source_key']), None)
                 parent = (coverage_row or {}).get('parent_source_part')
@@ -287,6 +295,9 @@ class Sources:
                     rebuilt, problem = self.binding(dict(source_id=parent, fraction_range=interval))
                     if problem or fingerprint(scale_part(candidate, self.factor or 1.)) != fingerprint(rebuilt[0]['part']):
                         raise ValueError('风管分区轮廓未通过原曲线区间重建')
+                # Retain the real original-part intervals verified above. The
+                # producer's whole reference-list hash cannot prove disjoint use.
+                source_claims.extend(copy.deepcopy(p['source']) for p in actual)
             factor = sc.canonical_scale(data['unit']) if sc.unit_known(data['unit']) else 1.
             checked = duct.checked_geometry(segment['geometry'])
             midline = segment['geometry'].get('derived_midline')
@@ -305,6 +316,7 @@ class Sources:
                            source=dict(source_sha256=self.source_sha256, upstream_segment_id=segment['segment_id'],
                                        producer='build_duct_network_from_neutral.py', producer_sha256=digest(duct.__file__),
                                        profile=dict(path=str(path), sha256=digest(path)), source_geometry_refs=segment['source_geometry_refs'],
+                                       source_claims=source_claims,
                                        representation=segment['representation'], layout=self.layout,
                                        derived_midline=midline,midline_evidence=checked.get('midline_evidence'),
                                        actual_curve_length=checked.get('length'),length_error_estimate=checked.get('length_error_estimate'),

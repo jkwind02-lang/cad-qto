@@ -39,17 +39,60 @@ def shape_signature(parts,closed=False):
     return min(fingerprint(seq)for seq in sequences)
 
 
-def source_claim_signature(parts):
-    claims=[]
+def source_claim_intervals(parts):
+    """Occupancy uses real source identity, never geometry or a whole-list hash."""
+    claims={};missing=[]
     for item in parts:
         raw=item['source']
-        if raw.get('source_id'):
-            claims.append(dict(source_sha256=raw['source_sha256'],source_id=raw['source_id'],part_index=raw['part_index'],fraction_range=raw['fraction_range']))
-        elif raw.get('source_geometry_refs'):
-            claims.append(dict(source_sha256=raw['source_sha256'],refs=raw['source_geometry_refs']))
-        else:
-            claims.append(raw)
-    return fingerprint(sorted(claims,key=fingerprint))
+        if item['evidence_layer']=='scenario':
+            continue  # A sourced endpoint pair is a hypothesis, not drawn occupancy.
+        originals=raw.get('source_claims') or [raw]
+        for claim in originals:
+            path=claim.get('instance_path');index=claim.get('part_index');interval=claim.get('fraction_range')
+            if (not claim.get('source_sha256') or not isinstance(path,str) or not path
+                    or isinstance(index,bool) or not isinstance(index,int) or index<0
+                    or not isinstance(interval,list) or len(interval)!=2):
+                missing.append(claim);continue
+            lo,hi=[number(v,'source.fraction_range')for v in interval]
+            if not 0<=lo<hi<=1:
+                missing.append(claim);continue
+            value=dict(source_sha256=claim['source_sha256'],instance_path=path,
+                       part_index=index,fraction_range=[lo,hi])
+            claims[fingerprint(value)]=value
+    return list(claims.values()),missing
+
+
+def route_evidence_signature(parts):
+    """Equal geometry cannot promote a derived or scenario alias to drawn."""
+    forward=[dict(part=p['part'],evidence_layer=p['evidence_layer'],error_bound=p.get('error_bound',0.))for p in parts]
+    reverse=[dict(p,part=reverse_part(p['part']))for p in reversed(forward)]
+    return min(fingerprint(seq)for seq in (forward,reverse))
+
+
+def check_source_claim_overlaps(routes,todo):
+    occupied={};conflicts={}
+    for route in routes:
+        for claim in route['source_claims']:
+            key=(claim['source_sha256'],claim['instance_path'],claim['part_index'])
+            lo,hi=claim['fraction_range']
+            for other,old in occupied.get(key,[]):
+                if other is route:
+                    continue
+                a,b=old['fraction_range'];overlap=[max(lo,a),min(hi,b)]
+                if overlap[0]>=overlap[1]:
+                    continue  # Adjacent/disjoint intervals are legitimate partitions.
+                evidence=[other['multiplicity'],route['multiplicity']]
+                if (all(evidence) and len({(e['source_id'],e['text'],e['count'])for e in evidence})==1
+                        and evidence[0]['index']!=evidence[1]['index']):
+                    continue
+                other['physical_identity_uncertain']=route['physical_identity_uncertain']=True
+                ids=tuple(sorted((other['raw']['id'],route['raw']['id'])))
+                detail=dict(source_sha256=key[0],instance_path=key[1],part_index=key[2],overlap_range=overlap)
+                conflicts.setdefault(ids,{})[fingerprint(detail)]=detail
+            occupied.setdefault(key,[]).append((route,claim))
+    for ids,details in conflicts.items():
+        todo.append(dict(problem='同一原part区间被多个物理管路重叠认领但缺有源根数与独立实例序号；未自动当作多管或重复删量',
+                         route_ids=list(ids),source_overlaps=list(details.values())))
 
 
 def conic_parameters(part, angle):
@@ -399,11 +442,15 @@ def calculate(manifest_path,request,base=None,request_path=None):
     base=Path(base or Path(manifest_path).parent)
     # Scope completeness is about the selected objects. Unrelated source errors
     # are still retained in provenance and cannot erase an otherwise valid branch.
-    todo=[];routes=[];seen={};aliases=[];source_claims={}
+    todo=[];routes=[];seen={};aliases=[]
     for raw in request.get('routes',[]):
         validate_context(source,raw,'route')
         if raw.get('discipline')not in ('pipe','duct','tray'):
             raise ValueError('公共穿越仅接水管、风管和桥架物理路径')
+        if raw.get('z_mode')not in (None,'plan_only','source_wcs'):
+            raise ValueError('z_mode须为plan_only或source_wcs')
+        if raw.get('z_mode')=='source_wcs':
+            source.refs(raw.get('z_basis_source_ids'),'route.z_basis_source_ids')
         if raw.get('import'):
             if raw.get('bindings'):
                 raise ValueError('同一路径不能同时声明import和bindings')
@@ -431,26 +478,27 @@ def calculate(manifest_path,request,base=None,request_path=None):
         if not parts:
             todo.append(dict(route_id=raw['id'],problem='路径没有可重建几何，穿越处数未知'))
         signature=shape_signature(parts)
+        evidence_signature=route_evidence_signature(parts)
+        multiplicity=source.multiplicity(raw.get('multiplicity_evidence'))
+        claims,missing=source_claim_intervals(parts)
+        if missing:
+            todo.append(dict(route_id=raw['id'],problem='管路缺完整原源实例、part或区间身份，物理认领关系未决',source_claims=missing))
+        context=(raw['discipline'],raw.get('system'),raw['space_id'],raw['floor_id'],
+                 raw.get('z_mode')or'plan_only',raw.get('datum_id'),
+                 tuple(sorted(set(raw.get('z_basis_source_ids')or[]))),source.unit,multiplicity)
         physical=raw['physical_id']
         if physical in seen:
             old=seen[physical]
-            if signature!=old['signature']or any(raw[k]!=old['raw'][k]for k in ('discipline','space_id','floor_id')):
-                raise ValueError('同一物理管路多个表达不一致；须先明确同物与区间关系')
+            if signature!=old['signature'] or context!=old['context'] or evidence_signature!=old['evidence_signature']:
+                raise ValueError('同一物理管路多个表达的几何、空间/楼层、基准、依据层级或多根实例不一致；须先明确同物与区间关系')
+            old['source_claims'].extend(claims)
+            old['physical_identity_uncertain']|=bool(missing)
             old['aliases'].append(raw['id']);aliases.append(dict(physical_id=physical,alias=raw['id'],primary=old['raw']['id']))
             continue
-        route=dict(raw=raw,parts=parts,signature=signature,aliases=[],multiplicity=source.multiplicity(raw.get('multiplicity_evidence')),
-                   physical_identity_uncertain=False)
+        route=dict(raw=raw,parts=parts,signature=signature,evidence_signature=evidence_signature,context=context,
+                   aliases=[],multiplicity=multiplicity,source_claims=claims,physical_identity_uncertain=bool(missing))
         seen[physical]=route;routes.append(route)
-        if parts:
-            claim=source_claim_signature(parts);group=source_claims.setdefault(claim,[]);group.append(route)
-            if len(group)>1:
-                evidence=[v['multiplicity']for v in group]
-                valid=(all(evidence)and len({(e['source_id'],e['text'],e['count'])for e in evidence})==1
-                       and len({e['index']for e in evidence})==len(evidence))
-                if not valid:
-                    for item in group:
-                        item['physical_identity_uncertain']=True
-                    todo.append(dict(problem='同一原part被多个物理管路认领但缺有源根数与独立实例序号；未自动当作多管或重复删量',route_ids=[v['raw']['id']for v in group]))
+    check_source_claim_overlaps(routes,todo)
     barriers=[];wall_seen={}
     for raw in request.get('barriers',[]):
         validate_context(source,raw,'barrier')

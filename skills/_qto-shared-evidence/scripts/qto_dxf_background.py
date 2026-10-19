@@ -136,6 +136,76 @@ class _Drawing:
   self._affine[key] = lost
   return lost
 
+ def branch_content(self, e, eff_layer=None, stack=()):
+  """Whether a rejected INSERT branch may contain visible drawing content.
+
+  Missing definitions, cycles and an excessive inspection depth stay unknown/true;
+  nested defined empty blocks and entirely hidden branches lose nothing.
+  """
+  lay = e.dxf.layer if e.dxf.layer != '0' else (eff_layer or '0')
+  if self.hidden(lay): return False
+  if e.dxftype() != 'INSERT': return e.dxftype() not in SKIP_SILENT
+  name = e.dxf.name
+  if name in stack or len(stack) >= 64: return True
+  if any(not a.is_invisible and not self.hidden(a.dxf.layer if a.dxf.layer != '0' else lay) and (a.dxf.text or '').strip() for a in e.attribs): return True
+  blk = self.doc.blocks.get(name)
+  if blk is None: return True
+  return any(self.branch_content(child, lay, stack + (name,)) for child in blk)
+
+ def branch_bounds(self, e, parent=None, stack=(), eff_layer='0'):
+  """Envelope for a rejected branch, using original matrices rather than explosion.
+
+  This is only warning scope. It never emits display or measurement primitives.
+  Cycles/missing extents remain bounded by the available source insertion point.
+  """
+  lay = e.dxf.layer if e.dxf.layer != '0' else eff_layer
+  if self.hidden(lay) or e.dxftype() in SKIP_SILENT: return None
+  from ezdxf import bbox
+  from ezdxf.math import Matrix44
+  parent = Matrix44() if parent is None else parent
+  regions = []
+  if e.dxftype() == 'INSERT':
+   if e.mcount > 1:
+    try:
+     instances = list(e.multi_insert())
+     if len(instances) == e.mcount:
+      regions = [self.branch_bounds(instance, parent, stack, lay) for instance in instances]
+    except Exception: pass
+   else:
+    name = e.dxf.name; blk = self.doc.blocks.get(name)
+    if blk is not None and name not in stack and len(stack) < 64:
+     try:
+      child_m = Matrix44.chain(e.matrix44(), parent)
+      regions = [self.branch_bounds(child, child_m, stack + (name,), lay) for child in blk]
+      regions.extend(self.branch_bounds(a, parent, stack, lay) for a in e.attribs if not a.is_invisible)
+     except Exception: pass
+  else:
+   try:
+    ext = bbox.extents([e], fast=True)
+    if ext.has_data:
+     points = list(parent.transform_vertices(ext.cube_vertices()))
+     return (min(p.x for p in points), min(p.y for p in points), max(p.x for p in points), max(p.y for p in points))
+   except Exception: pass
+  regions = [r for r in regions if r is not None]
+  if regions: return (min(r[0] for r in regions), min(r[1] for r in regions), max(r[2] for r in regions), max(r[3] for r in regions))
+  p = _anchor(e)
+  if p is None: return None
+  q = parent.transform(e.ocs().to_wcs(e.dxf.insert) if e.dxftype() == 'INSERT' else (*p, 0))
+  return (q.x, q.y, q.x, q.y)
+
+ def incomplete_definition(self, e, stack=(), depth=0):
+  """Missing or bounded-out descendants must reach the walker even without a bbox.
+
+  This only widens the broad phase; the walker still applies actual layer and sheet scope.
+  A defined empty block is complete and must not create a recovery warning.
+  """
+  name = e.dxf.name
+  blk = self.doc.blocks.get(name)
+  if blk is None: return True
+  if not len(blk): return False
+  if depth >= MAX_DEPTH or name in stack: return True
+  return any(self.incomplete_definition(child, stack + (name,), depth + 1) for child in blk.query('INSERT'))
+
  def definition_display(self, e, parent=None, stack=(), array=False):
   """Fit-only splines and MTEXT need their definition before a non-similarity transform.
 
@@ -214,6 +284,8 @@ def _block_sources(m, ves, blk):
 
 
 def _anchor(e):
+ if e.dxftype() == 'INSERT':
+  p = e.ocs().to_wcs(e.dxf.insert); return (p.x, p.y)
  for k in ('start', 'insert', 'center', 'location'):
   if e.dxf.hasattr(k):
    v = e.dxf.get(k); return (v[0], v[1])
@@ -237,10 +309,13 @@ class _Walker:
  def classify(self, e):
   if e.dxftype() != 'INSERT': return 'top_level'
   if str(e.dxf.handle).upper() in self.handles: return 'object_symbol'
-  return 'large' if self.dw.block_size(e.dxf.name) > self.large_points else 'small_block'
+  try: points = self.dw.block_size(e.dxf.name)
+  except RecursionError: points = self.large_points + 1  # unknown deep size must not look like a small complete block
+  return 'large' if points > self.large_points else 'small_block'
 
  def run(self, e):
   self.out, self.not_shown, self.dropped = [], [], Counter()
+  self.not_shown_regions = {}
   self.cls = self.classify(e)
   if e.dxftype() == 'INSERT' and (self.dw.affine_loss(e) or self.dw.definition_display(e)):
    from ezdxf.math import Matrix44
@@ -254,8 +329,64 @@ class _Walker:
  def _skip_affine(self, kind, e, m):
   p = _anchor(e)
   if p is not None:
-   p = m.transform((*p, 0)); p = (p.x, p.y)
+   p = m.transform(e.ocs().to_wcs(e.dxf.insert) if e.dxftype() == 'INSERT' else (*p, 0)); p = (p.x, p.y)
   self.not_shown.append((kind, p))
+
+ def _skip_block(self, kind, e, m=None, clip=None):
+  """Keep a private WCS scope for a whole rejected branch, not a page-wide warning.
+
+  The public walker tuple stays compatible. Bounds are conservative envelopes, not
+  recovered primitives or quantity geometry. Missing extents use the insertion point.
+  """
+  if e.dxftype() == 'INSERT' and not self.dw.branch_content(e): return
+  region = self.dw.branch_bounds(e, m)
+  if clip is not None:
+   try:
+    path = clip.get_wcs_clipping_path()
+    planar_parent = m is None or math.hypot(*tuple(m.transform_direction((0, 0, 1)))[:2]) <= 1e-12
+    if not path.is_inverted_clip and path.vertices and planar_parent:
+     points = [(*p, 0) for p in path.vertices]
+     if m is not None: points = list(m.transform_vertices(points))
+     bounds = (min(p[0] for p in points), min(p[1] for p in points), max(p[0] for p in points), max(p[1] for p in points))
+     if region is not None:
+      region = (max(region[0], bounds[0]), max(region[1], bounds[1]), min(region[2], bounds[2]), min(region[3], bounds[3]))
+      if region[0] > region[2] or region[1] > region[3]: return
+   except Exception: pass  # unreadable clipping falls back to the branch envelope
+  if region is None:
+   p = _anchor(e)
+   if p is not None:
+    if m is not None:
+     q = m.transform(e.ocs().to_wcs(e.dxf.insert) if e.dxftype() == 'INSERT' else (*p, 0)); p = (q.x, q.y)
+    region = (*p, *p)
+  self.not_shown_regions[len(self.not_shown)] = region
+  self.not_shown.append((kind, None))
+
+ def _clip_block(self, e, m=None):
+  if not e.has_extension_dict: return False
+  from ezdxf.xclip import XClip
+  from ezdxf.entities import Dictionary, SpatialFilter
+  try:
+   extension = e.get_extension_dict()
+   if 'ACAD_FILTER' not in extension: return False
+   filters = extension['ACAD_FILTER']
+   if not isinstance(filters, Dictionary): raise ValueError('unrecognized ACAD_FILTER payload')
+   if 'SPATIAL' not in filters: return False
+   spatial = filters['SPATIAL']
+   if not isinstance(spatial, SpatialFilter): raise ValueError('unrecognized SPATIAL payload')
+   enabled = spatial.dxf.get('is_clipping_enabled')
+   if enabled not in (0, 1): raise ValueError('unrecognized SPATIAL clipping state')
+   if enabled == 0: return False  # only a recognized, explicitly disabled filter may pass
+   clip = XClip(e)
+   if not clip.is_clipping_enabled: raise ValueError('inconsistent SPATIAL clipping state')
+  except Exception:
+   # ezdxf returns False for absent *and* unrecognized SPATIAL objects. Unknown
+   # structures are not evidence of disabled clipping; refuse the whole branch.
+   self._skip_block('proxy', e, m); return True
+  # Neither route implements clipping. Reject this branch before attributes or
+  # primitives escape, including nested and inverted clips; an empty block loses nothing.
+  blk = self.dw.doc.blocks.get(e.dxf.name)
+  if blk is None or len(blk) or e.attribs: self._skip_block('proxy', e, m, clip)
+  return True
 
  def _walk_affine(self, e, m, eff_layer, byblock, depth):
   """Walk original definitions without rebuilding an INSERT from rotation and scale."""
@@ -267,17 +398,12 @@ class _Walker:
   c = e.dxf.get('color', 256)
   bb = byblock if c == 0 else (c if c != 256 else self.dw.layer_aci(lay))
   if t in ('INSERT', 'DIMENSION'):
-   if depth >= MAX_DEPTH: self._skip_affine('proxy', e, m); return
+   if depth >= MAX_DEPTH:
+    blk = self.dw.doc.blocks.get(e.dxf.name) if t == 'INSERT' else None
+    if t != 'INSERT' or blk is None or len(blk): self._skip_block('proxy', e, m)
+    return
    if t == 'INSERT':
-    if e.has_extension_dict:
-     from ezdxf.xclip import XClip
-     try: clipped = XClip(e).is_clipping_enabled
-     except Exception:
-      self.not_shown.append(('proxy', None)); return
-     if clipped:
-      # The definition walk cannot apply XCLIP. Do not show unclipped geometry
-      # as the block's actual appearance, including when its anchor is off sheet.
-      self.not_shown.append(('proxy', None)); return
+    if self._clip_block(e, m): return
     if e.mcount > 1:
      try: instances = list(e.multi_insert())
      except Exception: self._skip_affine('proxy', e, m); return
@@ -351,8 +477,12 @@ class _Walker:
   c = e.dxf.get('color', 256)
   bb = byblock if c == 0 else (c if c != 256 else self.dw.layer_aci(lay))
   if t in ('INSERT', 'DIMENSION'):
-   if depth >= MAX_DEPTH: return
+   if depth >= MAX_DEPTH:
+    blk = self.dw.doc.blocks.get(e.dxf.name) if t == 'INSERT' else None
+    if t != 'INSERT' or blk is None or len(blk): self._skip_block('proxy', e)
+    return
    if t == 'INSERT':
+    if self._clip_block(e): return
     for a in e.attribs:
      if a.is_invisible: continue
      alay = a.dxf.layer if a.dxf.layer != '0' else lay
@@ -538,7 +668,7 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
  for e in dw.msp:
   # The library bbox follows the same lossy nested explosion. Defer affected blocks
   # to the exact primitive filter below, otherwise a correct endpoint can be discarded.
-  if e.dxftype() == 'INSERT' and (dw.affine_loss(e) or dw.definition_display(e)): hit = targets
+  if e.dxftype() == 'INSERT' and (dw.incomplete_definition(e) or dw.affine_loss(e) or dw.definition_display(e)): hit = targets
   else:
    try: ext = bbox.extents([e], cache=cache, fast=True)
    except Exception: continue
@@ -563,8 +693,10 @@ def build_dxf_backgrounds(dxf_path, expected_sha256, targets, object_handles, un
     if not any(_inside(p, b) for p in pts): continue
     t['items'].append(_round_item(it, t['dx'], t['dy'], precision))
     t['stats']['background_items'] += 1; t['stats']['background_points'] += len(pts); t['stats']['points_' + cls] += len(pts)
-   for kind, p in not_shown:
-    if p is None or _inside(p, b): t['restoration'][kind] += 1
+   for i, (kind, p) in enumerate(not_shown):
+    region = w.not_shown_regions.get(i)
+    if (not (region[2] < b[0] or region[0] > b[2] or region[3] < b[1] or region[1] > b[3]) if region is not None else p is None or _inside(p, b)):
+     t['restoration'][kind] += 1
    for lay, n in dropped.items(): t['dropped_layers'][lay] += n
  # Symbol reconciliation (contract 7.5): blocks the object tables point at, plus blocks on the declared symbol layers.
  # Symbol notes (contract 7.5.1) explain a symbol before it may count as duplicate or uncounted; without notes the output is unchanged.
