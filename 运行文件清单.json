@@ -3,7 +3,7 @@
   "professional_skills": 13,
   "coordinator_skills": 1,
   "basic_read_skills": 1,
-  "runtime_file_count": 393,
+  "runtime_file_count": 394,
   "files": [
     {
       "path": "_qto-shared-evidence/assets/review/feedback-endpoints.json",
@@ -92,8 +92,8 @@
     },
     {
       "path": "_qto-shared-evidence/references/几何单位推定凭据.md",
-      "sha256": "5548493982ebaaf636d323b7ad60c6a0f2dd93de4a86a2b46f02400e6cef63cc",
-      "bytes": 19499
+      "sha256": "a9208c6cdaea71c00e15049bb05566f9491e9038043b55a446fb36d349c1fbc0",
+      "bytes": 29325
     },
     {
       "path": "_qto-shared-evidence/references/原图独立算量实测.md",
@@ -407,8 +407,8 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_geometric_unit_evidence.py",
-      "sha256": "9dd6cffe327c559a9db619a942ee5721f3a503cace8ab4ee5c3c47d3f562270f",
-      "bytes": 57552
+      "sha256": "35b615d808cced39f237363f536f87ec87e45aaced9243478a50016119818b0a",
+      "bytes": 75983
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_human_review_evidence.py",
@@ -447,13 +447,13 @@
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_pipe_topology.py",
-      "sha256": "f8ca408ae3d98c0fb75fc9666b5b8441535dda8f31df6e2767fd0e14b85182fc",
-      "bytes": 38689
+      "sha256": "9789a2148b118adbaae3d6d771787f9d59a1a199771919d8545300371a713a0b",
+      "bytes": 38806
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_recognition_workbench.py",
-      "sha256": "214053627e7e25ac565c87f7ed8c498b16e9ce993476987b5a80b70a7bbabb7f",
-      "bytes": 60033
+      "sha256": "e234e80fd666e858ea555ebc4f3570e9af1d204cf2a5ef87262a70114cbff948",
+      "bytes": 64647
     },
     {
       "path": "_qto-shared-evidence/scripts/qto_review_comparison.py",
@@ -524,6 +524,11 @@
       "path": "_qto-shared-evidence/scripts/qto_symbol_geometry.py",
       "sha256": "318cc098c6af56d5f879626c53c0f11c1c1fb3f80c62486293ff5574728e33e4",
       "bytes": 35659
+    },
+    {
+      "path": "_qto-shared-evidence/scripts/qto_workbench_legacy_declaration.py",
+      "sha256": "884f7099f2738cf0851aab7341494052a0684cca09a19a4308517537a6337149",
+      "bytes": 6268
     },
     {
       "path": "_qto-shared-evidence/scripts/read_cad_basic.py",
@@ -1497,8 +1502,8 @@
     },
     {
       "path": "qto-pipe-networks/references/系统图明确尺寸与标高分段候选.md",
-      "sha256": "f5023af15be02781c93c32f51efc078e8fd2e311a9ecb3c9369fb79d481e44ea",
-      "bytes": 28401
+      "sha256": "f9d401a745583ed2c2b7306b857c0dc9b443c30635ff57bdcf6f147d34016ab9",
+      "bytes": 32655
     },
     {
       "path": "qto-pipe-networks/references/结果检查与输出.md",
@@ -1567,8 +1572,8 @@
     },
     {
       "path": "qto-pipe-networks/scripts/infer_pipe_network.py",
-      "sha256": "44e021365e2bfdb8b45969204a2b769b34440a888461bf0391d5d168a0ab78ac",
-      "bytes": 113152
+      "sha256": "1b9b2d60552aa0ca8313aa723b0db2b117d6c5e05a27633122c066867a0169ab",
+      "bytes": 113747
     },
     {
       "path": "qto-pipe-networks/scripts/measure_pipe_centerlines.py",
@@ -1637,8 +1642,8 @@
     },
     {
       "path": "qto-pipe-networks/scripts/produce_pipe_diagram_network.py",
-      "sha256": "b7e8643fc4536ce29bb10d953e43f552edf5fdd5cff8c89ad0dcb22b99d7f739",
-      "bytes": 22526
+      "sha256": "96dabd926744c248e7fb968610b6f27253803d34f89a7666a6c48460a19ca953",
+      "bytes": 33329
     },
     {
       "path": "qto-pipe-networks/scripts/receive_pipe_diagram_lengths.py",

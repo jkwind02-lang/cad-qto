@@ -196,7 +196,7 @@ def test_workbench_actual_local_index_to_pipe_consumer(physical):
         else:bad['geometric_unit_consumption']['workbench_production']['producer_dependencies'].popitem()
         with pytest.raises(ValueError):workbench.verify_workbench_unit_consumption(bad)
     isolated=c['tmp']/'same-byte-checkout'
-    shutil.copytree(SHARED.parent.parent.parent,isolated,ignore=shutil.ignore_patterns('__pycache__','.pytest_cache','*.pyc'))
+    shutil.copytree(SHARED.parent.parent.parent,isolated,ignore=shutil.ignore_patterns('.git','.codex_work','__pycache__','.pytest_cache','*.pyc'))
     consumer=isolated/'skills/qto-pipe-networks/scripts/infer_pipe_network.py'
     done=run([consumer,'--input',ip,'--output',c['tmp']/'same-byte-result.json'])
     assert done.returncode==0,done.stdout+done.stderr
@@ -219,7 +219,7 @@ def test_runtime_dependency_bytes_and_source_changes_invalidate_consumers(physic
     c=physical;req=copy.deepcopy(c['request']);e=binding.Evidence(c['manifest'],req)
     fake=copy.deepcopy(c['credential']);fake['runtime_dependencies'].pop()
     with pytest.raises(ValueError,match='依赖'):units.verify_geometric_unit_consumption(fake,c['mf'],c['scope'],.001)
-    copied=tmp_path/'copied-source';shutil.copytree(SHARED.parent.parent.parent,copied,ignore=shutil.ignore_patterns('__pycache__','.pytest_cache','*.pyc'))
+    copied=tmp_path/'copied-source';shutil.copytree(SHARED.parent.parent.parent,copied,ignore=shutil.ignore_patterns('.git','.codex_work','__pycache__','.pytest_cache','*.pyc'))
     module=copied/'skills/_qto-shared-evidence/scripts/qto_cad_source_contract.py'
     module.write_bytes(module.read_bytes()+b'\n# changed consumer dependency\n')
     checker=put(tmp_path/'credential.json',c['credential']);scope=put(tmp_path/'scope.json',c['scope'])

@@ -123,17 +123,39 @@ def verify_geometric_unit_runtime_identity(credential):
     return verify_geometric_unit_runtime_dependencies(credential.get('runtime_dependencies'))
 
 
+def _raw_text(entity):
+    if entity.dxftype() == 'MTEXT':
+        return entity.text
+    if entity.dxftype() in {'ATTRIB', 'ATTDEF'} and entity.has_embedded_mtext_entity:
+        return entity.virtual_mtext_entity().text
+    return str(entity.dxf.get('text', ''))
+
+
 def _text(entity):
-    return entity.plain_text() if entity.dxftype() == 'MTEXT' else str(entity.dxf.get('text', ''))
+    if entity.dxftype() in {'ATTRIB', 'ATTDEF'} and entity.has_embedded_mtext_entity:
+        return entity.plain_mtext()
+    # The native TEXT family decoder handles caret notation and %% formatting;
+    # a literal ^M in the source is a control character, not a metre token.
+    return entity.plain_text() if entity.dxftype() in TEXT_TYPES else _raw_text(entity)
+
+
+_ORGANIZATION_UNIT_LABEL = re.compile(
+    r'(?m)(?:^|(?<=[;；]))[ \t]*(?:建设|建設|设计|設計|施工|监理|監理|编制|編制|审图|審圖|合作)单位[ \t]*(?:[:：]|(?=$))')
+
+
+def _unit_candidate_text(text):
+    # Remove only the explicit organization label, never its following body.
+    # Any coordinate/dimension/pending-unit clause remains subject to screening.
+    return _ORGANIZATION_UNIT_LABEL.sub('', text)
 
 
 def _unit_text_candidate(text):
     # M1521 is a door/code identifier, not a metre declaration. A numerical
     # prefix (e.g. -0.9m) remains a real local-unit annotation.
+    text = _unit_candidate_text(text)
     words = [(a,b,v) for a,b,v in unit_tokens(text, with_spans=True) if b == len(text) or not text[b].isdigit()]
     marker = re.search(r'单位|繪圖單位|绘图单位', text)
-    organizational_label = re.fullmatch(r'\s*(?:建设|建設|设计|設計|施工|监理|監理|编制|編制|审图|審圖)单位\s*[:：]?\s*[^\n]*', text)
-    return bool(words or marker and not organizational_label)
+    return bool(words or marker)
 
 
 def _finite(values):
@@ -517,6 +539,39 @@ def _paper_size_evidence(doc, request, box):
     return rows
 
 
+def _ole_placement_corners(entity):
+    """Recorded WCS envelope only; never decode or endorse the OLE payload.
+
+    Autodesk OLE2FRAME/AcDbOle2Frame defines 10 and 11 as upper-left and
+    lower-right WCS corners. ezdxf retains this subclass as compiled raw Tags
+    (entities/oleframe.py); unlike its get_first_value bbox, reject duplicates.
+    https://help.autodesk.com/cloudhelp/2019/ENU/AutoCAD-DXF/files/GUID-77747CE6-82C6-4452-97ED-4CEEB38BE960.htm
+    """
+    from itertools import product
+    tags = getattr(entity, 'acdb_ole2frame', None)
+    if tags is None or _owner_context_issue(entity):
+        return None
+    if [t.value for t in tags if t.code == 100] != ['AcDbOle2Frame']:
+        return None
+    # Compiled 10/11 contain x,y[,z]. Orphan/repeated coordinate components
+    # and extra placement fields are outside this finite native contract.
+    if any(t.code in range(12, 40) or t.code in (210, 220, 230) for t in tags):
+        return None
+    vertices = [[t.value for t in tags if t.code == code] for code in (10, 11)]
+    if any(len(v) != 1 for v in vertices):
+        return None
+    try:
+        a, b = [tuple(v[0]) for v in vertices]
+        if any(len(v) not in (2, 3) or not _finite(v) for v in (a, b)):
+            return None
+        a, b = [(v[0], v[1], v[2] if len(v) == 3 else 0.) for v in (a, b)]
+        if a[2] != 0. or b[2] != 0. or a[0] == b[0] or a[1] == b[1]:
+            return None
+        return list(product((a[0], b[0]), (a[1], b[1]), (0.,)))
+    except (TypeError, ValueError, ArithmeticError):
+        return None
+
+
 def _search_unit_texts(doc, frame_box):
     """Search every encoded namespace, then judge applicability through active instances.
 
@@ -525,22 +580,30 @@ def _search_unit_texts(doc, frame_box):
     """
     from ezdxf import bbox
     from itertools import product
-    counts, all_hits = {}, []
+    counts, all_hits, inventory_decoding_audit = {}, [], []
     for block in doc.blocks:
         counts[block.name] = 0
         for entity in block:
             candidates = []
             if entity.dxftype() in TEXT_TYPES:
-                candidates.append(_text(entity))
+                candidates.append((entity, _text(entity)))
             if entity.dxftype() == 'INSERT':
-                candidates.extend(_text(a) for a in entity.attribs)
+                candidates.extend((a, _text(a)) for a in entity.attribs)
             if entity.dxftype() == 'DIMENSION':
-                candidates.append(str(entity.dxf.get('text', '')))
-            for text in candidates:
+                candidates.append((entity, str(entity.dxf.get('text', ''))))
+            for text_entity, text in candidates:
                 counts[block.name] += 1
+                raw = _raw_text(text_entity)
+                candidate_text = _unit_candidate_text(text)
+                facts = dict(raw_text=raw, text_source_handle=text_entity.dxf.handle,
+                             text_entity_type=text_entity.dxftype())
+                if raw != text or candidate_text != text:
+                    inventory_decoding_audit.append(dict(handle=text_entity.dxf.handle, block=block.name,
+                        **facts, text=text, unit_candidate_text=candidate_text,
+                        is_unit_candidate=_unit_text_candidate(text)))
                 if _unit_text_candidate(text):
-                    all_hits.append({'handle': entity.dxf.handle, 'block': block.name, 'text': text})
-    hits, uninspected, excluded, noncoordinate, active_text_count = [], [], [], [], 0
+                    all_hits.append({'handle': entity.dxf.handle, 'block': block.name, 'text': text, **facts})
+    hits, uninspected, excluded, noncoordinate, decoding_audit, active_text_count = [], [], [], [], [], 0
     checked_array_cells = []
 
     def transform(point, matrices):
@@ -548,12 +611,29 @@ def _search_unit_texts(doc, frame_box):
             point = tuple(matrix.transform(point))
         return tuple(point)
 
-    def extent(entity, matrices):
+    def extent(entity, matrices, placement_supported=True):
         try:
-            bounds = bbox.extents([entity], fast=True)
-            if not bounds.has_data:
-                return None
-            points = [transform(p, matrices) for p in product(*zip(bounds.extmin, bounds.extmax))]
+            if entity.dxftype() == 'OLE2FRAME':
+                if not placement_supported:
+                    return None
+                corners = _ole_placement_corners(entity)
+                if corners is None:
+                    return None
+                # Only fully recovered finite XY ancestors. Transform every
+                # corner, not just the two diagonal endpoints after rotation.
+                for matrix in matrices:
+                    o, x, y = [tuple(matrix.transform(p)) for p in ((0,0,0),(1,0,0),(0,1,0))]
+                    if not all(_finite(p) for p in (o,x,y)) or any(p[2] != 0. for p in (o,x,y)):
+                        return None
+                    determinant = (x[0]-o[0])*(y[1]-o[1]) - (x[1]-o[1])*(y[0]-o[0])
+                    if not _finite([determinant]) or determinant == 0.:
+                        return None
+                points = [transform(p, matrices) for p in corners]
+            else:
+                bounds = bbox.extents([entity], fast=True)
+                if not bounds.has_data:
+                    return None
+                points = [transform(p, matrices) for p in product(*zip(bounds.extmin, bounds.extmax))]
             values = [min(p[0] for p in points), min(p[1] for p in points), max(p[0] for p in points), max(p[1] for p in points)]
             return values if _finite(values) else None
         except Exception:
@@ -563,26 +643,36 @@ def _search_unit_texts(doc, frame_box):
         return box is not None and (box[2] < frame_box[0] or box[0] > frame_box[2]
                                     or box[3] < frame_box[1] or box[1] > frame_box[3])
 
-    def unknown(entity, matrices, path, reason, geometry=None):
-        box = extent(geometry if geometry is not None else entity, matrices)
+    def unknown(entity, matrices, path, reason, geometry=None, placement_supported=True):
+        box = extent(geometry if geometry is not None else entity, matrices, placement_supported) if placement_supported else None
         row = {'handle': entity.dxf.handle, 'entity_type': entity.dxftype(), 'instance_path': path, 'bbox': box, 'reason': reason}
+        if entity.dxftype() == 'OLE2FRAME':
+            row.update(content_read=False, placement_only=True,
+                       bbox_basis='native_AcDbOle2Frame_WCS_10_11_full_instance_chain' if box is not None else None)
         if outside(box):
             excluded.append({**row, 'disposition': 'proven_outside_frame'})
         else:
             uninspected.append(row)
 
-    def visit(entity, matrices=(), path='', stack=()):
+    def visit(entity, matrices=(), path='', stack=(), placement_supported=True):
         nonlocal active_text_count
         kind = entity.dxftype()
         path = path + '/' + str(entity.dxf.handle)
         strings = [_text(entity)] if kind in TEXT_TYPES else [str(entity.dxf.get('text', ''))] if kind == 'DIMENSION' else []
         for text in strings:
             active_text_count += 1
+            raw = _raw_text(entity)
+            candidate_text = _unit_candidate_text(text)
+            if raw != text or candidate_text != text:
+                decoding_audit.append(dict(handle=entity.dxf.handle, entity_type=kind, instance_path=path,
+                    canonical_instance_path=_canonical_search_path(doc, path), raw_text=raw, text=text,
+                    unit_candidate_text=candidate_text, is_unit_candidate=_unit_text_candidate(text)))
             if not _unit_text_candidate(text):
                 continue
             box = extent(entity, matrices)
             row = {'handle': entity.dxf.handle, 'entity_type': kind, 'instance_path': path,
-                   'canonical_instance_path': _canonical_search_path(doc, path), 'bbox': box, 'text': text}
+                   'canonical_instance_path': _canonical_search_path(doc, path), 'bbox': box,
+                   'text': text, 'raw_text': raw}
             if outside(box):
                 excluded.append({**row, 'disposition': 'proven_outside_frame'})
             elif (not re.search(r'坐标|座標|绘图|繪圖|图纸|圖紙|尺寸|其余|其餘', text)
@@ -593,7 +683,7 @@ def _search_unit_texts(doc, frame_box):
             else:
                 hits.append(row)
         if kind in OPAQUE_TEXT_CARRIERS:
-            unknown(entity, matrices, path, '可能承载适用单位文字，内容尚未读清')
+            unknown(entity, matrices, path, '可能承载适用单位文字，内容尚未读清', placement_supported=placement_supported)
         elif '[' in path and kind not in TEXT_TYPES | ARRAY_KNOWN_NON_TEXT_ENTITIES | {'INSERT', 'DIMENSION'}:
             unknown(entity, matrices, path, '数组cell内未知实际载体尚未证明不承载适用单位文字')
         if kind == 'INSERT':
@@ -625,24 +715,25 @@ def _search_unit_texts(doc, frame_box):
                         # only the ancestors, never this INSERT matrix again.
                         attribute_matrices = (*matrices, Matrix44.translate(*offset))
                         for attrib in entity.attribs:
-                            visit(attrib, attribute_matrices, cell_path, stack)
+                            visit(attrib, attribute_matrices, cell_path, stack, placement_supported and not context_issue)
                         if context_issue:
-                            unknown(entity, matrices, cell_path, context_issue + '，不能证明已完整读取适用单位文字', virtual)
+                            unknown(entity, matrices, cell_path, context_issue + '，不能证明已完整读取适用单位文字', virtual, placement_supported=False)
                         if block is None or block.block.is_xref or name in stack or len(stack) >= 32:
-                            unknown(entity, matrices, cell_path, '未读取cell内外参、缺块、循环或完整父链文字', virtual)
+                            unknown(entity, matrices, cell_path, '未读取cell内外参、缺块、循环或完整父链文字', virtual, placement_supported=False)
                         else:
                             child_matrices = (*matrices, virtual.matrix44())
                             for child in block:
-                                visit(child, child_matrices, cell_path, (*stack, name))
+                                visit(child, child_matrices, cell_path, (*stack, name),
+                                      placement_supported and not context_issue)
                     except (ValueError, ArithmeticError):
-                        unknown(entity, matrices, cell_path, '阵列cell或块实例变换不能核验文字适用范围')
+                        unknown(entity, matrices, cell_path, '阵列cell或块实例变换不能核验文字适用范围', placement_supported=False)
         elif kind == 'DIMENSION':
             try:
                 block, offset = _dimension_render_context(doc, entity)
                 from ezdxf.math import Matrix44
                 render_matrices = (*matrices, Matrix44.translate(*offset))
                 for child in block:
-                    visit(child, render_matrices, path, stack)
+                    visit(child, render_matrices, path, stack, placement_supported)
             except (ValueError, ArithmeticError):
                 unknown(entity, matrices, path, '尺寸渲染块或其平移/注释上下文尚未核清，不能完成单位文字搜索')
 
@@ -651,11 +742,165 @@ def _search_unit_texts(doc, frame_box):
     return {'method': 'all_layouts_all_definitions_inventory_then_active_Model_instance_scope',
             'text_count': sum(counts.values()), 'by_block_count': counts, 'whole_document_unit_text_hits': all_hits,
             'active_text_count': active_text_count, 'unit_text_matches': hits, 'uninspected_active_text_carriers': uninspected,
+            'text_decoding_audit': decoding_audit,
+            'whole_document_text_decoding_audit': inventory_decoding_audit,
+            'text_decoding_basis': 'native ezdxf TEXT-family plain_text / MTEXT plain_text / embedded attribute plain_mtext; raw source retained',
             'non_coordinate_unit_texts': noncoordinate,
             'checked_array_cells': checked_array_cells,
             'excluded_outside_frame': excluded, 'status': 'CONFLICT' if hits else 'UNRESOLVED' if uninspected else 'COMPLETE',
             'absence_scope': 'current_frame_active_Model_instances',
             'limitations': ['未使用块定义和其他图页不作本框单位声明；当前框可能承载文字但未读清的对象必须未决']}
+
+
+def _component_dimension_evidence(doc, manifest, request, scope, box, metres):
+    """Finite source-text schedule + one native rectangular component instance.
+
+    The manifest registers the adopted reference, its issuer/version and drawing
+    applicability. This verifies that frozen reference, not issuer authenticity
+    or human approval. The request can select sources, never supply dimensions.
+    """
+    refs = request.get('component_dimension_refs', [])
+    if not refs:
+        return []
+    registry = manifest.get('component_dimension_sources')
+    if not isinstance(registry, list) or not registry or any(not isinstance(r, dict) for r in registry):
+        raise ValueError('构件尺寸须先在 CAD 清单登记采用的权威参考资料，不能由请求自填尺寸或权威标签')
+    ids = [r.get('source_id') for r in registry]
+    if any(not isinstance(v, str) or not v.strip() for v in ids) or len(ids) != len(set(ids)):
+        raise ValueError('构件尺寸参考资料 source_id 缺失或重复')
+    output, used = [], set()
+    token = r'[A-Za-z0-9_.-]+'
+    header_pattern = (r'文件编号：(?P<document>'+token+r')；版本：(?P<revision>'+token+
+                      r')；发布方：(?P<issuer>[^；\r\n]+)；资料角色：(?P<role>manufacturer_dimension_schedule|design_component_schedule)')
+    row_pattern = (r'图号：(?P<drawing>'+token+r')；图名：(?P<view>[^；\r\n]+)；构件编号：(?P<component>'+token+
+                   r')；外形(?P<axis>[XY])尺寸：(?P<number>\d+(?:\.\d+)?)\s*(?P<unit>mm|cm|m|ft|in|毫米|厘米|米|英尺|英寸)[。.]?')
+    for ref in refs:
+        if not isinstance(ref, dict):
+            raise ValueError('component_dimension_refs 须为结构化源引用')
+        source = next((r for r in registry if r['source_id'] == ref.get('authority_source_id')), None)
+        if source is None:
+            raise ValueError('构件尺寸参考资料未在清单登记')
+        verify_source_file(source, '构件尺寸权威原文')
+        path = Path(source['path'])
+        if path.suffix.lower() != '.txt' or path.stat().st_size > 1024*1024:
+            raise ValueError('本分支只支持已冻结 UTF-8 原文 TXT（不超过1MiB）；PDF/扫描/表格尚未解析')
+        try:
+            lines = path.read_text(encoding='utf-8-sig').splitlines()
+        except UnicodeError as exc:
+            raise ValueError('权威构件尺寸原文载体未能按 UTF-8 读清') from exc
+        header = re.fullmatch(header_pattern, lines[0].strip()) if lines else None
+        if (header is None or any(header[k] != source.get(k) for k in ('document', 'revision', 'issuer', 'role'))
+                or not str(source.get('adoption_basis') or '').strip()):
+            raise ValueError('参考资料原文编号/版本/发布方/角色与清单采用记录不闭合')
+        drawing_entity, drawing_transform = _ref(doc, ref.get('drawing_number_ref'))
+        view_entity, view_transform = _ref(doc, ref.get('view_text_ref'))
+        if any(e.dxftype() not in TEXT_TYPES or not _text_in_frame(e, t, box)
+               for e, t in ((drawing_entity, drawing_transform), (view_entity, view_transform))):
+            raise ValueError('构件适用图号/图名须回源到本图框可见文字')
+        drawing_match = re.fullmatch(r'图号\s*[:：]\s*('+token+r')', _text(drawing_entity).strip())
+        if drawing_match is None:
+            raise ValueError('图号须引用真实完整图号原文')
+        drawing, view = drawing_match[1], _text(view_entity).strip()
+        title_ids = {_ref(doc, r)[1].source_context['instance_path'] for r in request['view_text_refs']}
+        if view_transform.source_context['instance_path'] not in title_ids:
+            raise ValueError('构件图名未绑定本次已核验的比例平面图')
+        if source.get('applies_to') != {'drawing_number': drawing, 'view_title': view}:
+            raise ValueError('参考资料清单适用图号/图名与当前图不一致')
+        identity_entity, identity_transform = _ref(doc, ref.get('component_id_ref'), allow_array_cells=False)
+        footprint, transform = _ref(doc, ref.get('footprint_ref'), allow_array_cells=False)
+        chain = transform.source_context['insert_chain']
+        identity_chain = identity_transform.source_context['insert_chain']
+        if (identity_entity.dxftype() != 'ATTRIB' or len(chain) != 1 or len(identity_chain) != 1
+                or chain[0]['handle'] != identity_chain[0]['handle']):
+            raise ValueError('构件编号与外形须属于同一 Model 单一 INSERT 实例；嵌套/阵列尚未支持')
+        insert = doc.entitydb[chain[0]['handle']]
+        tag = identity_entity.dxf.tag
+        if tag not in ('COMPONENT_ID', 'EQUIPMENT_ID'):
+            raise ValueError('有限分支须以 COMPONENT_ID 或 EQUIPMENT_ID 属性绑定构件编号')
+        component = _text(identity_entity).strip()
+        if re.fullmatch(token, component) is None or not _text_in_frame(identity_entity, identity_transform, box):
+            raise ValueError('构件实例编号为空/不规范或未在本图框内')
+        matches = []
+        def inventory(layout, ancestors=(), seen=()):
+            for item in layout:
+                if item.dxftype() != 'INSERT':
+                    continue
+                children = doc.blocks.get(item.dxf.name)
+                if children is None or item.dxf.name in seen or len(seen) >= 32:
+                    raise ValueError('构件唯一身份所需 INSERT 实例清查未闭合')
+                for attribute in item.attribs:
+                    if attribute.dxf.tag in ('COMPONENT_ID', 'EQUIPMENT_ID') and _text(attribute).strip() == component:
+                        rows, columns = _insert_cell_context(item)
+                        matches.append((item, attribute, ancestors, rows*columns))
+                inventory(children, (*ancestors, item.dxf.handle), (*seen, item.dxf.name))
+        inventory(doc.modelspace())
+        if (len(matches) != 1 or matches[0][0] is not insert or matches[0][1] is not identity_entity
+                or matches[0][2] or matches[0][3] != 1):
+            raise ValueError('构件编号不是当前 Model 的唯一物理实例，重复编号/错误身份不能任取')
+        identity = transform.source_context['instance_path']
+        if identity in used:
+            raise ValueError('构件外形源实例重复，不能重复充当独立证据')
+        used.add(identity)
+        block = doc.blocks.get(insert.dxf.name)
+        if (footprint.dxftype() != 'LWPOLYLINE' or not footprint.closed or len(footprint) != 4
+                or any(e is not footprint and e.dxftype() != 'ATTDEF' for e in block)
+                or float(footprint.dxf.get('elevation', 0.)) != 0.
+                or tuple(footprint.dxf.get('extrusion', (0, 0, 1))) != (0, 0, 1)
+                or float(footprint.dxf.get('const_width', 0.)) != 0.):
+            raise ValueError('当前仅支持单一封闭矩形外形构件块；复杂符号不能选内部矩形冒充外形')
+        raw = list(footprint.get_points('xyseb'))
+        if any(not _finite(row) or any(v != 0. for v in row[2:]) for row in raw):
+            raise ValueError('构件外形须为无宽度无弧段的有限矩形')
+        points = [(r[0], r[1], 0.) for r in raw]
+        xs, ys = sorted(set(p[0] for p in points)), sorted(set(p[1] for p in points))
+        if (len(xs) != 2 or len(ys) != 2 or len(set(points)) != 4
+                or any((a[0] == b[0]) == (a[1] == b[1]) for a, b in zip(points, points[1:]+points[:1]))):
+            raise ValueError('构件外形须为块局部 X/Y 轴矩形，不能用对角线或另轴代替')
+        world = [transform(p) for p in points]
+        bounds = scope['bounds']
+        if not all(_inside(p, box, strict=True) and bounds['xmin'] <= p[0] < bounds['xmax_exclusive']
+                   and bounds['ymin'] <= p[1] < bounds['ymax_exclusive'] for p in world):
+            raise ValueError('构件外形须在本图框内部及本次 measurement_scope 内，不能图框自证或跨范围')
+        axis = ref.get('measurement_axis')
+        if axis not in ('X', 'Y'):
+            raise ValueError('构件测量轴须明确为原块局部 X 或 Y')
+        records = []
+        for line_number, line in enumerate(lines[1:], 2):
+            if not line.strip():
+                continue
+            match = re.fullmatch(row_pattern, line.strip())
+            if match is None:
+                raise ValueError('权威构件尺寸原文存在未解析的规格/条件/单位语句，不能选一行掩盖冲突')
+            if (match['drawing'], match['view'], match['component'], match['axis']) == (drawing, view, component, axis):
+                records.append((line_number, line, match))
+        if (type(ref.get('source_line')) is not int or len(records) != 1 or records[0][0] != ref.get('source_line')):
+            raise ValueError('构件尺寸完整原句须唯一匹配图号/图名/编号/指定轴/原文行，重复或另轴不得采用')
+        line_number, original, record = records[0]
+        a = (xs[0], ys[0], 0.)
+        b = (xs[1], ys[0], 0.) if axis == 'X' else (xs[0], ys[1], 0.)
+        endpoints = [transform(a), transform(b)]
+        measured = math.dist(*endpoints)
+        number = float(record['number'])
+        physical = number * canonical_scale(record['unit'])
+        if (not _finite([number, physical, measured]) or min(number, physical, measured) <= 0.
+                or abs(physical / (measured * metres) - 1.) > TOLERANCE):
+            raise ValueError('权威构件指定轴物理尺寸与实例实测及图框推定单位冲突（容差1%），单位保持未知')
+        output.append(dict(evidence_type='qto-source-bound-component-dimension/1.0',
+                           evidence_class='independent_component_physical_dimension',
+                           authority_source=source, source_line=line_number, source_text=original,
+                           drawing_number=drawing, view_title=view, component_id=component,
+                           component_id_source_context=_source_context(identity_entity, identity_transform),
+                           drawing_number_source_context=_source_context(drawing_entity, drawing_transform),
+                           view_source_context=_source_context(view_entity, view_transform),
+                           footprint_source_context=_source_context(footprint, transform, points),
+                           measurement_axis=axis, measurement_axis_basis='source_block_local_axis',
+                           measurement_endpoints_wcs=endpoints, measurement=measured,
+                           source_dimension_value=number, source_dimension_unit=record['unit'],
+                           physical_dimension_metres=physical, implied_metres_per_drawing_unit=physical/measured,
+                           scope=scope, physical_dimension_proven_independently=True,
+                           physical_unit_proven_independently=False, coordinate_unit_declaration=False,
+                           formal_adoption=False))
+    return output
 
 
 def verify_geometric_unit_evidence(request, manifest, scope):
@@ -716,9 +961,10 @@ def verify_geometric_unit_evidence(request, manifest, scope):
         title_sources.append(_source_context(entity, transform))
     if not any('平面' in t for t in title_texts) or any(re.search(r'系统图|系統圖|原理|示意|不按比例', t) for t in title_texts):
         raise ValueError('当前图名未证明按比例平面图，或含系统/示意/原理语义，不能按图长计量')
-    refs = request.get('dimension_refs')
-    if not isinstance(refs, list) or not refs:
-        raise ValueError('仅有图框幅面/比例是一类证据；须引用第二类独立 DIMENSION 几何自洽证据')
+    refs = request.get('dimension_refs', [])
+    component_refs = request.get('component_dimension_refs', [])
+    if not isinstance(refs, list) or not isinstance(component_refs, list) or not (refs or component_refs):
+        raise ValueError('仅有图框幅面/比例是一类证据；须引用第二类独立 DIMENSION 或权威构件尺寸证据')
     dimensions, used = [], set()
     for ref in refs:
         if not isinstance(ref, dict):
@@ -781,6 +1027,7 @@ def verify_geometric_unit_evidence(request, manifest, scope):
                            'dimlfac_role': 'source_display_multiplier_checked_against_world_geometry_not_unit_or_quantity_factor',
                            'dimscale_role': 'annotation_display_only_not_a_length_multiplier',
                            'evidence_class': 'independent_dimension_geometric_consistency', 'physical_unit_proven_independently': False})
+    components = _component_dimension_evidence(doc, manifest, request, scope, box, metres)
     search = _search_unit_texts(doc, box)
     if paper_sources:
         paper_ids = {r['instance_path'] for r in paper_sources}
@@ -836,14 +1083,15 @@ def verify_geometric_unit_evidence(request, manifest, scope):
                       'actual_axis_spans': [width, height], 'checked_axes': 2,
                       'scale_text': scale_text, 'scale_source_context': _source_context(scale_entity, scale_transform),
                       'scale_denominator': denominator, 'tolerance': TOLERANCE},
-            'dimensions': dimensions, 'unit_text_search': search, 'view_texts': title_texts,
+            'dimensions': dimensions, 'component_dimensions': components,
+            'unit_text_search': search, 'view_texts': title_texts,
             'view_source_contexts': title_sources,
             'coordinate_unit_evidence': coordinate_units,
             'physical_unit_basis': 'source_coordinate_declaration' if coordinate_units else None,
             'allows_length_measurement': bool(coordinate_units),
             'basis': ('已回源核对本框明确坐标SI声明；' if coordinate_units else
                        '图上无坐标单位声明；局部数值/材料/标高单位未作坐标单位依据；' if search['non_coordinate_unit_texts'] else '图上无单位文字；')
-                + '在标准幅面及图签比例假设下由双轴几何推定单位，原尺寸只作独立几何自洽；规则推算，未经人工采用'}
+                + '在标准幅面及图签比例假设下由双轴几何推定单位，原尺寸或已绑定构件尺寸作第二类证据；规则推算，未经人工采用'}
     if search['status'] != 'COMPLETE':
         partial = {**result, 'schema_version': 'qto-geometric-scale-corroboration/1.0', 'status': 'UNIT_UNRESOLVED',
                    'candidate_raw_unit': raw_unit, 'raw_unit': None, 'metres_per_drawing_unit': None,
@@ -871,6 +1119,25 @@ def verify_geometric_unit_consumption(credential, manifest, scope, factor, outpu
                      factor_to_output=None,length=None,quantity_level='未决量',evidence_level=None,
                      allows_length_measurement=False)
         raise GeometricUnitUnresolved('仅图框与 DIM 几何自洽没有独立坐标 SI 依据，单位保持未决',partial)
+    return _geometric_consumption_receipt(credential, checked, manifest, scope, factor, output_unit)
+
+
+def verify_geometric_inferred_rule_consumption(credential, manifest, scope, factor, output_unit='m'):
+    """Explicit lower-evidence pipe inlet; never an SI declaration or fallback."""
+    if not isinstance(scope, dict) or not isinstance(credential, dict) or scope != credential.get('scope'):
+        raise ValueError('规则推算实际消费必须显式绑定同一 measurement_scope')
+    checked = verify_geometric_unit_credential(credential, scope)
+    if checked.get('physical_unit_basis') is not None or checked.get('coordinate_unit_evidence'):
+        raise ValueError('原源已有明确坐标 SI 声明，须走物理 SI 消费入口，不能降格为无单位规则推算')
+    receipt = _geometric_consumption_receipt(credential, checked, manifest, scope, factor, output_unit)
+    receipt.update(schema_version='qto-geometric-inferred-rule-consumption/1.0',
+                   consumption_mode='inferred_rule', evidence_level='inferred', quantity_level='规则推算量',
+                   allows_physical_si_measurement=False)
+    return receipt
+
+
+def _geometric_consumption_receipt(credential, checked, manifest, scope, factor, output_unit):
+    """Common source/factor/dependency closure, after the inlet-specific gate."""
     ref = credential['cad_manifest']
     original = json.loads(Path(ref['path']).read_text(encoding='utf-8-sig'))
     if original != manifest:
@@ -879,6 +1146,7 @@ def verify_geometric_unit_consumption(credential, manifest, scope, factor, outpu
     if isinstance(factor, bool) or not isinstance(factor, (int, float)) or not math.isfinite(factor) or not math.isclose(factor, expected, rel_tol=1e-12, abs_tol=0.):
         raise ValueError('专业单位倍率与回源凭据不一致，不能混入根数或长度系数')
     dependencies = [*checked['runtime_dependencies'], ref,
+                    *[v['authority_source'] for v in checked.get('component_dimensions', [])],
                     *[v for k, v in manifest.items() if k in ('authoritative_source', 'exchange_dxf', 'exchange_conversion') and isinstance(v, dict)],
                     *[v for v in manifest.get('artifacts', {}).values() if isinstance(v, dict) and 'path' in v]]
     fingerprints = {}
@@ -926,6 +1194,7 @@ def main():
         if manifest.get('exchange_conversion'):
             protected.append(Path(manifest['exchange_conversion']['path']))
         protected.extend(Path(ref['path']) for ref in (manifest.get('artifacts') or {}).values() if isinstance(ref, dict) and ref.get('path'))
+        protected.extend(Path(ref['path']) for ref in manifest.get('component_dimension_sources', []) if isinstance(ref, dict) and ref.get('path'))
         for source in protected:
             if args.output.resolve() == source.resolve() or (args.output.exists() and source.exists() and args.output.samefile(source)):
                 raise ValueError('输出不得覆盖或经链接覆盖原图/请求/范围/清单')

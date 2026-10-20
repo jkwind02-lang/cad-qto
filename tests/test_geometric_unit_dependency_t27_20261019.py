@@ -157,7 +157,7 @@ def test_actual_receipt_binds_new_validator_bytes_with_replay_on_and_off_and_res
     frozen_receipt=json.loads(receipt.read_text(encoding='utf-8'))
     assert len(frozen_receipt['producer_dependencies'])==3
     isolated=tmp_path/'isolated-source'
-    shutil.copytree(ROOT,isolated,ignore=shutil.ignore_patterns('__pycache__','.pytest_cache','*.pyc','*.pyo'))
+    shutil.copytree(ROOT,isolated,ignore=shutil.ignore_patterns('.git','.codex_work','__pycache__','.pytest_cache','*.pyc','*.pyo'))
     module=isolated/'skills/_qto-shared-evidence/scripts/qto_geometric_unit_evidence.py'
     producer=isolated/'skills/qto-pipe-networks/scripts/infer_pipe_network.py'
     original_bytes=module.read_bytes();producer_before=sha(producer);receipt_before=sha(receipt)

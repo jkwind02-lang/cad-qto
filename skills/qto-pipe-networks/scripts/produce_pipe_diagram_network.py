@@ -10,6 +10,7 @@ import argparse
 import copy
 import json
 import math
+from fractions import Fraction
 from pathlib import Path
 import subprocess
 import sys
@@ -19,9 +20,9 @@ from measure_pipe_diagram_lengths import (measure, sha, digest, replay_digest, r
     runtime_dependencies as measurement_dependencies, verify_runtime_dependencies,
     write_new, RESULT as CANDIDATE, BASIS, Drawing, finite)
 from receive_pipe_diagram_lengths import load_binding
-from qto_cad_geometry import read_dxf_with_diagnostics
+from qto_cad_geometry import read_dxf_with_diagnostics, entity_geometry, transform_geometry
 from qto_cad_source_contract import canonical_scale, verify_source_file, unit_tokens
-from pipe_diagram_source_parts import unique_workbench_interval, coordinate_unit_annotation
+from pipe_diagram_source_parts import unique_workbench_interval, coordinate_unit_annotation, span_parts
 
 REQUEST = 'qto-pipe-physical-network-production/1.0'
 RESULT = 'qto-pipe-physical-network/1.0'
@@ -182,6 +183,158 @@ def workbench_si_span(context, original, original_segment, item, binding, span, 
     return note, scale, endpoints, evidence
 
 
+def exact_parent_ranges(items, part_count):
+    """Prove coverage before affine mapping can alias distinct float cuts.
+
+    Items are in ascending original parent order. Only after exact adjacency
+    is established may internal cuts be removed from the measured set.
+    """
+    ranges = []
+    for item in items:
+        loc = item.get('parent_geometry_interval')
+        require(isinstance(loc, dict) and set(loc) == {'part', 'from_fraction', 'to_fraction'},
+                '原派生边缺可重放父参数范围，须从当前原输入重新生产')
+        index, a, b = loc['part'], loc['from_fraction'], loc['to_fraction']
+        require(isinstance(index, int) and not isinstance(index, bool) and 0 <= index < part_count,
+                '原派生边父part无效')
+        require(all(isinstance(t, (int, float)) and not isinstance(t, bool) and math.isfinite(t)
+                    for t in (a, b)) and 0 <= a < b <= 1, '原派生边父参数无效')
+        if ranges:
+            pi, pa, pb = ranges[-1]
+            if pi == index:
+                require(pb == a, '原父part参数存在缺口、重叠或倒序，不能经源映射舍入吞并')
+                ranges[-1] = (index, pa, b)
+                continue
+            require(index == pi+1 and pb == 1 and a == 0,
+                    '原父part边界不连续或漏part，不能经源映射补齐')
+        ranges.append((index, a, b))
+    return ranges
+
+
+def grouped_source_span(context, original, parent, items, binding, span, source, bounds, saved):
+    """A bounded route is a continuous group of actual derived parent edges.
+
+    Parent parameter provenance comes from the freshly replayed topology, never
+    from a caller-supplied saved geometry or a nearest/equal-length match.
+    """
+    require('source_parts' in span, 'segment_ids组必须使用有向原生route_interval')
+    sid = parent['segment_id']
+    require(all(r.get('parent_segment_id') == sid for r in items), '有向组必须属于同一真实生产父路由')
+    all_ids = saved['route_preparation']['parent_map'][sid]
+    ids = [r['segment_id'] for r in items]
+    positions = [all_ids.index(ident) for ident in ids]
+    forward = len(positions) == 1 or positions[1] > positions[0]
+    step = 1 if forward else -1
+    require(positions == list(range(positions[0], positions[0]+step*len(positions), step)),
+            '有向组不连续、漏中间边或重复边，不能伪装完整路由')
+    if context:
+        object_ids = parent.get('workbench_object_ids')
+        require(isinstance(object_ids, list) and len(object_ids) == 1
+                and object_ids[0] in context['objects'], '父路由缺真实工作台对象')
+        obj = context['objects'][object_ids[0]]
+        path = [h.upper() for h in obj['source_path']]
+        native_parts = (obj.get('geometry') or {}).get('parts', [])
+        require(native_parts, '工作台父对象缺完整源路线')
+        interval = dict(from_part=0, from_fraction=0., to_part=len(native_parts)-1, to_fraction=1.)
+    else:
+        path, interval = parent.get('source_instance_path'), parent.get('source_route_interval')
+        require(isinstance(path, list) and isinstance(interval, dict),
+                '旧父路由缺完整source_instance_path/source_route_interval，不能靠调用者几何替代')
+        source_binding = parent.get('source_drawing')
+        require(isinstance(source_binding, dict), '旧父路由缺原输入绑定的source_drawing路径/SHA')
+        verify_source_file(source_binding, '旧父路由原输入绑定图纸')
+        require(source_binding == binding['drawing'], '调用者图纸与旧父路由原输入源绑定不符')
+    require(path == span['path'], '有向组完整源实例路径与实际父路由不符')
+    entity, matrix = source.resolve(path)
+    full_geometry = entity_geometry(entity).get('geometry')
+    require(full_geometry is not None, '原生父路线缺完整几何')
+    full_parts = transform_geometry(full_geometry, matrix)['parts']
+    require(full_parts and math.dist(full_parts[0].get('start', [0., 0., 0.]),
+                full_parts[-1].get('end', [0., 0., 0.])) > 1e-8,
+            '闭合原生父路线不进入当前有向组适配')
+    whole = source.span(dict(path=path, route_interval=interval), bounds)
+    native = whole['source_parts']
+    if len(items) == 1:
+        # A single derived edge has no ordering pair; its source traversal
+        # supplies the direction rather than forcing the parent direction.
+        forward = span['direction'] == whole['direction']
+    raw_parts = (parent.get('geometry') or {}).get('parts', [])
+    require(len(raw_parts) == len(native), '父路由完整几何与原源part数不符')
+    if context:
+        # Reuse the unchanged public SI and ledger replay, including selected
+        # TEXT/ATTRIB carrier placement. Group geometry is checked below too.
+        first_item = items[0]
+        p = first_item['parent_geometry_interval']
+        leg = source.span(dict(path=path, part=p['part'], from_fraction=p['from_fraction'],
+                               to_fraction=p['to_fraction']), bounds)
+        note, scale, _, evidence = workbench_si_span(context, original, parent, first_item,
+            binding, leg, source, bounds)
+    else:
+        note = source.annotation(binding.get('coordinate_unit_annotation_path'), bounds)
+        tokens = unit_tokens(note['text'])
+        require(('绘图坐标单位' in note['text'] or 'drawing coordinate unit' in note['text'].lower())
+                and len(tokens) == 1, '原管网源坐标单位须有明确适用声明')
+        scale = next(iter(tokens))
+        evidence = {'method': 'source_coordinate_length', 'source_unit_note': note,
+            'metres_per_source_coordinate': scale, 'source_input_segment': copy.deepcopy(parent)}
+    output_scale = canonical_scale(original['unit'])
+    for raw_part, native_part in zip(raw_parts, native):
+        require(raw_part.get('kind') == 'line', '有向旧网组只接真实直线路由')
+        expected = [[v*scale for v in point] for point in native_part['page_endpoints']]
+        actual = [[finite(v)*output_scale for v in raw_part[key]] for key in ('start', 'end')]
+        require(all(math.dist(a, b) <= 1e-8 for a, b in zip(actual, expected)),
+                '完整父路由几何与当前源part/方向/单位不符')
+    # Original endpoint fields are also part of the route, not optional aliases
+    # which could point at another physical port with the same total length.
+    for key, point in zip(('start', 'end'), whole['page_endpoints']):
+        raw_point = parent.get(key)
+        require(isinstance(raw_point, list) and len(raw_point) in (2, 3), '父路由缺实际起终端点')
+        actual = [finite(v)*output_scale for v in raw_point]+([0.] if len(raw_point) == 2 else [])
+        require(math.dist(actual, [v*scale for v in point]) <= 1e-8, '父路由端口与完整原源起终不符')
+    expected = []
+    ordered = items if forward else items[::-1]
+    for index, first_parameter, last_parameter in exact_parent_ranges(ordered, len(native)):
+        leg = native[index]
+        a, b = Fraction(leg['from_fraction']), Fraction(leg['to_fraction'])
+        def mapped(t):
+            t = Fraction(t)
+            return a+(b-a)*t if leg['direction'] == 1 else b-(b-a)*t
+        first, last = mapped(first_parameter), mapped(last_parameter)
+        expected.append((leg['part'], min(first, last), max(first, last), leg['direction']))
+    if not forward:
+        expected = [(i, a, b, -d) for i, a, b, d in expected[::-1]]
+    # Merge only adjacent exact source intervals within a native part. A gap,
+    # including one ULP, cannot disappear under a geometric tolerance.
+    merged = []
+    for i, a, b, direction in expected:
+        if merged and merged[-1][0] == i and merged[-1][3] == direction:
+            pi, pa, pb, pd = merged[-1]
+            require((pb == a if direction == 1 else pa == b), '派生组源参数有缺口或重叠')
+            merged[-1] = (i, min(pa, a), max(pb, b), pd)
+        else:
+            merged.append((i, a, b, direction))
+    actual = [(p['part'], p['from_fraction'], p['to_fraction'], p['direction']) for p in span['source_parts']]
+    # Fraction-to-float equality is exact. An outer mapped boundary which the
+    # float source contract cannot represent is refused, never rounded into
+    # another range. Whole-parent and exactly representable partial ranges
+    # remain compatible with the existing source_span contract.
+    require(actual == merged, '有向组源part/参数/方向与实际派生链的精确映射不符；不能舍入合并范围')
+    dns = {r.get('dn') for r in items}
+    require(len({r['system'] for r in items}) == 1 and len(dns-{None}) <= 1,
+            '连续组跨系统或已知DN，须按实际边分别映射')
+    levels = {r.get('quantity_level', '未决量') for r in items}
+    level = '未决量' if '未决量' in levels else '方案暂估量' if '方案暂估量' in levels else '规则推算量' if '规则推算量' in levels else '确认量'
+    evidence['source_resolution'] = {**evidence.get('source_resolution', {}),
+        'parent_segment_id': sid, 'replayed_segment_ids': ids,
+        'parent_geometry_intervals': [copy.deepcopy(r['parent_geometry_interval']) for r in items],
+        'full_instance_path': path, 'source_parts': copy.deepcopy(span['source_parts']),
+        'whole_parent_source_geometry_replayed': True}
+    combined = {**items[0], 'segment_id': 'group:'+digest(ids)[:24],
+        'length': math.fsum(finite(r['length']) for r in items), 'quantity_level': level,
+        'dn': None if None in dns else next(iter(dns))}
+    return combined, note, scale, [[v*scale for v in p] for p in span['page_endpoints']], evidence
+
+
 def replay_legacy(data):
     """Replay the existing producer, then source-check each direct length.
 
@@ -205,13 +358,22 @@ def replay_legacy(data):
     workbench = workbench_si_context(original)
     mapping = data.get('base_extent_bindings')
     require(isinstance(mapping, list), '原管网须有逐实物源区间映射')
-    mappings = {text(r.get('segment_id'), 'segment_id'): r for r in mapping}
-    require(len(mapping) == len(mappings) and set(mappings) ==
-            {r['segment_id'] for r in saved['segments']}, '原管网实物映射差集不守恒')
+    saved_rows = {r['segment_id']: r for r in saved['segments']}
+    mapped_ids = []
+    for binding in mapping:
+        group = binding.get('segment_ids')
+        require(('segment_ids' in binding) != ('segment_id' in binding), '映射须在segment_id与segment_ids中恰选一种')
+        ids = group if group is not None else [text(binding.get('segment_id'), 'segment_id')]
+        require(isinstance(ids, list) and ids and all(isinstance(i, str) and i in saved_rows for i in ids),
+                '映射组缺实际原边')
+        mapped_ids.extend(ids)
+    require(len(mapped_ids) == len(set(mapped_ids)) and set(mapped_ids) == set(saved_rows),
+            '原管网实物映射差集不守恒或同边重复计量')
     raw = {r['segment_id']: r for r in original['segments']}
     rows = []
-    for item in saved['segments']:
-        binding = mappings[item['segment_id']]
+    for binding in mapping:
+        items = [saved_rows[i] for i in binding.get('segment_ids', [binding.get('segment_id')])]
+        item = items[0]
         drawing = binding.get('drawing')
         verify_source_file(drawing, '原管网实物DXF')
         require(Path(drawing['path']).is_absolute(), '原管网DXF须为绝对路径')
@@ -223,11 +385,15 @@ def replay_legacy(data):
         bounds = [finite(v) for v in bounds]
         require(bounds[0] < bounds[2] and bounds[1] < bounds[3], '原管网定位窗退化')
         span = source.span(binding.get('source_span'), bounds)
-        require('source_parts' not in span, '既有workbench/恢复断口/竖段映射尚未适配有向多part路由；须保留原网及未适配余项')
-        parent = item.get('parent_segment_id', item['segment_id']) if workbench else item['segment_id']
+        grouped = 'segment_ids' in binding
+        require(grouped or 'source_parts' not in span, '有向多part须以segment_ids绑定实际连续派生链')
+        parent = item.get('parent_segment_id', item['segment_id']) if workbench or grouped else item['segment_id']
         require(parent in raw, '原网络派生边缺少实际生产父路线')
         original_segment = raw[parent]
-        if workbench:
+        if grouped:
+            item, note, scale, coordinates, evidence = grouped_source_span(workbench, original,
+                original_segment, items, binding, span, source, bounds, saved)
+        elif workbench:
             note, scale, coordinates, evidence = workbench_si_span(
                 workbench, original, original_segment, item, binding, span, source, bounds)
         else:

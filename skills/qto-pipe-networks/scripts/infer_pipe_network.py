@@ -327,6 +327,12 @@ def main() -> int:
         overlap_input = data
         protected_sources = source_paths(data, args.input) + review_source_paths(data, args.input)
         geometry_unit = data.get("geometric_unit_evidence")
+        from qto_recognition_workbench import workbench_unit_consumption_required, verify_workbench_unit_consumption
+        workbench_replay_required=workbench_unit_consumption_required(data)
+        if workbench_replay_required:
+            workbench_consumption=verify_workbench_unit_consumption(data, required=True)
+            protected_sources += [Path(v['path']) for v in workbench_consumption['input_files'].values()]
+            protected_sources += [Path(p) for p in workbench_consumption['dependency_fingerprints']]
         if geometry_unit is not None:
             if not isinstance(data.get("measurement_scope"), dict):
                 fail("几何单位推算必须保留 measurement_scope，不能仅复制比例或PASS标记")
@@ -335,7 +341,7 @@ def main() -> int:
             # producer tag. The physical-SI inlet must carry its complete actual
             # production contract; stripping workbench/receipt cannot downgrade
             # those source objects into trusted caller-entered geometry.
-            if checked_geometry.get('physical_unit_basis') == 'source_coordinate_declaration':
+            if checked_geometry.get('physical_unit_basis') == 'source_coordinate_declaration' and not workbench_replay_required:
                 from qto_recognition_workbench import verify_workbench_unit_consumption
                 verify_workbench_unit_consumption(data, required=True)
             checked_geometry["cad_manifest"] = geometry_unit["cad_manifest"]
@@ -503,7 +509,7 @@ def main() -> int:
                 "length": length,
                 "source_ids": source_ids,
                 "seeds": seeds,
-                **{k: raw.get(k) for k in ("geometry", "parent_segment_id", "space_id", "start_token", "end_token", "tangent_start", "tangent_end")},
+                **{k: raw.get(k) for k in ("geometry", "parent_segment_id", "parent_geometry_interval", "space_id", "start_token", "end_token", "tangent_start", "tangent_end")},
             }
             endpoints.extend(
                 [

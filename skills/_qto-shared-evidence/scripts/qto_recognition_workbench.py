@@ -452,7 +452,7 @@ def family_candidates(index, object_id, relative_tolerance=1e-7):
         semantic_equivalence_confirmed=False,method="相同类型及长度分布仅缩小候选；仍须比较构形、属性、接口与工程用途")
 
 
-def prepare_pipe(index, operations, ledger_path):
+def prepare_pipe(index, operations, ledger_path, *, input_files=None):
     """Convert explicit source-object decisions to the existing pipe input.
 
     Geometries, endpoint locations and measured lengths cannot be supplied by the
@@ -480,7 +480,8 @@ def prepare_pipe(index, operations, ledger_path):
     canonical_source_ids={}
     workbench_producer_dependencies=None
     if operations.get('geometric_unit_evidence') is not None:
-        from qto_geometric_unit_evidence import verify_geometric_unit_consumption, runtime_python_dependencies
+        from qto_geometric_unit_evidence import (verify_geometric_unit_consumption,
+                                                verify_geometric_inferred_rule_consumption, runtime_python_dependencies)
         workbench_producer_dependencies=runtime_python_dependencies([Path(__file__)],[Path(__file__).parent])
         credential=operations['geometric_unit_evidence']
         if operations.get('unit_declaration'):
@@ -504,7 +505,14 @@ def prepare_pipe(index, operations, ledger_path):
         if replay['index_sha256']!=index['index_sha256']:
             raise ValueError('局部工作台索引与当前原图实际重放不一致')
         factor=operations.get('factor_to_output')
-        consumption=verify_geometric_unit_consumption(credential,manifest,measurement_scope,factor,unit)
+        mode=operations.get('unit_consumption_mode','physical_si')
+        if mode not in ('physical_si','inferred_rule'):
+            raise ValueError('unit_consumption_mode 只能为 physical_si 或显式 inferred_rule')
+        consumption_verifier=(verify_geometric_inferred_rule_consumption if mode=='inferred_rule'
+                              else verify_geometric_unit_consumption)
+        consumption=consumption_verifier(credential,manifest,measurement_scope,factor,unit)
+        if mode=='inferred_rule':
+            _verify_workbench_input_files(input_files,index,operations)
         raw_unit=consumption['checked_evidence']['raw_unit']
         for oid in scope:
             box=objects[oid].get('bbox')
@@ -767,10 +775,14 @@ def prepare_pipe(index, operations, ledger_path):
             total_index_objects=len(objects),outside_selected_scope_count=len(objects)-len(scope),
             conversion_warnings=index["conversion_warnings"],formal_adoption_allowed=False,
             adoption_scope="working",review_status="unreviewed"))
+    if not geometry_fields:
+        result['workbench']['index_context']=dict(layout=index['layout'],
+            bounds=copy.deepcopy(index['index_scope']['bounds']),authoritative_source=copy.deepcopy(index['authoritative_source']))
+        result['workbench']['production_operations']=copy.deepcopy(operations)
     if geometry_fields:
         if workbench_producer_dependencies!=runtime_python_dependencies([Path(__file__)],[Path(__file__).parent]):
             raise ValueError('局部工作台计算期间源码字节变化，须重新实际生产')
-        current=verify_geometric_unit_consumption(operations['geometric_unit_evidence'],manifest,
+        current=consumption_verifier(operations['geometric_unit_evidence'],manifest,
                                                 measurement_scope,factor,unit)
         if current['dependency_fingerprints']!=consumption['dependency_fingerprints']:
             raise ValueError('局部工作台计算期间单位或原源依赖变化')
@@ -779,17 +791,63 @@ def prepare_pipe(index, operations, ledger_path):
             layout=index['layout'],scope_bounds=expected,index_sha256=index['index_sha256'],
             recognition_ledger=dict(path=str(ledger_path),sha256=hashlib.sha256(ledger_path.read_bytes()).hexdigest()),
             producer_dependencies=workbench_producer_dependencies)
+        if mode=='inferred_rule':
+            _verify_workbench_input_files(input_files,index,operations)
+            result['geometric_unit_consumption']['workbench_production']['input_files']=copy.deepcopy(input_files)
     return result
+
+
+def _verify_workbench_input_files(files,index,operations):
+    if not isinstance(files,dict) or set(files)!={'index','operations'}:
+        raise ValueError('规则推算工作台必须绑定原 index/operations 文件及SHA，不能仅留自填配方')
+    for key,value in (('index',index),('operations',operations)):
+        verify_source_file(files[key],'工作台实际生产 '+key)
+        normalized=lambda value:json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False)
+        if normalized(_json(files[key]['path']))!=normalized(value):
+            raise ValueError('工作台实际生产 '+key+' 文件与当前输入不一致')
+
+
+def workbench_unit_consumption_required(data):
+    """Require replay from the frozen ledger, even if output producer tags vanish.
+
+    The native object namespace is a conservative requirement trigger, not proof
+    of geometry. Only complete prepare_pipe replay can prove that geometry.
+    Caller mode/source_key values cannot disable this requirement.
+    """
+    has_unit_contract=(data.get('geometric_unit_evidence') is not None
+                       or data.get('geometric_unit_consumption') is not None)
+    if data.get('workbench') or data.get('geometric_unit_consumption'):
+        return True
+    basis=data.get('recognition_basis') or {}
+    ledger_ref=({'path':basis.get('ledger_path'),'sha256':basis.get('ledger_sha256')}
+                if basis else (data.get('geometric_unit_source_binding') or {}).get('recognition_ledger'))
+    if not ledger_ref:
+        return False
+    verify_source_file(ledger_ref,'管网实际生产识别台账')
+    ledger=_json(ledger_ref['path'])
+    native_prefix='CADINST-'+(data.get('measurement_scope') or {}).get('layout','Model')+'/'
+    # Layout is not a caller-controlled escape: this finite unit path is Model.
+    prefixes={native_prefix,'CADINST-Model/'}
+    native=any(isinstance(oid,str) and any(oid.startswith(prefix) for prefix in prefixes)
+               for entry in ledger.get('entries',[]) if entry.get('status')=='active'
+               for oid in entry.get('object_ids',[]))
+    # Native object identity requires complete source/index/ledger replay even
+    # when every removable unit/producer field has been stripped. INSUNITS is
+    # a unit fact, never proof of the delivered geometry or professional result.
+    return native
 
 
 def verify_workbench_unit_consumption(data, *, required=False):
     """Rebuild the actual local index and production operations at the infer inlet."""
-    if not required and (not data.get('workbench') or data.get('geometric_unit_evidence') is None):
+    if not required and not workbench_unit_consumption_required(data):
         return None
     from qto_geometric_unit_evidence import runtime_python_dependencies,verify_runtime_python_dependencies
     receipt=data.get('geometric_unit_consumption')
     recipe=receipt.get('workbench_production') if isinstance(receipt,dict) else None
     if not isinstance(recipe,dict):
+        if data.get('geometric_unit_evidence') is None and receipt is None:
+            from qto_workbench_legacy_declaration import verify_legacy_source_declaration
+            return verify_legacy_source_declaration(data)
         raise ValueError('局部工作台缺实际几何单位生产凭据，须重新生产')
     current=runtime_python_dependencies([Path(__file__)],[Path(__file__).parent])
     verify_runtime_python_dependencies(recipe.get('producer_dependencies'),current)
@@ -799,12 +857,16 @@ def verify_workbench_unit_consumption(data, *, required=False):
                       scope_bounds=recipe['scope_bounds'])
     if index['index_sha256']!=recipe['index_sha256']:
         raise ValueError('局部工作台原源索引已变化，须重新生产')
-    replay=prepare_pipe(index,recipe['operations'],ledger['path'])
+    files=recipe.get('input_files')
+    if files is not None:
+        _verify_workbench_input_files(files,index,recipe['operations'])
+    replay=prepare_pipe(index,recipe['operations'],ledger['path'],input_files=files)
     replay['geometric_unit_consumption']['workbench_production']['producer_dependencies']=recipe['producer_dependencies']
     normalized=lambda value:json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False)
     if normalized(replay)!=normalized(data):
         raise ValueError('局部工作台实际生产结果与完整回源重放不一致')
-    return dict(producer_dependencies=current,recognition_ledger=ledger,index_sha256=index['index_sha256'])
+    return dict(producer_dependencies=current,recognition_ledger=ledger,index_sha256=index['index_sha256'],
+                input_files=files or {},dependency_fingerprints=receipt['dependency_fingerprints'])
 
 
 def main():
@@ -820,7 +882,12 @@ def main():
             source=_json(args.source);out=build_index(source,layout=args.layout,authoritative_source=source.pop("authoritative_source",None),scope_bounds=args.bounds)
         elif args.action=="context":out=context(_json(args.index),_json(args.query))
         elif args.action=="family":out=family_candidates(_json(args.index),args.object_id)
-        else:out=prepare_pipe(_json(args.index),_json(args.operations),args.ledger)
+        else:
+            operations=_json(args.operations)
+            files=({k:dict(path=str(p.resolve()),sha256=hashlib.sha256(p.read_bytes()).hexdigest())
+                    for k,p in (('index',args.index),('operations',args.operations))}
+                   if operations.get('unit_consumption_mode')=='inferred_rule' else None)
+            out=prepare_pipe(_json(args.index),operations,args.ledger,input_files=files)
         # Never overwrite inputs or source evidence, including an index's original drawing.
         protected={Path(v).resolve() for k,v in vars(args).items() if k in {"source","index","query","operations","ledger"} and v}
         if args.action!="index":
@@ -828,8 +895,11 @@ def main():
         else:protected.update(Path(out[k]["path"]).resolve() for k in ("source","authoritative_source"))
         if args.action=='apply':
             protected.update((args.ledger.parent/Path(item['path'])).resolve() for item in _json(args.ledger).get('evidence',[]))
+            protected.update(Path(p).resolve() for p in (out.get('geometric_unit_consumption') or {}).get('dependency_fingerprints',{}))
         protected.update(Path(str(p)+'.export.json') for p in list(protected) if p.suffix.lower()=='.dxf')
-        if args.output.resolve() in protected or (getattr(args,"svg",None) and (args.svg.resolve() in protected or args.svg.resolve()==args.output.resolve())):
+        if (args.output.resolve() in protected
+                or (args.output.exists() and any(p.exists() and args.output.samefile(p) for p in protected))
+                or (getattr(args,"svg",None) and (args.svg.resolve() in protected or args.svg.resolve()==args.output.resolve()))):
             raise ValueError("输出不能覆盖输入或原图")
         args.output.parent.mkdir(parents=True,exist_ok=True)
         args.output.write_text(json.dumps(out,ensure_ascii=False,indent=2,allow_nan=False),encoding="utf-8")
