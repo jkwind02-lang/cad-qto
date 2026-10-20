@@ -12,6 +12,9 @@ def finite(v):
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("input", type=Path); ap.add_argument("--output", type=Path); a=ap.parse_args()
     try:
+        if a.output and (a.output.resolve() == a.input.resolve()
+                         or (a.output.exists() and a.output.samefile(a.input))):
+            raise ValueError("输出文件不能与输入文件相同，请使用独立输出路径")
         data=json.loads(a.input.read_text(encoding="utf-8")); rows=data.get("wall_segments")
         if not isinstance(rows,list) or not rows: raise ValueError("wall_segments必须为非空数组")
         out=[]

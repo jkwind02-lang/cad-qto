@@ -1342,8 +1342,8 @@
     },
     {
       "path": "qto-masonry-secondary/scripts/calculate_masonry_reference.py",
-      "sha256": "7e7fbdf126a6e45f8ba4db3f96a1202023d43d8c3b15cf47a6bc897c0096867c",
-      "bytes": 2403
+      "sha256": "92b9a1bb0cf4928fab534672c754ed77a850715d6522f3bb297e8fe77e67dda0",
+      "bytes": 2651
     },
     {
       "path": "qto-masonry-secondary/SKILL.md",
